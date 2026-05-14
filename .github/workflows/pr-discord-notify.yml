@@ -1,0 +1,76 @@
+name: PR Discord Notification
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send Discord DMs
+        uses: actions/github-script@v7
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        with:
+          script: |
+            const fs = require('fs');
+            const https = require('https');
+
+            const body = context.payload.pull_request.body || '';
+            const prTitle = context.payload.pull_request.title;
+            const prUrl = context.payload.pull_request.html_url;
+            const prAuthor = context.payload.pull_request.user.login;
+
+            const checked = [...body.matchAll(/^- \[x\] (.+)$/gim)]
+              .map(m => m[1].trim());
+
+            if (checked.length === 0) {
+              console.log('체크된 리뷰어 없음');
+              return;
+            }
+
+            const userMap = JSON.parse(
+              fs.readFileSync('.github/discord-users.json', 'utf8')
+            );
+
+            const request = (method, path, data) => new Promise((resolve, reject) => {
+              const payload = JSON.stringify(data);
+              const req = https.request({
+                hostname: 'discord.com',
+                path: `/api/v10${path}`,
+                method,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`
+                }
+              }, res => {
+                let b = '';
+                res.on('data', c => b += c);
+                res.on('end', () => resolve(JSON.parse(b)));
+              });
+              req.on('error', reject);
+              if (data) req.write(payload);
+              req.end();
+            });
+
+            for (const name of checked) {
+              const userId = userMap[name];
+              if (!userId) {
+                console.log(`Discord ID 없음: ${name}`);
+                continue;
+              }
+
+              const dm = await request('POST', '/users/@me/channels', {
+                recipient_id: userId
+              });
+
+              await request('POST', `/channels/${dm.id}/messages`, {
+                content: `📋 **리뷰 요청이 왔어요!**\n**PR:** [${prTitle}](${prUrl})\n**작성자:** ${prAuthor}`
+              });
+
+              console.log(`${name} Discord DM 전송 완료`);
+            }
