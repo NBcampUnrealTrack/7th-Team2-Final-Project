@@ -79,3 +79,17 @@ DerivedDataCache/*
 
 # RiderLink plugin
 Plugins/Developer/RiderLink/
+
+# Claude Code / MCP
+.claude/
+.cursor/
+.env
+dist/
+CLAUDE.md
+
+# MCP 자동 생성 문서 (개인용)
+AGENTS.md
+기획서.md
+내파트.md
+플랜.md
+체크리스트.md
