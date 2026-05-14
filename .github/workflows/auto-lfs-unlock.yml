@@ -1,0 +1,61 @@
+name: Auto LFS Unlock
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  auto-unlock:
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Unlock Merged Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # base...head 명시 비교로 머지 커밋의 양쪽 부모 혼합 방지
+          MODIFIED_FILES=$(git diff --name-only \
+            origin/${{ github.event.pull_request.base.ref }}...${{ github.event.pull_request.head.sha }} \
+            | grep -E '\.(uasset|umap)$' || true)
+
+          if [ -z "$MODIFIED_FILES" ]; then
+            echo "해제할 언리얼 에셋 락이 없습니다."
+            exit 0
+          fi
+
+          LOCKS_JSON=$(git lfs locks --json)
+
+          UNLOCK_COUNT=0
+          FAIL_COUNT=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            # 정확 매칭으로 PR 작성자가 소유한 락만 해제 대상으로 선정
+            LOCK_OWNER=$(echo "$LOCKS_JSON" \
+              | jq -r --arg f "$file" '.[] | select(.path == $f) | .owner.name')
+
+            if [ "$LOCK_OWNER" = "$PR_AUTHOR" ]; then
+              # GitHub Actions bot이 다른 사용자 락 해제하려면 --force 필수
+              if git lfs unlock --force "$file"; then
+                echo "락 해제 성공: $file"
+                UNLOCK_COUNT=$((UNLOCK_COUNT+1))
+              else
+                echo "WARNING: 락 해제 실패 -> $file (수동 해제 필요)"
+                FAIL_COUNT=$((FAIL_COUNT+1))
+              fi
+            fi
+          done <<< "$MODIFIED_FILES"
+
+          echo ""
+          echo "결과: 성공 ${UNLOCK_COUNT}개, 실패 ${FAIL_COUNT}개"
+          if [ $FAIL_COUNT -gt 0 ]; then
+            echo "WARNING: 실패한 파일은 위 목록 확인 후 수동으로 해제해주세요."
+          fi

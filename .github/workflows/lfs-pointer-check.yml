@@ -1,0 +1,50 @@
+name: LFS Pointer Integrity Check
+
+on:
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  check-pointers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (Without LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+
+      # actions/checkout이 base branch ref를 보장하지 않으므로 명시적 fetch
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Verify Modified Unreal Assets are LFS Pointers
+        run: |
+          # AM 필터: 추가/수정 모두 검사 (신규 .uasset도 반드시 LFS 거쳐야 함)
+          MODIFIED_FILES=$(git diff --name-only --diff-filter=AM \
+            origin/${{ github.base_ref }}...HEAD \
+            | grep -E '\.(uasset|umap)$' || true)
+
+          if [ -z "$MODIFIED_FILES" ]; then
+            echo "검사할 언리얼 에셋이 없습니다."
+            exit 0
+          fi
+
+          ERROR_COUNT=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ ! -f "$file" ] && continue
+
+            # git lfs pointer --check 는 --file 플래그 필수 (positional argument 미지원)
+            if ! git lfs pointer --check --file="$file" > /dev/null 2>&1; then
+              echo "ERROR: 생 바이너리 업로드 감지! -> $file"
+              ERROR_COUNT=$((ERROR_COUNT+1))
+            fi
+          done <<< "$MODIFIED_FILES"
+
+          if [ $ERROR_COUNT -gt 0 ]; then
+            echo "총 $ERROR_COUNT 개의 에셋이 LFS를 거치지 않았습니다."
+            echo "작업자 로컬 터미널에서 'git add --renormalize .' 후 다시 커밋해주세요."
+            exit 1
+          fi
+          echo "모든 변경된 에셋이 정상적인 LFS 포인터입니다."
