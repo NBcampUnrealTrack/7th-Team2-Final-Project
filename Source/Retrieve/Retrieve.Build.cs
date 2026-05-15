@@ -8,6 +8,8 @@ public class Retrieve : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		PublicIncludePaths.AddRange(new string[] { "Retrieve" });
+
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",
