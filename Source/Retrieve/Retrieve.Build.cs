@@ -7,14 +7,36 @@ public class Retrieve : ModuleRules
 	public Retrieve(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine",
+			"InputCore",
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks",
+			"ModularGameplay",
+			"EnhancedInput",
+			"GameplayMessageRuntime",
+			"StateTreeModule",
+			"GameplayStateTreeModule",
+			"NetCore",
+			"UMG",
+			"Slate",
+			"SlateCore"
+		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"Niagara",
+			"AIModule"
+		});
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-		
+
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
 
