@@ -79,6 +79,24 @@ void URetrieveAbilitySet::GiveToAbilitySystem(URetrieveAbilitySystemComponent* A
 			OutGrantedHandles->AddAttributeSet(NewSet);
 		}
 	}
+	
+	// Grant the gameplay effects
+	for (const FRetrieveAbilitySet_GameplayEffect& EffectToGrant : GrantedGameplayEffects)
+	{
+		if (!IsValid(EffectToGrant.GameplayEffect))
+		{
+			continue;
+		}
+
+		const UGameplayEffect* GameplayEffect = EffectToGrant.GameplayEffect->GetDefaultObject<UGameplayEffect>();
+		const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectToSelf(
+			GameplayEffect, EffectToGrant.EffectLevel, ASC->MakeEffectContext());
+
+		if (OutGrantedHandles)
+		{
+			OutGrantedHandles->AddGameplayEffectHandle(Handle);
+		}
+	}
 
 	// Grant the gameplay abilities
 	for (const FRetrieveAbilitySet_GameplayAbility& AbilityToGrant : GrantedGameplayAbilities)
@@ -99,24 +117,6 @@ void URetrieveAbilitySet::GiveToAbilitySystem(URetrieveAbilitySystemComponent* A
 		if (OutGrantedHandles)
 		{
 			OutGrantedHandles->AddAbilitySpecHandle(Handle);
-		}
-	}
-
-	// Grant the gameplay effects
-	for (const FRetrieveAbilitySet_GameplayEffect& EffectToGrant : GrantedGameplayEffects)
-	{
-		if (!IsValid(EffectToGrant.GameplayEffect))
-		{
-			continue;
-		}
-
-		const UGameplayEffect* GameplayEffect = EffectToGrant.GameplayEffect->GetDefaultObject<UGameplayEffect>();
-		const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectToSelf(
-			GameplayEffect, EffectToGrant.EffectLevel, ASC->MakeEffectContext());
-
-		if (OutGrantedHandles)
-		{
-			OutGrantedHandles->AddGameplayEffectHandle(Handle);
 		}
 	}
 }
