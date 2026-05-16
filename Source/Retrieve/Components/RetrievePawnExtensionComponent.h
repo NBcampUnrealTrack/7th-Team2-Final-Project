@@ -18,7 +18,13 @@ public:
 	URetrievePawnExtensionComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	static const FName NAME_ActorFeatureName;
-
+	
+	/** Returns the pawn extension component if one exists on the specified actor. */
+	static URetrievePawnExtensionComponent* FindPawnExtensionComponent(const AActor* Actor)
+	{
+		return Actor ? Actor->FindComponentByClass<URetrievePawnExtensionComponent>() : nullptr;
+	}
+	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	//~ Begin IGameFrameworkInitStateInterface interface
@@ -30,12 +36,6 @@ public:
 	virtual void OnActorInitStateChanged(const FActorInitStateChangedParams& Params) override;
 	virtual void CheckDefaultInitialization() override;
 	//~ End IGameFrameworkInitStateInterface interface
-
-	/** Returns the pawn extension component if one exists on the specified actor. */
-	static URetrievePawnExtensionComponent* FindPawnExtensionComponent(const AActor* Actor)
-	{
-		return Actor ? Actor->FindComponentByClass<URetrievePawnExtensionComponent>() : nullptr;
-	}
 
 	const URetrievePawnData* GetPawnData() const { return PawnData; }
 	void SetPawnData(const URetrievePawnData* InPawnData);
