@@ -86,6 +86,11 @@ Plugins/Developer/RiderLink/
 .env
 dist/
 CLAUDE.md
+Tools/
+.mcp.json
+Plugins/Monolith/
+.env
+.env.local
 
 # MCP 자동 생성 문서 (개인용)
 AGENTS.md
@@ -93,3 +98,4 @@ AGENTS.md
 내파트.md
 플랜.md
 체크리스트.md
+.scrum-state.json
