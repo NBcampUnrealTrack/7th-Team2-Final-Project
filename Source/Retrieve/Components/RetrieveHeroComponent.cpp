@@ -1,0 +1,250 @@
+#include "Components/RetrieveHeroComponent.h"
+
+#include "EnhancedInputSubsystems.h"
+#include "RetrievePawnExtensionComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Character/RetrievePawnData.h"
+#include "Components/GameFrameworkComponentManager.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Input/RetrieveInputComponent.h"
+#include "Input/RetrieveInputConfig.h"
+
+const FName URetrieveHeroComponent::NAME_ActorFeatureName("Hero");
+const FName URetrieveHeroComponent::NAME_BindInputsNow("BindInputsNow");
+
+URetrieveHeroComponent::URetrieveHeroComponent(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+{
+	PrimaryComponentTick.bCanEverTick = false;
+}
+
+void URetrieveHeroComponent::OnRegister()
+{
+	Super::OnRegister();
+	if (!GetPawn<APawn>())
+	{
+		return;
+	}
+	RegisterInitStateFeature();
+}
+
+void URetrieveHeroComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	BindOnActorInitStateChanged(URetrievePawnExtensionComponent::NAME_ActorFeatureName, FGameplayTag(), false);
+	ensure(TryToChangeInitState(RetrieveGameplayTags::InitState_Spawned));
+	CheckDefaultInitialization();
+}
+
+void URetrieveHeroComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnregisterInitStateFeature();
+	Super::EndPlay(EndPlayReason);
+}
+
+bool URetrieveHeroComponent::CanChangeInitState(UGameFrameworkComponentManager* Manager, FGameplayTag CurrentState,
+                                                FGameplayTag DesiredState) const
+{
+	check(Manager)
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn)
+	{
+		return false;
+	}
+	
+	if (!CurrentState.IsValid() && DesiredState == RetrieveGameplayTags::InitState_Spawned)
+	{
+		return true;
+	}
+	
+	if (CurrentState == RetrieveGameplayTags::InitState_Spawned && DesiredState == RetrieveGameplayTags::InitState_DataAvailable)
+	{
+		if (!Pawn->GetPlayerState())
+		{
+			return false;
+		}
+		if (Pawn->IsLocallyControlled())
+		{
+			const APlayerController* PlayerController = GetController<APlayerController>();
+			if (!PlayerController || !PlayerController->GetLocalPlayer())
+			{
+				return false;
+			}
+			return true;
+		}
+	}
+	
+	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState == RetrieveGameplayTags::InitState_DataInitialized)
+	{
+		return Manager->HasFeatureReachedInitState(Pawn, URetrievePawnExtensionComponent::NAME_ActorFeatureName, RetrieveGameplayTags::InitState_DataInitialized);
+	}
+	
+	if (CurrentState == RetrieveGameplayTags::InitState_DataInitialized && DesiredState == RetrieveGameplayTags::InitState_GameplayReady)
+	{
+		return true;
+	}
+	
+	return false;
+}
+
+void URetrieveHeroComponent::HandleChangeInitState(UGameFrameworkComponentManager* Manager, FGameplayTag CurrentState,
+	FGameplayTag DesiredState)
+{
+	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState == RetrieveGameplayTags::InitState_DataInitialized)
+	{
+		APawn* Pawn = GetPawn<APawn>();
+		if (!Pawn || !Pawn->IsLocallyControlled())
+		{
+			return;
+		}
+
+		UGameFrameworkComponentManager::SendGameFrameworkComponentExtensionEvent(Pawn, NAME_BindInputsNow);
+		BindPlayerInputs();
+	}
+}
+
+void URetrieveHeroComponent::OnActorInitStateChanged(const FActorInitStateChangedParams& Params)
+{
+	if (Params.FeatureName == URetrievePawnExtensionComponent::NAME_ActorFeatureName && Params.FeatureState == RetrieveGameplayTags::InitState_DataInitialized)
+	{
+		CheckDefaultInitialization();
+	}
+}
+
+void URetrieveHeroComponent::CheckDefaultInitialization()
+{
+	static const TArray<FGameplayTag> StateChain = {
+		RetrieveGameplayTags::InitState_Spawned,
+		RetrieveGameplayTags::InitState_DataAvailable,
+		RetrieveGameplayTags::InitState_DataInitialized,
+		RetrieveGameplayTags::InitState_GameplayReady
+	};
+	ContinueInitStateChain(StateChain);
+}
+
+void URetrieveHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputComponent)
+{
+	check(PlayerInputComponent);
+	// DataInitialized에 도달하기 전에 SetupPlayerInputComponent가 호출될 수 있음
+	// InputComponent를 캐시해두고 PawnExtensionComponent가 준비되면 바인딩
+	PendingInputComponent = PlayerInputComponent;
+	BindPlayerInputs();
+}
+
+void URetrieveHeroComponent::BindPlayerInputs()
+{
+	if (bInputsBound) return;
+	if (!PendingInputComponent) return;
+
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn || !Pawn->IsLocallyControlled()) return;
+
+	const APlayerController* PlayerController = GetController<APlayerController>();
+	if (!PlayerController) return;
+
+	const ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer();
+	if (!LocalPlayer) return;
+
+	URetrievePawnExtensionComponent* PawnExtensionComponent = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn);
+	if (!PawnExtensionComponent) return;
+
+	const URetrievePawnData* PawnData = PawnExtensionComponent->GetPawnData();
+	if (!PawnData) return;
+
+	const URetrieveInputConfig* InputConfig = PawnData->InputConfig;
+	if (!InputConfig) return;
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (!Subsystem) return;
+	Subsystem->ClearAllMappings();
+
+	if (PawnData->DefaultMappingContext)
+	{
+		Subsystem->AddMappingContext(PawnData->DefaultMappingContext, PawnData->DefaultMappingPriority);
+	}
+
+	URetrieveInputComponent* RetrieveIC = Cast<URetrieveInputComponent>(PendingInputComponent);
+	if (!RetrieveIC) return;
+
+	TArray<uint32> BindHandles;
+	RetrieveIC->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, BindHandles);
+	
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
+	
+	bInputsBound = true;
+}
+
+void URetrieveHeroComponent::Input_Move(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+	
+	const FVector2D Value = InputActionValue.Get<FVector2D>();
+	const FRotator MovementRotation(0.0f, Pawn->GetControlRotation().Yaw, 0.0f);
+	
+	if (Value.X != 0.0f)
+	{
+		const FVector MovementDirection = MovementRotation.RotateVector(FVector::RightVector);
+		Pawn->AddMovementInput(MovementDirection, Value.X);
+	}
+
+	if (Value.Y != 0.0f)
+	{
+		const FVector MovementDirection = MovementRotation.RotateVector(FVector::ForwardVector);
+		Pawn->AddMovementInput(MovementDirection, Value.Y);
+	}}
+
+void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn)
+	{
+		return;
+	}
+	
+	const FVector2D Value = InputActionValue.Get<FVector2D>();
+	
+	if (Value.X != 0.0f)
+	{
+		Pawn->AddControllerYawInput(Value.X);
+	}
+
+	if (Value.Y != 0.0f)
+	{
+		Pawn->AddControllerPitchInput(Value.Y);
+	}
+}
+
+void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn)
+	{
+		return;
+	}
+	
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->AbilityInputTagPressed(InputTag);
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn)
+	{
+		return;
+	}
+	
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->AbilityInputTagReleased(InputTag);
+		}
+	}
+}
