@@ -1,0 +1,62 @@
+name: Asset Lock Enforcement
+
+on:
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  verify-locks:
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Check Locks for Modified Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # M 필터: 수정된 에셋만 검사 (신규 파일은 사전 락 워크플로 마찰이 커서 제외)
+          MODIFIED_FILES=$(git diff --name-only --diff-filter=M \
+            origin/${{ github.base_ref }}...HEAD \
+            | grep -E '\.(uasset|umap)$' || true)
+
+          if [ -z "$MODIFIED_FILES" ]; then
+            echo "검사할 수정된 언리얼 에셋이 없습니다."
+            exit 0
+          fi
+
+          git lfs install
+
+          # JSON으로 락 정보 받아 path + owner.name 정확 매칭
+          LOCKS_JSON=$(git lfs locks --json)
+
+          ERROR_COUNT=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            LOCK_OWNER=$(echo "$LOCKS_JSON" \
+              | jq -r --arg f "$file" '.[] | select(.path == $f) | .owner.name')
+
+            if [ -z "$LOCK_OWNER" ]; then
+              echo "ERROR: 락(Lock) 없이 수정된 파일 -> $file"
+              ERROR_COUNT=$((ERROR_COUNT+1))
+            elif [ "$LOCK_OWNER" != "$PR_AUTHOR" ]; then
+              echo "ERROR: 다른 사용자($LOCK_OWNER)가 잠근 파일 수정 시도 -> $file"
+              ERROR_COUNT=$((ERROR_COUNT+1))
+            fi
+          done <<< "$MODIFIED_FILES"
+
+          if [ $ERROR_COUNT -gt 0 ]; then
+            echo ""
+            echo "에셋 수정 시 반드시 언리얼 에디터에서 Check Out(Lock) 후 작업해주세요."
+            exit 1
+          fi
+
+          echo "모든 수정 에셋의 락이 정상 확인되었습니다."
