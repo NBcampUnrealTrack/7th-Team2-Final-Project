@@ -1,22 +1,35 @@
 {
-	"FileVersion": 3,
-	"EngineAssociation": "5.7",
-	"Category": "",
-	"Description": "",
-	"Modules": [
-		{
-			"Name": "Retrieve",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		}
-	],
-	"Plugins": [
-		{
-			"Name": "ModelingToolsEditorMode",
-			"Enabled": true,
-			"TargetAllowList": [
-				"Editor"
-			]
-		}
-	]
+    "FileVersion": 3,
+    "EngineAssociation": "5.7",
+    "Category": "",
+    "Description": "",
+    "Modules": [
+        {
+            "Name": "Retrieve",
+            "Type": "Runtime",
+            "LoadingPhase": "Default",
+            "AdditionalDependencies": [
+                "Engine",
+                "CoreUObject",
+                "GameplayAbilities",
+                "GameplayTags",
+                "GameplayTasks",
+                "ModularGameplay",
+                "EnhancedInput",
+                "GameplayMessageRuntime",
+                "StateTreeModule",
+                "GameplayStateTreeModule"
+            ]
+        }
+    ],
+    "Plugins": [
+        { "Name": "GameplayAbilities",      "Enabled": true },
+        { "Name": "EnhancedInput",          "Enabled": true },
+        { "Name": "ModularGameplay",        "Enabled": true },
+        { "Name": "GameplayMessageRouter",  "Enabled": true },
+        { "Name": "StateTree",              "Enabled": true },
+        { "Name": "GameplayStateTree",      "Enabled": true },
+        { "Name": "ControlRig",             "Enabled": true },
+        { "Name": "IKRig",                  "Enabled": true }
+    ]
 }
