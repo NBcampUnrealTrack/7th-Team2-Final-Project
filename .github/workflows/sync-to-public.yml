@@ -1,0 +1,214 @@
+name: Sync to Public Portfolio Repo
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  sync:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # ───────────────────────────────────────────────
+      # Private Repo 체크아웃
+      # ───────────────────────────────────────────────
+      - name: Checkout Private Repo
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          lfs: false
+          path: private-source
+
+      # ───────────────────────────────────────────────
+      # ⭐ Squash 머지 대응: PR head SHA 명시적 fetch
+      # Squash 후 head commit이 develop 히스토리에서 끊겨도
+      # 명시 fetch하면 git log로 PR 내부 commit 조회 가능
+      # ───────────────────────────────────────────────
+      - name: Fetch PR head commits (for Squash compatibility)
+        if: github.event_name == 'pull_request'
+        run: |
+          cd private-source
+          # PR head SHA를 명시적으로 fetch (orphan 상태여도 OK)
+          git fetch origin ${{ github.event.pull_request.head.sha }} --depth=100 || \
+            echo "::warning::PR head SHA fetch 실패 (head 브랜치 이미 삭제됐을 수 있음)"
+
+      # ───────────────────────────────────────────────
+      # EULA 안전 검증
+      # ───────────────────────────────────────────────
+      - name: EULA Safety Check
+        run: |
+          set -e
+          cd private-source
+          FORBIDDEN_PATHS=(
+            "Content/External"
+            "Content/_External"
+            "Content/Megascans"
+            "Content/Marketplace"
+            "Plugins/Marketplace"
+          )
+          for p in "${FORBIDDEN_PATHS[@]}"; do
+            if [ -e "$p" ]; then
+              echo "::error::금지된 경로 발견: $p"
+              echo "Private 저장소의 .gitignore 점검 필요"
+              exit 1
+            fi
+          done
+          echo "EULA 안전 검증 통과"
+
+      # ───────────────────────────────────────────────
+      # Public Repo 체크아웃 (.git 포함, 히스토리 보존)
+      # ───────────────────────────────────────────────
+      - name: Checkout Public Repo
+        env:
+          PUBLIC_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          PUBLIC_USER: ${{ vars.PUBLIC_REPO_USER }}
+          PUBLIC_REPO: ${{ vars.PUBLIC_REPO_NAME }}
+        run: |
+          git clone \
+            "https://x-access-token:${PUBLIC_TOKEN}@github.com/${PUBLIC_USER}/${PUBLIC_REPO}.git" \
+            public-target
+
+          cd public-target
+          if git ls-remote --heads origin develop | grep -q develop; then
+            git checkout develop
+          else
+            git checkout main 2>/dev/null || git checkout -b main
+            git checkout -b develop
+          fi
+
+      # ───────────────────────────────────────────────
+      # 파일 동기화 (--delete로 삭제도 반영)
+      # ───────────────────────────────────────────────
+      - name: Sync Files
+        run: |
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows' \
+            --exclude='.github/discord-users.json' \
+            --exclude='Content/External' \
+            --exclude='Content/_External' \
+            --exclude='Content/Megascans' \
+            --exclude='Content/Marketplace' \
+            --exclude='Content/Developers' \
+            --exclude='Plugins' \
+            --exclude='Binaries' \
+            --exclude='Intermediate' \
+            --exclude='Saved' \
+            --exclude='DerivedDataCache' \
+            --exclude='Build' \
+            --exclude='Backup' \
+            --exclude='.vs' \
+            --exclude='.idea' \
+            --exclude='.claude' \
+            --exclude='.cursor' \
+            private-source/ public-target/
+
+      # ───────────────────────────────────────────────
+      # 스냅샷 검증
+      # ───────────────────────────────────────────────
+      - name: Verify Snapshot Clean
+        run: |
+          cd public-target
+          if find . -type d \( -name "External" -o -name "Megascans" -o -name "Marketplace" \) | grep -q .; then
+            echo "::error::Public 트리에 유료 에셋 폴더 잔재 발견"
+            exit 1
+          fi
+          if [ -d "Plugins" ]; then
+            echo "::error::Plugins 폴더가 Public에 남아있음"
+            exit 1
+          fi
+
+      # ───────────────────────────────────────────────
+      # PR 정보로 commit 메시지 조립 + push
+      # ───────────────────────────────────────────────
+      - name: Commit and Push (PR-based)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          cd public-target
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add -A
+          
+          if git diff --cached --quiet; then
+            echo "::notice::변경사항 없음. commit skip"
+            exit 0
+          fi
+          
+          # ─────────────────────────────────────────────
+          # Private에서 PR 내부 commit 목록 추출
+          # Squash 머지여도 head SHA를 fetch했으므로 git log 가능
+          # ─────────────────────────────────────────────
+          cd ../private-source
+          COMMIT_LIST=$(git log --pretty=format:'- %s (%h) by @%an' "${PR_BASE_SHA}..${PR_HEAD_SHA}" 2>/dev/null || true)
+          
+          if [ -z "$COMMIT_LIST" ]; then
+            # fallback: head SHA fetch 실패 시 단일 commit 표시
+            COMMIT_LIST="- ${PR_TITLE} (Squash merged)"
+            echo "::warning::PR 내부 commit 조회 실패. Squash 단일 commit으로 표시"
+          fi
+          
+          cd ../public-target
+          
+          # commit 메시지 조립
+          MSG_FILE=$(mktemp)
+          {
+            echo "${PR_TITLE} (#${PR_NUMBER})"
+            echo ""
+            echo "PR Author: @${PR_AUTHOR}"
+            echo "PR Link: ${PR_URL}"
+            echo ""
+            echo "## Commits in this PR"
+            echo "${COMMIT_LIST}"
+            if [ -n "${PR_BODY}" ]; then
+              echo ""
+              echo "## PR Description"
+              echo "${PR_BODY}"
+            fi
+          } > "$MSG_FILE"
+          
+          git commit -F "$MSG_FILE"
+          git push origin develop
+
+      # ───────────────────────────────────────────────
+      # 수동 실행 시
+      # ───────────────────────────────────────────────
+      - name: Commit and Push (Manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cd public-target
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add -A
+          
+          if git diff --cached --quiet; then
+            echo "::notice::변경사항 없음"
+            exit 0
+          fi
+          
+          git commit -m "Manual sync from Private (develop)" \
+                     -m "Triggered manually on $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push origin develop
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "::notice::Public Repo develop sync 완료"
