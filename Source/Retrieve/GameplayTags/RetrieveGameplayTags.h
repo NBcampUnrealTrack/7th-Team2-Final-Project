@@ -88,6 +88,7 @@ namespace RetrieveGameplayTags
 
     // ---- Gameplay events: combat
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ComboFinisher);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Normal);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Heavy);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parry_Success);
