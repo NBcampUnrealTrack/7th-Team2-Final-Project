@@ -1,4 +1,4 @@
-﻿#include "RetrieveGameplayTags.h"
+#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -109,6 +109,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Gameplay events: element / core / item
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_Unlock, "GameplayEvent.Element.Unlock");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_ModeChange, "GameplayEvent.Element.ModeChange");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Core_Drop, "GameplayEvent.Core.Drop");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Core_Absorb, "GameplayEvent.Core.Absorb");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Item_Used, "GameplayEvent.Item.Used");

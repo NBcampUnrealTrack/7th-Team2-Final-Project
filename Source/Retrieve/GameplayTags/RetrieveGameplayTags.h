@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "NativeGameplayTags.h"
 
@@ -111,6 +111,7 @@ namespace RetrieveGameplayTags
 
     // ---- Gameplay events: element / core / item
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_Unlock);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_ModeChange);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Core_Drop);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Core_Absorb);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Item_Used);
