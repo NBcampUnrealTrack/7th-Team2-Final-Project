@@ -1,5 +1,6 @@
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
-
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
 
@@ -39,6 +40,7 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 		{
 			const float NewHealth = FMath::Clamp(GetHealth() - DamageDone, 0.f, GetMaxHealth());
 			SetHealth(NewHealth);
+			BroadcastHitEvent(Data, DamageDone);
 		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
@@ -62,4 +64,47 @@ void UCombatAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
 void UCombatAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxHealth, OldValue);
+}
+
+void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
+{
+	AActor* AttackerActor = Data.EffectSpec.GetEffectContext().GetInstigator();
+	if (IsValid(AttackerActor) == false) return;
+	
+	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+	if (IsValid(TargetActor) == false) return;
+	
+	// 공격자 GE에 붙여둔 태그로 강도 판정
+	FGameplayTagContainer SourceTags;
+	Data.EffectSpec.GetAllAssetTags(SourceTags);
+	
+	FGameplayTag HitEventTag ;
+	for (const FGameplayTag& Tag : SourceTags)
+	{
+		if (Tag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Hit))
+		{
+			HitEventTag = Tag;
+			break;
+		}
+	}
+	
+	if (HitEventTag.IsValid() == false)
+	{
+		HitEventTag = RetrieveGameplayTags::GameplayEvent_Hit_Normal;
+	}
+	
+	FGameplayEventData EventData;
+	EventData.EventTag = HitEventTag;
+	EventData.Instigator = AttackerActor;
+	EventData.Target = TargetActor;
+	EventData.EventMagnitude = DamageDone;
+	
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, HitEventTag, EventData);
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, HitEventTag, EventData);
+	
+	// 테스트 코드
+	UE_LOG(LogTemp, Log, TEXT("[HitEvent] %s Damage=%.1f Attacker=%s Target=%s"),
+	*HitEventTag.ToString(), DamageDone,
+	AttackerActor ? *AttackerActor->GetName() : TEXT("None"),
+	TargetActor   ? *TargetActor->GetName()   : TEXT("None"));
 }

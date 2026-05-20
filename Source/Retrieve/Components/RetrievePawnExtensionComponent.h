@@ -18,13 +18,13 @@ public:
 	URetrievePawnExtensionComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	static const FName NAME_ActorFeatureName;
-	
+
 	/** Returns the pawn extension component if one exists on the specified actor. */
 	static URetrievePawnExtensionComponent* FindPawnExtensionComponent(const AActor* Actor)
 	{
 		return Actor ? Actor->FindComponentByClass<URetrievePawnExtensionComponent>() : nullptr;
 	}
-	
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	//~ Begin IGameFrameworkInitStateInterface interface
@@ -55,18 +55,23 @@ public:
 	void HandleControllerChanged();
 	void HandlePlayerStateReplicated();
 	void SetupPlayerInputComponent();
-	
+
+	void OnAbilitySystemInitialized_RegisterAndCall(FSimpleMulticastDelegate::FDelegate Delegate);
+
 protected:
 	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-private:
+protected:
 	UPROPERTY(EditInstanceOnly, ReplicatedUsing = OnRep_PawnData, Category = "Retrieve|Pawn")
 	TObjectPtr<const URetrievePawnData> PawnData;
 
 	UFUNCTION()
 	void OnRep_PawnData();
+
+	/** ASC + UCombatAttributeSet + 초기 스탯이 모두 준비된 직후 발동됩니다 (DataInitialized 진입 시) */
+	FSimpleMulticastDelegate OnAbilitySystemInitialized;
 
 	UPROPERTY()
 	TObjectPtr<URetrieveAbilitySystemComponent> AbilitySystemComponent;
