@@ -27,18 +27,18 @@ void URetrievePawnExtensionComponent::GetLifetimeReplicatedProps(TArray<FLifetim
 void URetrievePawnExtensionComponent::OnRegister()
 {
 	Super::OnRegister();
-	
+
 	TArray<UActorComponent*> Found;
 	GetOwner()->GetComponents(URetrievePawnExtensionComponent::StaticClass(), Found);
 	ensureAlwaysMsgf(Found.Num() == 1, TEXT("Only one URetrievePawnExtensionComponent should exist on a pawn."));
-	
+
 	RegisterInitStateFeature();
 }
 
 void URetrievePawnExtensionComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	BindOnActorInitStateChanged(NAME_None, FGameplayTag(), false);
 	ensure(TryToChangeInitState(RetrieveGameplayTags::InitState_Spawned));
 	CheckDefaultInitialization();
@@ -74,11 +74,11 @@ void URetrievePawnExtensionComponent::OnRep_PawnData()
 }
 
 void URetrievePawnExtensionComponent::InitializeAbilitySystem(URetrieveAbilitySystemComponent* InASC,
-	AActor* InOwnerActor)
+                                                              AActor* InOwnerActor)
 {
 	check(InASC);
 	check(InOwnerActor);
-	
+
 	if (AbilitySystemComponent == InASC)
 	{
 		return;
@@ -87,11 +87,11 @@ void URetrievePawnExtensionComponent::InitializeAbilitySystem(URetrieveAbilitySy
 	{
 		UninitializeAbilitySystem();
 	}
-	
+
 	APawn* Pawn = GetPawnChecked<APawn>();
 	AbilitySystemComponent = InASC;
 	AbilitySystemComponent->InitAbilityActorInfo(InOwnerActor, Pawn);
-	
+
 	CheckDefaultInitialization();
 }
 
@@ -101,9 +101,9 @@ void URetrievePawnExtensionComponent::UninitializeAbilitySystem()
 	{
 		return;
 	}
-	
+
 	GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
-	
+
 	if (AbilitySystemComponent->GetAvatarActor() == GetOwner())
 	{
 		AbilitySystemComponent->ClearActorInfo();
@@ -130,25 +130,39 @@ void URetrievePawnExtensionComponent::SetupPlayerInputComponent()
 	CheckDefaultInitialization();
 }
 
+void URetrievePawnExtensionComponent::OnAbilitySystemInitialized_RegisterAndCall(
+	FSimpleMulticastDelegate::FDelegate Delegate)
+{
+	if (!OnAbilitySystemInitialized.IsBoundToObject(Delegate.GetUObject()))
+	{
+		OnAbilitySystemInitialized.Add(Delegate);
+	}
+
+	if (AbilitySystemComponent)
+	{
+		Delegate.Execute();
+	}
+}
 
 bool URetrievePawnExtensionComponent::CanChangeInitState(UGameFrameworkComponentManager* Manager,
-	FGameplayTag CurrentState, FGameplayTag DesiredState) const
+                                                         FGameplayTag CurrentState, FGameplayTag DesiredState) const
 {
 	check(Manager);
 	APawn* Pawn = GetPawn<APawn>();
-	
+
 	if (!CurrentState.IsValid() || DesiredState == RetrieveGameplayTags::InitState_Spawned)
 	{
 		return Pawn != nullptr;
 	}
-	
-	if (CurrentState == RetrieveGameplayTags::InitState_Spawned && DesiredState == RetrieveGameplayTags::InitState_DataAvailable)
+
+	if (CurrentState == RetrieveGameplayTags::InitState_Spawned && DesiredState ==
+		RetrieveGameplayTags::InitState_DataAvailable)
 	{
 		if (!PawnData)
 		{
 			return false;
 		}
-		
+
 		if (Pawn->GetLocalRole() != ROLE_SimulatedProxy)
 		{
 			const bool bHasAuthority = Pawn->HasAuthority();
@@ -163,8 +177,9 @@ bool URetrievePawnExtensionComponent::CanChangeInitState(UGameFrameworkComponent
 		}
 		return true;
 	}
-	
-	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState == RetrieveGameplayTags::InitState_DataInitialized)
+
+	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState ==
+		RetrieveGameplayTags::InitState_DataInitialized)
 	{
 		if (PawnData && !PawnData->bRequiresAbilitySystem)
 		{
@@ -172,19 +187,21 @@ bool URetrievePawnExtensionComponent::CanChangeInitState(UGameFrameworkComponent
 		}
 		return AbilitySystemComponent != nullptr;
 	}
-	
-	if (CurrentState == RetrieveGameplayTags::InitState_DataInitialized && DesiredState == RetrieveGameplayTags::InitState_GameplayReady)
+
+	if (CurrentState == RetrieveGameplayTags::InitState_DataInitialized && DesiredState ==
+		RetrieveGameplayTags::InitState_GameplayReady)
 	{
 		return Manager->HaveAllFeaturesReachedInitState(GetOwner(), RetrieveGameplayTags::InitState_DataInitialized);
 	}
-	
+
 	return false;
 }
 
 void URetrievePawnExtensionComponent::HandleChangeInitState(UGameFrameworkComponentManager* Manager,
-	FGameplayTag CurrentState, FGameplayTag DesiredState)
+                                                            FGameplayTag CurrentState, FGameplayTag DesiredState)
 {
-	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState == RetrieveGameplayTags::InitState_DataInitialized)
+	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState ==
+		RetrieveGameplayTags::InitState_DataInitialized)
 	{
 		APawn* Pawn = GetPawn<APawn>();
 		if (!Pawn || !Pawn->HasAuthority())
@@ -195,27 +212,30 @@ void URetrievePawnExtensionComponent::HandleChangeInitState(UGameFrameworkCompon
 		{
 			return;
 		}
-		
+
 		// Lumen 폰은 초기화 핸드셰이크에 참여하지만 ASC가 없음. DataInitialized 이벤트만 발생하면 됨
 		if (!PawnData->bRequiresAbilitySystem)
 		{
 			return;
 		}
-		
+
 		if (!AbilitySystemComponent)
 		{
 			return;
 		}
-		
+
 		// 1. AbilitySet 부여. ASC에 UCombatAttributeSet이 스폰됨
 		if (PawnData->DefaultAbilitySet)
 		{
 			PawnData->DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, GetOwner());
 		}
-		
+
 		// 2. PawnData에 행(row)이 지정되어 있다면 DT_CharacterStats에서 MaxHealth를 적용
 		// AttributeSet은 기본값으로 생성된 상태이므로, 이 단계에서 해당 값을 데이터로 덮어씀
 		ApplyCharacterStatsRow();
+		
+		// 3. ASC + UCombatAttributeSet + 초기 스탯이 모두 준비됨
+		OnAbilitySystemInitialized.Broadcast();
 	}
 }
 
@@ -225,7 +245,7 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 	{
 		return;
 	}
-	
+
 	if (PawnData->CharacterStatsRow.IsNone() || !PawnData->CharacterStatsTable)
 	{
 		return;
@@ -233,13 +253,14 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 
 	const FCharacterStats* Row = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
 		PawnData->CharacterStatsRow, TEXT("URetrievePawnExtensionComponent::ApplyCharacterStatsRow"));
-	
+
 	if (!Row)
 	{
 		return;
 	}
-	
-	if (UCombatAttributeSet* AttributeSet = const_cast<UCombatAttributeSet*>(AbilitySystemComponent->GetSet<UCombatAttributeSet>()))
+
+	if (UCombatAttributeSet* AttributeSet = const_cast<UCombatAttributeSet*>(AbilitySystemComponent->GetSet<
+		UCombatAttributeSet>()))
 	{
 		AttributeSet->SetMaxHealth(Row->MaxHealth);
 		AttributeSet->SetHealth(Row->MaxHealth);
@@ -262,6 +283,6 @@ void URetrievePawnExtensionComponent::CheckDefaultInitialization()
 		RetrieveGameplayTags::InitState_DataInitialized,
 		RetrieveGameplayTags::InitState_GameplayReady,
 	};
-	
+
 	ContinueInitStateChain(StateChain);
 }
