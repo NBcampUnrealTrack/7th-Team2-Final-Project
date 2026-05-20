@@ -1,0 +1,130 @@
+﻿#pragma once
+
+#include "NativeGameplayTags.h"
+
+namespace RetrieveGameplayTags
+{
+	 // ---- Init State
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_Spawned);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_DataAvailable);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_DataInitialized);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_GameplayReady);
+
+    // ---- Input
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Move);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Look);
+
+    // ---- Player abilities
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Guard);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Parry);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Dash);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Jump);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Burst);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Absorb);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Interact);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_LockOn);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_UseItem);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SetElement_Fire);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SetElement_Water);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SetElement_Wind);
+
+    // ---- Enemy / Boss abilities
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_SpecialAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Boss_PatternAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Boss_PhaseTransition);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Boss_Groggy);
+
+    // ---- Common abilities
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Common_Die);
+
+    // ---- Player state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Normal);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Combat);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dodging);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Guarding);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Parrying);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Bursting);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Staggered);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Knockdown);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dead);
+
+    // ---- Enemy state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Idle);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Chase);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Attack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_SpecialAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Hit);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Staggered);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Groggy);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Return);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Dead);
+
+    // ---- Boss state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Intro);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Combat);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PhaseTransition);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Groggy);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Dead);
+
+    // ---- Combat micro-state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Combo_Open);
+
+    // ---- Gauge state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_Full);
+
+    // ---- Elements
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Fire);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Water);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Wind);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Corruption);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_None);
+
+    // ---- Lock-on
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(LockOn_Active);
+
+    // ---- Gameplay events: combat
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ComboFinisher);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Normal);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Heavy);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parry_Success);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Dodge_Success);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_DodgeCounter_Success);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_WeakPointHit);
+
+    // ---- Gameplay events: boss / pattern counter
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_PatternCast);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_PhaseTransition);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_PatternCounterWindow);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_PatternCountered);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_GroggyTrigger);
+
+    // ---- Gameplay events: enemy combat / death
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_Attack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_Die);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_Die);
+
+    // ---- Gameplay events: element / core / item
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_Unlock);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Core_Drop);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Core_Absorb);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Item_Used);
+
+    // ---- Input routing tags
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_UseItem_Slot1);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_UseItem_Slot2);
+
+    // ---- Message channels
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Combat_Hit);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Combat_DamageDealt);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_ElementGauge_SlotChanged);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_ElementGauge_Full);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_ElementGauge_Burst);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Quest_GuardianDefeated);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_World_OutpostActivated);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Player_Died);
+}
