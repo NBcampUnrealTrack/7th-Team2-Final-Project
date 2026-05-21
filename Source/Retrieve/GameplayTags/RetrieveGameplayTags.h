@@ -68,6 +68,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PatternAttack);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_PhaseTransition);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Groggy);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Staggered);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Dead);
 
     // ---- Combat micro-state
@@ -129,4 +130,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Quest_GuardianDefeated);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_World_OutpostActivated);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Player_Died);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Monster_Died);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Game_QueenDefeated);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Enemy_PlayerSpotted);
 }

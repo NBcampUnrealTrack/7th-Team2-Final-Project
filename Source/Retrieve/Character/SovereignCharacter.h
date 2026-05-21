@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/RetrieveCombatCharacter.h"
+#include "GenericTeamAgentInterface.h"
 #include "SovereignCharacter.generated.h"
 
 class UCameraComponent;
@@ -9,13 +10,17 @@ class URetrieveHeroComponent;
 class USpringArmComponent;
 
 UCLASS()
-class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter
+class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 	
 public:
 	ASovereignCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	
+	virtual FGenericTeamId GetGenericTeamId() const override
+	{
+		return FGenericTeamId(PlayerTeamId);
+	}
 protected:
 	virtual void InitializeAbilitySystem() override;
 
@@ -27,4 +32,7 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<UCameraComponent> ThirdPersonCamera;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
+	uint8 PlayerTeamId = 1;
 };

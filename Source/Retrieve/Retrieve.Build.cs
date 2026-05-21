@@ -27,13 +27,13 @@ public class Retrieve : ModuleRules
 			"NetCore",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"AIModule"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"Niagara",
-			"AIModule"
+			"Niagara"
 		});
 
 		// Uncomment if you are using Slate UI
