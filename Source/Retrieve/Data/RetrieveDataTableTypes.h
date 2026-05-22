@@ -24,6 +24,9 @@ struct RETRIEVE_API FCharacterStats : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
 	float MaxHealth = 100.0f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
+	float AttackPower = 0.0f;
 };
 
 USTRUCT(BlueprintType)

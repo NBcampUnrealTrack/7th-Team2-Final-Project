@@ -5,6 +5,7 @@
 #include "Engine/DataAsset.h"
 #include "RetrievePawnData.generated.h"
 
+class UGameplayEffect;
 class UInputMappingContext;
 class URetrieveInputConfig;
 class URetrieveAbilitySet;
@@ -55,4 +56,7 @@ public:
 	/** DataTable 에셋. `CharacterStatsRow` 설정 시 반드시 지정해야 합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
 	TObjectPtr<UDataTable> CharacterStatsTable;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
+	TSubclassOf<UGameplayEffect> InitStatsEffect;
 };

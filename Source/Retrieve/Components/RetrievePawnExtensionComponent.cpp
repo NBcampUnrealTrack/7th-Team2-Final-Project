@@ -7,6 +7,7 @@
 #include "Components/GameFrameworkComponentManager.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
 const FName URetrievePawnExtensionComponent::NAME_ActorFeatureName("PawnExtension");
@@ -259,12 +260,47 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		return;
 	}
 
-	if (UCombatAttributeSet* AttributeSet = const_cast<UCombatAttributeSet*>(AbilitySystemComponent->GetSet<
-		UCombatAttributeSet>()))
+	UCombatAttributeSet* AttributeSet =
+		const_cast<UCombatAttributeSet*>(AbilitySystemComponent->GetSet<UCombatAttributeSet>());
+
+	if (!AttributeSet)
 	{
+		return;
+	}
+	
+	// GE_InitStats가 지정되어 있는 경우 (SetByCaller 활용 주입)
+	if (PawnData->InitStatsEffect)
+	{
+		FGameplayEffectSpecHandle SpecHandle =
+			AbilitySystemComponent->MakeOutgoingSpec(PawnData->InitStatsEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+
+		if (SpecHandle.IsValid() && SpecHandle.Data.IsValid())
+		{
+			SpecHandle.Data->SetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Init_MaxHealth, Row->MaxHealth);
+			SpecHandle.Data->SetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Init_Health, Row->MaxHealth);
+			SpecHandle.Data->SetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Init_AttackPower, Row->AttackPower);
+			
+			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
+	else
+	{
+		// GE 할당이 안 되어 있을 때 에러 방지용 안전한 수동 Fallback
 		AttributeSet->SetMaxHealth(Row->MaxHealth);
 		AttributeSet->SetHealth(Row->MaxHealth);
+		AttributeSet->SetAttackPower(Row->AttackPower);
 	}
+	
+	// PIE 검증을 위한 핵심 초기화 로그 출력
+	UE_LOG(LogTemp, Log, TEXT("[StatsInit] Pawn=%s Row=%s HP=%.1f MaxHP=%.1f ATK=%.1f"),
+		*GetNameSafe(GetOwner()),
+		*PawnData->CharacterStatsRow.ToString(),
+		AttributeSet->GetHealth(),
+		AttributeSet->GetMaxHealth(),
+		AttributeSet->GetAttackPower());
 }
 
 void URetrievePawnExtensionComponent::OnActorInitStateChanged(const FActorInitStateChangedParams& Params)
