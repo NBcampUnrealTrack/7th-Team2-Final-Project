@@ -18,6 +18,9 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	URetrieveAbilitySystemComponent* GetRetrieveAbilitySystemComponent() const { return AbilitySystemComponent; }
 
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Element")
+	FGameplayTag GetCurrentElementTag() const;
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|PlayerState")
 	TObjectPtr<URetrieveAbilitySystemComponent> AbilitySystemComponent;
