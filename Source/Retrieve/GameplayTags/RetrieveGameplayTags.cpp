@@ -132,8 +132,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Item_Used, "GameplayEvent.Item.Used");
 
 	// ---- Input routing tags
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot4, "Input.UseItem.Slot4");
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot5, "Input.UseItem.Slot5");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot1, "Input.UseItem.Slot1");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
 
 	// ---- Item
 	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon, "Item.Weapon");

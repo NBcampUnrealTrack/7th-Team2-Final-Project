@@ -6,9 +6,11 @@
 #include "SovereignCharacter.generated.h"
 
 class UCameraComponent;
+class UInventoryComponent;
 class URetrieveHeroComponent;
 class USpringArmComponent;
 class UCombatReactionComponent;
+class UWeaponComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
@@ -30,6 +32,12 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UCombatReactionComponent> CombatReactionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UInventoryComponent> InventoryComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UWeaponComponent> WeaponComponent;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<USpringArmComponent> CameraSpringArm;

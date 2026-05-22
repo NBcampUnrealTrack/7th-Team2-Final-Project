@@ -2,8 +2,10 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CombatReactionComponent.h"
+#include "Components/InventoryComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
+#include "Components/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Input/RetrieveInputComponent.h"
@@ -25,6 +27,8 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 
 	HeroComponent = CreateDefaultSubobject<URetrieveHeroComponent>(TEXT("HeroComponent"));
 	CombatReactionComponent = CreateDefaultSubobject<UCombatReactionComponent>(TEXT("CombatReactionComponent"));
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
