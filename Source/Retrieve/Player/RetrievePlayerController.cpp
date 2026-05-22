@@ -126,9 +126,7 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 	
 		case ERetrieveSessionState::InGame:
 			{
-				FInputModeGameAndUI Mode;
-				Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-				Mode.SetHideCursorDuringCapture(true);
+				FInputModeGameOnly Mode;
 				SetInputMode(Mode);
 				bShowMouseCursor = false;
 				break;
