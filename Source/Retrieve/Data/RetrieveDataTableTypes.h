@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
@@ -187,4 +187,28 @@ struct RETRIEVE_API FHitFeedback : public FTableRowBase
 	// 대미지 숫자 색상(강도별 시각 차별)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Damage Number")
 	FLinearColor DamageNumberColor = FLinearColor::White;
+};
+
+/**
+ * 스킬 조합
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FSkillCombination : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Element")
+	TMap<FGameplayTag, int32> ElementPattern;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motion")
+	FName MotionGroup;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameplayTag PrimaryEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	FGameplayTag SecondaryEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	float DamageMultiplier;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	float EffectDuration;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
+	float AoeRadius;
 };
