@@ -8,6 +8,7 @@ UCombatAttributeSet::UCombatAttributeSet()
 {
 	InitHealth(100.f);
 	InitMaxHealth(100.f);
+	InitAttackPower(0.f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -15,6 +16,7 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Health, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackPower, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -24,6 +26,10 @@ void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+	}
+	else if (Attribute == GetAttackPowerAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
 	}
 }
 
@@ -64,6 +70,11 @@ void UCombatAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
 void UCombatAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxHealth, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_AttackPower(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, AttackPower, OldValue);
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const

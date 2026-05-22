@@ -164,4 +164,35 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Monster_Died);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Game_QueenDefeated);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Enemy_PlayerSpotted);
+	
+	// ---- Data
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Mul);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxHealth);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Health);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackPower);
+	/*
+	// ---- Attack type (공격자 측 분류 — 가드/패리 분기 판정용)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Normal);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Heavy);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_BossHeavy);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Unblockable);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Parryable);
+
+	// ---- Hit react (피격자 반응 제어 마커 — Cue 연동용)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hit_React_Stagger);
+
+	// ---- Damage context
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Source_Player);
+
+	// ---- Gauge state (보완)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_Empty);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_SlotReady);
+
+	// ---- Gameplay events: combat (보완)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_HeavyAttack_Launched);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Guard_Success);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Guard_Break);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parry_Fail);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Knockdown);
+	*/
 }

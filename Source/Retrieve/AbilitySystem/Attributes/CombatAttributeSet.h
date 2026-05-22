@@ -29,6 +29,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth)
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxHealth)
+	
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_AttackPower)
+	FGameplayAttributeData AttackPower;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, AttackPower)
 
 	UPROPERTY(BlueprintReadOnly)
 	FGameplayAttributeData IncomingDamage;
@@ -41,6 +45,7 @@ public:
 private:
 	UFUNCTION() void OnRep_Health(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_AttackPower(const FGameplayAttributeData& OldValue);
 	// 데미지 적용 후 카메라/플로터/리액션 시스템에 알릴 이벤트 발행
 	void BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const;
 };

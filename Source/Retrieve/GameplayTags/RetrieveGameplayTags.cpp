@@ -132,8 +132,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Item_Used, "GameplayEvent.Item.Used");
 
 	// ---- Input routing tags
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot4, "Input.UseItem.Slot4");
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot5, "Input.UseItem.Slot5");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot1, "Input.UseItem.Slot1");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
 
 	// ---- Item
 	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon, "Item.Weapon");
@@ -162,4 +162,35 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Monster_Died, "Channel.Monster.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Game_QueenDefeated, "Channel.Game.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_PlayerSpotted, "Channel.Enemy.PlayerSpotted");
+	
+	// ---- Data
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxHealth, "Data.Init.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Health, "Data.Init.Health");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
+	/*
+	// ---- Attack type
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Normal, "Attack.Type.Normal");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Heavy, "Attack.Type.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Unblockable, "Attack.Type.Unblockable");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Parryable, "Attack.Type.Parryable");
+
+	// ---- Hit react
+	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");
+
+	// ---- Damage context
+	UE_DEFINE_GAMEPLAY_TAG(Damage_Source_Player, "Damage.Source.Player");
+
+	// ---- Gauge state
+	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_Empty, "State.Gauge.Empty");
+	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_SlotReady, "State.Gauge.SlotReady");
+
+	// ---- Gameplay events: combat
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_HeavyAttack_Launched, "GameplayEvent.HeavyAttack.Launched");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Success, "GameplayEvent.Guard.Success");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Break, "GameplayEvent.Guard.Break");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Fail, "GameplayEvent.Parry.Fail");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Knockdown, "GameplayEvent.Hit.Knockdown");
+	*/
 }

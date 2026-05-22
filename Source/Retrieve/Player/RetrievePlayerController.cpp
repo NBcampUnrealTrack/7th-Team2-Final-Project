@@ -3,13 +3,29 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/InventoryComponent.h"
+#include "Components/Widget.h"
+#include "Components/WeaponComponent.h"
 #include "Core/RetrieveGameMode.h"
 #include "Core/RetrieveGameState.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
+#include "UI/Inventory/InventoryPanelWidget.h"
+#include "UI/Map/RetrieveMinimapWidget.h"
+#include "UI/Map/RetrieveWorldMapWidget.h"
+#include "UI/RetrieveGamePanelWidget.h"
+#include "UObject/ConstructorHelpers.h"
 
 ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
+	bShowMouseCursor = false;
+
+	static ConstructorHelpers::FClassFinder<UUserWidget> HUDWidgetFinder(TEXT("/Game/Retrieve/UI/WBP_HUD"));
+	if (HUDWidgetFinder.Succeeded())
+	{
+		HUDClass = HUDWidgetFinder.Class;
+	}
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -51,6 +67,8 @@ void ARetrievePlayerController::BeginPlay()
 
 void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CloseActivePanel();
+
 	if (SessionListener.IsValid())
 	{
 		if (UWorld* World = GetWorld())
@@ -83,8 +101,38 @@ void ARetrievePlayerController::PlayerTick(float DeltaTime)
 	}
 }
 
+bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (Params.Event == IE_Pressed)
+	{
+		if (ActivePanel && Params.Key == EKeys::Escape)
+		{
+			CloseActivePanel();
+			return true;
+		}
+
+		if (TryHandleMinimapShortcut(Params.Key))
+		{
+			return true;
+		}
+
+		if (TryHandlePanelShortcut(Params.Key))
+		{
+			return true;
+		}
+
+		if (TryHandleConsumableSlotShortcut(Params.Key))
+		{
+			return true;
+		}
+	}
+
+	return Super::InputKey(Params);
+}
+
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
 {
+	CloseActivePanel();
 	SwapActiveWidget(NewState);
 	UpdateInputMode(NewState);
 }
@@ -157,6 +205,215 @@ TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieve
 		default:
 			return nullptr;
 	}
+}
+
+void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePanelWidget> PanelClass, FKey ToggleKey)
+{
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open panel: PanelClass is empty."));
+		return;
+	}
+
+	if (ActivePanel && ActivePanelClass == PanelClass)
+	{
+		CloseActivePanel();
+		return;
+	}
+
+	CloseActivePanel();
+
+	URetrieveGamePanelWidget* NewPanel = CreateWidget<URetrieveGamePanelWidget>(this, PanelClass);
+	if (!NewPanel)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to create panel: %s"), *GetNameSafe(PanelClass));
+		return;
+	}
+
+	NewPanel->SetIsFocusable(true);
+	NewPanel->ToggleKey = ToggleKey;
+	NewPanel->OnCloseRequested.AddDynamic(this, &ThisClass::HandleActivePanelCloseRequested);
+
+	if (UInventoryPanelWidget* InventoryPanel = Cast<UInventoryPanelWidget>(NewPanel))
+	{
+		InventoryPanel->InitializeInventoryPanel(GetPawnInventoryComponent(), GetPawnWeaponComponent());
+	}
+
+	ActivePanel = NewPanel;
+	ActivePanelClass = PanelClass;
+
+	NewPanel->AddToViewport(PanelZOrder);
+	CenterActiveWorldMapPanel();
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetWidgetToFocus(NewPanel->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+	bShowMouseCursor = true;
+
+	NewPanel->SetKeyboardFocus();
+}
+
+void ARetrievePlayerController::CloseActivePanel()
+{
+	if (!ActivePanel)
+	{
+		return;
+	}
+
+	ActivePanel->OnCloseRequested.RemoveDynamic(this, &ThisClass::HandleActivePanelCloseRequested);
+	ActivePanel->RemoveFromParent();
+	ActivePanel = nullptr;
+	ActivePanelClass = nullptr;
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = false;
+}
+
+void ARetrievePlayerController::ToggleMinimapRotationMode()
+{
+	if (URetrieveMinimapWidget* MinimapWidget = FindMinimapWidgetInHUD())
+	{
+		MinimapWidget->ToggleRotationMode();
+	}
+}
+
+void ARetrievePlayerController::HandleActivePanelCloseRequested()
+{
+	CloseActivePanel();
+}
+
+bool ARetrievePlayerController::TryHandleMinimapShortcut(FKey Key)
+{
+	if (bEnableMinimapRotationShortcut && MinimapRotationKey.IsValid() && Key == MinimapRotationKey)
+	{
+		ToggleMinimapRotationMode();
+		return true;
+	}
+
+	return false;
+}
+
+bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
+{
+	for (const FRetrievePanelShortcutConfig& ShortcutConfig : PanelShortcuts)
+	{
+		if (ShortcutConfig.Key != Key)
+		{
+			continue;
+		}
+
+		if (!CanOpenPanel(ShortcutConfig))
+		{
+			return true;
+		}
+
+		OpenExclusivePanel(ShortcutConfig.PanelClass, ShortcutConfig.Key);
+		return true;
+	}
+
+	return false;
+}
+
+bool ARetrievePlayerController::TryHandleConsumableSlotShortcut(FKey Key)
+{
+	const int32 SlotKey = Key == EKeys::Four ? 4 : (Key == EKeys::Five ? 5 : INDEX_NONE);
+	if (SlotKey == INDEX_NONE)
+	{
+		return false;
+	}
+
+	if (UInventoryComponent* InventoryComponent = GetPawnInventoryComponent())
+	{
+		InventoryComponent->UseConsumableSlot(SlotKey);
+	}
+
+	return true;
+}
+
+bool ARetrievePlayerController::CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const
+{
+	if (!ShortcutConfig.PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid panel shortcut: %s has no PanelClass."), *ShortcutConfig.Key.ToString());
+		return false;
+	}
+
+	if (!ShortcutConfig.bRequiresInventoryOpenPermission)
+	{
+		return true;
+	}
+
+	const UInventoryComponent* InventoryComponent = GetPawnInventoryComponent();
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open inventory panel: pawn has no InventoryComponent."));
+		return false;
+	}
+
+	return InventoryComponent->CanOpenInventory();
+}
+
+void ARetrievePlayerController::CenterActiveWorldMapPanel()
+{
+	if (!bCenterWorldMapOnOpen)
+	{
+		return;
+	}
+
+	if (URetrieveWorldMapWidget* WorldMapWidget = Cast<URetrieveWorldMapWidget>(ActivePanel))
+	{
+		WorldMapWidget->CenterOnPlayer();
+	}
+}
+
+URetrieveMinimapWidget* ARetrievePlayerController::FindMinimapWidgetInHUD() const
+{
+	if (!ActiveTopLevelWidget)
+	{
+		return nullptr;
+	}
+
+	if (URetrieveMinimapWidget* DirectMinimapWidget = Cast<URetrieveMinimapWidget>(ActiveTopLevelWidget))
+	{
+		return DirectMinimapWidget;
+	}
+
+	if (UWidget* RootWidget = ActiveTopLevelWidget->GetRootWidget())
+	{
+		if (URetrieveMinimapWidget* RootMinimapWidget = Cast<URetrieveMinimapWidget>(RootWidget))
+		{
+			return RootMinimapWidget;
+		}
+	}
+
+	URetrieveMinimapWidget* FoundMinimapWidget = nullptr;
+	if (ActiveTopLevelWidget->WidgetTree)
+	{
+		ActiveTopLevelWidget->WidgetTree->ForEachWidget([&FoundMinimapWidget](UWidget* Widget)
+		{
+			if (!FoundMinimapWidget)
+			{
+				FoundMinimapWidget = Cast<URetrieveMinimapWidget>(Widget);
+			}
+		});
+	}
+
+	return FoundMinimapWidget;
+}
+
+UInventoryComponent* ARetrievePlayerController::GetPawnInventoryComponent() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	return ControlledPawn ? ControlledPawn->FindComponentByClass<UInventoryComponent>() : nullptr;
+}
+
+UWeaponComponent* ARetrievePlayerController::GetPawnWeaponComponent() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	return ControlledPawn ? ControlledPawn->FindComponentByClass<UWeaponComponent>() : nullptr;
 }
 
 
