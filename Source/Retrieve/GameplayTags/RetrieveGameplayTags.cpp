@@ -82,6 +82,18 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Element_Corruption, "Element.Corruption");
 	UE_DEFINE_GAMEPLAY_TAG(Element_None, "Element.None");
 
+	// ---- Weapon
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_SwordShield, "Weapon.Type.SwordShield");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_DualBlade, "Weapon.Type.DualBlade");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Staff, "Weapon.Type.Staff");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_Low, "Weapon.Grade.Low");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_Mid, "Weapon.Grade.Mid");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_High, "Weapon.Grade.High");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_Fire, "Weapon.Affinity.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_Water, "Weapon.Affinity.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_Wind, "Weapon.Affinity.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_None, "Weapon.Affinity.None");
+
 	// ---- Lock-on
 	UE_DEFINE_GAMEPLAY_TAG(LockOn_Active, "LockOn.Active");
 
@@ -120,8 +132,22 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Item_Used, "GameplayEvent.Item.Used");
 
 	// ---- Input routing tags
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot1, "Input.UseItem.Slot1");
-	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot4, "Input.UseItem.Slot4");
+	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot5, "Input.UseItem.Slot5");
+
+	// ---- Item
+	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon, "Item.Weapon");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable, "Item.Consumable");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material, "Item.Material");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Currency, "Item.Currency");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Fire, "Item.Consumable.Draught.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Water, "Item.Consumable.Draught.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Wind, "Item.Consumable.Draught.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material_EmptyFlask, "Item.Material.EmptyFlask");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Fire, "Item.Material.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Water, "Item.Material.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Wind, "Item.Material.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Currency_Basic, "Item.Currency.Basic");
 
 	// ---- Message channels
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Session_StateChanged, "Channel.Session.StateChanged");
