@@ -9,6 +9,13 @@
 
 class UStateTree;
 class UCameraShakeBase;
+class UAnimInstance;
+class UAnimMontage;
+class UGameplayEffect;
+class URetrieveAbilitySet;
+class USkeletalMesh;
+class UStaticMesh;
+class UTexture2D;
 
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
@@ -209,4 +216,255 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	float EffectDuration;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
 	float AoeRadius;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveItemStack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item", meta = (Categories = "Item"))
+	FGameplayTag ItemCategoryTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item", meta = (ClampMin = "0"))
+	int32 Quantity = 1;
+};
+
+// SaveGame 복원용 인벤토리 스냅샷
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveInventorySaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TArray<FRetrieveItemStack> WeaponItems;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TArray<FRetrieveItemStack> ConsumableItems;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TArray<FRetrieveItemStack> MaterialItems;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	FName EquippedWeaponId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TMap<int32, FName> ConsumableSlotItemIds;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponSkillPreview
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (Categories = "Ability"))
+	FGameplayTag AbilityTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill", meta = (MultiLine = true))
+	FText ShortDescription;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill")
+	TSoftObjectPtr<UTexture2D> Icon;
+};
+
+UENUM(BlueprintType)
+enum class ERetrieveWeaponMeshType : uint8
+{
+	StaticMesh,
+	SkeletalMesh
+};
+
+UENUM(BlueprintType)
+enum class ERetrieveWeaponAttachTarget : uint8
+{
+	CharacterMeshSocket,
+	OwnerRoot,
+	OwnerComponentName,
+	OwnerComponentTag
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveWeaponAttachmentData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FName PartName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	ERetrieveWeaponMeshType MeshType = ERetrieveWeaponMeshType::StaticMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	TSoftObjectPtr<UStaticMesh> StaticMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	TSoftObjectPtr<USkeletalMesh> SkeletalMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	ERetrieveWeaponAttachTarget AttachTarget = ERetrieveWeaponAttachTarget::CharacterMeshSocket;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FName AttachComponentName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FName AttachComponentTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FName AttachSocketName = TEXT("Weapon_R");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FTransform RelativeTransform = FTransform::Identity;
+};
+
+// 무기 데이터. 보유 상태는 InventoryComponent, 실제 장착 반영은 WeaponComponent에서 처리
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Item"))
+	FGameplayTag ItemTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Weapon.Type"))
+	FGameplayTag WeaponTypeTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Weapon.Grade"))
+	FGameplayTag WeaponGradeTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Weapon.Affinity"))
+	FGameplayTag WeaponAffinityTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	float AttackPower = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	float ElementChargeMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	TArray<FRetrieveWeaponAttachmentData> Attachments;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	TSoftObjectPtr<UDataTable> WeaponAttackTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
+	FSoftObjectPath WeaponAbilitySet;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (Categories = "Ability"))
+	TArray<FGameplayTag> GrantedAbilityTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Animation")
+	TSoftClassPtr<UAnimInstance> UpperBodyAnimLayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|UI")
+	TArray<FWeaponSkillPreview> SkillPreviews;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|UI", meta = (MultiLine = true))
+	FText ShortDescription;
+};
+
+// 소모 아이템 데이터. 실제 회복/버프 적용은 UseItem Ability에서 처리
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveConsumableItemRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable", meta = (Categories = "Item.Consumable"))
+	FGameplayTag ItemTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable", meta = (Categories = "Element"))
+	FGameplayTag ElementTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	float HealAmount = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	float ElementBuffMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	float BuffDuration = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable", meta = (ClampMin = "1"))
+	int32 MaxStack = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|GAS")
+	TSubclassOf<UGameplayEffect> HealEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|GAS")
+	TSubclassOf<UGameplayEffect> ElementBuffEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|Animation")
+	TSoftObjectPtr<UAnimMontage> UseMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|Rules")
+	FGameplayTagContainer BlockedStateTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|UI", meta = (MultiLine = true))
+	FText ShortDescription;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveMaterialItemRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material", meta = (Categories = "Item.Material"))
+	FGameplayTag ItemTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material", meta = (Categories = "Element"))
+	FGameplayTag ElementTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material", meta = (ClampMin = "1"))
+	int32 MaxStack = 99;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material|UI", meta = (MultiLine = true))
+	FText ShortDescription;
+};
+
+// UI 아이콘 조회용 테이블. RowName은 ItemId와 동일하게 사용
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveItemIconRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
+	TSoftObjectPtr<UTexture2D> IconTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
+	TSoftObjectPtr<UTexture2D> ElementIconTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon", meta = (Categories = "Item"))
+	FGameplayTag ItemCategoryTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
+	FGameplayTag ElementOrAffinityTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
+	FLinearColor AccentColor = FLinearColor::White;
 };
