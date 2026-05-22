@@ -28,7 +28,8 @@ public class Retrieve : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"AIModule"
+			"AIModule",
+			"Landscape"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
