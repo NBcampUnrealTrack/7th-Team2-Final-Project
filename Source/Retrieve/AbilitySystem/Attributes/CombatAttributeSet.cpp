@@ -78,33 +78,56 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	FGameplayTagContainer SourceTags;
 	Data.EffectSpec.GetAllAssetTags(SourceTags);
 	
-	FGameplayTag HitEventTag ;
+	FGameplayTag AttackerEventTag;
 	for (const FGameplayTag& Tag : SourceTags)
 	{
-		if (Tag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Hit))
+		if (Tag != RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess &&
+			Tag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess))
 		{
-			HitEventTag = Tag;
+			AttackerEventTag = Tag;
 			break;
 		}
 	}
 	
-	if (HitEventTag.IsValid() == false)
+	if (AttackerEventTag.IsValid() == false)
 	{
-		HitEventTag = RetrieveGameplayTags::GameplayEvent_Hit_Normal;
+		AttackerEventTag = RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Light;
+	}
+	
+	FGameplayTag TargetEventTag;
+	for (const FGameplayTag& Tag : SourceTags)
+	{
+		if (Tag != RetrieveGameplayTags::GameplayEvent_Hit &&
+			Tag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Hit))
+		{
+			TargetEventTag = Tag;
+			break;
+		}
+	}
+	
+	if (TargetEventTag.IsValid() == false)
+	{
+		TargetEventTag = RetrieveGameplayTags::GameplayEvent_Hit_Normal;
 	}
 	
 	FGameplayEventData EventData;
-	EventData.EventTag = HitEventTag;
 	EventData.Instigator = AttackerActor;
 	EventData.Target = TargetActor;
 	EventData.EventMagnitude = DamageDone;
 	
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, HitEventTag, EventData);
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, HitEventTag, EventData);
+	EventData.EventTag = AttackerEventTag;
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
+	if (TargetActor != AttackerActor)
+	{
+		EventData.EventTag = TargetEventTag;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);
+	}
 	
 	// 테스트 코드
-	UE_LOG(LogTemp, Log, TEXT("[HitEvent] %s Damage=%.1f Attacker=%s Target=%s"),
-	*HitEventTag.ToString(), DamageDone,
-	AttackerActor ? *AttackerActor->GetName() : TEXT("None"),
-	TargetActor   ? *TargetActor->GetName()   : TEXT("None"));
+	UE_LOG(LogTemp, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
+		*AttackerEventTag.ToString(),
+		*TargetEventTag.ToString(),
+		DamageDone,
+		*GetNameSafe(AttackerActor),
+		*GetNameSafe(TargetActor));
 }
