@@ -126,6 +126,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_UseItem_Slot2);
 
     // ---- Message channels
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Session_StateChanged);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Combat_Hit);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Combat_DamageDealt);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_ElementGauge_SlotChanged);
