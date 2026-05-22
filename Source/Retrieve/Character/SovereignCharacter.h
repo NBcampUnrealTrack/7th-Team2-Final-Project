@@ -8,6 +8,7 @@
 class UCameraComponent;
 class URetrieveHeroComponent;
 class USpringArmComponent;
+class UCombatReactionComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
@@ -26,6 +27,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveHeroComponent> HeroComponent;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UCombatReactionComponent> CombatReactionComponent;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<USpringArmComponent> CameraSpringArm;

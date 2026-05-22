@@ -1,6 +1,7 @@
 #include "Character/SovereignCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/CombatReactionComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -23,7 +24,8 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	MoveComp->AirControl = 0.35f;
 
 	HeroComponent = CreateDefaultSubobject<URetrieveHeroComponent>(TEXT("HeroComponent"));
-
+	CombatReactionComponent = CreateDefaultSubobject<UCombatReactionComponent>(TEXT("CombatReactionComponent"));
+	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
 	CameraSpringArm->TargetArmLength = 400.0f;

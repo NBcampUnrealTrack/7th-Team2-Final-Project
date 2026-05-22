@@ -94,6 +94,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Dodge_Success, "GameplayEvent.Dodge.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_DodgeCounter_Success, "GameplayEvent.DodgeCounter.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_WeakPointHit, "GameplayEvent.WeakPointHit");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess, "GameplayEvent.Attack.HitSuccess");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Light, "GameplayEvent.Attack.HitSuccess.Light");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Heavy, "GameplayEvent.Attack.HitSuccess.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_WeakPoint, "GameplayEvent.Attack.HitSuccess.WeakPoint");
 
 	// ---- Gameplay events: boss / pattern counter
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Boss_PatternCast, "GameplayEvent.Boss.PatternCast");

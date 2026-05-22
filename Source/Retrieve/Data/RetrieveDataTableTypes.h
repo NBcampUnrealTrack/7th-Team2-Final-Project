@@ -3,14 +3,12 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 
-#include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "RetrieveDataTableTypes.generated.h"
 
 class UStateTree;
 class UCameraShakeBase;
-class UStateTree;
 
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
@@ -179,8 +177,8 @@ struct RETRIEVE_API FHitFeedback : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "3.0"))
 	float CameraShakeScale = 1.0f;
 	// 매칭 되는 GameplayEvent 태그
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FX", meta = (Categories = "GameplayEvent"))
-	FGameplayTagContainer FXTags;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit", meta = (Categories = "GameplayEvent"))
+	FGameplayTagContainer HitEventTags;
 	// 대미지 숫자 플로터 크기 배수
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Damage Number", meta = (ClampMin = "0.5", UIMin = "0.5", UIMax = "3.0"))
 	float DamageNumberScale = 1.0f;
