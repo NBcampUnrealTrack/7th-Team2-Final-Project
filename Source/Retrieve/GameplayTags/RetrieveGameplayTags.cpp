@@ -124,6 +124,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
 
 	// ---- Message channels
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Session_StateChanged, "Channel.Session.StateChanged");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Combat_Hit, "Channel.Combat.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Combat_DamageDealt, "Channel.Combat.DamageDealt");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_SlotChanged, "Channel.ElementGauge.SlotChanged");
