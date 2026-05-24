@@ -98,8 +98,9 @@ void URetrievePawnExtensionComponent::InitializeAbilitySystem(URetrieveAbilitySy
 
 void URetrievePawnExtensionComponent::UninitializeAbilitySystem()
 {
-	if (!AbilitySystemComponent)
+	if (!IsValid(AbilitySystemComponent))
 	{
+		AbilitySystemComponent = nullptr;
 		return;
 	}
 

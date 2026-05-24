@@ -93,6 +93,16 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag RequiredActionTag;
+	
+	// 충돌체 관련
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
+	FName HitboxBoneName = NAME_None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(ClampMin="0.0"))
+	float HitboxRadius = 30.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
+	FVector HitboxOffset = FVector::ZeroVector;
 };
 
 USTRUCT(BlueprintType)

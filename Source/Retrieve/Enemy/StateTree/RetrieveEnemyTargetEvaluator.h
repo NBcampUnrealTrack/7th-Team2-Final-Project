@@ -15,6 +15,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	TObjectPtr<AActor> TargetPlayer = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	FVector TargetLocation = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float DistanceToTarget = 0.f;
@@ -27,6 +30,12 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	FGameplayTagContainer OwnedTags;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bOutOfChaseRange = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Input")
+	float ChaseRange = 1500.f;
 	
 	float AccumulatedTime = 0.f;
 	float TimeSinceLastSeen = 0.f;

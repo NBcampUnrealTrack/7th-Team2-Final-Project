@@ -4,9 +4,12 @@
 #include "StateTreeExecutionContext.h"
 #include "AIController.h"
 #include "Perception/AIPerceptionComponent.h"
-#include "Character/SovereignCharacter.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "Character/RetrieveEnemyCharacter.h"
 
 bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
 {
@@ -27,6 +30,8 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	InstanceData.SpawnedLocation = Pawn->GetActorLocation();
+	
+	InstanceData.bOutOfChaseRange = false;
 }
 
 void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
@@ -52,7 +57,12 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	{
 		return;
 	}
+	
+	const float DistanceFromSpawn =
+	FVector::Dist(InstanceData.SpawnedLocation, Pawn->GetActorLocation());
 
+	InstanceData.bOutOfChaseRange = DistanceFromSpawn >= InstanceData.ChaseRange;
+	
 	TArray<AActor*> PerceivedActors;
 	PerceptionComp->GetCurrentlyPerceivedActors(nullptr, PerceivedActors);
 
@@ -62,9 +72,17 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	for (AActor* Actor : PerceivedActors)
 	{
-		if (!Actor || !Cast<ASovereignCharacter>(Actor))
+		if (!Actor)
 		{
 			continue;
+		}
+		const AAIController* OwnerController =
+			Cast<AAIController>(Pawn->GetController());
+
+		if (!OwnerController ||
+			OwnerController->GetTeamAttitudeTowards(*Actor) != ETeamAttitude::Hostile)
+		{
+			return;
 		}
 		
 		const float DistSq = FVector::DistSquared(PawnLocation, Actor->GetActorLocation());
@@ -77,8 +95,26 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (NearestTarget)
 	{
-		InstanceData.TargetPlayer = NearestTarget;
-		InstanceData.DistanceToTarget = FMath::Sqrt(NearestDistSq);
+		if (InstanceData.TargetPlayer != NearestTarget)
+		{
+			const bool bHadTarget = InstanceData.TargetPlayer != nullptr;
+			InstanceData.TargetPlayer = NearestTarget;
+			
+			if (!bHadTarget)
+			{
+				FEnemyPlayerSpottedPayload Payload;
+				Payload.SpottedActor = NearestTarget;
+				Payload.SpottedLocation = NearestTarget->GetActorLocation();
+				Payload.InstigatorLocation = Pawn->GetActorLocation();
+				Payload.InstigatorEnemy = Pawn;
+
+				UWorld* World = Pawn->GetWorld();
+				UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(World);
+				MsgSubsys.BroadcastMessage(
+					RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
+					Payload);
+			}
+		}
 		InstanceData.TimeSinceLastSeen = 0.f;
 		InstanceData.bTargetLost = false;
 	}
@@ -92,6 +128,24 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			InstanceData.DistanceToTarget = 0.f;
 			InstanceData.bTargetLost = true;
 		}
+	}
+	else
+	{
+		if (ARetrieveEnemyCharacter* EnemyChar = Cast<ARetrieveEnemyCharacter>(Pawn))
+		{
+			if (AActor* Alerted = EnemyChar->AlertedTarget)
+			{
+				InstanceData.TargetPlayer = Alerted;
+				InstanceData.bTargetLost  = false;
+				EnemyChar->AlertedTarget  = nullptr;
+			}
+		}
+	}
+	
+	if (IsValid(InstanceData.TargetPlayer))
+	{
+		InstanceData.TargetLocation = InstanceData.TargetPlayer->GetActorLocation();
+		InstanceData.DistanceToTarget = FVector::Dist(Pawn->GetActorLocation(), InstanceData.TargetLocation);
 	}
 	
 	if (const IAbilitySystemInterface* ASCIf = Cast<IAbilitySystemInterface>(Pawn))

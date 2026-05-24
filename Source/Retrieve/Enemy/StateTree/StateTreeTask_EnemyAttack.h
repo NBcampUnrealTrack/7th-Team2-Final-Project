@@ -12,6 +12,9 @@ struct FStateTreeTask_EnemyAttackInstanceData
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, meta=(Optional))
+	TObjectPtr<AActor> TargetActor = nullptr;
+	
 	// 이 시간(초)을 초과하면 GA 완료 여부와 무관하게 Succeeded 반환
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.5"))
 	float MaxAttackDuration = 5.f;

@@ -8,11 +8,46 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Engine/DataTable.h"
+#include "Components/SphereComponent.h"
+#include "AbilitySystemInterface.h"
+#include "GameFramework/Character.h"
+#include "GameplayEffect.h"
+#include "AIController.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
 	PatternTable = InPatternTable;
 	PatternSlots = InPatternSlots;
+	if (!PatternSlots.IsEmpty())
+	{
+		BasicAttackRowName = PatternSlots[0];
+	}
+}
+
+bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
+{
+	if (!Target) return false;
+
+	URetrieveAbilitySystemComponent* ASC = GetASC();
+	if (!ASC) return false;
+
+	// 기본 공격 Row 유효성 확인
+	if (!PatternTable || BasicAttackRowName.IsNone()) return false;
+	const FMonsterPatternRow* Row =
+		PatternTable->FindRow<FMonsterPatternRow>(BasicAttackRowName, TEXT(""));
+	if (!Row || Row->HitboxBoneName.IsNone()) return false;
+
+	ActivePatternRowName = BasicAttackRowName;
+
+	FGameplayEventData EventData;
+	EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
+	EventData.Target     = Target;
+	EventData.Instigator = GetOwner();
+
+	const int32 TriggeredCount =
+		ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_Attack, &EventData);
+
+	return TriggeredCount > 0;
 }
 
 bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
@@ -23,7 +58,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	}
 
 	const FMonsterPatternRow* BestPattern = FindBestPattern(Target);
-	if (!BestPattern)
+	if (!BestPattern || BestPattern->HitboxBoneName == NAME_None)
 	{
 		return false;
 	}
@@ -33,7 +68,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	{
 		return false;
 	}
-
+	
 	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 	{
 		PatternCounter->SetActivePatternRow(ActivePatternRowName, PatternTable.Get());
@@ -42,8 +77,15 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	FGameplayEventData EventData;
 	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
 	EventData.Target   = Target;
-	ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_Attack, &EventData);
+	EventData.Instigator = GetOwner();
+	
+	const int32 TriggeredCount = ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack, &EventData);
 
+	if (TriggeredCount <= 0)
+	{
+		return false;
+	}
+	
 	StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
 	return true;
 }
@@ -64,6 +106,7 @@ void UEnemyCombatComponent::StopCurrentPattern()
 		PatternCounter->CloseCounterWindow();
 	}
 
+	DeactivateHitbox();
 	ActivePatternRowName = NAME_None;
 }
 
@@ -73,7 +116,144 @@ bool UEnemyCombatComponent::IsPatternActive() const
 	return ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack);
 }
 
-const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target) const
+void UEnemyCombatComponent::ActivateHitbox()
+{
+	if (!ActiveHitboxComp) return;
+
+	const FMonsterPatternRow* Row = PatternTable
+		? PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName == NAME_None 
+			? BasicAttackRowName : ActivePatternRowName,
+			TEXT(""))
+		: nullptr;
+
+	if (Row && !Row->HitboxBoneName.IsNone())
+	{
+		if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
+		{
+			if (!ActiveHitboxComp->AttachToComponent(
+				OwnerChar->GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				Row->HitboxBoneName))
+			{
+				UE_LOG(LogSkeletalMesh, Error, TEXT("[%s] HitBox attachment failed"), *GetName());
+			}
+		}
+		
+		ActiveHitboxComp->SetSphereRadius(Row->HitboxRadius);
+		ActiveHitboxComp->SetRelativeLocation(Row->HitboxOffset);
+	}
+	else if (Row == nullptr)
+	{
+		UE_LOG(LogDataTable, Error, TEXT("[%s] Row is inValid"), *GetName());
+	}
+	else if (Row->HitboxBoneName.IsNone())
+	{
+		UE_LOG(LogDataTable, Error, TEXT("[%s] Bone name is none"), *GetName());
+	}
+	
+	HitActors.Empty();
+	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+}
+
+void UEnemyCombatComponent::DeactivateHitbox()
+{
+	if (!ActiveHitboxComp)
+	{
+		return;
+	}
+	
+	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HitActors.Empty();
+}
+
+void UEnemyCombatComponent::SetActiveHitbox(USphereComponent* NewHitbox)
+{
+	if (ActiveHitboxComp)
+	{
+		ActiveHitboxComp->OnComponentBeginOverlap.RemoveDynamic(
+			this, &UEnemyCombatComponent::OnHitboxOverlap);
+	}
+
+	ActiveHitboxComp = NewHitbox;
+
+	if (ActiveHitboxComp)
+	{
+		ActiveHitboxComp->OnComponentBeginOverlap.AddDynamic(
+			this, &UEnemyCombatComponent::OnHitboxOverlap);
+		ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+
+void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!OtherActor || OtherActor == GetOwner())
+	{
+		return;
+	}
+	
+	const IAbilitySystemInterface* TargetASCActor = 
+		Cast<IAbilitySystemInterface>(OtherActor);
+
+	if (!TargetASCActor)
+	{
+		return;
+	}
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!OwnerPawn)
+	{
+		return;
+	}
+	
+	const AAIController* OwnerController =
+		Cast<AAIController>(OwnerPawn->GetController());
+
+	if (!OwnerController ||
+		OwnerController->GetTeamAttitudeTowards(*OtherActor) != ETeamAttitude::Hostile)
+	{
+		return;
+	}
+	
+	if (HitActors.Contains(OtherActor))
+	{
+		return;
+	}
+	
+	if (!GetOwner()->HasAuthority())
+	{
+		return;
+	}
+	
+	IAbilitySystemInterface* TargetIF = Cast<IAbilitySystemInterface>(OtherActor);
+	UAbilitySystemComponent* TargetASC = TargetIF ? TargetIF->GetAbilitySystemComponent() : nullptr;
+	if (!TargetASC)
+	{
+		return;
+	}
+	
+	URetrieveAbilitySystemComponent* SourceASC = GetASC();
+	if (!SourceASC || !DamageEffectClass)
+	{
+		return;
+	}
+	
+	HitActors.Add(OtherActor);
+
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddInstigator(GetOwner(), GetOwner());
+	FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(
+		DamageEffectClass, 1.f, Context);
+
+	if (Spec.IsValid())
+	{
+		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+	}
+	
+	UE_LOG(LogDamage, Display, TEXT("[%s] Hit "), *GetName())
+}
+
+const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
 {
 	if (!PatternTable || PatternSlots.IsEmpty() || !GetOwner())
 	{
@@ -83,38 +263,37 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
 	const FVector PawnLocation = GetOwner()->GetActorLocation();
 	const float DistanceSq     = FVector::DistSquared(PawnLocation, Target->GetActorLocation());
 
-	const FMonsterPatternRow* BestRow      = nullptr;
-	int32                     BestPriority = MIN_int32;
-	FName                     BestRowName  = NAME_None;
+	const FMonsterPatternRow* BestRow = nullptr;
+	int32 BestPriority = MIN_int32;
 
 	for (const FName& RowName : PatternSlots)
 	{
 		const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(RowName, TEXT("UEnemyCombatComponent"));
 		if (!Row)
 		{
+			UE_LOG(LogTemp,Error, TEXT("[%s] Can't find patternRow. RowName : %s"), *GetName(), *RowName.ToString());
 			continue;
 		}
+		
 		if (DistanceSq > FMath::Square(Row->ActivationRange))
 		{
 			continue;
 		}
+		
 		if (!IsCooldownReady(RowName))
 		{
 			continue;
 		}
+		
 		if (Row->Priority > BestPriority)
 		{
 			BestPriority = Row->Priority;
-			BestRow      = Row;
-			BestRowName  = RowName;
+			ActivePatternRowName = RowName;
+			BestRow = Row;
 		}
 	}
-
-	// const_cast: FindBestPattern은 const지만 선택된 패턴 이름을 캐싱해야 함
-	if (BestRow)
-	{
-		const_cast<UEnemyCombatComponent*>(this)->ActivePatternRowName = BestRowName;
-	}
+	
+	UE_LOG(LogDataTable, Display, TEXT("[%s] Set ActivePatternRowName : %s"), *GetName(), *ActivePatternRowName.ToString());
 	return BestRow;
 }
 

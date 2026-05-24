@@ -3,10 +3,6 @@
 #include "Components/StateTreeAIComponent.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
-#include "StructUtils/InstancedStruct.h"
-#include "GameFramework/GameplayMessageSubsystem.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
-#include "Character/SovereignCharacter.h"
 #include "GenericTeamAgentInterface.h"
 
 AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializer)
@@ -25,19 +21,11 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
-
-	AIPerceptionComp->OnTargetPerceptionUpdated.AddDynamic(
-		this, &AEnemyAIController::OnTargetPerceptionUpdated);
 }
 
 void AEnemyAIController::OnUnPossess()
 {
 	Super::OnUnPossess();
-	
-	if (IsValid(AIPerceptionComp))
-	{
-		AIPerceptionComp->OnTargetPerceptionUpdated.RemoveDynamic(this, &AEnemyAIController::OnTargetPerceptionUpdated);
-	}
 }
 
 void AEnemyAIController::PostInitializeComponents()
@@ -82,28 +70,12 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 	return Result;
 }
 
-void AEnemyAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
-{
-	if (!Actor) return;
-	
-	if (Stimulus.WasSuccessfullySensed())
-	{
-		if (Cast<ASovereignCharacter>(Actor))
-		{
-			UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(GetWorld());
-		
-			FGameplayTag Channel = RetrieveGameplayTags::Channel_Enemy_PlayerSpotted;
-			MsgSubsys.BroadcastMessage(Channel, FInstancedStruct());
-		}
-	}
-}
-
 void AEnemyAIController::InitSightConfig()
 {
 	SightConfig->SightRadius = SightRadius;
 	SightConfig->LoseSightRadius = LoseSightRadius;
 	SightConfig->PeripheralVisionAngleDegrees = PeripheralVisionAngleDegrees;
-	SightConfig->SetMaxAge(MaxAge);
+	SightConfig->SetMaxAge(5.0f);
 	
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = false;
