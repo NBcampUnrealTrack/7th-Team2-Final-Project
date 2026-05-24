@@ -45,6 +45,8 @@ void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 bool UCombatReactionComponent::TryToggleLockOn()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[ReactionComp] TryToggleLockOn called, LockOnComp=%s"), 
+		LockOnComp ? *LockOnComp->GetName() : TEXT("nullptr"));
 	return LockOnComp ? LockOnComp->Toggle() : false;
 }
 
