@@ -80,7 +80,7 @@ protected:
 	float MonitorInterval = 0.1f;
 	// Debug
 	UPROPERTY(EditAnywhere, Category = "Retrieve|LockOn|Debug")
-	bool bDebugDraw = false;
+	bool bDebugDraw = true;
 
 private:
 	// MonitorTimer 콜백 락온 유지 가능 여부 체크

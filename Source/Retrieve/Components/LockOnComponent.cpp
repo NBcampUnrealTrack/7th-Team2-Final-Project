@@ -108,6 +108,7 @@ bool ULockOnComponent::SwitchTarget(FVector2D InputDir)
 
 bool ULockOnComponent::Toggle()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[LockOnComp] Toggle called, bLockOnActive=%d"), bLockOnActive);
 	if (IsLockedOn())
 	{
 		StopLockOn();
