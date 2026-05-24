@@ -74,6 +74,13 @@ namespace RetrieveGameplayTags
 
 	// ---- Gauge state
 	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_Full, "State.Gauge.Full");
+	
+	// ---- Attack type
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Normal, "Attack.Type.Normal");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Heavy, "Attack.Type.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Unblockable, "Attack.Type.Unblockable");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Parryable, "Attack.Type.Parryable");
 
 	// ---- Elements
 	UE_DEFINE_GAMEPLAY_TAG(Element_Fire, "Element.Fire");
@@ -106,6 +113,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Dodge_Success, "GameplayEvent.Dodge.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_DodgeCounter_Success, "GameplayEvent.DodgeCounter.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_WeakPointHit, "GameplayEvent.WeakPointHit");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_Impact, "GameplayEvent.Attack.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess, "GameplayEvent.Attack.HitSuccess");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Light, "GameplayEvent.Attack.HitSuccess.Light");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Heavy, "GameplayEvent.Attack.HitSuccess.Heavy");
@@ -169,13 +177,6 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Health, "Data.Init.Health");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
 	/*
-	// ---- Attack type
-	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Normal, "Attack.Type.Normal");
-	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Heavy, "Attack.Type.Heavy");
-	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
-	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Unblockable, "Attack.Type.Unblockable");
-	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Parryable, "Attack.Type.Parryable");
-
 	// ---- Hit react
 	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");
 

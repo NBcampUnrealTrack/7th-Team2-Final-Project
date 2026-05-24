@@ -77,6 +77,13 @@ namespace RetrieveGameplayTags
     // ---- Gauge state
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_Full);
 
+	// ---- Attack type
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Normal);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Heavy);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_BossHeavy);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Unblockable);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Parryable);
+	
     // ---- Elements
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Fire);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Water);
@@ -108,6 +115,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Dodge_Success);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_DodgeCounter_Success);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_WeakPointHit);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_Impact);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Light);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Heavy);
@@ -170,14 +178,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxHealth);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Health);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackPower);
+	
+	
 	/*
-	// ---- Attack type (공격자 측 분류 — 가드/패리 분기 판정용)
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Normal);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Heavy);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_BossHeavy);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Unblockable);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Parryable);
-
 	// ---- Hit react (피격자 반응 제어 마커 — Cue 연동용)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hit_React_Stagger);
 
