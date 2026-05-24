@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
-#include "Perception/AIPerceptionTypes.h"
 #include "GenericTeamAgentInterface.h"
 #include "EnemyAIController.generated.h"
 
@@ -28,9 +27,6 @@ protected:
 	virtual void OnUnPossess() override;
 	
 	virtual void PostInitializeComponents() override;
-	
-	UFUNCTION()
-	void OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
 
 private:
 	void InitSightConfig();
@@ -52,8 +48,6 @@ protected:
 	float LoseSightRadius = 1800.f; // 소실 반경
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
 	float PeripheralVisionAngleDegrees = 60.f;   // 시야각 (절반)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
-	float MaxAge = 5.f;
 	
 	// Team
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|AI|Team")

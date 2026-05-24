@@ -1,10 +1,8 @@
 #include "Components/DropComponent.h"
 
 #include "Engine/DataTable.h"
-#include "StructUtils/InstancedStruct.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
 
 void UDropComponent::Initialize(UDataTable* InDropTable, FName InDropRowName)
 {
@@ -14,13 +12,6 @@ void UDropComponent::Initialize(UDataTable* InDropTable, FName InDropRowName)
 
 void UDropComponent::ProcessDrop()
 {
-	// Channel.Monster.Died 브로드캐스트 — 퀘스트·게임매니저가 구독
-	if (UWorld* World = GetWorld())
-	{
-		UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(World);
-		MsgSubsys.BroadcastMessage(RetrieveGameplayTags::Channel_Monster_Died, FInstancedStruct());
-	}
-
 	if (!DropTable || DropRowName.IsNone())
 	{
 		return;

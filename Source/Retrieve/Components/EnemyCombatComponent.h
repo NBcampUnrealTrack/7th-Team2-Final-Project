@@ -6,6 +6,9 @@
 
 class UDataTable;
 class URetrieveAbilitySystemComponent;
+class USphereComponent;
+class UGameplayEffect;
+
 struct FMonsterPatternRow;
 
 /**
@@ -26,11 +29,8 @@ public:
 	/** AEnemyCharacter::BeginPlay에서 DT_MonsterData 파싱 후 호출 */
 	void Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots);
 
-	/**
-	 * StateTree Task::EnterState에서 호출.
-	 * 범위·쿨다운을 통과한 최고 우선순위 패턴을 선택해 GA를 발동한다.
-	 * @return 발동 가능한 패턴이 있으면 true, 없으면 false (Task → Failed)
-	 */
+	bool RequestBasicAttack(AActor* Target);
+	
 	bool RequestPatternByPriority(AActor* Target);
 
 	void StopCurrentPattern();
@@ -41,8 +41,21 @@ public:
 
 	UDataTable* GetPatternTable() const { return PatternTable.Get(); }
 
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Components|Pattern")
+	void ActivateHitbox();
+	
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Components|Pattern")
+	void DeactivateHitbox();
+	
+	void SetActiveHitbox(USphereComponent* NewHitbox);
+	
 private:
-	const FMonsterPatternRow* FindBestPattern(AActor* Target) const;
+	UFUNCTION()
+	void OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+						 UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+						 bool bFromSweep, const FHitResult& SweepResult);
+	
+	const FMonsterPatternRow* FindBestPattern(AActor* Target);
 	bool IsCooldownReady(FName RowName) const;
 	void StartCooldown(FName RowName, float Duration);
 	URetrieveAbilitySystemComponent* GetASC() const;
@@ -50,9 +63,23 @@ private:
 	UPROPERTY()
 	TObjectPtr<UDataTable> PatternTable;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|BasicAttack")
+	FName BasicAttackRowName;
+	
+	UPROPERTY(VisibleAnywhere)
+	FName ActivePatternRowName;
+	
 	TArray<FName> PatternSlots;
 
 	TMap<FName, float> CooldownExpiry;
 
-	FName ActivePatternRowName;
+	
+	UPROPERTY()
+	TObjectPtr<USphereComponent> ActiveHitboxComp;
+
+	/** 히트박스 적중 시 적용할 GE (임시: GE_DamageTest, 추후 DT 연동으로 교체) */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|Hitbox")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+	TSet<TWeakObjectPtr<AActor>> HitActors;
 };

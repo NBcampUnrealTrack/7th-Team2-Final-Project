@@ -14,6 +14,7 @@ class RETRIEVE_API UDropComponent : public UPawnComponent
 public:
 	void Initialize(UDataTable* InDropTable, FName InDropRowName);
 
+	UFUNCTION(BlueprintCallable)
 	void ProcessDrop();
 
 private:
