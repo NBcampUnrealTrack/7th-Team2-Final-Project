@@ -71,6 +71,11 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Staggered);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Boss_Dead);
 
+    // ---- Status state
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Burn);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Cold);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Vulnerable);
+
     // ---- Combat micro-state
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Combo_Open);
 
@@ -178,6 +183,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxHealth);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Health);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackPower);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MoveSpeed);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
 	
 	
 	/*
