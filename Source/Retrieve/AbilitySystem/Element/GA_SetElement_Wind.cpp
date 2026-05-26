@@ -6,6 +6,8 @@
 UGA_SetElement_Wind::UGA_SetElement_Wind()
 {
 	AbilityTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Wind);
+
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Wind);
 }
 
 void UGA_SetElement_Wind::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
