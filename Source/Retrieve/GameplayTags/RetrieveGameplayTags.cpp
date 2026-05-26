@@ -69,6 +69,11 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Staggered, "State.Boss.Staggered");
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Dead, "State.Boss.Dead");
 
+	// ---- Status state
+	UE_DEFINE_GAMEPLAY_TAG(State_Status_Burn, "State.Status.Burn");
+	UE_DEFINE_GAMEPLAY_TAG(State_Status_Cold, "State.Status.Cold");
+	UE_DEFINE_GAMEPLAY_TAG(State_Status_Vulnerable, "State.Status.Vulnerable");
+	
 	// ---- Combat micro-state
 	UE_DEFINE_GAMEPLAY_TAG(State_Combo_Open, "State.Combo.Open");
 
@@ -176,6 +181,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxHealth, "Data.Init.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Health, "Data.Init.Health");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MoveSpeed, "Data.Init.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_IncomingDamageMultiplier, "Data.Init.IncomingDamageMultiplier");
 	/*
 	// ---- Hit react
 	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");

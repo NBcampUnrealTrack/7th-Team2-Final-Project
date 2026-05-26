@@ -9,6 +9,8 @@ UCombatAttributeSet::UCombatAttributeSet()
 	InitHealth(100.f);
 	InitMaxHealth(100.f);
 	InitAttackPower(0.f);
+	InitMoveSpeed(600.f);
+	InitIncomingDamageMultiplier(1.f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -17,6 +19,8 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Health, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MoveSpeed, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -28,6 +32,14 @@ void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
 	}
 	else if (Attribute == GetAttackPowerAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
+	}
+	else if (Attribute == GetMoveSpeedAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
+	}
+	else if (Attribute == GetIncomingDamageMultiplierAttribute())
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
@@ -75,6 +87,16 @@ void UCombatAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue
 void UCombatAttributeSet::OnRep_AttackPower(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, AttackPower, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MoveSpeed, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_IncomingDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, OldValue);
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
