@@ -6,6 +6,8 @@
 UGA_SetElement_Water::UGA_SetElement_Water()
 {
 	AbilityTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Water);
+
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Water);
 }
 
 void UGA_SetElement_Water::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

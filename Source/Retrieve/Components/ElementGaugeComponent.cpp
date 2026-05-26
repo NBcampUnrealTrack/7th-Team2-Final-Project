@@ -143,4 +143,3 @@ URetrieveAbilitySystemComponent* UElementGaugeComponent::GetRetrieveASC() const
 	ASC = RetrieveASC;
 	return RetrieveASC;
 }
-
