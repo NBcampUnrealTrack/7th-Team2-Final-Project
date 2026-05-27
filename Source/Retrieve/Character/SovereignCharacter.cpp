@@ -1,10 +1,12 @@
 #include "Character/SovereignCharacter.h"
 
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CombatReactionComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/ElementGaugeComponent.h"
+#include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -31,6 +33,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
+	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
@@ -66,5 +69,20 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		{
 			WeaponComponent->EquipWeapon(TEXT("Weapon_SwordShield_Basic"));
 		}
+	}
+	
+	if (PawnCosmeticComponent)
+	{
+		PawnCosmeticComponent->InitializeWithAbilitySystem(ASC);
+	}
+}
+
+void ASovereignCharacter::UnPossessed()
+{
+	Super::UnPossessed();  // 부모의 PawnExtensionComponent 해제 포함
+	
+	if (PawnCosmeticComponent)
+	{
+		PawnCosmeticComponent->UninitializeFromAbilitySystem();
 	}
 }

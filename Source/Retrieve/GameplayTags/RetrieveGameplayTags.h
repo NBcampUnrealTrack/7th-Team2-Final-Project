@@ -13,7 +13,7 @@ namespace RetrieveGameplayTags
     // ---- Input
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Move);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Look);
-
+	
     // ---- Player abilities
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack);
@@ -43,6 +43,7 @@ namespace RetrieveGameplayTags
     // ---- Player state
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Normal);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Combat);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Attacking);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dodging);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Guarding);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Parrying);
@@ -50,6 +51,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Staggered);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Knockdown);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dead);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_ForcedMove);
 
     // ---- Enemy state
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Idle);
@@ -97,6 +99,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_None);
 
     // ---- Weapon
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Type_Unarmed);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Type_SwordShield);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Type_DualBlade);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Type_Staff);
@@ -108,8 +111,16 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Affinity_Wind);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Affinity_None);
 
+    // ---- Cosmetic (외형 차원, Layer 매칭용)
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cosmetic_Gender_Male);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cosmetic_Gender_Female);
+	
     // ---- Lock-on
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(LockOn_Active);
+
+    // ---- Animation locks
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Animation_Lock_Rotation);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Animation_Lock_Movement);
 
     // ---- Gameplay events: combat
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ComboFinisher);

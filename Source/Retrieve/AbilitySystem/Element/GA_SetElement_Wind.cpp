@@ -35,6 +35,7 @@ void UGA_SetElement_Wind::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 	Payload.EventTag = EventTag;
 	Payload.Instigator = ActorInfo->AvatarActor.Get();
 	Payload.Target = ActorInfo->AvatarActor.Get();
+	Payload.InstigatorTags.AddTag(RetrieveGameplayTags::Element_Wind);
 
 	ASC->HandleGameplayEvent(EventTag, &Payload);
 

@@ -35,7 +35,8 @@ void UGA_SetElement_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 	Payload.EventTag = EventTag;
 	Payload.Instigator = ActorInfo->AvatarActor.Get();
 	Payload.Target = ActorInfo->AvatarActor.Get();
-
+	Payload.InstigatorTags.AddTag(RetrieveGameplayTags::Element_Fire);
+	
 	ASC->HandleGameplayEvent(EventTag, &Payload);
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
