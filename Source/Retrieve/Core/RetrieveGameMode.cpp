@@ -33,9 +33,7 @@ void ARetrieveGameMode::OnWorldReadyForGameplay()
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		GS->TransitionTo(ERetrieveSessionState::MainMenu);
-		
-		// TODO: W_MainMenu 위젯 생성 이후, 메인메뉴에서 인게임 진입하도록 수정하기
-		GS->TransitionTo(ERetrieveSessionState::InGame);
+		GS->TransitionTo(ERetrieveSessionState::InGame); // 메인메뉴 생성 전까지 임시
 	}
 }
 
