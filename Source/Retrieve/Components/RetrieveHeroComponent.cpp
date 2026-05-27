@@ -1,5 +1,7 @@
 #include "Components/RetrieveHeroComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
 #include "EnhancedInputSubsystems.h"
 #include "RetrievePawnExtensionComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
@@ -198,6 +200,13 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 {
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn)
+	{
+		return;
+	}
+	// 락온 중에는 카메라가 타겟을 자동 추적하므로 마우스 Look 입력 무시
+	const IAbilitySystemInterface* ASCInterface = Cast<IAbilitySystemInterface>(Pawn);
+	UAbilitySystemComponent* ASC = ASCInterface ? ASCInterface->GetAbilitySystemComponent() : nullptr;
+	if (ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::LockOn_Active))
 	{
 		return;
 	}

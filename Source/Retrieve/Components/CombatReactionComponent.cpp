@@ -1,6 +1,8 @@
 
 
 #include "CombatReactionComponent.h"
+
+#include "LockOnCameraRig.h"
 #include "Components/LockOnComponent.h"
 #include "GameFramework/Actor.h"
 
@@ -26,9 +28,21 @@ void UCombatReactionComponent::BeginPlay()
 		LockOnComp->RegisterComponent();
 	}
 	
-	if (LockOnComp)
+	if (IsValid(LockOnComp))
 	{
 		LockOnComp->OnTargetChanged.AddUniqueDynamic(this, &UCombatReactionComponent::HandleLockOnTargetChanged);
+	}
+	
+	if (IsValid(LockOnCameraRigComp) == false)
+	{
+		LockOnCameraRigComp = NewObject<ULockOnCameraRig>(Owner, TEXT("LockOnCameraRigComp"));
+		Owner->AddOwnedComponent(LockOnCameraRigComp);
+		LockOnCameraRigComp->RegisterComponent();
+	}
+	
+	if (IsValid(LockOnCameraRigComp))
+	{
+		LockOnCameraRigComp->Initialize();
 	}
 }
 
@@ -39,6 +53,13 @@ void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		LockOnComp->OnTargetChanged.RemoveDynamic(this, &UCombatReactionComponent::HandleLockOnTargetChanged);
 		LockOnComp->DestroyComponent();
 		LockOnComp = nullptr;
+	}
+	
+	if (IsValid(LockOnCameraRigComp))
+	{
+		LockOnCameraRigComp->StopTracking();
+		LockOnCameraRigComp->DestroyComponent();
+		LockOnCameraRigComp = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -67,5 +88,18 @@ bool UCombatReactionComponent::IsLockedOn() const
 
 void UCombatReactionComponent::HandleLockOnTargetChanged(AActor* NewTarget)
 {
+	if (IsValid(LockOnCameraRigComp) == false)
+	{
+		return;
+	}
+	
+	if (IsValid(NewTarget))
+	{
+		LockOnCameraRigComp->StartTracking(NewTarget);
+	}
+	else
+	{
+		LockOnCameraRigComp->StopTracking();
+	}
 	OnLockOnTargetChanged.Broadcast(NewTarget);
 }
