@@ -16,6 +16,8 @@ class URetrieveAbilitySet;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
+class UNiagaraSystem;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
@@ -207,6 +209,54 @@ struct RETRIEVE_API FHitFeedback : public FTableRowBase
 	FLinearColor DamageNumberColor = FLinearColor::White;
 };
 
+UENUM(BlueprintType)
+enum class EBurstAttackType : uint8
+{
+	Cleave           UMETA(DisplayName = "단일 강타"),
+	GroundEruption   UMETA(DisplayName = "지면 분출"),
+	Projectile       UMETA(DisplayName = "투사체"),
+	Dash             UMETA(DisplayName = "돌진"),
+	AreaOfEffect     UMETA(DisplayName = "주변 AoE")
+};
+
+UENUM(BlueprintType)
+enum class EBurstHitSource : uint8
+{
+	Sword    UMETA(DisplayName = "검 (Weapon_R 계열)"),
+	Shield   UMETA(DisplayName = "방패 (Shield 소켓 계열)"),
+	Body     UMETA(DisplayName = "캐릭터 본체 (돌진/AoE)"),
+	World    UMETA(DisplayName = "월드 좌표 (지면 분출)")
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FBurstHitInstance
+{
+	GENERATED_BODY()
+
+	/** 이 타격의 공격력 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
+	float DamageMultiplier = 1.0f;
+
+	/** 어디서 나가는지. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
+	EBurstHitSource HitSource = EBurstHitSource::Sword;
+
+	/** 소켓 오버라이드. 비우면 HitSource 기본값 사용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
+	FName SocketOverride = NAME_None;
+
+	/** 이 타격에서 재생할 적중 VFX. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
+	TSoftObjectPtr<UNiagaraSystem> HitVFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
+	TSoftObjectPtr<USoundBase> HitSound;
+
+	/** 이 타격이 적중한 대상에 순차 부여할 상태 GE들. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Status")
+	TArray<TSubclassOf<UGameplayEffect>> StatusEffects;
+};
+
 /**
  * 스킬 조합
  */
@@ -215,20 +265,35 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Element")
+	// ---- Name --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Meta")
+	FText DisplayName;
+	// ---- Pattern / Motion --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motion")
-	FName MotionGroup;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
-	FGameplayTag PrimaryEffect;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
-	FGameplayTag SecondaryEffect;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
-	float DamageMultiplier;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
-	float EffectDuration;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Effect")
-	float AoeRadius;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
+	UAnimMontage* AttackMontage;
+	// ---- Attack --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack")
+	EBurstAttackType AttackType = EBurstAttackType::Cleave;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Projectile", meta = (EditCondition = "AttackType == EBurstAttackType::Projectile"))
+	TSubclassOf<AActor> ProjectileClass;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EBurstAttackType::Dash", ClampMin = "0.0"))
+	float DashDistance = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EBurstAttackType::AreaOfEffect", ClampMin = "0.0"))
+	float AoeRadius = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::GroundEruption", ClampMin = "0.0"))
+	float WorldSpawnDistance = 300.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::GroundEruption"))
+	TSubclassOf<AActor> WorldSpawnActorClass;
+	// ---- Damage --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Damage")
+	TSubclassOf<UGameplayEffect> DamageEffect;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Damage")
+	TArray<FBurstHitInstance> HitSequence;
+	// ---- FX --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
+	TSoftObjectPtr<USoundBase> CastSound;
 };
 
 USTRUCT(BlueprintType)
