@@ -35,7 +35,8 @@ void UGA_SetElement_Water::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	Payload.EventTag = EventTag;
 	Payload.Instigator = ActorInfo->AvatarActor.Get();
 	Payload.Target = ActorInfo->AvatarActor.Get();
-
+	Payload.InstigatorTags.AddTag(RetrieveGameplayTags::Element_Water);
+	
 	ASC->HandleGameplayEvent(EventTag, &Payload);
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);

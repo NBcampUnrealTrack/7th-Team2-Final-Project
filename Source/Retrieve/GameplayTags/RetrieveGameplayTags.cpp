@@ -41,6 +41,7 @@ namespace RetrieveGameplayTags
 	// ---- Player state
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Normal, "State.Player.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Combat, "State.Player.Combat");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Attacking, "State.Player.Attacking");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dodging, "State.Player.Dodging");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
@@ -48,6 +49,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Staggered, "State.Player.Staggered");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Knockdown, "State.Player.Knockdown");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dead, "State.Player.Dead");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
 
 	// ---- Enemy state
 	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_Idle, "State.Enemy.Idle");
@@ -95,6 +97,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Element_None, "Element.None");
 
 	// ---- Weapon
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Unarmed, "Weapon.Type.Unarmed");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_SwordShield, "Weapon.Type.SwordShield");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_DualBlade, "Weapon.Type.DualBlade");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Staff, "Weapon.Type.Staff");
@@ -106,8 +109,16 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_Wind, "Weapon.Affinity.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_None, "Weapon.Affinity.None");
 
+	// ---- Cosmetic
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Gender_Male, "Cosmetic.Gender.Male");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Gender_Female, "Cosmetic.Gender.Female");
+	
 	// ---- Lock-on
 	UE_DEFINE_GAMEPLAY_TAG(LockOn_Active, "LockOn.Active");
+
+	// ---- Animation locks
+	UE_DEFINE_GAMEPLAY_TAG(Animation_Lock_Rotation, "Animation.Lock.Rotation");
+	UE_DEFINE_GAMEPLAY_TAG(Animation_Lock_Movement, "Animation.Lock.Movement");
 
 	// ---- Gameplay events: combat
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_ComboFinisher, "GameplayEvent.ComboFinisher");

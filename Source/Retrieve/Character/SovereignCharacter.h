@@ -5,6 +5,7 @@
 #include "GenericTeamAgentInterface.h"
 #include "SovereignCharacter.generated.h"
 
+class URetrievePawnCosmeticComponent;
 class UCameraComponent;
 class UInventoryComponent;
 class URetrieveHeroComponent;
@@ -27,6 +28,7 @@ public:
 	}
 protected:
 	virtual void InitializeAbilitySystem() override;
+	virtual void UnPossessed() override;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveHeroComponent> HeroComponent;
@@ -34,6 +36,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UCombatReactionComponent> CombatReactionComponent;
 
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<URetrievePawnCosmeticComponent> PawnCosmeticComponent;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
 
