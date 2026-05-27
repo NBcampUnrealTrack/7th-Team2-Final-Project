@@ -1,10 +1,13 @@
 #include "Player/RetrievePlayerController.h"
 
+#include "MVVMSubsystem.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "Character/RetrieveCombatCharacter.h"
 #include "Components/InventoryComponent.h"
+#include "Components/RetrieveHealthComponent.h"
 #include "Components/Widget.h"
 #include "Components/WeaponComponent.h"
 #include "Core/RetrieveGameMode.h"
@@ -15,7 +18,10 @@
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
+#include "UI/ViewModels/HUDViewModel.h"
+#include "UI/ViewModels/PlayerStatusViewModel.h"
 #include "UObject/ConstructorHelpers.h"
+#include "View/MVVMView.h"
 
 ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -136,6 +142,13 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 	return Super::InputKey(Params);
 }
 
+void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
+{
+	Super::AcknowledgePossession(InPawn);
+	
+	TryBindHealthToHUD();
+}
+
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
 {
 	RemoveActivePanelImmediately();
@@ -147,6 +160,7 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
 {
 	if (ActiveTopLevelWidget)
 	{
+		ClearHUDViewModel();
 		ActiveTopLevelWidget->RemoveFromParent();
 		ActiveTopLevelWidget = nullptr;
 	}
@@ -157,7 +171,15 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
 		ActiveTopLevelWidget = CreateWidget<UUserWidget>(this, WidgetClass);
 		if (ActiveTopLevelWidget)
 		{
+			if (NewState == ERetrieveSessionState::InGame)
+			{
+				EnsureHUDViewModel();
+			}
 			ActiveTopLevelWidget->AddToViewport();
+			if (NewState == ERetrieveSessionState::InGame)
+			{
+				TryBindHealthToHUD();
+			}
 		}
 	}
 
@@ -492,5 +514,68 @@ void ARetrievePlayerController::Server_RequestQuitToMenu_Implementation()
 	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
 	{
 		GM->HandleQuitToMenu(this);
+	}
+}
+
+
+void ARetrievePlayerController::EnsureHUDViewModel()
+{
+	if (!ActiveTopLevelWidget)
+	{
+		return;
+	}
+	if (!HUDViewModelInstance)
+	{
+		HUDViewModelInstance = NewObject<UHUDViewModel>(this);
+	}
+	
+	UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr;
+	if (!MVVM)
+	{
+		return;
+	}
+	
+	UMVVMView* View = MVVM->GetViewFromUserWidget(ActiveTopLevelWidget);
+	if (!View)
+	{
+		return;
+	}
+	
+	View->SetViewModel(HUDViewModelBindingName, HUDViewModelInstance);
+}
+
+void ARetrievePlayerController::TryBindHealthToHUD()
+{
+	if (!HUDViewModelInstance)
+	{
+		return;
+	}
+	
+	UPlayerStatusViewModel* PlayerStatus = HUDViewModelInstance->GetPlayerStatus();
+	if (!PlayerStatus)
+	{
+		return;
+	}
+	
+	ARetrieveCombatCharacter* Combatant = Cast<ARetrieveCombatCharacter>(GetPawn());
+	if (!Combatant)
+	{
+		return;
+	}
+	
+	if (URetrieveHealthComponent* Health = Combatant->GetHealthComponent())
+	{
+		PlayerStatus->BindToHealth(Health);
+	}
+}
+
+void ARetrievePlayerController::ClearHUDViewModel()
+{
+	if (HUDViewModelInstance)
+	{
+		if (UPlayerStatusViewModel* PlayerStatus = HUDViewModelInstance->GetPlayerStatus())
+		{
+			PlayerStatus->UnbindFromHealth();
+		}
 	}
 }
