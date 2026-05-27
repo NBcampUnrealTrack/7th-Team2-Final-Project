@@ -10,7 +10,8 @@ class URetrieveAbilitySystemComponent;
 class UWeaponComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FInventoryChangedSignature);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FInventoryItemChangedSignature, FName, ItemId, int32, Quantity);
+// ItemId + CategoryTag + Quantity — 픽업 토스트 등 UI가 카테고리 구분 없이 DataTable을 찾을 수 있도록 Tag 포함
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FInventoryItemChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag, int32, Quantity);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEquippedWeaponChangedSignature, FName, WeaponItemId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FConsumableSlotChangedSignature, int32, SlotKey, FName, ItemId);
 
@@ -118,6 +119,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_ConsumableSlots, Category = "Retrieve|Inventory")
 	FName ConsumableSlot5ItemId = NAME_None;
 
+	// 픽업 토스트 알림용. 서버의 AddItem 성공 직후 set → REPNOTIFY_Always로 클라이언트에 복제
+	// → OnRep_LastAddedItem에서 OnItemAdded.Broadcast — WBP_HUD 토스트 트리거
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_LastAddedItem, Category = "Retrieve|Inventory")
+	FRetrieveItemStack LastAddedItemNotification;
+
 	UFUNCTION()
 	void OnRep_InventoryItems();
 
@@ -126,6 +132,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_ConsumableSlots();
+
+	UFUNCTION()
+	void OnRep_LastAddedItem();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestEquipWeapon(FName WeaponItemId);

@@ -67,7 +67,7 @@ void ARetrievePlayerController::BeginPlay()
 
 void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	CloseActivePanel();
+	RemoveActivePanelImmediately();
 
 	if (SessionListener.IsValid())
 	{
@@ -83,7 +83,13 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 		ActiveTopLevelWidget->RemoveFromParent();
 		ActiveTopLevelWidget = nullptr;
 	}
-	
+
+	if (ActiveToastManager)
+	{
+		ActiveToastManager->RemoveFromParent();
+		ActiveToastManager = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -132,7 +138,7 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
 {
-	CloseActivePanel();
+	RemoveActivePanelImmediately();
 	SwapActiveWidget(NewState);
 	UpdateInputMode(NewState);
 }
@@ -144,17 +150,33 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
 		ActiveTopLevelWidget->RemoveFromParent();
 		ActiveTopLevelWidget = nullptr;
 	}
-	
+
 	const TSubclassOf<UUserWidget> WidgetClass = ResolveWidgetClass(NewState);
-	if (!WidgetClass)
+	if (WidgetClass)
 	{
-		return;
+		ActiveTopLevelWidget = CreateWidget<UUserWidget>(this, WidgetClass);
+		if (ActiveTopLevelWidget)
+		{
+			ActiveTopLevelWidget->AddToViewport();
+		}
 	}
-	
-	ActiveTopLevelWidget = CreateWidget<UUserWidget>(this, WidgetClass);
-	if (ActiveTopLevelWidget)
+
+	// ── 토스트 매니저: InGame 상태에서만 활성화 ──────────────────────
+	// HUD(ActiveTopLevelWidget)와 독립적으로 관리된다.
+	// ZOrder=10 으로 HUD(기본 0) 위에 렌더링.
+	if (ActiveToastManager)
 	{
-		ActiveTopLevelWidget->AddToViewport();
+		ActiveToastManager->RemoveFromParent();
+		ActiveToastManager = nullptr;
+	}
+
+	if (NewState == ERetrieveSessionState::InGame && ToastManagerClass)
+	{
+		ActiveToastManager = CreateWidget<UUserWidget>(this, ToastManagerClass);
+		if (ActiveToastManager)
+		{
+			ActiveToastManager->AddToViewport(10);
+		}
 	}
 }
 
@@ -221,7 +243,10 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 		return;
 	}
 
-	CloseActivePanel();
+	if (ActivePanel)
+	{
+		RemoveActivePanelImmediately();
+	}
 
 	URetrieveGamePanelWidget* NewPanel = CreateWidget<URetrieveGamePanelWidget>(this, PanelClass);
 	if (!NewPanel)
@@ -233,6 +258,7 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	NewPanel->SetIsFocusable(true);
 	NewPanel->ToggleKey = ToggleKey;
 	NewPanel->OnCloseRequested.AddDynamic(this, &ThisClass::HandleActivePanelCloseRequested);
+	NewPanel->OnUIVFXFinished.AddDynamic(this, &ThisClass::HandleActivePanelCloseVFXFinished);
 
 	if (UInventoryPanelWidget* InventoryPanel = Cast<UInventoryPanelWidget>(NewPanel))
 	{
@@ -253,19 +279,37 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	bShowMouseCursor = true;
 
 	NewPanel->SetKeyboardFocus();
+	NewPanel->PlayPanelOpenVFX();
 }
 
 void ARetrievePlayerController::CloseActivePanel()
 {
-	if (!ActivePanel)
+	if (!ActivePanel || bActivePanelClosing)
 	{
 		return;
 	}
 
+	bActivePanelClosing = true;
+	if (!ActivePanel->PlayPanelCloseVFX())
+	{
+		RemoveActivePanelImmediately();
+	}
+}
+
+void ARetrievePlayerController::RemoveActivePanelImmediately()
+{
+	if (!ActivePanel)
+	{
+		bActivePanelClosing = false;
+		return;
+	}
+
 	ActivePanel->OnCloseRequested.RemoveDynamic(this, &ThisClass::HandleActivePanelCloseRequested);
+	ActivePanel->OnUIVFXFinished.RemoveDynamic(this, &ThisClass::HandleActivePanelCloseVFXFinished);
 	ActivePanel->RemoveFromParent();
 	ActivePanel = nullptr;
 	ActivePanelClass = nullptr;
+	bActivePanelClosing = false;
 
 	FInputModeGameOnly InputMode;
 	SetInputMode(InputMode);
@@ -283,6 +327,14 @@ void ARetrievePlayerController::ToggleMinimapRotationMode()
 void ARetrievePlayerController::HandleActivePanelCloseRequested()
 {
 	CloseActivePanel();
+}
+
+void ARetrievePlayerController::HandleActivePanelCloseVFXFinished(FGameplayTag EffectTag)
+{
+	if (EffectTag == RetrieveGameplayTags::UI_VFX_Panel_Close)
+	{
+		RemoveActivePanelImmediately();
+	}
 }
 
 bool ARetrievePlayerController::TryHandleMinimapShortcut(FKey Key)
@@ -368,6 +420,7 @@ void ARetrievePlayerController::CenterActiveWorldMapPanel()
 		WorldMapWidget->CenterOnPlayer();
 	}
 }
+
 
 URetrieveMinimapWidget* ARetrievePlayerController::FindMinimapWidgetInHUD() const
 {
