@@ -1,5 +1,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Abilities/GameplayAbility.h"
+#include "Abilities/GameplayAbilityTypes.h"
 
 void URetrieveAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
@@ -50,7 +52,27 @@ void URetrieveAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool 
 	{
 		if (FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecFromHandle(SpecHandle))
 		{
-			if (AbilitySpec->Ability && !AbilitySpec->IsActive())
+			if (!AbilitySpec->Ability)
+			{
+				continue;
+			}
+
+			if (AbilitySpec->IsActive())
+			{
+				AbilitySpecInputPressed(*AbilitySpec);
+				
+				const UGameplayAbility* AbilityInstance = AbilitySpec->GetPrimaryInstance();
+				if (!AbilityInstance)
+				{
+					continue;
+				}
+
+				InvokeReplicatedEvent(
+					EAbilityGenericReplicatedEvent::InputPressed,
+					AbilitySpec->Handle,
+					AbilityInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
+			}
+			else
 			{
 				AbilitiesToActivate.AddUnique(SpecHandle);
 			}
