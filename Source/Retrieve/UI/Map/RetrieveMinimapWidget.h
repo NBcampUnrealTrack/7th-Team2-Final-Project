@@ -5,6 +5,7 @@
 #include "RetrieveMinimapWidget.generated.h"
 
 class UImage;
+class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class URetrieveMapSubsystem;
 class URetrieveMapIconRegistry;
@@ -52,6 +53,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	TObjectPtr<UTexture2D> PlayerMarkerTexture;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
+	TObjectPtr<UMaterialInterface> MinimapMaterial;
+
 	// DT_MapIconRegistry가 연결된 레지스트리 오브젝트
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	TObjectPtr<URetrieveMapIconRegistry> IconRegistry;
@@ -92,6 +96,11 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMID;
+
+	// UpdateMinimapMaterial에서 SetTextureParameterValue를 매 틱 호출하지 않도록
+	// 마지막으로 설정한 텍스처를 기억한다.
+	UPROPERTY()
+	TObjectPtr<UTexture2D> CachedMIDTexture;
 
 	void UpdateMinimapMaterial(URetrieveMapSubsystem* MapSub, const FVector& PlayerLocation);
 

@@ -47,6 +47,12 @@ public:
 	float OverrideSize = 16.0f;
 
 protected:
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	void RegisterWithMapSubsystem();
+	void UnregisterFromMapSubsystem();
 };
