@@ -98,24 +98,29 @@ void URetrievePawnExtensionComponent::InitializeAbilitySystem(URetrieveAbilitySy
 
 void URetrievePawnExtensionComponent::UninitializeAbilitySystem()
 {
+	URetrieveAbilitySystemComponent* ASC = AbilitySystemComponent;
+	AActor* Owner = GetOwner();
+	
 	if (!IsValid(AbilitySystemComponent))
 	{
 		AbilitySystemComponent = nullptr;
 		return;
 	}
-
-	GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
-
-	if (AbilitySystemComponent->GetAvatarActor() == GetOwner())
-	{
-		AbilitySystemComponent->ClearActorInfo();
-	}
+	
+	// 재진입 방어: 정리 중 다시 들어오면 이미 nullptr로 보이게 한다.
 	AbilitySystemComponent = nullptr;
+	
+	GrantedHandles.TakeFromAbilitySystem(ASC);
+
+	if (IsValid(ASC) && ASC->GetAvatarActor_Direct() == Owner)
+	{
+		ASC->ClearActorInfo();
+	}
 }
 
 void URetrievePawnExtensionComponent::HandleControllerChanged()
 {
-	if (AbilitySystemComponent && AbilitySystemComponent->GetAvatarActor() == GetOwner())
+	if (AbilitySystemComponent && AbilitySystemComponent->GetAvatarActor_Direct() == GetOwner())
 	{
 		AbilitySystemComponent->RefreshAbilityActorInfo();
 	}

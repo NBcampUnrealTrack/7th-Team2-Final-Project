@@ -22,6 +22,10 @@ public:
 	
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 	
+	void Deactivate();
+	
+	void Reactivate();
+	
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
@@ -30,6 +34,8 @@ protected:
 
 private:
 	void InitSightConfig();
+	
+	void TryStartStateTree();
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")

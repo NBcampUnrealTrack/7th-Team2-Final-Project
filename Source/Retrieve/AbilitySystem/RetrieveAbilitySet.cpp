@@ -32,28 +32,33 @@ void FRetrieveAbilitySet_GrantedHandles::TakeFromAbilitySystem(URetrieveAbilityS
 		return;
 	}
 
-	for (const FGameplayAbilitySpecHandle& Handle : AbilitySpecHandles)
+	TArray<FGameplayAbilitySpecHandle> Handles = MoveTemp(AbilitySpecHandles);
+	TArray<FActiveGameplayEffectHandle> EffectHandles = MoveTemp(GameplayEffectHandles);
+	TArray<TObjectPtr<UAttributeSet>> AttributeSets = MoveTemp(GrantedAttributeSets);
+
+	for (const FGameplayAbilitySpecHandle& Handle : Handles)
 	{
 		if (Handle.IsValid())
 		{
 			ASC->ClearAbility(Handle);
 		}
 	}
-	for (const FActiveGameplayEffectHandle& Handle : GameplayEffectHandles)
+
+	for (const FActiveGameplayEffectHandle& Handle : EffectHandles)
 	{
 		if (Handle.IsValid())
 		{
 			ASC->RemoveActiveGameplayEffect(Handle);
 		}
 	}
-	for (UAttributeSet* Set : GrantedAttributeSets)
-	{
-		ASC->RemoveSpawnedAttribute(Set);
-	}
 
-	AbilitySpecHandles.Reset();
-	GameplayEffectHandles.Reset();
-	GrantedAttributeSets.Reset();
+	for (UAttributeSet* Set : AttributeSets)
+	{
+		if (Set)
+		{
+			ASC->RemoveSpawnedAttribute(Set);
+		}
+	}
 }
 
 void URetrieveAbilitySet::GiveToAbilitySystem(URetrieveAbilitySystemComponent* ASC,

@@ -14,12 +14,14 @@ void UDropComponent::ProcessDrop()
 {
 	if (!DropTable || DropRowName.IsNone())
 	{
+		UE_LOG(LogDataTable, Error, TEXT("[%s] DropTable not set."), *GetName());
 		return;
 	}
 
 	const FEnemyDropRow* Row = DropTable->FindRow<FEnemyDropRow>(DropRowName, TEXT("UDropComponent"));
 	if (!Row)
 	{
+		UE_LOG(LogDataTable, Error, TEXT("[%s] EnemyDrpopRow missing."), *GetName());
 		return;
 	}
 

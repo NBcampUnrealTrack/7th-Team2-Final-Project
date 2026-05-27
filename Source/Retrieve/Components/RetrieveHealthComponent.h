@@ -38,6 +38,8 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	void ResetHealth();
+	
 public:
 	UPROPERTY(BlueprintAssignable)
 	FOnHealthChanged OnHealthChanged;
