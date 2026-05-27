@@ -43,6 +43,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
 	UDataTable* GetAttackTable() const { return CurrentWeaponAttackTable; }
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
+	UMeshComponent* GetPrimaryEquippedWeaponMesh() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Weapon")
 	FWeaponChangedSignature OnWeaponEquipped;
@@ -50,6 +53,8 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Weapon")
 	FWeaponChangedSignature OnWeaponUnequipped;
 
+	const FRetrieveWeaponDataRow& GetWeaponDataRef() const { return CurrentWeaponData; }
+	
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

@@ -134,6 +134,18 @@ void UWeaponComponent::ClearWeaponVisuals()
 	EquippedWeaponMeshComponents.Reset();
 }
 
+UMeshComponent* UWeaponComponent::GetPrimaryEquippedWeaponMesh() const
+{
+	for (UMeshComponent* MeshComponent : EquippedWeaponMeshComponents)
+	{
+		if (IsValid(MeshComponent))
+		{
+			return MeshComponent;
+		}
+	}
+	return nullptr;
+}
+
 bool UWeaponComponent::HasAuthorityToModify() const
 {
 	const AActor* Owner = GetOwner();

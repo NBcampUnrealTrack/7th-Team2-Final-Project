@@ -60,5 +60,11 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	if (PawnExtensionComponent)
 	{
 		PawnExtensionComponent->InitializeAbilitySystem(ASC, RetrievePS);
+		
+		// 검/방패 장착 테스트용 코드
+		if (HasAuthority() && WeaponComponent && !WeaponComponent->IsEquipped())
+		{
+			WeaponComponent->EquipWeapon(TEXT("Weapon_SwordShield_Basic"));
+		}
 	}
 }

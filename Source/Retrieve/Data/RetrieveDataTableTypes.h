@@ -368,6 +368,21 @@ enum class ERetrieveWeaponAttachTarget : uint8
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponComboStep
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FName SectionName = NAME_None;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FRetrieveWeaponAttachmentData
 {
 	GENERATED_BODY()
@@ -435,6 +450,12 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UDataTable> WeaponAttackTable;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FName TraceSocketName = TEXT("Weapon_R");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (TitleProperty = "SectionName"))
+	TArray<FWeaponComboStep> ComboSteps;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;
