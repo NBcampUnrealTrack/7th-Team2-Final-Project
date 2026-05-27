@@ -18,12 +18,14 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	// 인벤토리 데이터는 소유 클라이언트만 수신. 다른 플레이어의 인벤토리는 볼 필요 없음
-	DOREPLIFETIME_CONDITION(UInventoryComponent, WeaponItems,          COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableItems,       COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UInventoryComponent, MaterialItems,         COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UInventoryComponent, EquippedWeaponId,      COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot4ItemId, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot5ItemId, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, WeaponItems,              COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableItems,           COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, MaterialItems,             COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, EquippedWeaponId,          COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot4ItemId,     COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot5ItemId,     COND_OwnerOnly);
+	// REPNOTIFY_Always: 같은 아이템을 연속 픽업해도 OnRep가 매번 발동되도록
+	DOREPLIFETIME_CONDITION_NOTIFY(UInventoryComponent, LastAddedItemNotification, COND_OwnerOnly, REPNOTIFY_Always);
 }
 
 bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
@@ -63,8 +65,12 @@ bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, in
 		NewStack.ItemCategoryTag = ItemCategoryTag;
 		NewStack.Quantity = 1;
 		UE_LOG(LogTemp, Log, TEXT("인벤토리 무기 추가: ItemId=%s Quantity=1"), *ItemId.ToString());
-		OnItemAdded.Broadcast(ItemId, 1);
+		OnItemAdded.Broadcast(ItemId, ItemCategoryTag, 1);
 		OnInventoryChanged.Broadcast();
+		// 클라이언트 토스트 알림 — OnRep_LastAddedItem → OnItemAdded.Broadcast (클라이언트측)
+		LastAddedItemNotification.ItemId = ItemId;
+		LastAddedItemNotification.ItemCategoryTag = ItemCategoryTag;
+		LastAddedItemNotification.Quantity = 1;
 		return true;
 	}
 
@@ -85,8 +91,12 @@ bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, in
 			*ItemId.ToString(), *ItemCategoryTag.ToString(), Quantity);
 	}
 
-	OnItemAdded.Broadcast(ItemId, Quantity);
+	OnItemAdded.Broadcast(ItemId, ItemCategoryTag, Quantity);
 	OnInventoryChanged.Broadcast();
+	// 클라이언트 토스트 알림 — OnRep_LastAddedItem → OnItemAdded.Broadcast (클라이언트측)
+	LastAddedItemNotification.ItemId = ItemId;
+	LastAddedItemNotification.ItemCategoryTag = ItemCategoryTag;
+	LastAddedItemNotification.Quantity = Quantity;
 	return true;
 }
 
@@ -146,7 +156,7 @@ bool UInventoryComponent::RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag,
 			}
 		}
 
-		OnItemRemoved.Broadcast(ItemId, Quantity);
+		OnItemRemoved.Broadcast(ItemId, ItemCategoryTag, Quantity);
 		OnInventoryChanged.Broadcast();
 		return true;
 	}
@@ -511,6 +521,19 @@ void UInventoryComponent::OnRep_ConsumableSlots()
 		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
 	}
 	OnInventoryChanged.Broadcast();
+}
+
+void UInventoryComponent::OnRep_LastAddedItem()
+{
+	// 전용 서버에서 클라이언트로 복제될 때 호출됨.
+	// 리슨 서버 호스트와 스탠드얼론은 AddItem에서 직접 Broadcast되므로 여기 진입 안 함.
+	if (!LastAddedItemNotification.ItemId.IsNone())
+	{
+		OnItemAdded.Broadcast(
+			LastAddedItemNotification.ItemId,
+			LastAddedItemNotification.ItemCategoryTag,
+			LastAddedItemNotification.Quantity);
+	}
 }
 
 void UInventoryComponent::ServerRequestEquipWeapon_Implementation(FName WeaponItemId)

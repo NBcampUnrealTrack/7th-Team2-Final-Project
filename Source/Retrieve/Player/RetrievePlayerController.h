@@ -74,12 +74,23 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> MainMenuClass;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> HUDClass;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> ResultClass;
+
+	/**
+	 * 아이템 획득 토스트 알림 위젯 클래스 (WBP_ToastManager).
+	 * HUD와 독립적으로 InGame 상태에서만 Viewport에 추가/제거된다.
+	 * WBP_HUD의 부모 클래스와 무관하게 동작한다.
+	 *
+	 * 설정: BP_RetrievePlayerController → Details → ToastManagerClass 슬롯
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI",
+		meta = (DisplayName = "Toast Manager Class"))
+	TSubclassOf<UUserWidget> ToastManagerClass;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|UI")
 	TObjectPtr<URetrieveGamePanelWidget> ActivePanel;
@@ -101,18 +112,28 @@ protected:
 	
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveTopLevelWidget;
+
+	/** InGame 상태에서만 활성화되는 토스트 알림 위젯 인스턴스 */
+	UPROPERTY()
+	TObjectPtr<UUserWidget> ActiveToastManager;
 	
 	FGameplayMessageListenerHandle SessionListener;
 
 	UFUNCTION()
 	void HandleActivePanelCloseRequested();
 
+	UFUNCTION()
+	void HandleActivePanelCloseVFXFinished(FGameplayTag EffectTag);
+
 	bool TryHandleMinimapShortcut(FKey Key);
 	bool TryHandlePanelShortcut(FKey Key);
 	bool TryHandleConsumableSlotShortcut(FKey Key);
 	bool CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const;
 	void CenterActiveWorldMapPanel();
+	void RemoveActivePanelImmediately();
 	URetrieveMinimapWidget* FindMinimapWidgetInHUD() const;
 	UInventoryComponent* GetPawnInventoryComponent() const;
 	UWeaponComponent* GetPawnWeaponComponent() const;
+
+	bool bActivePanelClosing = false;
 };
