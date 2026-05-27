@@ -6,6 +6,8 @@
 #include "CombatReactionComponent.generated.h"
 
 class ULockOnComponent;
+class ULockOnCameraRig;
+
 // class UHitReactionComponent; // TODO 2주차 추가 예정
 // class UCombatFeedbackComponent // TODO 2주차 추가 예정
 
@@ -49,6 +51,8 @@ protected:
 	// BeginPlay에서 Owner Actor에 런타임 생성/부착되는 하위 기능 컴포넌트
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnComponent> LockOnComp;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
+	TObjectPtr<ULockOnCameraRig> LockOnCameraRigComp;
 	// TODO 2주차: UHitReactionComponent
 	// UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	// TObjectPtr<UHitReactionComponent> HitReactionComp;
