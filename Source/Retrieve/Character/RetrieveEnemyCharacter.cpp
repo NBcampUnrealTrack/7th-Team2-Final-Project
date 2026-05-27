@@ -7,12 +7,15 @@
 #include "Components/EnemyCombatComponent.h"
 #include "Components/PatternCounterComponent.h"
 #include "Components/DropComponent.h"
+#include "Components/RetrieveHealthComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/DataTable.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Components/SphereComponent.h"
+#include "Enemy/EnemyAIController.h"
+#include "Components/CapsuleComponent.h"
 
 ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -39,12 +42,23 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	MoveComp->bUseControllerDesiredRotation = true;
 	MoveComp->bOrientRotationToMovement = false;
 	MoveComp->RotationRate = FRotator(0.f, 360.f, 0.f);
+	MoveComp->bUseRVOAvoidance = true;
+}
+
+void ARetrieveEnemyCharacter::SetRespawnable(bool NewRespawnable)
+{
+	bRespawnable = NewRespawnable;
 }
 
 void ARetrieveEnemyCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (GetMesh())
+	{
+		InitialMeshRelativeTransform = GetMesh()->GetRelativeTransform();
+	}
+	
 	InitializeAbilitySystem();
 	InitializeComponents();
 	
@@ -125,6 +139,54 @@ void ARetrieveEnemyCharacter::HandleDeathStarted(AActor* OwningActor)
 	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Die;
 	EventData.Instigator = this;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, RetrieveGameplayTags::GameplayEvent_Enemy_Die, EventData);
+}
+
+void ARetrieveEnemyCharacter::HandleDeathEnded(AActor* OwningActor)
+{
+	if (bRespawnable)
+	{
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+		
+		if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
+		{
+			AI->Deactivate();
+		}
+		
+		OnDeathEnded.Broadcast(this); // Spawner, Controller에 통보
+	}
+	else
+	{
+		Destroy();
+	}
+}
+
+void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn)
+{
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->SetCollisionProfileName(TEXT("CharacterMesh"));
+		MeshComp->AttachToComponent(
+			GetCapsuleComponent(),
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		MeshComp->SetRelativeTransform(InitialMeshRelativeTransform);
+	}
+	
+	SetActorTransform(SpawnTransform);
+	SetActorHiddenInGame(false);
+	SetActorEnableCollision(true);
+	
+	if (bIsRespawn)
+	{
+		GetHealthComponent()->ResetHealth();
+		UE_LOG(LogTemp, Warning, TEXT("[%s] Respaawned!"), *GetName());
+	}
+	
+	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
+	{
+		AI->Reactivate();
+	}
 }
 
 void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)

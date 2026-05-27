@@ -14,6 +14,8 @@ class USphereComponent;
 
 struct FEnemyPlayerSpottedPayload;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathEnded, AActor*, DeadCharacter);
+	
 UCLASS()
 class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter
 {
@@ -22,6 +24,14 @@ class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter
 public:
 	ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	void SetRespawnable(bool NewRespawnable);
+	
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
+	void HandleDeathEnded(AActor* OwningActor);
+	
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
+	void ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn = false);
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -33,12 +43,16 @@ protected:
 	
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
-	private:
+
+private:
 	void OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
 	
 public:
 	UPROPERTY()
 	TObjectPtr<AActor> AlertedTarget;
+	
+	UPROPERTY(BlueprintAssignable)
+	FOnDeathEnded OnDeathEnded;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AbilitySystem")
@@ -77,4 +91,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Monster")
 	TObjectPtr<UDataTable> DropTable;
+	
+	bool bRespawnable = false;
+	
+private:
+	// Ragdoll 복구용
+	FTransform InitialMeshRelativeTransform;
 };

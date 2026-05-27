@@ -37,7 +37,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime += DeltaTime;
 	
-	/*APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
+	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EnemyAttackTask Failed: Pawn missing"));
@@ -49,7 +49,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EnemyAttackTask Succeeded: PatternInactive"));
 		return EStateTreeRunStatus::Succeeded;
-	}*/
+	}
 
 	if (InstanceData.ElapsedTime >= InstanceData.MaxAttackDuration)
 	{

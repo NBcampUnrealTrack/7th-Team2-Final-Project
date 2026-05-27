@@ -17,6 +17,22 @@ void URetrieveHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 	DOREPLIFETIME(URetrieveHealthComponent, bDeathStarted);
 }
 
+void URetrieveHealthComponent::ResetHealth()
+{
+	if (!AbilitySystemComponent || !AttributeSet)
+		return;
+
+	// bDeathStarted 먼저 초기화 → HP 변경 시 재사망 트리거 방지
+	bDeathStarted = false;
+
+	// Health를 MaxHealth로 직접 설정 (GE 파이프라인 우회)
+	const float MaxHP = AttributeSet->GetMaxHealth();
+	AbilitySystemComponent->SetNumericAttributeBase(
+		UCombatAttributeSet::GetHealthAttribute(), MaxHP);
+	
+	UE_LOG(LogTemp, Display, TEXT("[%s] HealthRevocer!"), *GetOwner()->GetName());
+}
+
 void URetrieveHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UninitializeWithAbilitySystem();

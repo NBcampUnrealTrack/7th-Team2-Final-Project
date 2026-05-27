@@ -21,6 +21,9 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	
+	GetWorld()->GetTimerManager().SetTimerForNextTick(
+			this, &AEnemyAIController::TryStartStateTree);
 }
 
 void AEnemyAIController::OnUnPossess()
@@ -70,6 +73,24 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 	return Result;
 }
 
+void AEnemyAIController::Deactivate()
+{
+	if (StateTreeAIComp && StateTreeAIComp->IsRunning())
+	{
+		StateTreeAIComp->StopLogic("Deactivated");
+	}
+	
+	if (AIPerceptionComp)
+	{
+		AIPerceptionComp->ForgetAll();
+	}
+}
+
+void AEnemyAIController::Reactivate()
+{
+	TryStartStateTree();
+}
+
 void AEnemyAIController::InitSightConfig()
 {
 	SightConfig->SightRadius = SightRadius;
@@ -84,4 +105,12 @@ void AEnemyAIController::InitSightConfig()
 	AIPerceptionComp->ConfigureSense(*SightConfig);
 	AIPerceptionComp->SetDominantSense(SightConfig->GetSenseImplementation());
 	AIPerceptionComp->RequestStimuliListenerUpdate();
+}
+
+void AEnemyAIController::TryStartStateTree()
+{
+	if (StateTreeAIComp && !StateTreeAIComp->IsRunning())
+	{
+		StateTreeAIComp->StartLogic();
+	}
 }
