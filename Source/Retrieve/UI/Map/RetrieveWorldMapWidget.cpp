@@ -7,6 +7,7 @@
 #include "Components/Widget.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
@@ -22,13 +23,20 @@ void URetrieveWorldMapWidget::NativeConstruct()
 	SetClipping(EWidgetClipping::ClipToBoundsAlways);
 	ZoomLevel    = MinZoom;
 	ViewCenterUV = FVector2D(0.5f, 0.5f);
+	bPendingCenterOnPlayer = true;
+
+	const FString LocationString = CurrentLocationText.ToString();
+	if (LocationString.IsEmpty() || LocationString.Contains(TEXT("?")))
+	{
+		CurrentLocationText = NSLOCTEXT("RetrieveWorldMap", "CurrentLocation", "현재 위치");
+	}
 }
 
 // ---------- 공개 함수 ----------
 
 void URetrieveWorldMapWidget::CenterOnPlayer()
 {
-	const APlayerController* PC = GetOwningPlayer();
+	const APlayerController* PC = GetWorldMapPlayerController();
 	if (!PC || !PC->GetPawn()) { return; }
 
 	UWorld* World = GetWorld();
@@ -40,6 +48,17 @@ void URetrieveWorldMapWidget::CenterOnPlayer()
 	// WorldToUV: 축별 실제 범위로 나눈 정확한 UV
 	ViewCenterUV = MapSub->WorldToUV(PC->GetPawn()->GetActorLocation());
 	ClampViewCenter();
+	bPendingCenterOnPlayer = false;
+}
+
+void URetrieveWorldMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (bPendingCenterOnPlayer)
+	{
+		CenterOnPlayer();
+	}
 }
 
 void URetrieveWorldMapWidget::ZoomIn()
@@ -121,7 +140,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	const FVector2D Center  = MapViewTopLeft + MapViewSize * 0.5f;
 
 	// 게임 상태 취득
-	const APlayerController* PC    = GetOwningPlayer();
+	const APlayerController* PC    = GetWorldMapPlayerController();
 	UWorld*                  World = GetWorld();
 	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 
@@ -219,13 +238,12 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	{
 		const FVector   PlayerLoc    = PC->GetPawn()->GetActorLocation();
 		const FVector2D PlayerUV     = MapSub->WorldToUV(PlayerLoc);
+		const FSlateRect MapViewRect(MapViewTopLeft.X, MapViewTopLeft.Y,
+		                             MapViewTopLeft.X + MapViewSize.X, MapViewTopLeft.Y + MapViewSize.Y);
 		const FVector2D PlayerScreen = UVToScreen(PlayerUV, Center, ScaledW, ScaledH);
 
-		const FSlateRect MapRect(MapTopLeft.X, MapTopLeft.Y,
-		                         MapTopLeft.X + ScaledW, MapTopLeft.Y + ScaledH);
-
 		// ── 플레이어 마커 + 현재 위치 레이블 ─────────────────────────────────
-		if (MapRect.ContainsPoint(FVector2D(PlayerScreen)))
+		if (MapViewRect.ContainsPoint(FVector2D(PlayerScreen)))
 		{
 			const float CameraYaw = PC->PlayerCameraManager
 				? PC->PlayerCameraManager->GetCameraRotation().Yaw
@@ -240,6 +258,11 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			PlayerBrush.SetResourceObject(PlayerMarkerTexture);
 			PlayerBrush.ImageSize = MarkerSz;
 
+			const FLinearColor EffectiveMarkerColor =
+				PlayerMarkerColor.A > KINDA_SMALL_NUMBER ? PlayerMarkerColor : FLinearColor::White;
+			const FLinearColor EffectiveLabelColor =
+				LabelColor.A > KINDA_SMALL_NUMBER ? LabelColor : FLinearColor::White;
+
 			FSlateDrawElement::MakeRotatedBox(
 				OutDrawElements,
 				++CurrentLayer,
@@ -252,10 +275,13 @@ int32 URetrieveWorldMapWidget::NativePaint(
 				FMath::DegreesToRadians(CameraYaw),
 				TOptional<FVector2D>(AbsPlayerScreen),
 				FSlateDrawElement::ERotationSpace::RelativeToWorld,
-				PlayerMarkerColor
+				EffectiveMarkerColor
 			);
 
-			if (!CurrentLocationText.IsEmpty())
+			const FText LocationText = CurrentLocationText.IsEmpty()
+				? NSLOCTEXT("RetrieveWorldMap", "CurrentLocation", "현재 위치")
+				: CurrentLocationText;
+			if (!LocationText.IsEmpty())
 			{
 				const FSlateFontInfo LabelFont =
 					FCoreStyle::GetDefaultFontStyle("Bold", PlayerLabelFontSize);
@@ -264,7 +290,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 					PlayerScreen.Y - MarkerSz.Y * 0.5f - 6.0f
 				);
 				DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
-				          CurrentLocationText.ToString(), LabelAnchor, LabelFont, LabelColor);
+				          LocationText.ToString(), LabelAnchor, LabelFont, EffectiveLabelColor);
 			}
 		}
 
@@ -276,7 +302,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			const FVector2D IconUV     = MapSub->WorldToUV(Icon->GetOwner()->GetActorLocation());
 			const FVector2D IconScreen = UVToScreen(IconUV, Center, ScaledW, ScaledH);
 
-			if (!MapRect.ContainsPoint(FVector2D(IconScreen))) { continue; }
+			if (!MapViewRect.ContainsPoint(FVector2D(IconScreen))) { continue; }
 
 			DrawWorldIcon(OutDrawElements, CurrentLayer, AllottedGeometry, Icon, IconScreen);
 
@@ -434,13 +460,26 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 		{
 			const FVector2D AbsTopLeft = FVector2D(ViewGeometry.LocalToAbsolute(FVector2f::ZeroVector));
 			const FVector2D AbsBottomRight = FVector2D(ViewGeometry.LocalToAbsolute(FVector2f(ViewSize)));
-			OutTopLeft = AllottedGeometry.AbsoluteToLocal(AbsTopLeft);
-			const FVector2D BottomRight = AllottedGeometry.AbsoluteToLocal(AbsBottomRight);
-			OutSize = FVector2D(
-				FMath::Max(1.0f, BottomRight.X - OutTopLeft.X),
-				FMath::Max(1.0f, BottomRight.Y - OutTopLeft.Y)
+			FVector2D CandidateTopLeft = AllottedGeometry.AbsoluteToLocal(AbsTopLeft);
+			const FVector2D CandidateBottomRight = AllottedGeometry.AbsoluteToLocal(AbsBottomRight);
+
+			const FSlateRect WidgetRect(0.0f, 0.0f, WidgetSize.X, WidgetSize.Y);
+			FSlateRect CandidateRect(
+				CandidateTopLeft.X,
+				CandidateTopLeft.Y,
+				CandidateBottomRight.X,
+				CandidateBottomRight.Y
 			);
-			return;
+			CandidateRect = CandidateRect.IntersectionWith(WidgetRect);
+
+			const float CandidateW = CandidateRect.Right - CandidateRect.Left;
+			const float CandidateH = CandidateRect.Bottom - CandidateRect.Top;
+			if (CandidateW > 1.0f && CandidateH > 1.0f)
+			{
+				OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
+				OutSize = FVector2D(CandidateW, CandidateH);
+				return;
+			}
 		}
 	}
 
@@ -454,6 +493,16 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 		FMath::Max(1.0f, WidgetSize.X - Left - Right),
 		FMath::Max(1.0f, WidgetSize.Y - Top - Bottom)
 	);
+}
+
+APlayerController* URetrieveWorldMapWidget::GetWorldMapPlayerController() const
+{
+	if (APlayerController* OwningPC = GetOwningPlayer())
+	{
+		return OwningPC;
+	}
+
+	return UGameplayStatics::GetPlayerController(this, 0);
 }
 
 bool URetrieveWorldMapWidget::IsInsideMapView(const FVector2D& LocalPosition, const FVector2D& MapTopLeft, const FVector2D& MapSize) const

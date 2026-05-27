@@ -6,10 +6,31 @@ URetrieveMapIconComponent::URetrieveMapIconComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void URetrieveMapIconComponent::OnRegister()
+{
+	Super::OnRegister();
+}
+
+void URetrieveMapIconComponent::OnUnregister()
+{
+	UnregisterFromMapSubsystem();
+	Super::OnUnregister();
+}
+
 void URetrieveMapIconComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	RegisterWithMapSubsystem();
+}
 
+void URetrieveMapIconComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnregisterFromMapSubsystem();
+	Super::EndPlay(EndPlayReason);
+}
+
+void URetrieveMapIconComponent::RegisterWithMapSubsystem()
+{
 	if (UWorld* World = GetWorld())
 	{
 		if (URetrieveMapSubsystem* Sub = World->GetSubsystem<URetrieveMapSubsystem>())
@@ -19,7 +40,7 @@ void URetrieveMapIconComponent::BeginPlay()
 	}
 }
 
-void URetrieveMapIconComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void URetrieveMapIconComponent::UnregisterFromMapSubsystem()
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -28,6 +49,4 @@ void URetrieveMapIconComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 			Sub->UnregisterIcon(this);
 		}
 	}
-
-	Super::EndPlay(EndPlayReason);
 }

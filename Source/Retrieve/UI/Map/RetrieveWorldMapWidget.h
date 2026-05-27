@@ -116,6 +116,7 @@ protected:
 	virtual bool NativeSupportsKeyboardFocus() const override { return true; }
 
 	virtual void NativeConstruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(
 		const FPaintArgs& Args,
 		const FGeometry& AllottedGeometry,
@@ -136,6 +137,7 @@ private:
 	FVector2D ViewCenterUV = FVector2D(0.5f, 0.5f);
 
 	bool      bIsPanning       = false;
+	bool      bPendingCenterOnPlayer = true;
 	FVector2D PanStartLocalPos;  // 드래그 시작 위젯 로컬 좌표
 	FVector2D PanStartCenterUV;  // 드래그 시작 ViewCenterUV
 
@@ -160,6 +162,7 @@ private:
 
 	void GetMapViewRect(const FGeometry& AllottedGeometry, FVector2D& OutTopLeft, FVector2D& OutSize) const;
 	bool IsInsideMapView(const FVector2D& LocalPosition, const FVector2D& MapTopLeft, const FVector2D& MapSize) const;
+	APlayerController* GetWorldMapPlayerController() const;
 
 	void DrawWorldIcon(
 		FSlateWindowElementList& OutDrawElements,

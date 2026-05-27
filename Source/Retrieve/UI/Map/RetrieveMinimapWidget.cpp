@@ -7,6 +7,7 @@
 #include "Components/Image.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
+#include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
@@ -22,8 +23,15 @@ void URetrieveMinimapWidget::NativeConstruct()
 		return;
 	}
 
-	UMaterialInterface* BaseMaterial =
-		Cast<UMaterialInterface>(Image_Minimap->GetBrush().GetResourceObject());
+	UMaterialInterface* BaseMaterial = MinimapMaterial;
+	if (!BaseMaterial)
+	{
+		BaseMaterial = Cast<UMaterialInterface>(Image_Minimap->GetBrush().GetResourceObject());
+	}
+
+	// The image widget is only a design-time/material reference. NativePaint owns
+	// the minimap render order so the brush cannot cover markers or actor icons.
+	Image_Minimap->SetVisibility(ESlateVisibility::Collapsed);
 
 	if (!BaseMaterial)
 	{
@@ -35,7 +43,26 @@ void URetrieveMinimapWidget::NativeConstruct()
 	{
 		// 맵 텍스처는 NativePaint에서 직접 그리므로 Image_Minimap 위젯은 숨긴다.
 		// (MID 생성을 위한 머티리얼 참조 용도로만 사용)
-		Image_Minimap->SetVisibility(ESlateVisibility::Hidden);
+		Image_Minimap->SetVisibility(ESlateVisibility::Collapsed);
+
+		// 머티리얼 기본값이 RT 텍스처를 참조할 수 있으므로 베이크 텍스처를 즉시 덮어씌운다.
+		// NativeTick 전에 설정해 첫 프레임부터 올바른 텍스처가 사용되도록 한다.
+		UTexture2D* InitTex = BakedMapTexture;
+		if (!InitTex)
+		{
+			if (UWorld* W = GetWorld())
+			{
+				if (URetrieveMapSubsystem* Sub = W->GetSubsystem<URetrieveMapSubsystem>())
+				{
+					InitTex = Sub->BakedMapTexture;
+				}
+			}
+		}
+		if (InitTex)
+		{
+			MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), InitTex);
+			CachedMIDTexture = InitTex;
+		}
 	}
 }
 
@@ -44,11 +71,6 @@ void URetrieveMinimapWidget::NativeConstruct()
 void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-
-	if (!MinimapMID)
-	{
-		return;
-	}
 
 	UWorld* World = GetWorld();
 	const APlayerController* PC = GetOwningPlayer();
@@ -64,7 +86,10 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	}
 
 	const FVector PlayerLocation = PC->GetPawn()->GetActorLocation();
-	UpdateMinimapMaterial(MapSub, PlayerLocation);
+	if (MinimapMID)
+	{
+		UpdateMinimapMaterial(MapSub, PlayerLocation);
+	}
 }
 
 // ---------- 머티리얼 파라미터 갱신 ----------
@@ -89,9 +114,13 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 		ActiveTexture = MapSub->BakedMapTexture;
 	}
 
-	if (ActiveTexture)
+	// 텍스처가 실제로 바뀔 때만 파라미터를 업데이트한다.
+	// 매 틱 SetTextureParameterValue를 호출하면 스트리밍 시스템이 해당 텍스처를
+	// 최고 우선순위로 유지하려 하므로 스트리밍 풀 압박을 가중시킨다.
+	if (ActiveTexture && ActiveTexture != CachedMIDTexture)
 	{
 		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), ActiveTexture);
+		CachedMIDTexture = ActiveTexture;
 	}
 }
 
@@ -128,6 +157,8 @@ int32 URetrieveMinimapWidget::NativePaint(
 	const float     MiniMapRadius = FMath::Min(WidgetSize.X, WidgetSize.Y) * 0.5f;
 	const FVector   PlayerLoc     = PC->GetPawn()->GetActorLocation();
 	const float     CameraYaw     = GetCameraYaw(PC);
+	UWorld* World = GetWorld();
+	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 
 	// 모든 드로우 콜을 위젯 할당 영역으로 클리핑 (맵 텍스처 오버플로우 방지)
 	const FSlateClippingZone ClipZone(AllottedGeometry.GetLayoutBoundingRect());
@@ -166,6 +197,48 @@ int32 URetrieveMinimapWidget::NativePaint(
 			FSlateDrawElement::ERotationSpace::RelativeToWorld
 		);
 	}
+	else if (MapSub && MapSub->HasValidBounds())
+	{
+		UTexture2D* ActiveTexture = BakedMapTexture ? BakedMapTexture.Get() : MapSub->BakedMapTexture.Get();
+		if (ActiveTexture)
+		{
+			const FVector2D PlayerUV = MapSub->WorldToUV(PlayerLoc);
+			const float HalfU = ViewWorldRadius / FMath::Max(MapSub->MapExtentXY.Y, 1.0f);
+			const float HalfV = ViewWorldRadius / FMath::Max(MapSub->MapExtentXY.X, 1.0f);
+			const FVector2D UVMin(
+				FMath::Clamp(PlayerUV.X - HalfU, 0.0f, 1.0f),
+				FMath::Clamp(PlayerUV.Y - HalfV, 0.0f, 1.0f)
+			);
+			const FVector2D UVMax(
+				FMath::Clamp(PlayerUV.X + HalfU, 0.0f, 1.0f),
+				FMath::Clamp(PlayerUV.Y + HalfV, 0.0f, 1.0f)
+			);
+
+			const float RotAngle = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? -CameraYaw : 0.0f;
+			const float Scale = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? FMath::Sqrt(2.0f) : 1.0f;
+			const FVector2D ScaledSize = WidgetSize * Scale;
+			const FVector2D MapTopLeft = Center - ScaledSize * 0.5f;
+
+			FSlateBrush MapBrush;
+			MapBrush.SetResourceObject(ActiveTexture);
+			MapBrush.ImageSize = WidgetSize;
+			MapBrush.SetUVRegion(FBox2f(FVector2f(UVMin), FVector2f(UVMax)));
+
+			FSlateDrawElement::MakeRotatedBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(ScaledSize),
+					FSlateLayoutTransform(FVector2f(MapTopLeft))
+				),
+				&MapBrush,
+				ESlateDrawEffect::None,
+				FMath::DegreesToRadians(RotAngle),
+				TOptional<FVector2D>(AbsCenter),
+				FSlateDrawElement::ERotationSpace::RelativeToWorld
+			);
+		}
+	}
 
 	// ── 플레이어 마커 ──────────────────────────────────────────────────────────
 	// NorthUp: CameraYaw만큼 회전해 북쪽 기준 방향 표시
@@ -197,10 +270,8 @@ int32 URetrieveMinimapWidget::NativePaint(
 	}
 
 	// ── 액터 아이콘 ──────────────────────────────────────────────────────────
-	UWorld* World = GetWorld();
 	if (World)
 	{
-		URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>();
 		if (MapSub && MapSub->HasValidBounds())
 		{
 			for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
