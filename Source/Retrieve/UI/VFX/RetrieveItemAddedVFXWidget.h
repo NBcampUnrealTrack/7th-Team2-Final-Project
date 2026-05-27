@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
@@ -24,10 +24,10 @@ protected:
 	TObjectPtr<UInventoryComponent> BoundInventoryComponent;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|UI VFX|Item")
-	void BP_OnItemAdded(FName ItemId, int32 Quantity);
+	void BP_OnItemAdded(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity);
 
 	UFUNCTION()
-	void HandleItemAdded(FName ItemId, int32 Quantity);
+	void HandleItemAdded(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity);
 
 	UInventoryComponent* ResolveInventoryComponent() const;
 	UWidget* ResolveItemIconVFXTarget() const;
