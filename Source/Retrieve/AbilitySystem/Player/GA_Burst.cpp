@@ -40,7 +40,7 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
-    UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Motion=%s"), *MatchedRow->MotionGroup.ToString());
+    UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Skill=%s"), *MatchedRow->DisplayName.ToString());
 
     Gauge->ConsumeAllSlots();
 
