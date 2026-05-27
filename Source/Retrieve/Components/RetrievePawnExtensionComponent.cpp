@@ -1,4 +1,4 @@
-#include "Components/RetrievePawnExtensionComponent.h"
+﻿#include "Components/RetrievePawnExtensionComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
@@ -75,7 +75,7 @@ void URetrievePawnExtensionComponent::OnRep_PawnData()
 }
 
 void URetrievePawnExtensionComponent::InitializeAbilitySystem(URetrieveAbilitySystemComponent* InASC,
-                                                              AActor* InOwnerActor)
+	AActor* InOwnerActor)
 {
 	check(InASC);
 	check(InOwnerActor);
@@ -100,16 +100,16 @@ void URetrievePawnExtensionComponent::UninitializeAbilitySystem()
 {
 	URetrieveAbilitySystemComponent* ASC = AbilitySystemComponent;
 	AActor* Owner = GetOwner();
-	
+
 	if (!IsValid(AbilitySystemComponent))
 	{
 		AbilitySystemComponent = nullptr;
 		return;
 	}
-	
+
 	// 재진입 방어: 정리 중 다시 들어오면 이미 nullptr로 보이게 한다.
 	AbilitySystemComponent = nullptr;
-	
+
 	GrantedHandles.TakeFromAbilitySystem(ASC);
 
 	if (IsValid(ASC) && ASC->GetAvatarActor_Direct() == Owner)
@@ -152,7 +152,7 @@ void URetrievePawnExtensionComponent::OnAbilitySystemInitialized_RegisterAndCall
 }
 
 bool URetrievePawnExtensionComponent::CanChangeInitState(UGameFrameworkComponentManager* Manager,
-                                                         FGameplayTag CurrentState, FGameplayTag DesiredState) const
+	FGameplayTag CurrentState, FGameplayTag DesiredState) const
 {
 	check(Manager);
 	APawn* Pawn = GetPawn<APawn>();
@@ -205,7 +205,7 @@ bool URetrievePawnExtensionComponent::CanChangeInitState(UGameFrameworkComponent
 }
 
 void URetrievePawnExtensionComponent::HandleChangeInitState(UGameFrameworkComponentManager* Manager,
-                                                            FGameplayTag CurrentState, FGameplayTag DesiredState)
+	FGameplayTag CurrentState, FGameplayTag DesiredState)
 {
 	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState ==
 		RetrieveGameplayTags::InitState_DataInitialized)
@@ -240,7 +240,7 @@ void URetrievePawnExtensionComponent::HandleChangeInitState(UGameFrameworkCompon
 		// 2. PawnData에 행(row)이 지정되어 있다면 DT_CharacterStats에서 MaxHealth를 적용
 		// AttributeSet은 기본값으로 생성된 상태이므로, 이 단계에서 해당 값을 데이터로 덮어씀
 		ApplyCharacterStatsRow();
-		
+
 		// 3. ASC + UCombatAttributeSet + 초기 스탯이 모두 준비됨
 		OnAbilitySystemInitialized.Broadcast();
 	}
@@ -273,7 +273,7 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 	{
 		return;
 	}
-	
+
 	// GE_InitStats가 지정되어 있는 경우 (SetByCaller 활용 주입)
 	if (PawnData->InitStatsEffect)
 	{
@@ -288,7 +288,11 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 				RetrieveGameplayTags::Data_Init_Health, Row->MaxHealth);
 			SpecHandle.Data->SetSetByCallerMagnitude(
 				RetrieveGameplayTags::Data_Init_AttackPower, Row->AttackPower);
-			
+			SpecHandle.Data->SetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Init_MoveSpeed, 600.f);
+			SpecHandle.Data->SetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Init_IncomingDamageMultiplier, 1.f);
+
 			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 		}
 	}
@@ -299,7 +303,7 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		AttributeSet->SetHealth(Row->MaxHealth);
 		AttributeSet->SetAttackPower(Row->AttackPower);
 	}
-	
+
 	// PIE 검증을 위한 핵심 초기화 로그 출력
 	UE_LOG(LogTemp, Log, TEXT("[StatsInit] Pawn=%s Row=%s HP=%.1f MaxHP=%.1f ATK=%.1f"),
 		*GetNameSafe(GetOwner()),

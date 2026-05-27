@@ -1,4 +1,4 @@
-
+﻿
 #pragma once
 
 #include "CoreMinimal.h"
@@ -94,10 +94,10 @@ USTRUCT(BlueprintType)
 struct FRetrieveModularLayoutSelectionEntry
 {
 	GENERATED_BODY()
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<URetrieveModularMeshLayout> Layout = nullptr;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	FGameplayTagContainer RequiredTags;
 };
@@ -110,12 +110,12 @@ USTRUCT(BlueprintType)
 struct FRetrieveModularLayoutSelectionSet
 {
 	GENERATED_BODY()
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, meta = (TitleProperty = Layout))
 	TArray<FRetrieveModularLayoutSelectionEntry> LayoutRules;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<URetrieveModularMeshLayout> DefaultLayout = nullptr;
-	
+
 	URetrieveModularMeshLayout* SelectBestLayout(const FGameplayTagContainer& Tags) const;
 };
