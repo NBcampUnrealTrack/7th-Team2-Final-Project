@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
 #include "InputCoreTypes.h"
+#include "UI/VFX/RetrieveUIVFXWidget.h"
 #include "RetrieveGamePanelWidget.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrievePanelCloseRequestedSignature);
@@ -11,7 +11,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRetrievePanelTabSwitchRequestedSign
 // 독립 패널 위젯의 공통 기반 클래스.
 // 닫기·토글 키 입력을 처리하며, 패널별 내용은 하위 클래스에서 구현한다.
 UCLASS(Abstract, Blueprintable)
-class RETRIEVE_API URetrieveGamePanelWidget : public UUserWidget
+class RETRIEVE_API URetrieveGamePanelWidget : public URetrieveUIVFXWidget
 {
 	GENERATED_BODY()
 
@@ -20,6 +20,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Panel")
 	void RequestClose();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Panel")
+	bool PlayPanelOpenVFX();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Panel")
+	bool PlayPanelCloseVFX();
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Panel")
 	FRetrievePanelCloseRequestedSignature OnCloseRequested;

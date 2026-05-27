@@ -1,5 +1,7 @@
 #include "UI/RetrieveGamePanelWidget.h"
 
+#include "GameplayTags/RetrieveGameplayTags.h"
+
 URetrieveGamePanelWidget::URetrieveGamePanelWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -9,6 +11,16 @@ URetrieveGamePanelWidget::URetrieveGamePanelWidget(const FObjectInitializer& Obj
 void URetrieveGamePanelWidget::RequestClose()
 {
 	OnCloseRequested.Broadcast();
+}
+
+bool URetrieveGamePanelWidget::PlayPanelOpenVFX()
+{
+	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Open);
+}
+
+bool URetrieveGamePanelWidget::PlayPanelCloseVFX()
+{
+	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Close, true);
 }
 
 FReply URetrieveGamePanelWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)

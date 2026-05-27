@@ -201,4 +201,15 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Fail, "GameplayEvent.Parry.Fail");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Knockdown, "GameplayEvent.Hit.Knockdown");
 	*/
+
+	// ---- UI VFX
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Close, "UI.VFX.Panel.Close");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Gauge_FullPulse, "UI.VFX.Gauge.FullPulse");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Icon_ItemAdded, "UI.VFX.Icon.ItemAdded");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Hover, "UI.VFX.Button.Hover");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Unhover, "UI.VFX.Button.Unhover");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Press, "UI.VFX.Button.Press");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Release, "UI.VFX.Button.Release");
+	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Tab_Switch, "UI.VFX.Tab.Switch");
 }

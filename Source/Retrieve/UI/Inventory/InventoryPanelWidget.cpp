@@ -75,6 +75,10 @@ void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 		CurrentCategoryTag = ConsumableTabCategoryTag;
 		RefreshInventoryView(true);
 	}
+
+	PlayUIVFXOnWidget(
+		RetrieveGameplayTags::UI_VFX_Tab_Switch,
+		UniformGrid_ItemList ? Cast<UWidget>(UniformGrid_ItemList.Get()) : GetRootWidget());
 }
 
 void UInventoryPanelWidget::RefreshInventoryList()
@@ -672,7 +676,6 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 	}
 
 	constexpr int32 GridColumnCount = 4;
-	constexpr float MinSlotSize = 48.0f;
 	constexpr float ScrollbarAllowance = 14.0f;
 
 	const FVector2D GridAreaSize = ScrollBox_ItemList
@@ -683,8 +686,8 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 		return;
 	}
 
-	const float AvailableWidth = FMath::Max(GridAreaSize.X - ScrollbarAllowance, MinSlotSize * GridColumnCount);
-	const float SlotSize = AvailableWidth / static_cast<float>(GridColumnCount);
+	const float AvailableWidth = FMath::Max(GridAreaSize.X - ScrollbarAllowance, 1.0f);
+	const float SlotSize = FMath::Max(FMath::FloorToFloat(AvailableWidth / static_cast<float>(GridColumnCount)), 1.0f);
 	const bool bGridAreaChanged = !GridAreaSize.Equals(LastInventoryGridAreaSize, 0.5f);
 	if (bGridAreaChanged)
 	{

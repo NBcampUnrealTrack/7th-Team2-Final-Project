@@ -209,10 +209,10 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> Border_WeaponSwapConfirm;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_ConfirmEquip;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_CancelEquip;
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -221,22 +221,22 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_QuickSlot5;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_AssignQuickSlot;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_UnassignQuickSlot;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> Border_QuickSlotAssignDialog;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_AssignSlot4;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_AssignSlot5;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_CancelQuickSlotAssign;
 
 	// 런타임 상태
