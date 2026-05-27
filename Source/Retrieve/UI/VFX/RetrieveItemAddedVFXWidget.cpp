@@ -1,4 +1,4 @@
-#include "UI/VFX/RetrieveItemAddedVFXWidget.h"
+﻿#include "UI/VFX/RetrieveItemAddedVFXWidget.h"
 
 #include "Components/InventoryComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -27,10 +27,10 @@ void URetrieveItemAddedVFXWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void URetrieveItemAddedVFXWidget::HandleItemAdded(FName ItemId, int32 Quantity)
+void URetrieveItemAddedVFXWidget::HandleItemAdded(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
 {
 	PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Icon_ItemAdded, ResolveItemIconVFXTarget());
-	BP_OnItemAdded(ItemId, Quantity);
+	BP_OnItemAdded(ItemId, ItemCategoryTag, Quantity);
 }
 
 UInventoryComponent* URetrieveItemAddedVFXWidget::ResolveInventoryComponent() const
