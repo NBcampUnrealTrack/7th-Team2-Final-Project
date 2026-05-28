@@ -82,7 +82,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		if (!OwnerController ||
 			OwnerController->GetTeamAttitudeTowards(*Actor) != ETeamAttitude::Hostile)
 		{
-			return;
+			continue;
 		}
 		
 		const float DistSq = FVector::DistSquared(PawnLocation, Actor->GetActorLocation());

@@ -16,6 +16,7 @@
 #include "Components/SphereComponent.h"
 #include "Enemy/EnemyAIController.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -43,6 +44,29 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	MoveComp->bOrientRotationToMovement = false;
 	MoveComp->RotationRate = FRotator(0.f, 360.f, 0.f);
 	MoveComp->bUseRVOAvoidance = true;
+	
+	if (IsValid(OwnedASC))
+	{
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Dead, 
+			EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &ARetrieveEnemyCharacter::OnDeadTagChanged);
+
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Chase,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnChaseTagChanged);
+
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Hit,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnHitTagChanged);
+
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Staggered,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnStaggeredTagChanged);
+		
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Groggy,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnGroggyTagChanged);
+	}
 }
 
 void ARetrieveEnemyCharacter::SetRespawnable(bool NewRespawnable)
@@ -66,6 +90,12 @@ void ARetrieveEnemyCharacter::BeginPlay()
 	GroupAlertHandle = MsgSubsys.RegisterListener<FEnemyPlayerSpottedPayload>(
 		RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
 		this, &ARetrieveEnemyCharacter::OnAlerted);
+	
+	if (UCharacterMovementComponent* MoveComp = Cast<UCharacterMovementComponent>(GetMovementComponent()))
+	{
+		DefaultGravityScale = MoveComp->GravityScale;
+		DefaultMovementMode = MoveComp->MovementMode;
+	}
 }
 
 void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -104,7 +134,6 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	{
 		EnemyCombatComponent->Initialize(PatternTable, Row->PatternSlots);
 		EnemyCombatComponent->SetActiveHitbox(FistHitbox);
-		UE_LOG(LogDataTable, Display, TEXT("[%s] EnemyCombatComponent initialized."), *GetName());
 	}
 
 	if (DropComponent && !Row->DropRow.IsNone())
@@ -141,17 +170,36 @@ void ARetrieveEnemyCharacter::HandleDeathStarted(AActor* OwningActor)
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, RetrieveGameplayTags::GameplayEvent_Enemy_Die, EventData);
 }
 
+void ARetrieveEnemyCharacter::OnDeadTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsDead = Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnChaseTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsChasing = Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnHitTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsHit = Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnStaggeredTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsStaggered = Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnGroggyTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsGroggy = Count > 0;
+}
+
 void ARetrieveEnemyCharacter::HandleDeathEnded(AActor* OwningActor)
 {
 	if (bRespawnable)
 	{
-		SetActorHiddenInGame(true);
-		SetActorEnableCollision(false);
-		
-		if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
-		{
-			AI->Deactivate();
-		}
+		DeactivateEnemy();
 		
 		OnDeathEnded.Broadcast(this); // Spawner, Controller에 통보
 	}
@@ -177,15 +225,40 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);
 	
+	if (UCharacterMovementComponent* MoveComp = Cast<UCharacterMovementComponent>(GetMovementComponent()))
+	{
+		GetCharacterMovement()->GravityScale = DefaultGravityScale;
+		GetCharacterMovement()->SetMovementMode(DefaultMovementMode);
+	}
+	
 	if (bIsRespawn)
 	{
-		GetHealthComponent()->ResetHealth();
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Respaawned!"), *GetName());
+		if (IsValid(HealthComponent))
+		{
+			HealthComponent->ResetHealth();
+		}
 	}
 	
 	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
 	{
 		AI->Reactivate();
+	}
+}
+
+void ARetrieveEnemyCharacter::DeactivateEnemy()
+{
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+		
+	if (UCharacterMovementComponent* MoveComp = Cast<UCharacterMovementComponent>(GetMovementComponent()))
+	{
+		MoveComp->GravityScale = 0.0f;
+		MoveComp->SetMovementMode(EMovementMode::MOVE_None);
+	}
+		
+	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
+	{
+		AI->Deactivate();
 	}
 }
 

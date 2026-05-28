@@ -118,8 +118,11 @@ bool UEnemyCombatComponent::IsPatternActive() const
 
 void UEnemyCombatComponent::ActivateHitbox()
 {
-	if (!ActiveHitboxComp) return;
-
+	if (!ActiveHitboxComp)
+	{
+		return;
+	}
+	
 	const FMonsterPatternRow* Row = PatternTable
 		? PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName == NAME_None 
 			? BasicAttackRowName : ActivePatternRowName,
