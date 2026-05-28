@@ -9,6 +9,7 @@ class URetrieveInteractionResultAsset;
 class URetrieveInteractionTypeAsset;
 class URetrieveInteractionPresetAsset;
 class URetrieveLootTableAsset;
+class UTexture2D;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FRetrieveOnInteractionAppliedSignature, AActor*, InteractionInstigator);
@@ -101,6 +102,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|★ 빠른 픽업 설정",
 		meta = (DisplayName = "수량", ClampMin = "1"))
 	int32 QuickPickupQuantity = 1;
+
+	/**
+	 * QuickPickupItemId가 설정된 단일 아이템 상호작용이면 Manager 프롬프트에
+	 * 아이템 DataTable의 DisplayName / DT_ItemIcon 아이콘을 우선 적용한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "단일 아이템 프롬프트 자동 적용"))
+	bool bUseQuickPickupItemPrompt = true;
+
+	/**
+	 * 단일 아이템 프롬프트 문구 포맷. {ItemName}, {ActionText}, {Quantity} 사용 가능.
+	 * 예: "{ItemName}", "{ActionText} {ItemName}", "{ItemName} x{Quantity}"
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "아이템 프롬프트 텍스트 포맷"))
+	FText QuickPickupPromptFormat = INVTEXT("{ItemName}");
+
+	/** 이 액터만 프롬프트 텍스트를 직접 덮어쓰고 싶을 때 사용한다. 비어 있으면 자동 계산값을 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "프롬프트 텍스트 Override"))
+	FText PromptTextOverride;
+
+	/** 이 액터만 프롬프트 아이콘을 직접 덮어쓰고 싶을 때 사용한다. None이면 자동 계산값을 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "프롬프트 아이콘 Override"))
+	TObjectPtr<UTexture2D> PromptIconOverride;
+
+	/** 아이템이 아닌 문/들기/채집류 프롬프트에서는 TypeAsset 아이콘을 비우고 텍스트만 보이게 한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "비아이템 프롬프트 아이콘 숨김"))
+	bool bHideIconForNonItemPrompt = true;
 
 	// ── 확률 드롭 직접 참조 (상자·몬스터·채광) ────────────────────────────
 	/**
@@ -203,6 +235,7 @@ protected:
 	void Server_ApplyResult(AActor* InteractionInstigator);
 
 	/** Authority에서 실제 결과 적용 */
+	UFUNCTION()
 	void ApplyResultAuthoritative(AActor* InteractionInstigator);
 
 	/**
