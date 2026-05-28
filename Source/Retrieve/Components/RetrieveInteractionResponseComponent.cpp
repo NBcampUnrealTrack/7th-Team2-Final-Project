@@ -5,11 +5,15 @@
 #include "Data/Interaction/RetrieveInteractionResultAsset.h"
 #include "Data/Interaction/RetrieveInteractionTypeAsset.h"
 #include "Data/Interaction/RetrieveLootTableAsset.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "Components/InventoryComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Internationalization/Text.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
@@ -17,6 +21,128 @@
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/UnrealType.h"
+
+namespace RetrieveInteractionPrompt
+{
+	struct FPromptData
+	{
+		FText Text;
+		TObjectPtr<UTexture2D> Icon = nullptr;
+		FLinearColor AccentColor = FLinearColor::White;
+	};
+
+	template <typename RowType>
+	FText FindDisplayNameInTable(const TCHAR* TablePath, FName ItemId, const TCHAR* Context)
+	{
+		if (UDataTable* DataTable = LoadObject<UDataTable>(nullptr, TablePath))
+		{
+			if (const RowType* Row = DataTable->FindRow<RowType>(ItemId, Context, false))
+			{
+				return Row->DisplayName;
+			}
+		}
+
+		return FText::GetEmpty();
+	}
+
+	FText LookupItemDisplayName(FName ItemId, FGameplayTag ItemCategoryTag)
+	{
+		if (ItemId.IsNone())
+		{
+			return FText::GetEmpty();
+		}
+
+		if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
+		{
+			const FText DisplayName = FindDisplayNameInTable<FRetrieveWeaponDataRow>(
+				TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData"),
+				ItemId,
+				TEXT("RetrieveInteractionPrompt"));
+			if (!DisplayName.IsEmpty())
+			{
+				return DisplayName;
+			}
+		}
+		else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+		{
+			const FText DisplayName = FindDisplayNameInTable<FRetrieveConsumableItemRow>(
+				TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem"),
+				ItemId,
+				TEXT("RetrieveInteractionPrompt"));
+			if (!DisplayName.IsEmpty())
+			{
+				return DisplayName;
+			}
+		}
+		else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material))
+		{
+			const FText DisplayName = FindDisplayNameInTable<FRetrieveMaterialItemRow>(
+				TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem"),
+				ItemId,
+				TEXT("RetrieveInteractionPrompt"));
+			if (!DisplayName.IsEmpty())
+			{
+				return DisplayName;
+			}
+		}
+
+		const FText WeaponName = FindDisplayNameInTable<FRetrieveWeaponDataRow>(
+			TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData"),
+			ItemId,
+			TEXT("RetrieveInteractionPrompt"));
+		if (!WeaponName.IsEmpty())
+		{
+			return WeaponName;
+		}
+
+		const FText ConsumableName = FindDisplayNameInTable<FRetrieveConsumableItemRow>(
+			TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem"),
+			ItemId,
+			TEXT("RetrieveInteractionPrompt"));
+		if (!ConsumableName.IsEmpty())
+		{
+			return ConsumableName;
+		}
+
+		const FText MaterialName = FindDisplayNameInTable<FRetrieveMaterialItemRow>(
+			TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem"),
+			ItemId,
+			TEXT("RetrieveInteractionPrompt"));
+		if (!MaterialName.IsEmpty())
+		{
+			return MaterialName;
+		}
+
+		return FText::FromName(ItemId);
+	}
+
+	bool LookupItemIconData(FName ItemId, FRetrieveItemIconRow& OutIconData)
+	{
+		if (ItemId.IsNone())
+		{
+			return false;
+		}
+
+		UDataTable* IconTable = LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Retrieve/Data/Items/DT_ItemIcon.DT_ItemIcon"));
+		if (!IconTable)
+		{
+			return false;
+		}
+
+		if (const FRetrieveItemIconRow* Row = IconTable->FindRow<FRetrieveItemIconRow>(
+			ItemId,
+			TEXT("RetrieveInteractionPrompt"),
+			false))
+		{
+			OutIconData = *Row;
+			return true;
+		}
+
+		return false;
+	}
+}
 
 URetrieveInteractionResponseComponent::URetrieveInteractionResponseComponent()
 {
@@ -132,6 +258,47 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 
 	const UClass* ManagerClass = ManagerComp->GetClass();
 	const FString OwnerName = GetOwner() ? GetOwner()->GetName() : TEXT("Unknown");
+	RetrieveInteractionPrompt::FPromptData PromptData;
+	PromptData.Text = TypeAsset->DisplayText;
+	PromptData.Icon = bHideIconForNonItemPrompt ? nullptr : TypeAsset->PromptIcon.Get();
+	PromptData.AccentColor = TypeAsset->PromptAccentColor;
+
+	if (bUseQuickPickupItemPrompt && !QuickPickupItemId.IsNone())
+	{
+		const FText ItemName = RetrieveInteractionPrompt::LookupItemDisplayName(
+			QuickPickupItemId,
+			QuickPickupItemCategoryTag);
+
+		FFormatNamedArguments Args;
+		Args.Add(TEXT("ItemName"), ItemName);
+		Args.Add(TEXT("ActionText"), TypeAsset->DisplayText);
+		Args.Add(TEXT("Quantity"), FText::AsNumber(QuickPickupQuantity));
+		PromptData.Text = FText::Format(QuickPickupPromptFormat, Args);
+
+		FRetrieveItemIconRow IconData;
+		if (RetrieveInteractionPrompt::LookupItemIconData(QuickPickupItemId, IconData))
+		{
+			if (UTexture2D* LoadedIcon = IconData.IconTexture.LoadSynchronous())
+			{
+				PromptData.Icon = LoadedIcon;
+			}
+			PromptData.AccentColor = IconData.AccentColor;
+		}
+		else
+		{
+			PromptData.Icon = TypeAsset->PromptIcon.Get();
+		}
+	}
+
+	if (!PromptTextOverride.IsEmpty())
+	{
+		PromptData.Text = PromptTextOverride;
+	}
+
+	if (PromptIconOverride)
+	{
+		PromptData.Icon = PromptIconOverride.Get();
+	}
 
 	// ── 1) HoldSeconds (float) ────────────────────────────────────────────
 	if (FFloatProperty* HoldProp = FindFProperty<FFloatProperty>(ManagerClass, FName("HoldSeconds")))
@@ -193,10 +360,10 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 					if (MapHelper.IsValidIndex(Idx))
 					{
 						ValueTextProp->SetPropertyValue(
-							MapHelper.GetValuePtr(Idx), TypeAsset->DisplayText);
+							MapHelper.GetValuePtr(Idx), PromptData.Text);
 						UE_LOG(LogTemp, Verbose,
 							TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" 적용"),
-							*OwnerName, *TypeAsset->DisplayText.ToString());
+							*OwnerName, *PromptData.Text.ToString());
 						break;
 					}
 				}
@@ -209,11 +376,11 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 					const int32 NewIdx = MapHelper.AddDefaultValue_Invalid_NeedsRehash();
 					KeyIntProp->SetPropertyValue(MapHelper.GetKeyPtr(NewIdx), 0);
 					ValueTextProp->SetPropertyValue(
-						MapHelper.GetValuePtr(NewIdx), TypeAsset->DisplayText);
+						MapHelper.GetValuePtr(NewIdx), PromptData.Text);
 					MapHelper.Rehash();
 					UE_LOG(LogTemp, Verbose,
 						TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" 새 항목 추가"),
-						*OwnerName, *TypeAsset->DisplayText.ToString());
+						*OwnerName, *PromptData.Text.ToString());
 				}
 				else
 				{
@@ -237,7 +404,7 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 
 	// ── 4) 아이콘 텍스처 ──────────────────────────────────────────────────
 	// TypeAsset.PromptIcon → Manager[MgrProp_Icon] (UTexture2D* ObjectProperty)
-	if (TypeAsset->PromptIcon && !TypeAsset->MgrProp_Icon.IsNone())
+	if (!TypeAsset->MgrProp_Icon.IsNone())
 	{
 		if (FObjectProperty* IconProp =
 			FindFProperty<FObjectProperty>(ManagerClass, TypeAsset->MgrProp_Icon))
@@ -246,10 +413,10 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 			if (IconProp->PropertyClass &&
 				UTexture2D::StaticClass()->IsChildOf(IconProp->PropertyClass))
 			{
-				IconProp->SetObjectPropertyValue_InContainer(ManagerComp, TypeAsset->PromptIcon.Get());
+				IconProp->SetObjectPropertyValue_InContainer(ManagerComp, PromptData.Icon.Get());
 				UE_LOG(LogTemp, Verbose,
 					TEXT("[Retrieve|Interaction] %s: Icon='%s' 적용"),
-					*OwnerName, *TypeAsset->PromptIcon->GetName());
+					*OwnerName, PromptData.Icon ? *PromptData.Icon->GetName() : TEXT("None"));
 			}
 			else
 			{
@@ -279,13 +446,13 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 			if (ColorProp->Struct == TBaseStructure<FLinearColor>::Get())
 			{
 				*ColorProp->ContainerPtrToValuePtr<FLinearColor>(ManagerComp) =
-					TypeAsset->PromptAccentColor;
+					PromptData.AccentColor;
 				bColorApplied = true;
 			}
 			else if (ColorProp->Struct == TBaseStructure<FColor>::Get())
 			{
 				*ColorProp->ContainerPtrToValuePtr<FColor>(ManagerComp) =
-					TypeAsset->PromptAccentColor.ToFColor(true);
+					PromptData.AccentColor.ToFColor(true);
 				bColorApplied = true;
 			}
 		}
@@ -295,9 +462,9 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 			UE_LOG(LogTemp, Verbose,
 				TEXT("[Retrieve|Interaction] %s: AccentColor=(%.2f,%.2f,%.2f) 적용"),
 				*OwnerName,
-				TypeAsset->PromptAccentColor.R,
-				TypeAsset->PromptAccentColor.G,
-				TypeAsset->PromptAccentColor.B);
+				PromptData.AccentColor.R,
+				PromptData.AccentColor.G,
+				PromptData.AccentColor.B);
 		}
 		else
 		{
@@ -504,8 +671,19 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 			for (const FRetrievePickupEntry& Drop : Drops)
 			{
 				if (Drop.ItemId.IsNone()) { continue; }
-				Inventory->AddItem(Drop.ItemId, Drop.ItemCategoryTag, Drop.Quantity);
-				++AppliedCount;
+				if (Inventory->AddItem(Drop.ItemId, Drop.ItemCategoryTag, Drop.Quantity))
+				{
+					++AppliedCount;
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[Retrieve|Interaction] %s: LootTable item AddItem 실패 ItemId=%s Tag=%s Quantity=%d"),
+						*OwnerActor->GetName(),
+						*Drop.ItemId.ToString(),
+						*Drop.ItemCategoryTag.ToString(),
+						Drop.Quantity);
+				}
 			}
 
 			UE_LOG(LogTemp, Log,
