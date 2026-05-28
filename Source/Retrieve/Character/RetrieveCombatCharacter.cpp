@@ -2,6 +2,7 @@
 
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 ARetrieveCombatCharacter::ARetrieveCombatCharacter(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -38,4 +39,9 @@ void ARetrieveCombatCharacter::HandleAbilitySystemInitialized()
 void ARetrieveCombatCharacter::HandleDeathStarted(AActor* OwningActor)
 {
 	// 기본 구현은 비어 있음. 아키타입(소버린/적/보스) 서브클래스가 오버라이드하여 사망 GA 활성화 및 GameplayEvent.*.Die 전송을 수행합니다.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+	}
 }

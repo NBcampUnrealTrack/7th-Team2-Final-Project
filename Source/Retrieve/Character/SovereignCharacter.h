@@ -29,6 +29,7 @@ public:
 protected:
 	virtual void InitializeAbilitySystem() override;
 	virtual void UnPossessed() override;
+	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveHeroComponent> HeroComponent;
@@ -45,7 +46,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UWeaponComponent> WeaponComponent;
 	
-
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementGaugeComponent> ElementGaugeComponent;
 

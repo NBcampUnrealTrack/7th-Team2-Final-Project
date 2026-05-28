@@ -36,6 +36,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Health")
 	bool IsDeadOrDying() const { return bDeathStarted; }
 	
+	FORCEINLINE AActor* GetLastDamageInstigator() const { return LastDamageInstigator.Get(); }
+	FORCEINLINE AActor* GetLastDamageCauser()    const { return LastDamageCauser.Get(); }
+	
+	void NotifyDamageContext(AActor* InInstigator, AActor* InDamageCauser)
+	{
+		LastDamageInstigator = InInstigator;
+		LastDamageCauser    = InDamageCauser;
+	}
+	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void ResetHealth();
@@ -49,6 +58,12 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 	FOnDeathStarted OnDeathStarted;
+	
+	UPROPERTY(BlueprintReadOnly, Category="Retrieve|Health")
+	TWeakObjectPtr<AActor> LastDamageInstigator;
+
+	UPROPERTY(BlueprintReadOnly, Category="Retrieve|Health")
+	TWeakObjectPtr<AActor> LastDamageCauser;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -64,7 +79,7 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<const UCombatAttributeSet> AttributeSet;
-
+	
 	UPROPERTY(ReplicatedUsing = OnRep_DeathStarted)
 	bool bDeathStarted = false;
 };

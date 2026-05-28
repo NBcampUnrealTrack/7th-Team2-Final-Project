@@ -4,13 +4,17 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CombatReactionComponent.h"
 #include "Components/InventoryComponent.h"
+#include "Components/RetrieveHealthComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/ElementGaugeComponent.h"
 #include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Input/RetrieveInputComponent.h"
 #include "Player/RetrievePlayerState.h"
 
@@ -85,4 +89,29 @@ void ASovereignCharacter::UnPossessed()
 	{
 		PawnCosmeticComponent->UninitializeFromAbilitySystem();
 	}
+}
+
+void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
+{
+	Super::HandleDeathStarted(OwningActor); 
+	
+	if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent()) 
+	{
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Dead);
+	}
+	
+	if (!HasAuthority()) return; 
+
+	const URetrieveHealthComponent* HC = GetHealthComponent();
+	
+	FPlayerDiedPayload Payload;
+	Payload.DeadActor     = this;
+	Payload.DeathLocation = GetActorLocation();
+	Payload.Killer        = HC ? HC->LastDamageInstigator.Get() : nullptr;
+	Payload.DamageCauser  = HC ? HC->LastDamageCauser.Get() : nullptr;
+	
+	UGameplayMessageSubsystem::Get(this).BroadcastMessage(
+		RetrieveGameplayTags::Channel_Player_Died, 
+		Payload
+	);
 }

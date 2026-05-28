@@ -66,6 +66,13 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
+	ImpactBeginEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, RetrieveGameplayTags::GameplayEvent_Attack_Impact_Begin, nullptr, false, true);
+	if (ImpactBeginEventTask)
+	{
+		ImpactBeginEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactBeginEvent);
+		ImpactBeginEventTask->ReadyForActivation();
+	}
+	
 	ImpactEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, RetrieveGameplayTags::GameplayEvent_Attack_Impact, nullptr, false, true);
 	if (ImpactEventTask)
 	{
@@ -86,7 +93,9 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 
 	CurrentComboIndex = StepIndex;
 	bComboQueued = false;
-	bImpactConsumedThisStep = false;
+	
+	HitActorsThisStep.Reset();
+	bHasValidPreviousTraceOrigin = false;
 
 	if (MontageTask)
 	{
@@ -150,12 +159,17 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 	StartListeningComboInput();
 }
 
+void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
+{
+	bHasValidPreviousTraceOrigin = false;
+	HitActorsThisStep.Reset();
+}
+
 void UGA_Attack::HandleImpactEvent(FGameplayEventData Payload)
 {
-	if (!IsActive() || bImpactConsumedThisStep || CurrentComboIndex == INDEX_NONE) return;
+	if (!IsActive() || CurrentComboIndex == INDEX_NONE) return;
 
 	ApplyStepDamage();
-	bImpactConsumedThisStep = true;
 }
 
 void UGA_Attack::ApplyStepDamage()
@@ -172,56 +186,55 @@ void UGA_Attack::ApplyStepDamage()
 	UMeshComponent* TraceMesh = IsValid(CachedWeaponComponent) ? CachedWeaponComponent->GetPrimaryEquippedWeaponMesh() : nullptr;
 	FName TraceSocket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
 
-	FVector TraceOrigin = AvatarActor->GetActorLocation();
+	FVector CurrentTraceOrigin = AvatarActor->GetActorLocation();
 	if (IsValid(TraceMesh) && TraceMesh->DoesSocketExist(TraceSocket))
 	{
-		TraceOrigin = TraceMesh->GetSocketLocation(TraceSocket);
-	}
-	else if (const ACharacter* Character = Cast<ACharacter>(AvatarActor))
-	{
-		if (USkeletalMeshComponent* CharacterMesh = Character->GetMesh())
-		{
-			if (CharacterMesh->DoesSocketExist(TraceSocket)) TraceOrigin = CharacterMesh->GetSocketLocation(TraceSocket);
-		}
+		CurrentTraceOrigin = TraceMesh->GetSocketLocation(TraceSocket);
 	}
 
 	UWorld* World = AvatarActor->GetWorld();
 	if (!IsValid(World)) return;
 	
+	const FVector SweepStart = bHasValidPreviousTraceOrigin ? PreviousTraceOrigin : CurrentTraceOrigin;
+	
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
-
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
 
-	TArray<FOverlapResult> OverlapResults;
-	const bool bHit = World->OverlapMultiByObjectType(OverlapResults, TraceOrigin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(TraceRadius), QueryParams);
-
+	TArray<FHitResult> HitResults;
+	const bool bHit = World->SweepMultiByObjectType(HitResults, SweepStart, CurrentTraceOrigin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(TraceRadius), QueryParams);
 	if (bDebugDrawTrace)
 	{
-		DrawDebugSphere(World, TraceOrigin, TraceRadius, 16, bHit ? FColor::Green : FColor::Red, false, 1.0f);
+		constexpr float DebugLife = -1.0f; 
+		DrawDebugLine(World, SweepStart, CurrentTraceOrigin, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
+		DrawDebugSphere(World, CurrentTraceOrigin, TraceRadius, 12, bHit ? FColor::Green : FColor::Red, false, DebugLife);
 	}
+	
+	PreviousTraceOrigin = CurrentTraceOrigin;
+	bHasValidPreviousTraceOrigin = true;
 
 	if (!bHit) return;
 
-	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
-	EffectContext.AddInstigator(AvatarActor, AvatarActor);
-	EffectContext.AddSourceObject(this);
-
-	FGameplayEffectSpecHandle DamageSpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), EffectContext);
-	if (!DamageSpecHandle.IsValid() || !DamageSpecHandle.Data.IsValid()) return;
-
-	DamageSpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
-
-	TSet<TObjectPtr<AActor>> UniqueTargets;
-	for (const FOverlapResult& Overlap : OverlapResults)
+	for (const FHitResult& Hit : HitResults)
 	{
-		AActor* TargetActor = Overlap.GetActor();
-		if (!IsValid(TargetActor) || TargetActor == AvatarActor || UniqueTargets.Contains(TargetActor)) continue;
+		AActor* TargetActor = Hit.GetActor();
+		if (!IsValid(TargetActor) || TargetActor == AvatarActor || HitActorsThisStep.Contains(TargetActor)) continue;
 
 		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor))
 		{
-			SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), TargetASC);
-			UniqueTargets.Add(TargetActor);
+			FGameplayEffectContextHandle PerHitContext = SourceASC->MakeEffectContext();
+			PerHitContext.AddInstigator(AvatarActor, AvatarActor);
+			PerHitContext.AddSourceObject(this);
+			
+			PerHitContext.AddHitResult(Hit, /*bReset=*/true);
+
+			FGameplayEffectSpecHandle PerHitSpec = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), PerHitContext);
+			if (!PerHitSpec.IsValid() || !PerHitSpec.Data.IsValid()) continue;
+
+			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
+
+			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
+			HitActorsThisStep.Add(TargetActor);
 		}
 	}
 }
@@ -255,6 +268,10 @@ void UGA_Attack::StopRuntimeTasks()
 	{
 		MontageTask->EndTask(); MontageTask = nullptr;
 	}
+	if (ImpactBeginEventTask)
+	{
+		ImpactBeginEventTask->EndTask(); ImpactBeginEventTask = nullptr;
+	}
 	if (ImpactEventTask)
 	{
 		ImpactEventTask->EndTask(); ImpactEventTask = nullptr;
@@ -276,7 +293,8 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 
 	CurrentComboIndex = INDEX_NONE;
 	bComboQueued = false;
-	bImpactConsumedThisStep = false;
+	HitActorsThisStep.Reset();
+	bHasValidPreviousTraceOrigin = false;
 	CachedWeaponComponent = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);

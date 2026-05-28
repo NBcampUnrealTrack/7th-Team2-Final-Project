@@ -272,7 +272,7 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
-	UAnimMontage* AttackMontage;
+	TSoftObjectPtr<UAnimMontage> AttackMontage;
 	// ---- Attack --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack")
 	EBurstAttackType AttackType = EBurstAttackType::Cleave;
