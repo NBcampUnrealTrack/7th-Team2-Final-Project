@@ -1,6 +1,5 @@
 #include "Enemy/SpawnerBase.h"
 
-#include "EnemyAIController.h"
 #include "Character/RetrievePawnData.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -153,13 +152,10 @@ void ASpawnerBase::DespawnAll()
 		}
 		
 		// 생존 → 비활성화 (EntryPawns에 참조 유지됨)
-		Pawn->SetActorHiddenInGame(true);
-		Pawn->SetActorEnableCollision(false);
-		
-		if (AEnemyAIController* AI = Cast<AEnemyAIController>(Pawn->GetController()))
+		if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 		{
-			AI->Deactivate();
-		} 
+			Enemy->DeactivateEnemy();
+		}
 	}
 	SpawnedPawns.Reset();
 }

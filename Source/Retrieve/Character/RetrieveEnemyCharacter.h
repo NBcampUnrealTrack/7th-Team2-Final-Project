@@ -24,6 +24,8 @@ class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter
 public:
 	ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	void SetRespawnable(bool NewRespawnable);
 	
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
@@ -31,11 +33,27 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
 	void ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn = false);
+	void DeactivateEnemy();
+	
+	// ABP Property Access 바인딩 전용
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsDeadForAnim()    const { return bCachedIsDead; }
+
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsChasingForAnim() const { return bCachedIsChasing; }
+
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsHitForAnim()     const { return bCachedIsHit; }
+
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsStaggeredForAnim()  const { return bCachedIsStaggered; }
+	
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
 	
 protected:
 	virtual void BeginPlay() override;
 	
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	virtual void InitializeAbilitySystem() override;
 	
@@ -43,7 +61,13 @@ protected:
 	
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
-
+	
+	void OnDeadTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnChaseTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnHitTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnStaggeredTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnGroggyTagChanged(const FGameplayTag Tag, int32 Count);
+	
 private:
 	void OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
 	
@@ -97,4 +121,13 @@ protected:
 private:
 	// Ragdoll 복구용
 	FTransform InitialMeshRelativeTransform;
+	
+	float DefaultGravityScale = 1.0f;
+	EMovementMode DefaultMovementMode;
+	
+	bool bCachedIsDead      = false;
+	bool bCachedIsChasing   = false;
+	bool bCachedIsHit       = false;
+	bool bCachedIsStaggered    = false;
+	bool bCachedIsGroggy    = false;
 };
