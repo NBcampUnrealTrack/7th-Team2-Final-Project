@@ -53,7 +53,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
 	float LoseSightRadius = 1800.f; // 소실 반경
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
-	float PeripheralVisionAngleDegrees = 60.f;   // 시야각 (절반)
+	float PeripheralVisionAngleDegrees = 140.f;   // 시야각 (절반)
 	
 	// Team
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|AI|Team")
