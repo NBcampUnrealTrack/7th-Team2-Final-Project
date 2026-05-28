@@ -7,6 +7,7 @@
 
 class ULockOnComponent;
 class ULockOnCameraRig;
+class ULockOnTargetHighlighter;
 
 // class UHitReactionComponent; // TODO 2주차 추가 예정
 // class UCombatFeedbackComponent // TODO 2주차 추가 예정
@@ -53,6 +54,9 @@ protected:
 	TObjectPtr<ULockOnComponent> LockOnComp;
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnCameraRig> LockOnCameraRigComp;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
+	TObjectPtr<ULockOnTargetHighlighter> LockOnHighlighter;
+	
 	// TODO 2주차: UHitReactionComponent
 	// UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	// TObjectPtr<UHitReactionComponent> HitReactionComp;
