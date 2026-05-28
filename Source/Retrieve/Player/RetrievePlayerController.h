@@ -42,6 +42,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI")
 	UHUDViewModel* GetHUDViewModel() const { return HUDViewModelInstance; }
+		
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Retrieve|Interaction")
+	UActorComponent* GetInteractorComponent() const;
 	
 	UFUNCTION(Server, Reliable)
 	void Server_RequestNewGame();
@@ -85,6 +88,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|UI")
 	TArray<FRetrievePanelShortcutConfig> PanelShortcuts;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Interaction", meta = (MetaClass = "/Script/Engine.ActorComponent"))
+	TSoftClassPtr<UActorComponent> InteractorComponentClass;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> MainMenuClass;

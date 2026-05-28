@@ -28,16 +28,20 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 {
 	bShowMouseCursor = false;
 	CheatClass = URetrieveCheatManager::StaticClass();
-	static ConstructorHelpers::FClassFinder<UUserWidget> HUDWidgetFinder(TEXT("/Game/Retrieve/UI/WBP_HUD"));
-	if (HUDWidgetFinder.Succeeded())
-	{
-		HUDClass = HUDWidgetFinder.Class;
-	}
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
 {
 	return CastChecked<ARetrievePlayerState>(PlayerState, ECastCheckedType::NullAllowed);
+}
+
+UActorComponent* ARetrievePlayerController::GetInteractorComponent() const
+{
+	if (UClass* ComponentClass = InteractorComponentClass.LoadSynchronous())
+	{
+		return FindComponentByClass(ComponentClass);
+	}
+	return nullptr;
 }
 
 void ARetrievePlayerController::BeginPlay()

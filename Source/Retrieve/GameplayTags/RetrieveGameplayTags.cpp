@@ -46,6 +46,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Bursting, "State.Player.Bursting");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Cinematic, "State.Player.Cinematic");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Staggered, "State.Player.Staggered");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Knockdown, "State.Player.Knockdown");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dead, "State.Player.Dead");
