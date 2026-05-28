@@ -2,9 +2,12 @@
 
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "AbilitySystemComponent.h"
-#include "GameplayEffect.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Animation/AnimMontage.h"
 #include "Components/ElementGaugeComponent.h"
+#include "Components/PlayerBurstComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameplayEffect.h"
 
 UGA_Burst::UGA_Burst()
 {
@@ -15,9 +18,15 @@ UGA_Burst::UGA_Burst()
 
 void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-    AActor* Avatar = ActorInfo->AvatarActor.Get();
-    UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+    AActor* Avatar = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+    UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
     if (!IsValid(Avatar) || !IsValid(ASC) || !SkillCombinationTable)
+    {
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+        return;
+    }
+
+    if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
     {
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
@@ -30,8 +39,7 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
         return;
     }
 
-    TMap<FGameplayTag, int32> ElementPattern;
-    ElementPattern = Gauge->GetCurrentCombination();
+    TMap<FGameplayTag, int32> ElementPattern = Gauge->GetCurrentCombination();
 
     const FSkillCombination* MatchedRow = FindMatchingCombination(ElementPattern);
     if (!MatchedRow)
@@ -44,12 +52,88 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
     Gauge->ConsumeAllSlots();
 
-    // (미구현) 실제 효과 발동 자리 ─ 추후:
-    //    - PrimaryEffect 태그로 GameplayEvent 발행하여 sub-GA 트리거
-    //    - MotionGroup으로 몽타주 선택
-    //    - DamageMultiplier / AoeRadius로 GE 또는 Trace 파라미터화
+    UPlayerBurstComponent* BurstComp = Avatar->FindComponentByClass<UPlayerBurstComponent>();
+    if (!IsValid(BurstComp))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] PlayerBurstComponent not found on %s"), *Avatar->GetName());
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+        return;
+    }
 
-    EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+    UAnimMontage* Montage = MatchedRow->AttackMontage.LoadSynchronous();
+    if (!IsValid(Montage))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] AttackMontage is null for Skill=%s"), *MatchedRow->DisplayName.ToString());
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+        return;
+    }
+
+    CachedBurstComp = BurstComp;
+    CachedSkill = MatchedRow;
+    BurstComp->BeginBurstSkill(MatchedRow);
+
+    MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, NAME_None, true);
+    if (!MontageTask)
+    {
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+        return;
+    }
+
+    MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
+    MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+    MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
+    MontageTask->ReadyForActivation();
+}
+
+void UGA_Burst::HandleMontageCompleted()
+{
+    EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+}
+
+void UGA_Burst::HandleMontageInterrupted()
+{
+    EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+}
+
+void UGA_Burst::HandleMontageCancelled()
+{
+    EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+}
+
+void UGA_Burst::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+    if (MontageTask)
+    {
+        MontageTask->EndTask();
+        MontageTask = nullptr;
+    }
+
+    if (IsValid(CachedBurstComp))
+    {
+        CachedBurstComp->EndBurstSkill();
+    }
+    CachedBurstComp = nullptr;
+    CachedSkill = nullptr;
+
+    Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UGA_Burst::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility)
+{
+    if (MontageTask)
+    {
+        MontageTask->EndTask();
+        MontageTask = nullptr;
+    }
+
+    if (IsValid(CachedBurstComp))
+    {
+        CachedBurstComp->EndBurstSkill();
+    }
+    CachedBurstComp = nullptr;
+    CachedSkill = nullptr;
+
+    Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
 }
 
 const FSkillCombination* UGA_Burst::FindMatchingCombination(const TMap<FGameplayTag, int32>& ElementPattern) const

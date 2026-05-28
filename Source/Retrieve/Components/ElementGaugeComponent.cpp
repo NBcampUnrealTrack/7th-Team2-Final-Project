@@ -1,6 +1,8 @@
 #include "Components/ElementGaugeComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
+#include "Engine/DataTable.h"
 #include "Player/RetrievePlayerState.h"
 
 UElementGaugeComponent::UElementGaugeComponent()
@@ -9,6 +11,83 @@ UElementGaugeComponent::UElementGaugeComponent()
 
 	ElementSlots.Init(FElementSlot(), SlotCount);
 	CurrentSlotIndex = 0;
+}
+
+void UElementGaugeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindFromASC();
+	Super::EndPlay(EndPlayReason);
+}
+
+void UElementGaugeComponent::BindToASC()
+{
+	URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC();
+	if (!RetrieveASC || !ChargeRuleTable)
+	{
+		return;
+	}
+
+	if (GameplayEventHandle.IsValid())
+	{
+		return;
+	}
+
+	// 캐시 빌드 (테이블 → TMap)
+	ChargeRuleCache.Reset();
+	SubscribedFilter.Reset();
+
+	static const FString Context(TEXT("UElementGaugeComponent::BindToASC"));
+	TArray<FElementChargeRule*> Rows;
+	ChargeRuleTable->GetAllRows<FElementChargeRule>(Context, Rows);
+	for (const FElementChargeRule* Row : Rows)
+	{
+		if (!Row || !Row->EventTag.IsValid() || Row->ChargeAmount <= 0)
+		{
+			continue;
+		}
+		ChargeRuleCache.Add(Row->EventTag, Row->ChargeAmount);
+		SubscribedFilter.AddTag(Row->EventTag);
+	}
+
+	if (SubscribedFilter.IsEmpty())
+	{
+		return;
+	}
+
+	GameplayEventHandle = RetrieveASC->AddGameplayEventTagContainerDelegate(
+		SubscribedFilter,
+		FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this, &UElementGaugeComponent::HandleGameplayEvent));
+}
+
+void UElementGaugeComponent::UnbindFromASC()
+{
+	if (!GameplayEventHandle.IsValid())
+	{
+		return;
+	}
+
+	if (ASC.IsValid())
+	{
+		ASC->RemoveGameplayEventTagContainerDelegate(SubscribedFilter, GameplayEventHandle);
+	}
+
+	GameplayEventHandle.Reset();
+	SubscribedFilter.Reset();
+	ChargeRuleCache.Reset();
+}
+
+void UElementGaugeComponent::HandleGameplayEvent(FGameplayTag EventTag, const FGameplayEventData* Payload)
+{
+	// 본인이 발생시킨 이벤트만 게이지 충전
+	if (!Payload || Payload->Instigator != GetOwner())
+	{
+		return;
+	}
+
+	if (const int32* Amount = ChargeRuleCache.Find(EventTag))
+	{
+		AddCharge(*Amount);
+	}
 }
 
 void UElementGaugeComponent::AddCharge(int32 Amount)
@@ -124,6 +203,14 @@ void UElementGaugeComponent::ClearSlot()
 	}
 
 	CurrentSlotIndex = 0;
+}
+
+float UElementGaugeComponent::GetSlotRatio(int32 SlotIndex) const
+{
+	if (!ElementSlots.IsValidIndex(SlotIndex)) return 0.f;
+
+	const FElementSlot& Slot = ElementSlots[SlotIndex];
+	return Slot.MaxGauge > 0 ? static_cast<float>(Slot.InternalGauge) / static_cast<float>(Slot.MaxGauge) : 0.f;
 }
 
 URetrieveAbilitySystemComponent* UElementGaugeComponent::GetRetrieveASC() const

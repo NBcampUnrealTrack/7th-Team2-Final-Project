@@ -209,6 +209,21 @@ struct RETRIEVE_API FHitFeedback : public FTableRowBase
 	FLinearColor DamageNumberColor = FLinearColor::White;
 };
 
+/**
+ * 원소 게이지 충전 규칙. GameplayEvent 태그별로 충전량을 정의한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FElementChargeRule : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Gauge", meta=(Categories="GameplayEvent"))
+	FGameplayTag EventTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Gauge", meta=(ClampMin="0"))
+	int32 ChargeAmount = 0;
+};
+
 UENUM(BlueprintType)
 enum class EBurstAttackType : uint8
 {
@@ -249,7 +264,7 @@ struct RETRIEVE_API FBurstHitInstance
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	TSoftObjectPtr<UNiagaraSystem> HitVFX;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	TSoftObjectPtr<USoundBase> HitSound;
 
 	/** 이 타격이 적중한 대상에 순차 부여할 상태 GE들. */

@@ -7,6 +7,7 @@
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/ElementGaugeComponent.h"
+#include "Components/PlayerBurstComponent.h"
 #include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
@@ -38,6 +39,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
+	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
@@ -78,6 +80,11 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	if (PawnCosmeticComponent)
 	{
 		PawnCosmeticComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	if (ElementGaugeComponent)
+	{
+		ElementGaugeComponent->BindToASC();
 	}
 }
 

@@ -13,6 +13,7 @@ class USpringArmComponent;
 class UCombatReactionComponent;
 class UWeaponComponent;
 class UElementGaugeComponent;
+class UPlayerBurstComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
@@ -48,6 +49,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementGaugeComponent> ElementGaugeComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UPlayerBurstComponent> PlayerBurstComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<USpringArmComponent> CameraSpringArm;
