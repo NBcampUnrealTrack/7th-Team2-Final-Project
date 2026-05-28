@@ -5,6 +5,7 @@
 #include "RetrieveMinimapWidget.generated.h"
 
 class UImage;
+class UBorder;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class URetrieveMapSubsystem;
@@ -70,6 +71,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	FLinearColor PlayerMarkerColor = FLinearColor::White;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Frame", meta=(ClampMin="0.1", ClampMax="1.0"))
+	float MapCircleRadiusRatio = 0.435f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Frame", meta=(ClampMin="12", ClampMax="128"))
+	int32 MapCircleSegments = 72;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	ERetrieveMinimapRotationMode RotationMode = ERetrieveMinimapRotationMode::NorthUp;
 
@@ -77,6 +84,7 @@ public:
 	void ToggleRotationMode();
 
 protected:
+	virtual void NativePreConstruct() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(
@@ -94,8 +102,25 @@ private:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UImage> Image_Minimap;
 
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UBorder> Border_MinimapFrame;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UImage> IMG_Frame;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UImage> IMG_Tracery;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UImage> IMG_Curlicue_Top;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UImage> IMG_Curlicue_Bottom;
+
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMID;
+
+	void HideSquareMinimapBackground();
 
 	// UpdateMinimapMaterial에서 SetTextureParameterValue를 매 틱 호출하지 않도록
 	// 마지막으로 설정한 텍스처를 기억한다.
@@ -103,6 +128,28 @@ private:
 	TObjectPtr<UTexture2D> CachedMIDTexture;
 
 	void UpdateMinimapMaterial(URetrieveMapSubsystem* MapSub, const FVector& PlayerLocation);
+
+	void DrawCircularMap(
+		FSlateWindowElementList& OutDrawElements,
+		int32& LayerId,
+		const FGeometry& AllottedGeometry,
+		float CameraYaw
+	) const;
+
+	void DrawImageBrush(
+		FSlateWindowElementList& OutDrawElements,
+		int32& LayerId,
+		const FGeometry& AllottedGeometry,
+		const UImage* Image,
+		const FVector2D& Position,
+		const FVector2D& Size
+	) const;
+
+	void DrawMinimapDecorations(
+		FSlateWindowElementList& OutDrawElements,
+		int32& LayerId,
+		const FGeometry& AllottedGeometry
+	) const;
 
 	/**
 	 * 아이콘 월드 좌표 → 미니맵 위젯 로컬 좌표.
