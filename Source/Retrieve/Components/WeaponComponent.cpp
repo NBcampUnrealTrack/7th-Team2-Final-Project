@@ -244,7 +244,8 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 	return Comp;
 }
 
-USceneComponent* UWeaponComponent::FindAttachmentParent(const FRetrieveWeaponAttachmentData& Attachment) const
+USceneComponent* UWeaponComponent::FindAttachmentParent(
+	const FRetrieveWeaponAttachmentData& Attachment) const
 {
 	AActor* Owner = GetOwner();
 	if (!Owner)
@@ -252,19 +253,26 @@ USceneComponent* UWeaponComponent::FindAttachmentParent(const FRetrieveWeaponAtt
 		return nullptr;
 	}
 
-	// 이름·태그 기반 컴포넌트 검색 공통 로직
-	auto FindComponent = [&](auto Predicate) -> USceneComponent*
+	auto HasSocket = [&](USceneComponent* Comp)
 	{
-		TArray<USceneComponent*> Components;
-		Owner->GetComponents<USceneComponent>(Components);
-		for (USceneComponent* Comp : Components)
+		return Comp &&
+			(Attachment.AttachSocketName.IsNone()
+			|| Comp->DoesSocketExist(Attachment.AttachSocketName));
+	};
+
+	TArray<USceneComponent*> SceneComponents;
+	Owner->GetComponents<USceneComponent>(SceneComponents);
+
+	auto FindSceneComponent = [&](TFunctionRef<bool(USceneComponent*)> Predicate)
+	{
+		for (USceneComponent* Comp : SceneComponents)
 		{
-			if (Comp && Predicate(Comp))
+			if (Comp && Predicate(Comp) && HasSocket(Comp))
 			{
 				return Comp;
 			}
 		}
-		return nullptr;
+		return static_cast<USceneComponent*>(nullptr);
 	};
 
 	switch (Attachment.AttachTarget)
@@ -273,13 +281,48 @@ USceneComponent* UWeaponComponent::FindAttachmentParent(const FRetrieveWeaponAtt
 		return Owner->GetRootComponent();
 
 	case ERetrieveWeaponAttachTarget::OwnerComponentName:
-		return FindComponent([&](USceneComponent* C) { return C->GetFName() == Attachment.AttachComponentName; });
+		return FindSceneComponent([&](USceneComponent* Comp)
+		{
+			return Comp->GetFName() == Attachment.AttachComponentName;
+		});
 
 	case ERetrieveWeaponAttachTarget::OwnerComponentTag:
-		return FindComponent([&](USceneComponent* C) { return C->ComponentHasTag(Attachment.AttachComponentTag); });
+		return FindSceneComponent([&](USceneComponent* Comp)
+		{
+			return Comp->ComponentHasTag(Attachment.AttachComponentTag);
+		});
 
-	default: // CharacterMeshSocket — 캐릭터 메시에 직접 소켓으로 붙임
-		ACharacter* CharacterOwner = Cast<ACharacter>(Owner);
-		return CharacterOwner ? CharacterOwner->GetMesh() : nullptr;
+	default:
+		break;
 	}
+
+	ACharacter* CharacterOwner = Cast<ACharacter>(Owner);
+	if (!CharacterOwner)
+	{
+		return nullptr;
+	}
+
+	if (!Attachment.AttachComponentName.IsNone())
+	{
+		if (USceneComponent* Comp = FindSceneComponent([&](USceneComponent* C)
+		{
+			return C->GetFName() == Attachment.AttachComponentName;
+		}))
+		{
+			return Comp;
+		}
+	}
+
+	TArray<USkeletalMeshComponent*> MeshComponents;
+	Owner->GetComponents<USkeletalMeshComponent>(MeshComponents);
+
+	for (USkeletalMeshComponent* MeshComp : MeshComponents)
+	{
+		if (MeshComp && MeshComp != CharacterOwner->GetMesh() && HasSocket(MeshComp))
+		{
+			return MeshComp;
+		}
+	}
+
+	return HasSocket(CharacterOwner->GetMesh()) ? CharacterOwner->GetMesh() : nullptr;
 }
