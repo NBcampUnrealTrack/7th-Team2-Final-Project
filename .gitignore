@@ -77,6 +77,9 @@ DerivedDataCache/*
 # Rider
 .idea/
 
+# Extra plugin
+Plugins/ALS-Refactored-4.16/
+
 # RiderLink plugin
 Plugins/Developer/RiderLink/
 
