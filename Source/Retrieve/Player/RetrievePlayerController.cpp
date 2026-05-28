@@ -13,6 +13,7 @@
 #include "Core/RetrieveGameMode.h"
 #include "Core/RetrieveGameState.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Logging/RetrieveCheatManager.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "UI/Inventory/InventoryPanelWidget.h"
 #include "UI/Map/RetrieveMinimapWidget.h"
@@ -26,7 +27,7 @@
 ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
 	bShowMouseCursor = false;
-
+	CheatClass = URetrieveCheatManager::StaticClass();
 	static ConstructorHelpers::FClassFinder<UUserWidget> HUDWidgetFinder(TEXT("/Game/Retrieve/UI/WBP_HUD"));
 	if (HUDWidgetFinder.Succeeded())
 	{

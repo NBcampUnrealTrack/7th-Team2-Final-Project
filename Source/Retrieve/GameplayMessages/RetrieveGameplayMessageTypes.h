@@ -21,10 +21,31 @@ struct RETRIEVE_API FMonsterDiedPayload
 
 	UPROPERTY(BlueprintReadOnly)
 	TWeakObjectPtr<AActor> Killer;
+	
+	UPROPERTY(BlueprintReadOnly) 
+	TWeakObjectPtr<AActor> DamageCauser;
 
 	/** DT_MonsterData Row 이름. 분류·집계용. 미연동 시 NAME_None */
 	UPROPERTY(BlueprintReadOnly)
 	FName MonsterDataRow;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FPlayerDiedPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly) 
+	TWeakObjectPtr<AActor> DeadActor;
+	
+	UPROPERTY(BlueprintReadOnly) 
+	FVector DeathLocation = FVector::ZeroVector;
+	
+	UPROPERTY(BlueprintReadOnly) 
+	TWeakObjectPtr<AActor> Killer;
+	
+	UPROPERTY(BlueprintReadOnly) 
+	TWeakObjectPtr<AActor> DamageCauser;
 };
 
 /**

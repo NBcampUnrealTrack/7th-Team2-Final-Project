@@ -1,7 +1,10 @@
 #include "Components/RetrieveHealthComponent.h"
 
+#include "AbilitySystemComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
 
 URetrieveHealthComponent::URetrieveHealthComponent(const FObjectInitializer& ObjectInitializer)
@@ -106,12 +109,34 @@ void URetrieveHealthComponent::HandleHealthChanged(const FOnAttributeChangeData&
 {
 	OnHealthChanged.Broadcast(ChangeData.NewValue);
 
-	if (GetOwner()->HasAuthority() && !bDeathStarted && ChangeData.NewValue <= 0.f)
+	if (!GetOwner()->HasAuthority() || bDeathStarted) return;
+	
+	if (!(ChangeData.OldValue > 0.f && ChangeData.NewValue <= 0.f)) return;
+	
+	if (ChangeData.GEModData)
 	{
-		bDeathStarted = true;
-		OnDeathStarted.Broadcast(GetOwner());
-		GetOwner()->ForceNetUpdate();
+		const FGameplayEffectContextHandle& Ctx = ChangeData.GEModData->EffectSpec.GetContext();
+		LastDamageInstigator = Ctx.GetInstigator();
+		LastDamageCauser     = Ctx.GetEffectCauser();
 	}
+	
+	bDeathStarted = true;
+	
+	if (AbilitySystemComponent)
+	{
+		const FGameplayTag DieTag = RetrieveGameplayTags::Ability_Common_Die;
+		FGameplayTagContainer ImmuneTags;
+		ImmuneTags.AddTag(DieTag);
+		
+		AbilitySystemComponent->CancelAbilities(nullptr, &ImmuneTags, nullptr);
+		
+		FGameplayTagContainer ActivationTags;
+		ActivationTags.AddTag(DieTag);
+		AbilitySystemComponent->TryActivateAbilitiesByTag(ActivationTags);
+	}
+	
+	OnDeathStarted.Broadcast(GetOwner());   
+	GetOwner()->ForceNetUpdate();
 }
 
 void URetrieveHealthComponent::HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData)

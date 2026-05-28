@@ -33,6 +33,7 @@ private:
 	void CleanupComboTag() const;
 	void ApplyStepDamage();
 
+	UFUNCTION() void HandleImpactBeginEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleInputPressed(float TimeWaited);
 	UFUNCTION() void HandleMontageCompleted();
@@ -52,11 +53,16 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UWeaponComponent> CachedWeaponComponent;
 	FRetrieveWeaponDataRow CachedWeaponData;
 
+	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactBeginEventTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitInputPress> InputPressTask;
 
 	int32 CurrentComboIndex = INDEX_NONE;
 	bool bComboQueued = false;
-	bool bImpactConsumedThisStep = false;
+	
+	TSet<TObjectPtr<AActor>> HitActorsThisStep;
+	
+	FVector PreviousTraceOrigin = FVector::ZeroVector;
+	bool bHasValidPreviousTraceOrigin = false;
 };

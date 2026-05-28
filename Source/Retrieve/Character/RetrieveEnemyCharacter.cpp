@@ -147,22 +147,29 @@ void ARetrieveEnemyCharacter::HandleDeathStarted(AActor* OwningActor)
 {
     Super::HandleDeathStarted(OwningActor);
 	
+	if (UAbilitySystemComponent* ASC = OwnedASC)
+	{
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
+	}
+	
 	if (!HasAuthority())
 	{
 		return;
 	}
 	
-	if (UWorld* World = GetWorld())
-	{
-		FMonsterDiedPayload Payload;
-		Payload.DeadActor = this;
-		Payload.DeathLocation = GetActorLocation();
-		// 현재 최종 살해자 정보를 가져올 수단 없음
-		Payload.Killer = nullptr;
-		
-		UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(World);
-		MsgSubsys.BroadcastMessage(RetrieveGameplayTags::Channel_Monster_Died, Payload);
-	}
+	const URetrieveHealthComponent* HC = GetHealthComponent();
+	
+	FMonsterDiedPayload Payload;
+	Payload.DeadActor       = this;
+	Payload.DeathLocation   = GetActorLocation();
+	Payload.Killer          = HC ? HC->LastDamageInstigator.Get() : nullptr;
+	Payload.DamageCauser    = HC ? HC->LastDamageCauser.Get() : nullptr;
+	Payload.MonsterDataRow  = MonsterDataRowName;
+
+	UGameplayMessageSubsystem::Get(this).BroadcastMessage(
+		RetrieveGameplayTags::Channel_Monster_Died, 
+		Payload
+	);
 	
 	FGameplayEventData EventData;
 	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Die;
