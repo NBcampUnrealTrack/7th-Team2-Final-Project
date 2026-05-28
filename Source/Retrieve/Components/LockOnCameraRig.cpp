@@ -160,35 +160,55 @@ void ULockOnCameraRig::StartTracking(AActor* Target)
 	SetComponentTickEnabled(true);
 }
 
-void ULockOnCameraRig::StopTracking()
+void ULockOnCameraRig::StopTracking(bool bImmediateRestore)
 {
-	if (bIsTracking == false)
+	if (bIsTracking == false && bIsReturning == false)
 	{
 		return;
 	}
 	
+	const bool bWasTracking = bIsTracking;
+	
 	APawn* Pawn = OwnerPawn.Get();
 	UCharacterMovementComponent* MoveComp = MovementComp.Get();
-	//USpringArmComponent* SA = SpringArm.Get();
+	USpringArmComponent* SA = SpringArm.Get();
 	
-	if (IsValid(MoveComp))
+	if (bWasTracking)
 	{
-		MoveComp->bOrientRotationToMovement = bSavedOrientRotationToMovement;
-	}
+		if (IsValid(MoveComp))
+		{
+			MoveComp->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+		}
 
-	if (IsValid(Pawn))
-	{
-		Pawn->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		if (IsValid(Pawn))
+		{
+			Pawn->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		}
 	}
-
-	// if (IsValid(SA))
-	// {
-	// 	SA->SocketOffset = SavedSocketOffset;
-	// }
 	
 	CurrentTarget = nullptr;
 	bIsTracking = false;
-	bIsReturning = true;
-	
+	if (bImmediateRestore)
+	{
+		if (IsValid(SA))
+		{
+			SA->SocketOffset = SavedSocketOffset;
+		}
+
+		bIsReturning = false;
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	if (IsValid(SA))
+	{
+		bIsReturning = true;
+		SetComponentTickEnabled(true);
+	}
+	else
+	{
+		bIsReturning = false;
+		SetComponentTickEnabled(false);
+	}
 	//SetComponentTickEnabled(false);
 }

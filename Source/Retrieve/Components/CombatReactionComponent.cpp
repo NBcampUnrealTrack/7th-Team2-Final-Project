@@ -3,6 +3,7 @@
 #include "CombatReactionComponent.h"
 
 #include "LockOnCameraRig.h"
+#include "LockOnTargetHighlighter.h"
 #include "Components/LockOnComponent.h"
 #include "GameFramework/Actor.h"
 
@@ -44,6 +45,11 @@ void UCombatReactionComponent::BeginPlay()
 	{
 		LockOnCameraRigComp->Initialize();
 	}
+	
+	if (IsValid(LockOnHighlighter) == false)
+	{
+		LockOnHighlighter = NewObject<ULockOnTargetHighlighter>(this);
+	}
 }
 
 void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -57,10 +63,17 @@ void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	
 	if (IsValid(LockOnCameraRigComp))
 	{
-		LockOnCameraRigComp->StopTracking();
+		LockOnCameraRigComp->StopTracking(true);
 		LockOnCameraRigComp->DestroyComponent();
 		LockOnCameraRigComp = nullptr;
 	}
+	
+	if (IsValid(LockOnHighlighter))
+	{
+		LockOnHighlighter->Clear();
+		LockOnHighlighter = nullptr;
+	}
+	
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -88,7 +101,7 @@ bool UCombatReactionComponent::IsLockedOn() const
 
 void UCombatReactionComponent::HandleLockOnTargetChanged(AActor* NewTarget)
 {
-	if (IsValid(LockOnCameraRigComp) == false)
+	if (IsValid(LockOnCameraRigComp) == false || IsValid(LockOnHighlighter) == false)
 	{
 		return;
 	}
@@ -96,10 +109,12 @@ void UCombatReactionComponent::HandleLockOnTargetChanged(AActor* NewTarget)
 	if (IsValid(NewTarget))
 	{
 		LockOnCameraRigComp->StartTracking(NewTarget);
+		LockOnHighlighter->Apply(NewTarget);
 	}
 	else
 	{
 		LockOnCameraRigComp->StopTracking();
+		LockOnHighlighter->Clear();
 	}
 	OnLockOnTargetChanged.Broadcast(NewTarget);
 }

@@ -30,7 +30,7 @@ public:
 	// 락온 시작 모드 백업 후 스트레이프 모드로 전환 + Tick 활성
 	void StartTracking(AActor* Target);
 	// 락온 해제 백업 모드 복원 + Tick 비활성
-	void StopTracking();
+	void StopTracking(bool bImmediateRestore = false);
 	
 	bool IsTracking() const { return bIsTracking; }
 	// 외부에 현재 타겟을 매 프레임 알려주는 함수 ReactionComp가 Tick에서 호출
