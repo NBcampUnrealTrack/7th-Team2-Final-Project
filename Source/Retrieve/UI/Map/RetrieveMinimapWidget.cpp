@@ -1,18 +1,25 @@
-#include "UI/Map/RetrieveMinimapWidget.h"
+﻿#include "UI/Map/RetrieveMinimapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "Components/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/Border.h"
 #include "Components/Image.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Rendering/DrawElements.h"
+#include "SlateMaterialBrush.h"
 #include "Styling/CoreStyle.h"
 
-// ---------- 초기화 ----------
+void URetrieveMinimapWidget::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+
+	HideSquareMinimapBackground();
+}
 
 void URetrieveMinimapWidget::NativeConstruct()
 {
@@ -23,15 +30,13 @@ void URetrieveMinimapWidget::NativeConstruct()
 		return;
 	}
 
+	HideSquareMinimapBackground();
+
 	UMaterialInterface* BaseMaterial = MinimapMaterial;
 	if (!BaseMaterial)
 	{
 		BaseMaterial = Cast<UMaterialInterface>(Image_Minimap->GetBrush().GetResourceObject());
 	}
-
-	// The image widget is only a design-time/material reference. NativePaint owns
-	// the minimap render order so the brush cannot cover markers or actor icons.
-	Image_Minimap->SetVisibility(ESlateVisibility::Collapsed);
 
 	if (!BaseMaterial)
 	{
@@ -41,12 +46,8 @@ void URetrieveMinimapWidget::NativeConstruct()
 	MinimapMID = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 	if (MinimapMID)
 	{
-		// 맵 텍스처는 NativePaint에서 직접 그리므로 Image_Minimap 위젯은 숨긴다.
-		// (MID 생성을 위한 머티리얼 참조 용도로만 사용)
-		Image_Minimap->SetVisibility(ESlateVisibility::Collapsed);
+		Image_Minimap->SetBrushFromMaterial(MinimapMID);
 
-		// 머티리얼 기본값이 RT 텍스처를 참조할 수 있으므로 베이크 텍스처를 즉시 덮어씌운다.
-		// NativeTick 전에 설정해 첫 프레임부터 올바른 텍스처가 사용되도록 한다.
 		UTexture2D* InitTex = BakedMapTexture;
 		if (!InitTex)
 		{
@@ -64,9 +65,102 @@ void URetrieveMinimapWidget::NativeConstruct()
 			CachedMIDTexture = InitTex;
 		}
 	}
+	
 }
 
-// ---------- 매 프레임 ----------
+void URetrieveMinimapWidget::HideSquareMinimapBackground()
+{
+	if (Image_Minimap)
+	{
+		Image_Minimap->SetColorAndOpacity(FLinearColor::Transparent);
+		Image_Minimap->SetBrushTintColor(FSlateColor(FLinearColor::Transparent));
+		Image_Minimap->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (Border_MinimapFrame)
+	{
+		FSlateBrush TransparentBrush;
+		TransparentBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
+		TransparentBrush.TintColor = FSlateColor(FLinearColor::Transparent);
+		Border_MinimapFrame->SetBrush(TransparentBrush);
+		Border_MinimapFrame->SetBrushColor(FLinearColor::Transparent);
+	}
+}
+
+void URetrieveMinimapWidget::DrawImageBrush(
+	FSlateWindowElementList& OutDrawElements,
+	int32& LayerId,
+	const FGeometry& AllottedGeometry,
+	const UImage* Image,
+	const FVector2D& Position,
+	const FVector2D& Size
+) const
+{
+	if (!Image || Size.X <= 0.0f || Size.Y <= 0.0f)
+	{
+		return;
+	}
+
+	const FSlateBrush& Brush = Image->GetBrush();
+	if (Brush.DrawAs == ESlateBrushDrawType::NoDrawType)
+	{
+		return;
+	}
+
+	FSlateDrawElement::MakeBox(
+		OutDrawElements,
+		++LayerId,
+		AllottedGeometry.ToPaintGeometry(
+			FVector2f(Size),
+			FSlateLayoutTransform(FVector2f(Position))
+		),
+		&Brush,
+		ESlateDrawEffect::None,
+		Image->GetColorAndOpacity()
+	);
+}
+
+void URetrieveMinimapWidget::DrawMinimapDecorations(
+	FSlateWindowElementList& OutDrawElements,
+	int32& LayerId,
+	const FGeometry& AllottedGeometry
+) const
+{
+	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
+
+	DrawImageBrush(
+		OutDrawElements,
+		LayerId,
+		AllottedGeometry,
+		IMG_Frame,
+		FVector2D(-28.0f, -32.0f),
+		WidgetSize + FVector2D(56.7f, 65.1f));
+
+	DrawImageBrush(
+		OutDrawElements,
+		LayerId,
+		AllottedGeometry,
+		IMG_Tracery,
+		FVector2D(0.0f, -5.0f),
+		WidgetSize + FVector2D(0.0f, 10.0f));
+
+	DrawImageBrush(
+		OutDrawElements,
+		LayerId,
+		AllottedGeometry,
+		IMG_Curlicue_Top,
+		FVector2D(WidgetSize.X * 0.5f - 40.0f, -29.0f),
+		FVector2D(80.0f, 42.0f));
+
+	DrawImageBrush(
+		OutDrawElements,
+		LayerId,
+		AllottedGeometry,
+		IMG_Curlicue_Bottom,
+		FVector2D(WidgetSize.X * 0.5f - 47.5f, WidgetSize.Y - 17.5f),
+		FVector2D(95.0f, 35.0f));
+}
+
 
 void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
@@ -90,9 +184,19 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	{
 		UpdateMinimapMaterial(MapSub, PlayerLocation);
 	}
+	
+	if (Image_Minimap)
+	{
+		FWidgetTransform Transform;
+		if (RotationMode == ERetrieveMinimapRotationMode::PlayerUp)
+		{
+			const float CameraYaw = GetCameraYaw(PC);
+			Transform.Angle = -CameraYaw;
+			Transform.Scale = FVector2D(FMath::Sqrt(2.0f), FMath::Sqrt(2.0f));
+		}
+		Image_Minimap->SetRenderTransform(Transform);
+	}
 }
-
-// ---------- 머티리얼 파라미터 갱신 ----------
 
 void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	URetrieveMapSubsystem* MapSub,
@@ -113,10 +217,7 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	{
 		ActiveTexture = MapSub->BakedMapTexture;
 	}
-
-	// 텍스처가 실제로 바뀔 때만 파라미터를 업데이트한다.
-	// 매 틱 SetTextureParameterValue를 호출하면 스트리밍 시스템이 해당 텍스처를
-	// 최고 우선순위로 유지하려 하므로 스트리밍 풀 압박을 가중시킨다.
+	
 	if (ActiveTexture && ActiveTexture != CachedMIDTexture)
 	{
 		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), ActiveTexture);
@@ -124,7 +225,83 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	}
 }
 
-// ---------- 페인트 (맵 텍스처 + 마커 + 아이콘) ----------
+void URetrieveMinimapWidget::DrawCircularMap(
+	FSlateWindowElementList& OutDrawElements,
+	int32& LayerId,
+	const FGeometry& AllottedGeometry,
+	float CameraYaw
+) const
+{
+	if (!MinimapMID)
+	{
+		return;
+	}
+
+	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
+	const FVector2D Center = WidgetSize * 0.5f;
+	const float Radius = FMath::Min(WidgetSize.X, WidgetSize.Y) * MapCircleRadiusRatio;
+	const int32 SegmentCount = FMath::Clamp(MapCircleSegments, 12, 128);
+
+	FSlateMaterialBrush MapBrush(*MinimapMID, FVector2f(WidgetSize));
+	const FSlateResourceHandle Handle = MapBrush.GetRenderingResource();
+	if (!Handle.IsValid())
+	{
+		return;
+	}
+
+	TArray<FSlateVertex> Verts;
+	Verts.Reserve(SegmentCount + 1);
+
+	const FVector2D AbsCenter = FVector2D(AllottedGeometry.LocalToAbsolute(FVector2f(Center)));
+	Verts.AddZeroed();
+	{
+		FSlateVertex& Vert = Verts.Last();
+		Vert.Position[0] = AbsCenter.X;
+		Vert.Position[1] = AbsCenter.Y;
+		Vert.TexCoords[0] = 0.5f;
+		Vert.TexCoords[1] = 0.5f;
+		Vert.TexCoords[2] = Vert.TexCoords[3] = 1.0f;
+		Vert.Color = FColor::White;
+	}
+
+	const float UVRotation = RotationMode == ERetrieveMinimapRotationMode::PlayerUp ? CameraYaw : 0.0f;
+	for (int32 Index = 0; Index < SegmentCount; ++Index)
+	{
+		const float Angle = (2.0f * PI * Index) / SegmentCount;
+		const FVector2D EdgeDir(FMath::Cos(Angle), FMath::Sin(Angle));
+		const FVector2D LocalPos = Center + EdgeDir * Radius;
+		const FVector2D AbsPos = FVector2D(AllottedGeometry.LocalToAbsolute(FVector2f(LocalPos)));
+		const FVector2D UVDir = Rotate2D(EdgeDir, UVRotation);
+
+		Verts.AddZeroed();
+		FSlateVertex& Vert = Verts.Last();
+		Vert.Position[0] = AbsPos.X;
+		Vert.Position[1] = AbsPos.Y;
+		Vert.TexCoords[0] = 0.5f + UVDir.X * 0.5f;
+		Vert.TexCoords[1] = 0.5f + UVDir.Y * 0.5f;
+		Vert.TexCoords[2] = Vert.TexCoords[3] = 1.0f;
+		Vert.Color = FColor::White;
+	}
+
+	TArray<SlateIndex> Indices;
+	Indices.Reserve(SegmentCount * 3);
+	for (int32 Index = 1; Index <= SegmentCount; ++Index)
+	{
+		Indices.Add(0);
+		Indices.Add(Index);
+		Indices.Add(Index == SegmentCount ? 1 : Index + 1);
+	}
+
+	FSlateDrawElement::MakeCustomVerts(
+		OutDrawElements,
+		++LayerId,
+		Handle,
+		Verts,
+		Indices,
+		nullptr,
+		0,
+		0);
+}
 
 int32 URetrieveMinimapWidget::NativePaint(
 	const FPaintArgs& Args,
@@ -136,113 +313,42 @@ int32 URetrieveMinimapWidget::NativePaint(
 	bool bParentEnabled
 ) const
 {
-	int32 CurrentLayer = Super::NativePaint(
-		Args, AllottedGeometry, MyCullingRect, OutDrawElements,
-		LayerId, InWidgetStyle, bParentEnabled
-	);
-
 	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
 	if (WidgetSize.X <= 1.0f || WidgetSize.Y <= 1.0f)
 	{
-		return CurrentLayer;
+		return Super::NativePaint(
+			Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+			LayerId, InWidgetStyle, bParentEnabled);
 	}
 
 	const APlayerController* PC = GetOwningPlayer();
 	if (!PC || !PC->GetPawn())
 	{
-		return CurrentLayer;
+		return Super::NativePaint(
+			Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+			LayerId, InWidgetStyle, bParentEnabled);
 	}
 
 	const FVector2D Center        = WidgetSize * 0.5f;
-	const float     MiniMapRadius = FMath::Min(WidgetSize.X, WidgetSize.Y) * 0.5f;
+	const float     MiniMapRadius = FMath::Min(WidgetSize.X, WidgetSize.Y) * MapCircleRadiusRatio;
 	const FVector   PlayerLoc     = PC->GetPawn()->GetActorLocation();
 	const float     CameraYaw     = GetCameraYaw(PC);
 	UWorld* World = GetWorld();
 	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+	int32 CurrentLayer = LayerId;
 
-	// 모든 드로우 콜을 위젯 할당 영역으로 클리핑 (맵 텍스처 오버플로우 방지)
-	const FSlateClippingZone ClipZone(AllottedGeometry.GetLayoutBoundingRect());
-	OutDrawElements.PushClip(ClipZone);
+	DrawCircularMap(OutDrawElements, CurrentLayer, AllottedGeometry, CameraYaw);
 
-	// RelativeToWorld 회전 기준점: 위젯 중앙의 절대 화면 좌표
+	CurrentLayer = Super::NativePaint(
+		Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+		CurrentLayer, InWidgetStyle, bParentEnabled
+	);
+
 	const FVector2D AbsCenter = FVector2D(AllottedGeometry.LocalToAbsolute(FVector2f(Center)));
 
-	// ── 맵 텍스처 ─────────────────────────────────────────────────────────────
-	// PlayerUp: -CameraYaw로 CCW 회전 → 플레이어 진행 방향이 위쪽에 고정
-	// 회전 시 모서리 공백이 생기지 않도록 √2 배 확대한 뒤 클리핑
-	if (MinimapMID)
-	{
-		const float RotAngle = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? -CameraYaw : 0.0f;
-		// PlayerUp: 항상 √2 배 고정 확대 → 회전 각도와 무관하게 모서리를 채우면서 줌 변동 없음
-		const float Scale    = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? FMath::Sqrt(2.0f) : 1.0f;
-
-		const FVector2D ScaledSize = WidgetSize * Scale;
-		const FVector2D MapTopLeft = Center - ScaledSize * 0.5f;
-
-		FSlateBrush MapBrush;
-		MapBrush.SetResourceObject(MinimapMID);
-		MapBrush.ImageSize = WidgetSize;
-
-		FSlateDrawElement::MakeRotatedBox(
-			OutDrawElements,
-			++CurrentLayer,
-			AllottedGeometry.ToPaintGeometry(
-				FVector2f(ScaledSize),
-				FSlateLayoutTransform(FVector2f(MapTopLeft))
-			),
-			&MapBrush,
-			ESlateDrawEffect::None,
-			FMath::DegreesToRadians(RotAngle),
-			TOptional<FVector2D>(AbsCenter),
-			FSlateDrawElement::ERotationSpace::RelativeToWorld
-		);
-	}
-	else if (MapSub && MapSub->HasValidBounds())
-	{
-		UTexture2D* ActiveTexture = BakedMapTexture ? BakedMapTexture.Get() : MapSub->BakedMapTexture.Get();
-		if (ActiveTexture)
-		{
-			const FVector2D PlayerUV = MapSub->WorldToUV(PlayerLoc);
-			const float HalfU = ViewWorldRadius / FMath::Max(MapSub->MapExtentXY.Y, 1.0f);
-			const float HalfV = ViewWorldRadius / FMath::Max(MapSub->MapExtentXY.X, 1.0f);
-			const FVector2D UVMin(
-				FMath::Clamp(PlayerUV.X - HalfU, 0.0f, 1.0f),
-				FMath::Clamp(PlayerUV.Y - HalfV, 0.0f, 1.0f)
-			);
-			const FVector2D UVMax(
-				FMath::Clamp(PlayerUV.X + HalfU, 0.0f, 1.0f),
-				FMath::Clamp(PlayerUV.Y + HalfV, 0.0f, 1.0f)
-			);
-
-			const float RotAngle = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? -CameraYaw : 0.0f;
-			const float Scale = (RotationMode == ERetrieveMinimapRotationMode::PlayerUp) ? FMath::Sqrt(2.0f) : 1.0f;
-			const FVector2D ScaledSize = WidgetSize * Scale;
-			const FVector2D MapTopLeft = Center - ScaledSize * 0.5f;
-
-			FSlateBrush MapBrush;
-			MapBrush.SetResourceObject(ActiveTexture);
-			MapBrush.ImageSize = WidgetSize;
-			MapBrush.SetUVRegion(FBox2f(FVector2f(UVMin), FVector2f(UVMax)));
-
-			FSlateDrawElement::MakeRotatedBox(
-				OutDrawElements,
-				++CurrentLayer,
-				AllottedGeometry.ToPaintGeometry(
-					FVector2f(ScaledSize),
-					FSlateLayoutTransform(FVector2f(MapTopLeft))
-				),
-				&MapBrush,
-				ESlateDrawEffect::None,
-				FMath::DegreesToRadians(RotAngle),
-				TOptional<FVector2D>(AbsCenter),
-				FSlateDrawElement::ERotationSpace::RelativeToWorld
-			);
-		}
-	}
-
-	// ── 플레이어 마커 ──────────────────────────────────────────────────────────
-	// NorthUp: CameraYaw만큼 회전해 북쪽 기준 방향 표시
-	// PlayerUp: 마커 고정 (위쪽 = 진행 방향)
+	const FSlateClippingZone ClipZone(AllottedGeometry.GetLayoutBoundingRect());
+	OutDrawElements.PushClip(ClipZone);
+	
 	{
 		const float MarkerRot = (RotationMode == ERetrieveMinimapRotationMode::NorthUp) ? CameraYaw : 0.0f;
 
@@ -268,45 +374,42 @@ int32 URetrieveMinimapWidget::NativePaint(
 			PlayerMarkerColor
 		);
 	}
-
-	// ── 액터 아이콘 ──────────────────────────────────────────────────────────
-	if (World)
+	
+	if (World && MapSub && MapSub->HasValidBounds())
 	{
-		if (MapSub && MapSub->HasValidBounds())
+		for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
 		{
-			for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
+			if (!IsValid(Icon) || !IsValid(Icon->GetOwner()) || !Icon->bShowOnMinimap)
 			{
-				if (!IsValid(Icon) || !IsValid(Icon->GetOwner()) || !Icon->bShowOnMinimap)
-				{
-					continue;
-				}
-
-				const FVector IconWorld = Icon->GetOwner()->GetActorLocation();
-				if (FVector::Dist2D(PlayerLoc, IconWorld) > ViewWorldRadius)
-				{
-					continue;
-				}
-
-				const FVector2D IconPos = WorldToLocal(
-					IconWorld, PlayerLoc, Center, WidgetSize, CameraYaw
-				);
-
-				if (FVector2D::Distance(IconPos, Center) > MiniMapRadius)
-				{
-					continue;
-				}
-
-				DrawIcon(OutDrawElements, CurrentLayer, AllottedGeometry, Icon, IconPos);
+				continue;
 			}
+
+			const FVector IconWorld = Icon->GetOwner()->GetActorLocation();
+			if (FVector::Dist2D(PlayerLoc, IconWorld) > ViewWorldRadius)
+			{
+				continue;
+			}
+
+			const FVector2D IconPos = WorldToLocal(
+				IconWorld, PlayerLoc, Center, WidgetSize, CameraYaw
+			);
+
+			if (FVector2D::Distance(IconPos, Center) > MiniMapRadius)
+			{
+				continue;
+			}
+
+			DrawIcon(OutDrawElements, CurrentLayer, AllottedGeometry, Icon, IconPos);
 		}
 	}
 
 	OutDrawElements.PopClip();
 
+	DrawMinimapDecorations(OutDrawElements, CurrentLayer, AllottedGeometry);
+
 	return CurrentLayer;
 }
 
-// ---------- 헬퍼 ----------
 
 void URetrieveMinimapWidget::ToggleRotationMode()
 {
@@ -342,21 +445,15 @@ FVector2D URetrieveMinimapWidget::WorldToLocal(
 	float CameraYaw
 ) const
 {
-	// 월드 공간 직접 델타 계산 — 레벨 형태(직사각/정사각)에 무관하게 정확.
-	//   +Y(East)  → 화면 오른쪽 (+ScreenX)
-	//   +X(North) → 화면 위쪽   (-ScreenY, 화면 Y 축 반전)
-	// ViewWorldRadius가 위젯 반쪽(WidgetSize/2)에 대응.
 	const float InvDiameter = 1.0f / FMath::Max(ViewWorldRadius * 2.0f, 1.0f);
 
 	FVector2D ScreenDelta(
 		 (TargetWorld.Y - PlayerWorld.Y) * WidgetSize.X * InvDiameter,
-		-(TargetWorld.X - PlayerWorld.X) * WidgetSize.Y * InvDiameter   // North-South 반전
+		-(TargetWorld.X - PlayerWorld.X) * WidgetSize.Y * InvDiameter
 	);
 
 	if (RotationMode == ERetrieveMinimapRotationMode::PlayerUp)
 	{
-		// 맵 텍스처가 -CameraYaw로 그려지므로 아이콘도 동일 방향 회전.
-		// 맵이 √2 고정 확대되므로 아이콘 오프셋도 √2 배 적용.
 		ScreenDelta = Rotate2D(ScreenDelta, -CameraYaw) * FMath::Sqrt(2.0f);
 	}
 
