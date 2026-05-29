@@ -35,6 +35,7 @@ enum class ERetrieveMapIconType : uint8
 	Lumen    UMETA(DisplayName="Lumen"),
 	Boss     UMETA(DisplayName="Boss"),
 	Outpost  UMETA(DisplayName="Outpost"),
+	FirstWeapon  UMETA(DisplayName="FirstWeapon"),
 };
 
 /**
