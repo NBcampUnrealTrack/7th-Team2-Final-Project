@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "TimerManager.h"
 #include "RetrieveMapSubsystem.generated.h"
 
 class URetrieveMapIconComponent;
@@ -146,8 +147,12 @@ public:
 	bool HasValidBounds() const { return MapExtent > 1.0f; }
 
 private:
-	void InitializeBounds(UWorld& InWorld);
+	bool InitializeBounds(UWorld& InWorld, bool bLogWarnings = true);
+	void RetryInitializeBounds();
 
 	UPROPERTY()
 	TArray<TObjectPtr<URetrieveMapIconComponent>> Icons;
+
+	FTimerHandle BoundsRetryTimerHandle;
+	int32 BoundsRetryAttempts = 0;
 };
