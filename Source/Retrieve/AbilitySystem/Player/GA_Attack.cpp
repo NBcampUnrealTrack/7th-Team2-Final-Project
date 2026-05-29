@@ -1,11 +1,5 @@
 #include "AbilitySystem/Player/GA_Attack.h"
 
-#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
-#include "Animation/RetrieveWeaponSockets.h"
-#include "Components/WeaponComponent.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
-#include "Logging/RetrieveLogChannels.h"
-
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
@@ -13,10 +7,11 @@
 #include "AbilitySystemComponent.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
-#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
-#include "GameFramework/Character.h"
 #include "GameplayEffect.h"
+#include "Animation/RetrieveWeaponSockets.h"
+#include "Components/WeaponComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_Attack::UGA_Attack()
 {
@@ -35,14 +30,23 @@ UGA_Attack::UGA_Attack()
 
 bool UGA_Attack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
-	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags)) return false;
-
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	
 	AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
 	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
-	if (!IsValid(WeaponComp) || !WeaponComp->IsEquipped()) return false;
-
-	if (WeaponComp->GetWeaponDataRef().ComboSteps.IsEmpty()) return false;
-
+	if (!IsValid(WeaponComp) || !WeaponComp->IsEquipped())
+	{
+		return false;
+	}
+	
+	if (WeaponComp->GetWeaponDataRef().ComboSteps.IsEmpty())
+	{
+		return false;
+	}
+	
 	return IsValid(DamageEffectClass);
 }
 
@@ -145,8 +149,11 @@ void UGA_Attack::StartListeningComboInput()
 void UGA_Attack::HandleInputPressed(float TimeWaited)
 {
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!IsValid(ASC)) return;
-
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+	
 	const bool bCanChain = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex + 1);
 	const bool bWindowOpen = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Combo_Open);
 
@@ -167,19 +174,26 @@ void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
 
 void UGA_Attack::HandleImpactEvent(FGameplayEventData Payload)
 {
-	if (!IsActive() || CurrentComboIndex == INDEX_NONE) return;
-
+	if (!IsActive() || CurrentComboIndex == INDEX_NONE)
+	{
+		return;
+	}
 	ApplyStepDamage();
 }
 
 void UGA_Attack::ApplyStepDamage()
 {
-	if (!HasAuthority(&GetCurrentActivationInfoRef())) return;
-
+	if (!HasAuthority(&GetCurrentActivationInfoRef()))
+	{
+		return;
+	}
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!IsValid(SourceASC) || !IsValid(AvatarActor) || !IsValid(DamageEffectClass)) return;
-
+	if (!IsValid(SourceASC) || !IsValid(AvatarActor) || !IsValid(DamageEffectClass))
+	{
+		return;
+	}
+	
 	const float DamageMul = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
 		? CachedWeaponData.ComboSteps[CurrentComboIndex].DamageMultiplier : 1.0f;
 
@@ -193,7 +207,10 @@ void UGA_Attack::ApplyStepDamage()
 	}
 
 	UWorld* World = AvatarActor->GetWorld();
-	if (!IsValid(World)) return;
+	if (!IsValid(World))
+	{
+		return;
+	}
 	
 	const FVector SweepStart = bHasValidPreviousTraceOrigin ? PreviousTraceOrigin : CurrentTraceOrigin;
 	
@@ -213,8 +230,10 @@ void UGA_Attack::ApplyStepDamage()
 	PreviousTraceOrigin = CurrentTraceOrigin;
 	bHasValidPreviousTraceOrigin = true;
 
-	if (!bHit) return;
-
+	if (!bHit)
+	{
+		return;
+	}
 	for (const FHitResult& Hit : HitResults)
 	{
 		AActor* TargetActor = Hit.GetActor();

@@ -1,22 +1,21 @@
 #include "Character/RetrieveEnemyCharacter.h"
 
-#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
-#include "AbilitySystemBlueprintLibrary.h" 
-#include "Components/RetrievePawnExtensionComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SphereComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
+#include "Enemy/EnemyAIController.h"
+#include "Engine/DataTable.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Components/DropComponent.h"
 #include "Components/EnemyCombatComponent.h"
 #include "Components/PatternCounterComponent.h"
-#include "Components/DropComponent.h"
 #include "Components/RetrieveHealthComponent.h"
+#include "Components/RetrievePawnExtensionComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "Engine/DataTable.h"
-#include "Data/RetrieveDataTableTypes.h"
-#include "Components/SphereComponent.h"
-#include "Enemy/EnemyAIController.h"
-#include "Components/CapsuleComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
 ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -128,8 +127,11 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	
 	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(
 	   MonsterDataRowName, TEXT("ARetrieveEnemyCharacter::InitializeComponents"));
-	if (!Row) return;
-
+	if (!Row)
+	{
+		return;
+	}
+	
 	if (EnemyCombatComponent)
 	{
 		EnemyCombatComponent->Initialize(PatternTable, Row->PatternSlots);

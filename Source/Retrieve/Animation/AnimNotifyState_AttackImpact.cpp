@@ -18,11 +18,21 @@ void UAnimNotifyState_AttackImpact::NotifyBegin(USkeletalMeshComponent* MeshComp
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
 
-	if (!IsValid(MeshComp)) return;
-	AActor* OwnerActor = MeshComp->GetOwner();
-	if (!IsValid(OwnerActor)) return;
+	if (!IsValid(MeshComp))
+	{
+		return;
+	}
 	
-	if (OwnerActor->GetLocalRole() != ROLE_Authority) return;
+	AActor* OwnerActor = MeshComp->GetOwner();
+	if (!IsValid(OwnerActor))
+	{
+		return;
+	}
+	
+	if (OwnerActor->GetLocalRole() != ROLE_Authority)
+	{
+		return;
+	}
 	
 	FGameplayEventData BeginPayload;
 	BeginPayload.EventTag = RetrieveGameplayTags::GameplayEvent_Attack_Impact_Begin;
@@ -35,12 +45,22 @@ void UAnimNotifyState_AttackImpact::NotifyTick(USkeletalMeshComponent* MeshComp,
 {
 	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime, EventReference);
 
-	if (!IsValid(MeshComp)) return;
-	AActor* OwnerActor = MeshComp->GetOwner();
-	if (!IsValid(OwnerActor)) return;
+	if (!IsValid(MeshComp))
+	{
+		return;
+	}
 	
-	if (OwnerActor->GetLocalRole() != ROLE_Authority) return;
-
+	AActor* OwnerActor = MeshComp->GetOwner();
+	if (!IsValid(OwnerActor))
+	{
+		return;
+	}
+	
+	if (OwnerActor->GetLocalRole() != ROLE_Authority)
+	{
+		return;
+	}
+	
 	const FGameplayTag EffectiveEventTag = EventTag.IsValid() ? EventTag : RetrieveGameplayTags::GameplayEvent_Attack_Impact;
 	
 	FGameplayEventData Payload;

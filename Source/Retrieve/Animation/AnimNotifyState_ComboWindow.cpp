@@ -18,8 +18,11 @@ void UAnimNotifyState_ComboWindow::NotifyBegin(USkeletalMeshComponent* MeshComp,
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
 
-	if (!IsValid(MeshComp) || !ComboOpenTag.IsValid()) return;
-
+	if (!IsValid(MeshComp) || !ComboOpenTag.IsValid())
+	{
+		return;
+	}
+	
 	if (AActor* OwnerActor = MeshComp->GetOwner())
 	{
 		if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OwnerActor))
@@ -33,8 +36,11 @@ void UAnimNotifyState_ComboWindow::NotifyEnd(USkeletalMeshComponent* MeshComp, U
 {
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
 
-	if (!IsValid(MeshComp) || !ComboOpenTag.IsValid()) return;
-
+	if (!IsValid(MeshComp) || !ComboOpenTag.IsValid())
+	{
+		return;
+	}
+	
 	if (AActor* OwnerActor = MeshComp->GetOwner())
 	{
 		if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OwnerActor))

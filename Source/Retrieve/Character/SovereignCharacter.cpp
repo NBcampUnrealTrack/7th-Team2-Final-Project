@@ -71,10 +71,10 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		PawnExtensionComponent->InitializeAbilitySystem(ASC, RetrievePS);
 		
 		// 검/방패 장착 테스트용 코드
-		if (HasAuthority() && WeaponComponent && !WeaponComponent->IsEquipped())
+		/*if (HasAuthority() && WeaponComponent && !WeaponComponent->IsEquipped())
 		{
 			WeaponComponent->EquipWeapon(TEXT("Weapon_SwordShield_Basic"));
-		}
+		}*/
 	}
 	
 	if (PawnCosmeticComponent)
@@ -107,8 +107,11 @@ void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Dead);
 	}
 	
-	if (!HasAuthority()) return; 
-
+	if (!HasAuthority())
+	{
+		return;
+	}
+	
 	const URetrieveHealthComponent* HC = GetHealthComponent();
 	
 	FPlayerDiedPayload Payload;
