@@ -231,6 +231,9 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 		}
 		UStaticMeshComponent* Comp = NewObject<UStaticMeshComponent>(Owner);
 		Comp->SetStaticMesh(Mesh);
+		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Comp->SetGenerateOverlapEvents(false);
+		Comp->SetCanEverAffectNavigation(false);
 		return Comp;
 	}
 
@@ -241,6 +244,9 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 	}
 	USkeletalMeshComponent* Comp = NewObject<USkeletalMeshComponent>(Owner);
 	Comp->SetSkeletalMesh(Mesh);
+	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Comp->SetGenerateOverlapEvents(false);
+	Comp->SetCanEverAffectNavigation(false);
 	return Comp;
 }
 
