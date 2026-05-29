@@ -8,6 +8,7 @@ UGA_SetElement_Fire::UGA_SetElement_Fire()
 	AbilityTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Fire);
 
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::Ability_Player_SetElement_Fire);
+	ActivationPolicy = ERetrieveAbilityActivationPolicy::OnSpawn;
 }
 
 void UGA_SetElement_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
