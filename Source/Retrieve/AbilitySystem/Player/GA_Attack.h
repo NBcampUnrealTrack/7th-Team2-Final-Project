@@ -50,18 +50,29 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack")
 	bool bDebugDrawTrace = false;
 
-	UPROPERTY(Transient) TObjectPtr<UWeaponComponent> CachedWeaponComponent;
+	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
+	
+	UPROPERTY(Transient) 
+	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
+	
+	UPROPERTY(Transient) 
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactBeginEventTask;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
+	
+	UPROPERTY(Transient) 
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+	
+	UPROPERTY(Transient) 
+	TObjectPtr<UAbilityTask_WaitInputPress> InputPressTask;
 
-	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactBeginEventTask;
-	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
-	UPROPERTY(Transient) TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
-	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitInputPress> InputPressTask;
-
+	UPROPERTY(Transient)
+	TSet<TObjectPtr<AActor>> HitActorsThisStep;
+	
 	int32 CurrentComboIndex = INDEX_NONE;
 	bool bComboQueued = false;
-	
-	TSet<TObjectPtr<AActor>> HitActorsThisStep;
 	
 	FVector PreviousTraceOrigin = FVector::ZeroVector;
 	bool bHasValidPreviousTraceOrigin = false;

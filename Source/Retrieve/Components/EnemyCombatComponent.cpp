@@ -1,18 +1,18 @@
 #include "Components/EnemyCombatComponent.h"
 
-#include "AbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "AIController.h"
+#include "Components/SphereComponent.h"
+#include "Engine/DataTable.h"
+#include "GameFramework/Character.h"
+#include "GameplayEffect.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/PatternCounterComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
-#include "Engine/DataTable.h"
-#include "Components/SphereComponent.h"
-#include "AbilitySystemInterface.h"
-#include "GameFramework/Character.h"
-#include "GameplayEffect.h"
-#include "AIController.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
