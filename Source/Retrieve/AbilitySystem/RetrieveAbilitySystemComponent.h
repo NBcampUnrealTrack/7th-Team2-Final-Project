@@ -10,6 +10,8 @@ class RETRIEVE_API URetrieveAbilitySystemComponent : public UAbilitySystemCompon
 	GENERATED_BODY()
 
 public:
+	virtual void InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor) override;
+
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	void AbilityInputTagReleased(const FGameplayTag& InputTag);
 
