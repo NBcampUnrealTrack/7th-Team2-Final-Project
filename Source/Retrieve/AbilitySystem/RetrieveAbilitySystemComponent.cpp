@@ -1,7 +1,27 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Character/Cosmetics/SovereignAnimInstance.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GameplayAbilityTypes.h"
+
+void URetrieveAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor)
+{
+	FGameplayAbilityActorInfo* ActorInfo = AbilityActorInfo.Get();
+	check(ActorInfo);
+	check(InOwnerActor);
+
+	const bool bHasNewPawnAvatar = Cast<APawn>(InAvatarActor) && (InAvatarActor != ActorInfo->AvatarActor.Get());
+
+	Super::InitAbilityActorInfo(InOwnerActor, InAvatarActor);
+
+	if (bHasNewPawnAvatar)
+	{
+		if (USovereignAnimInstance* SovereignAnimInst = Cast<USovereignAnimInstance>(ActorInfo->GetAnimInstance()))
+		{
+			SovereignAnimInst->InitializeWithAbilitySystem(this);
+		}
+	}
+}
 
 void URetrieveAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
