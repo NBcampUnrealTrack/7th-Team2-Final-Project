@@ -12,13 +12,12 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Kismet/GameplayStatics.h"    
 #include "Kismet/KismetSystemLibrary.h"
+#include "Data/LockOnConfig.h"
 #include "TimerManager.h"
 
 ULockOnComponent::ULockOnComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	// 기본 ObjectType: Pawn
-	SearchObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
 }
 
 void ULockOnComponent::BeginPlay()
@@ -29,6 +28,8 @@ void ULockOnComponent::BeginPlay()
 void ULockOnComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopLockOn();
+	UnsubscribeTargetDeath();
+	
 	UWorld* World = GetWorld();
 	if (IsValid(World))
 	{
@@ -38,8 +39,24 @@ void ULockOnComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void ULockOnComponent::SetConfig(ULockOnConfig* InConfig)
+{
+	if (IsValid(InConfig) == false)
+	{
+		return;
+	}
+	Config = InConfig;
+}
+
 bool ULockOnComponent::StartLockOn()
 {
+	if (IsValid(Config) == false)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[LockOnComp] StartLockOn 실패: Config 미지정 — ReactionComponent의 LockOnConfig 주입 확인"));
+		return false;
+	}
+	
 	if (CachePlayerRefs() == false)
 	{
 		return false;
@@ -71,8 +88,13 @@ void ULockOnComponent::StopLockOn()
 
 bool ULockOnComponent::SwitchTarget(FVector2D InputDir)
 {
-	// 입력 임계값 미만이면 무시
-	if (FMath::Abs(InputDir.X) < SwitchInputThreshold)
+	if (IsValid(Config) == false)
+	{
+		return false;
+	}
+
+	// 입력 없음만 무시 (KB/마우스 이산 입력 — 게임패드 아날로그 데드존은 추후)
+	if (FMath::IsNearlyZero(InputDir.X))
 	{
 		return false;
 	}
@@ -131,7 +153,7 @@ void ULockOnComponent::MonitorTick()
 
 void ULockOnComponent::DrawDebugLockOn() const
 {
-	if (bDebugDraw == false)
+	if (IsValid(Config) == false ||  Config->bDebugDraw == false)
 	{
 		return;
 	}
@@ -140,17 +162,17 @@ void ULockOnComponent::DrawDebugLockOn() const
 	{
 		return;
 	}
-	
+
 	UWorld* World = GetWorld();
 	if (IsValid(World) == false)
 	{
 		return;
 	}
-	
+
 	const FVector TargetLoc = Target->GetActorLocation();
-	
+
 	// 타겟 위에 노란 구체 (락온 표시)
-	DrawDebugSphere(World, TargetLoc, 80.f, 12, FColor::Yellow, false, MonitorInterval, 0, 2.f);
+	DrawDebugSphere(World, TargetLoc, 80.f, 12, FColor::Yellow, false, Config->MonitorInterval, 0, 2.f);
 	// 카메라 -> 타겟 노란 라인
 	APlayerCameraManager* CamManager = CachedCameraManager.Get();
 	if (IsValid(CamManager) == false)
@@ -159,7 +181,7 @@ void ULockOnComponent::DrawDebugLockOn() const
 	}
 
 	const FVector CamLoc = CamManager->GetCameraLocation();
-	DrawDebugLine(World, CamLoc, TargetLoc, FColor::Yellow, false, MonitorInterval, 0, 2.f);
+	DrawDebugLine(World, CamLoc, TargetLoc, FColor::Yellow, false, Config->MonitorInterval, 0, 2.f);
 }
 
 APawn* ULockOnComponent::GetOwningPawn() const
@@ -196,6 +218,11 @@ bool ULockOnComponent::CachePlayerRefs()
 void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 {
 	OutCandidates.Reset();
+	if (IsValid(Config) == false)
+	{
+		return;
+	}
+
 	// CachePlayerRefs는 호출자가 미리 보장 전제
 	// 여기서는 캐시가 비어있으면 빈 결과 리턴
 	APlayerCameraManager* CamManager = CachedCameraManager.Get();
@@ -204,28 +231,28 @@ void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 		return;
 	}
 	APawn* OwnerPawn = GetOwningPawn();
-	
+
 	const FVector CamLoc = CamManager->GetCameraLocation();
 	const FRotator CamRot = CamManager->GetCameraRotation();
-	const FVector TraceEnd = CamLoc + CamRot.Vector() * MaxDistance;
+	const FVector TraceEnd = CamLoc + CamRot.Vector() * Config->MaxDistance;
 	// 자기 자신 무시
 	TArray<AActor*> IgnoreActors;
 	if (IsValid(OwnerPawn))
 	{
 		IgnoreActors.Add(OwnerPawn);
 	}
-	
+
 	// SphereTrace
 	TArray<FHitResult> Hits;
 	UKismetSystemLibrary::SphereTraceMultiForObjects(
 		this,
 		CamLoc,
 		TraceEnd,
-		SphereRadius,
-		SearchObjectTypes,
+		Config->SphereRadius,
+		Config->SearchObjectTypes,
 		false,
 		IgnoreActors,
-		bDebugDraw ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
+		Config->bDebugDraw ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
 		Hits,
 		true
 		);	
@@ -256,7 +283,7 @@ void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 
 bool ULockOnComponent::HasLineOfSight(const AActor* Target) const
 {
-	if (IsValid(Target) == false)
+	if (IsValid(Config) == false || IsValid(Target) == false)
 	{
 		return false;
 	}
@@ -282,10 +309,10 @@ bool ULockOnComponent::HasLineOfSight(const AActor* Target) const
 	
 	FHitResult Hit;
 	const bool bBlocked = World->LineTraceSingleByChannel(
-		Hit, Start, End, LineOfSightChannel, Params
+		Hit, Start, End, Config->LineOfSightChannel, Params
 		);
 	
-	if (bDebugDraw)
+	if (Config->bDebugDraw)
 	{
 		const FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
 		DrawDebugLine(World, Start, End, LineColor, false, 0.1f, 0, 1.f);
@@ -333,11 +360,11 @@ bool ULockOnComponent::ProjectToScreen(const AActor* Actor, FVector2D& OutScreen
 
 AActor* ULockOnComponent::PickBestTarget(const TArray<AActor*>& Candidates) const
 {
-	if (Candidates.IsEmpty())
+	if (IsValid(Config) == false || Candidates.IsEmpty())
 	{
 		return nullptr;
 	}
-	
+
 	APlayerController* PC = CachedPC.Get();
 	if (IsValid(PC) == false)
 	{
@@ -374,6 +401,12 @@ AActor* ULockOnComponent::PickBestTarget(const TArray<AActor*>& Candidates) cons
 		{
 			continue;
 		}
+		// 이미 죽은 적은 후보 제외 (살아있는 타겟만 락온 → 이후 사망은 이벤트가 처리)
+		if (IsTargetDead(Candidate))
+		{
+			continue;
+		}
+		
 		// 스크린 좌표 변환
 		FVector2D ScreenPos;
 		bool bInFront = false;
@@ -391,16 +424,16 @@ AActor* ULockOnComponent::PickBestTarget(const TArray<AActor*>& Candidates) cons
 		const float ScreenDist = (ScreenPos - ScreenCenter).Size();
 		const float NormalizedScreenDist = FMath::Clamp(ScreenDist / ScreenHalfDiagonal, 0.f, 1.f);
 		// 데드존 컷
-		if (NormalizedScreenDist > MaxScreenDistance)
+		if (NormalizedScreenDist > Config->MaxScreenDistance)
 		{
 			continue;
 		}
 		
 		// 월드 거리 정규화
 		const float WorldDist = FVector::Distance(Candidate->GetActorLocation(), CamLoc);
-		const float NormalizedWorldDist = FMath::Clamp(WorldDist / MaxDistance, 0.f, 1.f);
+		const float NormalizedWorldDist = FMath::Clamp(WorldDist / Config->MaxDistance, 0.f, 1.f);
 		// 스코어 계산 - 가까울수록 고점
-		const float Score = ScreenWeight * (1.f - NormalizedScreenDist) + DistanceWeight * (1.f - NormalizedWorldDist);
+		const float Score = Config->ScreenWeight * (1.f - NormalizedScreenDist) + Config->DistanceWeight * (1.f - NormalizedWorldDist);
 		
 		if (Score > BestScore)
 		{
@@ -442,6 +475,12 @@ AActor* ULockOnComponent::PickSwitchTarget(const TArray<AActor*>& Candidates, FV
 		{
 			continue;
 		}
+		// 죽은 후보 스킵
+		if (IsTargetDead(Candidate))
+		{
+			continue;
+		}
+	
 		FVector2D ScreenPos;
 		bool bInFront = false;
 		if (ProjectToScreen(Candidate, ScreenPos, bInFront) == false)
@@ -477,7 +516,7 @@ void ULockOnComponent::SetCurrentTarget(AActor* NewTarget)
 	{
 		NewTarget = nullptr;
 	}
-	
+
 	AActor* Old = CurrentTarget.Get();
 	const bool bWasActive = bLockOnActive;
 	const bool bNewActive = IsValid(NewTarget);
@@ -487,9 +526,17 @@ void ULockOnComponent::SetCurrentTarget(AActor* NewTarget)
 		return;
 	}
 	
+	// 이전 타겟 사망 구독 해제 -> 타겟 갱신 -> 새 타겟 구독
+	UnsubscribeTargetDeath();
+	
 	CurrentTarget = NewTarget;
 	bLockOnActive = bNewActive;
-	
+
+	if (bNewActive)
+	{
+		SubscribeTargetDeath(NewTarget);
+	}
+
 	const bool bLockStarted = bNewActive && !bWasActive;
 	const bool bLockEnded = !bNewActive && bWasActive;
 	
@@ -500,11 +547,13 @@ void ULockOnComponent::SetCurrentTarget(AActor* NewTarget)
 		ApplyLockOnTag(true);
 		if (IsValid(World))
 		{
+			// Config 미지정 대비 안전 폴백
+			const float Interval = IsValid(Config) ? Config->MonitorInterval : 0.1f;
 			World->GetTimerManager().SetTimer(
 				MonitorTimerHandle,
 				this,
 				&ULockOnComponent::MonitorTick,
-				MonitorInterval,
+				Interval,
 				true
 				);
 		}
@@ -523,11 +572,11 @@ void ULockOnComponent::SetCurrentTarget(AActor* NewTarget)
 
 bool ULockOnComponent::ShouldBreakLockOn() const
 {
-	if (bLockOnActive == false)
+	if (bLockOnActive == false || IsValid(Config) == false)
 	{
 		return false;
 	}
-	
+
 	// 타겟 무효
 	AActor* Target = CurrentTarget.Get();
 	if (IsValid(Target) == false)
@@ -542,7 +591,7 @@ bool ULockOnComponent::ShouldBreakLockOn() const
 	}
 	
 	const float DistSquared = FVector::DistSquared(Target->GetActorLocation(), OwnerPawn->GetActorLocation());
-	if (DistSquared > FMath::Square(BreakDistance))
+	if (DistSquared > FMath::Square(Config->BreakDistance))
 	{
 		return true;
 	}
@@ -551,12 +600,7 @@ bool ULockOnComponent::ShouldBreakLockOn() const
 	{
 		return true;
 	}
-	// 사망 
-	if (IsTargetDead(Target))
-	{
-		return true;
-	}
-	
+
 	return false;
 }
 
@@ -612,5 +656,64 @@ void ULockOnComponent::ApplyLockOnTag(bool bAdd) const
 	else
 	{
 		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::LockOn_Active);
+	}
+}
+
+void ULockOnComponent::SubscribeTargetDeath(AActor* Target)
+{
+	IAbilitySystemInterface* ASCInterface = Cast<IAbilitySystemInterface>(Target);
+	if (ASCInterface == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = ASCInterface->GetAbilitySystemComponent();
+	if (IsValid(ASC) == false)
+	{
+		return;
+	}
+	
+	EnemyDeadHandle = ASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Dead, 
+		EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ULockOnComponent::OnTargetDeadTagChanged);
+	
+	BossDeadHandle = ASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Boss_Dead, 
+	EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ULockOnComponent::OnTargetDeadTagChanged);
+	
+	SubscribedASC = ASC;
+}
+
+void ULockOnComponent::UnsubscribeTargetDeath()
+{
+	UAbilitySystemComponent* ASC = SubscribedASC.Get();
+	if (IsValid(ASC) == false)
+	{
+		EnemyDeadHandle.Reset();
+		BossDeadHandle.Reset();
+		SubscribedASC.Reset();
+		
+		return;
+	}
+	
+	if (EnemyDeadHandle.IsValid())
+	{
+		ASC->UnregisterGameplayTagEvent(EnemyDeadHandle, 
+			RetrieveGameplayTags::State_Enemy_Dead, EGameplayTagEventType::NewOrRemoved);
+	}
+	if (BossDeadHandle.IsValid())
+	{
+		ASC->UnregisterGameplayTagEvent(BossDeadHandle, 
+			RetrieveGameplayTags::State_Boss_Dead, EGameplayTagEventType::NewOrRemoved);
+	}
+	EnemyDeadHandle.Reset();
+	BossDeadHandle.Reset();
+	SubscribedASC.Reset();
+}
+
+void ULockOnComponent::OnTargetDeadTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	// 사망 태그가 추가됨(Count > 0) 즉시 락온 해제
+	if (Count > 0)
+	{
+		StopLockOn();
 	}
 }

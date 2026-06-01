@@ -8,6 +8,8 @@
 class ULockOnComponent;
 class ULockOnCameraRig;
 class ULockOnTargetHighlighter;
+class ULockOnConfig; 
+class ULockOnCameraConfig; 
 
 // class UHitReactionComponent; // TODO 2주차 추가 예정
 // class UCombatFeedbackComponent // TODO 2주차 추가 예정
@@ -19,8 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnTargetChangedRelay, AActor*
  * LockOn/HitReaction/CombatFeedback sub-component를 런타임에 생성해 Owner Actor에 부착
  * 캐릭터/GA가 이 컴포넌트 1개만 알도록 통합
  */
-
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = "Retrieve", meta=(BlueprintSpawnableComponent))
 class RETRIEVE_API UCombatReactionComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -49,6 +50,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|CombatReaction|LockOn")
 	FOnLockOnTargetChangedRelay OnLockOnTargetChanged;
 protected:
+	// 튜닝 Config 
+	// LockOnComp 전용 탐색/스코어링/해제 파라미터
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|config")
+	TObjectPtr<ULockOnConfig> LockOnConfig;
+	// LockOnCameraRig 전용 카메라 추적/오프셋 파라미터
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|Config")
+	TObjectPtr<ULockOnCameraConfig> LockOnCameraConfig;
 	// BeginPlay에서 Owner Actor에 런타임 생성/부착되는 하위 기능 컴포넌트
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnComponent> LockOnComp;
