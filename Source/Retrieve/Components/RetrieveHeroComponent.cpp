@@ -1,9 +1,11 @@
-#include "Components/RetrieveHeroComponent.h"
+﻿#include "Components/RetrieveHeroComponent.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputCoreTypes.h"
 #include "RetrievePawnExtensionComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
@@ -44,20 +46,20 @@ void URetrieveHeroComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 }
 
 bool URetrieveHeroComponent::CanChangeInitState(UGameFrameworkComponentManager* Manager, FGameplayTag CurrentState,
-                                                FGameplayTag DesiredState) const
+	FGameplayTag DesiredState) const
 {
 	check(Manager)
-	APawn* Pawn = GetPawn<APawn>();
+		APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn)
 	{
 		return false;
 	}
-	
+
 	if (!CurrentState.IsValid() && DesiredState == RetrieveGameplayTags::InitState_Spawned)
 	{
 		return true;
 	}
-	
+
 	if (CurrentState == RetrieveGameplayTags::InitState_Spawned && DesiredState == RetrieveGameplayTags::InitState_DataAvailable)
 	{
 		if (!Pawn->GetPlayerState())
@@ -74,17 +76,17 @@ bool URetrieveHeroComponent::CanChangeInitState(UGameFrameworkComponentManager* 
 			return true;
 		}
 	}
-	
+
 	if (CurrentState == RetrieveGameplayTags::InitState_DataAvailable && DesiredState == RetrieveGameplayTags::InitState_DataInitialized)
 	{
 		return Manager->HasFeatureReachedInitState(Pawn, URetrievePawnExtensionComponent::NAME_ActorFeatureName, RetrieveGameplayTags::InitState_DataInitialized);
 	}
-	
+
 	if (CurrentState == RetrieveGameplayTags::InitState_DataInitialized && DesiredState == RetrieveGameplayTags::InitState_GameplayReady)
 	{
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -169,10 +171,10 @@ void URetrieveHeroComponent::BindPlayerInputs()
 
 	TArray<uint32> BindHandles;
 	RetrieveIC->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, BindHandles);
-	
+
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
-	
+
 	bInputsBound = true;
 }
 
@@ -180,21 +182,27 @@ void URetrieveHeroComponent::Input_Move(const FInputActionValue& InputActionValu
 {
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn) return;
-	
+
 	const FVector2D Value = InputActionValue.Get<FVector2D>();
 	const FRotator MovementRotation(0.0f, Pawn->GetControlRotation().Yaw, 0.0f);
-	
+
+	const FVector ForwardDirection = MovementRotation.RotateVector(FVector::ForwardVector);
+	const FVector RightDirection = MovementRotation.RotateVector(FVector::RightVector);
+
 	if (Value.X != 0.0f)
 	{
-		const FVector MovementDirection = MovementRotation.RotateVector(FVector::RightVector);
-		Pawn->AddMovementInput(MovementDirection, Value.X);
+		Pawn->AddMovementInput(RightDirection, Value.X);
 	}
 
 	if (Value.Y != 0.0f)
 	{
-		const FVector MovementDirection = MovementRotation.RotateVector(FVector::ForwardVector);
-		Pawn->AddMovementInput(MovementDirection, Value.Y);
-	}}
+		Pawn->AddMovementInput(ForwardDirection, Value.Y);
+	}
+
+	// GA_Dash 등 방향성 어빌리티가 참조할 카메라(컨트롤) Yaw 기반 입력 방향을 캐시
+	// 입력이 0이면 영 벡터가 저장되며, 호출부에서 ActorForward로 Fallback 처리
+	CachedMoveInputVector = (ForwardDirection * Value.Y + RightDirection * Value.X).GetSafeNormal();
+}
 
 void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValue)
 {
@@ -210,9 +218,9 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 	{
 		return;
 	}
-	
+
 	const FVector2D Value = InputActionValue.Get<FVector2D>();
-	
+
 	if (Value.X != 0.0f)
 	{
 		Pawn->AddControllerYawInput(Value.X);
@@ -231,7 +239,18 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 	{
 		return;
 	}
-	
+
+	if (InputTag == RetrieveGameplayTags::Ability_Player_Jump)
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
+		{
+			if (PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl))
+			{
+				return;
+			}
+		}
+	}
+
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
@@ -248,7 +267,7 @@ void URetrieveHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag
 	{
 		return;
 	}
-	
+
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())

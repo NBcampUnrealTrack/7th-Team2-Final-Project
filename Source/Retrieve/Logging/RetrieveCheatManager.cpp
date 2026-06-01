@@ -5,6 +5,8 @@
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "GameplayEffect.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 UAbilitySystemComponent* URetrieveCheatManager::GetLocalPlayerASC() const
 {
@@ -72,4 +74,34 @@ void URetrieveCheatManager::RetrieveSetHealth(float Value)
 
     UE_LOG(LogTemp, Display,
         TEXT("[CheatManager] RetrieveSetHealth → %.1f (MaxHP: %.1f)"), ClampedValue, MaxHP);
+}
+
+void URetrieveCheatManager::RetrieveTestGuardHit(bool bHeavy)
+{
+    UAbilitySystemComponent* ASC = GetLocalPlayerASC();
+    if (!ASC) return;
+
+    static const TCHAR* GEPath = TEXT("/Game/Retrieve/AbilitySystem/Player/GE_DebugGuardHit.GE_DebugGuardHit_C");
+    UClass* GEClass = StaticLoadClass(UGameplayEffect::StaticClass(), nullptr, GEPath);
+    if (!GEClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] GE_DebugGuardHit 로드 실패: %s"), GEPath);
+        return;
+    }
+
+    APawn* SelfPawn = GetOuterAPlayerController() ? GetOuterAPlayerController()->GetPawn() : nullptr;
+
+    FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
+    Ctx.AddInstigator(SelfPawn, SelfPawn);
+
+    FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GEClass, 1.f, Ctx);
+    if (!Spec.IsValid()) return;
+
+    Spec.Data->AddDynamicAssetTag(bHeavy
+        ? RetrieveGameplayTags::Attack_Type_Heavy
+        : RetrieveGameplayTags::Attack_Type_Normal);
+
+    ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+    UE_LOG(LogTemp, Display, TEXT("[CheatManager] RetrieveTestGuardHit(bHeavy=%d) 적용"), bHeavy ? 1 : 0);
 }

@@ -111,6 +111,17 @@ void URetrieveAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool 
 			if (AbilitySpec->Ability && AbilitySpec->IsActive())
 			{
 				AbilitySpecInputReleased(*AbilitySpec);
+				
+				const UGameplayAbility* AbilityInstance = AbilitySpec->GetPrimaryInstance();
+				if (!AbilityInstance)
+				{
+					continue;
+				}
+				
+				InvokeReplicatedEvent(
+					EAbilityGenericReplicatedEvent::InputReleased,
+					AbilitySpec->Handle,
+					AbilityInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
 			}
 		}
 	}

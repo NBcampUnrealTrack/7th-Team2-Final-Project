@@ -129,6 +129,7 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Normal);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Heavy);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parry_Success);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Guard_Broken);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Dodge_Success);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_DodgeCounter_Success);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_WeakPointHit);

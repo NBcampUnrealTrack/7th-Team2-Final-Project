@@ -127,6 +127,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Normal, "GameplayEvent.Hit.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Heavy, "GameplayEvent.Hit.Heavy");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Success, "GameplayEvent.Parry.Success");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Broken, "GameplayEvent.Guard.Broken");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Dodge_Success, "GameplayEvent.Dodge.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_DodgeCounter_Success, "GameplayEvent.DodgeCounter.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_WeakPointHit, "GameplayEvent.WeakPointHit");
