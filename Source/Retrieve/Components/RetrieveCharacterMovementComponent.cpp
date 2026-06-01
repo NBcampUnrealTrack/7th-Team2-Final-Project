@@ -1,5 +1,6 @@
 #include "Components/RetrieveCharacterMovementComponent.h"
 
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
@@ -19,7 +20,7 @@ namespace RetrieveCharacterMovement
 }
 
 URetrieveCharacterMovementComponent::URetrieveCharacterMovementComponent(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer)
+	: Super()   // UAlsCharacterMovementComponent 생성자는 ObjectInitializer 인자를 받지 않음
 {
 }
 
@@ -131,10 +132,20 @@ float URetrieveCharacterMovementComponent::GetMaxSpeed() const
 {
 	if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
 	{
+		// 이동 잠금 태그 우선
 		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Animation_Lock_Movement))
 		{
 			return 0.0f;
 		}
+
+		// ALS Gait 기반 베이스 속도에 MoveSpeed Attribute 배율 적용
+		// (Attribute 600 = 1.0배, 720 = 1.2배, 300 = 0.5배)
+		const float AlsBase = Super::GetMaxSpeed();
+		if (const UCombatAttributeSet* AttrSet = ASC->GetSet<UCombatAttributeSet>())
+		{
+			return AlsBase * (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+		}
+		return AlsBase;
 	}
 
 	return Super::GetMaxSpeed();

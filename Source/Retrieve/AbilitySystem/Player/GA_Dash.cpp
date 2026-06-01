@@ -1,7 +1,10 @@
 #include "AbilitySystem/Player/GA_Dash.h"
 
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -49,13 +52,19 @@ void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		return;
 	}
 	
+	// ALS StartRollingImplementation과 동일 흐름:
+	// RollingState.TargetYawAngle + SetRotationInstant + SetLocomotionAction(Rolling) 일괄 처리.
+	// 이게 없으면 매 프레임 RefreshRollingPhysics가 default TargetYawAngle(보통 0)로
+	// 캐릭터를 끌고 가서 의도하지 않은 방향으로 굴러갑니다.
 	const FVector DashDir = ResolveDashDirection(ActorInfo);
 	if (!DashDir.IsNearlyZero())
 	{
-		const FRotator YawOnly(0.f, DashDir.Rotation().Yaw, 0.f);
-		AvatarActor->SetActorRotation(YawOnly, ETeleportType::TeleportPhysics);
+		if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(AvatarActor))
+		{
+			Als->BeginRollLockoutTowardYaw(DashDir.Rotation().Yaw);
+		}
 	}
-	
+
 	UAnimMontage* Montage = DashMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
@@ -63,8 +72,18 @@ void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		return;
 	}
 
+	// 최종 PlayRate = BaseDashPlayRate × (MoveSpeed Attribute / 기준값)
+	float FinalPlayRate = BaseDashPlayRate;
+	if (const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
+	{
+		if (const UCombatAttributeSet* AttrSet = ASC->GetSet<UCombatAttributeSet>())
+		{
+			FinalPlayRate *= (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+		}
+	}
+
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, 1.f, NAME_None, /*bStopWhenAbilityEnds=*/true);
+		this, NAME_None, Montage, FinalPlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -121,6 +140,12 @@ FVector UGA_Dash::ResolveDashDirection(const FGameplayAbilityActorInfo* ActorInf
 
 void UGA_Dash::HandleMontageFinished()
 {
+	// 안전망: NotifyState End가 정상 호출됐어도 멱등이라 무해. 중도 끊김 케이스 보험.
+	if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Als->EndRollLockout();
+	}
+
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/false);
 }
 

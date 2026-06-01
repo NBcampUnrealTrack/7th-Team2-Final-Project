@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/CharacterMovementComponent.h"
+#include "AlsCharacterMovementComponent.h"
 
 #include "RetrieveCharacterMovementComponent.generated.h"
 
@@ -26,7 +26,7 @@ struct FRetrieveCharacterGroundInfo
 };
 
 UCLASS(Config = Game)
-class RETRIEVE_API URetrieveCharacterMovementComponent : public UCharacterMovementComponent
+class RETRIEVE_API URetrieveCharacterMovementComponent : public UAlsCharacterMovementComponent
 {
 	GENERATED_BODY()
 

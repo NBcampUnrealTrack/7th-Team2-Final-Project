@@ -30,7 +30,8 @@ public class Retrieve : ModuleRules
 			"SlateCore",
 			"AIModule",
 			"Landscape",
-			"ModelViewViewModel"
+			"ModelViewViewModel",
+			"ALS"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

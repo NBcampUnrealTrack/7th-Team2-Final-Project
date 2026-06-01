@@ -13,6 +13,8 @@ namespace RetrieveGameplayTags
     // ---- Input
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Move);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Look);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Sprint);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Crouch);
 	
     // ---- Player abilities
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
@@ -53,6 +55,8 @@ namespace RetrieveGameplayTags
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Knockdown);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dead);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_ForcedMove);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Sprinting);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Crouching);
 
     // ---- Enemy state
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Idle);
@@ -122,7 +126,10 @@ namespace RetrieveGameplayTags
     // ---- Animation locks
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Animation_Lock_Rotation);
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Animation_Lock_Movement);
-
+	
+	// ---- ALS Locomotion Actions (Retrieve 확장)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(LocomotionAction_Attack);
+	
     // ---- Gameplay events: combat
     RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ComboFinisher);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit);

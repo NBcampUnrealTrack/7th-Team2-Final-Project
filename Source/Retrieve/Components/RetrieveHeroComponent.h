@@ -52,6 +52,11 @@ protected:
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
 	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
 
+	/** ALS 연결 액션 입력. GAS 상태 태그 부여/해제 + ALS API 호출은 캐릭터가 자동 동기화. */
+	void Input_SprintPressed(const FInputActionValue& InputActionValue);
+	void Input_SprintReleased(const FInputActionValue& InputActionValue);
+	void Input_Crouch(const FInputActionValue& InputActionValue);
+
 private:
 	/** SetupPlayerInputComponent 시점에 캐시됨; 초기화가 DataInitialized에 도달하면 바인딩을 재시도에 사용됩니다 */
 	UPROPERTY(Transient)

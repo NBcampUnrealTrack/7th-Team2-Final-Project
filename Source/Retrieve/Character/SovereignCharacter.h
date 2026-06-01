@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Character/RetrieveCombatCharacter.h"
+#include "Character/RetrieveAlsCombatCharacter.h"
 #include "GenericTeamAgentInterface.h"
 #include "SovereignCharacter.generated.h"
 
@@ -9,6 +9,7 @@ class URetrievePawnCosmeticComponent;
 class UCameraComponent;
 class UInventoryComponent;
 class URetrieveHeroComponent;
+class USkeletalMeshComponent;
 class USpringArmComponent;
 class UCombatReactionComponent;
 class UWeaponComponent;
@@ -16,13 +17,13 @@ class UElementGaugeComponent;
 class UPlayerBurstComponent;
 
 UCLASS()
-class RETRIEVE_API ASovereignCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
+class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
-	
+
 public:
 	ASovereignCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-	
+
 	virtual FGenericTeamId GetGenericTeamId() const override
 	{
 		return FGenericTeamId(PlayerTeamId);
@@ -31,6 +32,8 @@ protected:
 	virtual void InitializeAbilitySystem() override;
 	virtual void UnPossessed() override;
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
+
+	virtual USpringArmComponent* GetCameraSpringArm() const override { return CameraSpringArm; }
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveHeroComponent> HeroComponent;
@@ -52,6 +55,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UPlayerBurstComponent> PlayerBurstComponent;
+
+	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<USkeletalMeshComponent> VisualMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<USpringArmComponent> CameraSpringArm;

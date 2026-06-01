@@ -11,6 +11,8 @@ namespace RetrieveGameplayTags
 	// ---- Input
 	UE_DEFINE_GAMEPLAY_TAG(Input_Move, "Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Look, "Input.Look");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Sprint, "Input.Sprint");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Crouch, "Input.Crouch");
 
 	// ---- Player abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Attack, "Ability.Player.Attack");
@@ -51,6 +53,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Knockdown, "State.Player.Knockdown");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dead, "State.Player.Dead");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
 
 	// ---- Enemy state
 	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_Idle, "State.Enemy.Idle");
@@ -120,7 +124,10 @@ namespace RetrieveGameplayTags
 	// ---- Animation locks
 	UE_DEFINE_GAMEPLAY_TAG(Animation_Lock_Rotation, "Animation.Lock.Rotation");
 	UE_DEFINE_GAMEPLAY_TAG(Animation_Lock_Movement, "Animation.Lock.Movement");
-
+	
+	// ---- ALS Locomotion Actions
+	UE_DEFINE_GAMEPLAY_TAG(LocomotionAction_Attack, "Als.LocomotionAction.Attack");
+	
 	// ---- Gameplay events: combat
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_ComboFinisher, "GameplayEvent.ComboFinisher");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit, "GameplayEvent.Hit");
