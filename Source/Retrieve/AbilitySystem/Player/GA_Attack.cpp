@@ -26,6 +26,7 @@ UGA_Attack::UGA_Attack()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 }
 
 bool UGA_Attack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -252,6 +253,8 @@ void UGA_Attack::ApplyStepDamage()
 
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
 
+			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
+			
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActorsThisStep.Add(TargetActor);
 		}

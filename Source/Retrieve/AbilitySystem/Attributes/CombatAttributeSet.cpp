@@ -11,6 +11,7 @@ UCombatAttributeSet::UCombatAttributeSet()
 	InitAttackPower(0.f);
 	InitMoveSpeed(600.f);
 	InitIncomingDamageMultiplier(1.f);
+	InitGuardDamageReduction(0.4f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -21,6 +22,7 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackPower, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MoveSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, GuardDamageReduction, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -43,6 +45,10 @@ void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
+	else if (Attribute == GetGuardDamageReductionAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, 1.f);
+	}
 }
 
 void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data)
@@ -51,14 +57,19 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 
 	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
-		const float DamageDone = GetIncomingDamage();
+		FGameplayTagContainer SpecTags;
+		Data.EffectSpec.GetAllAssetTags(SpecTags);
+
+		const float RawDamage = GetIncomingDamage();
+		const float FinalDamage = HandleIncomingDamage_Guard(Data, RawDamage, SpecTags);
+		
 		SetIncomingDamage(0.f);
 
-		if (DamageDone > 0.f)
+		if (FinalDamage > 0.f)
 		{
-			const float NewHealth = FMath::Clamp(GetHealth() - DamageDone, 0.f, GetMaxHealth());
+			const float NewHealth = FMath::Clamp(GetHealth() - FinalDamage, 0.f, GetMaxHealth());
 			SetHealth(NewHealth);
-			BroadcastHitEvent(Data, DamageDone);
+			BroadcastHitEvent(Data, FinalDamage);
 		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
@@ -97,6 +108,43 @@ void UCombatAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldValue
 void UCombatAttributeSet::OnRep_IncomingDamageMultiplier(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_GuardDamageReduction(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, GuardDamageReduction, OldValue);
+}
+
+
+float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags)
+{
+	UAbilitySystemComponent* TargetASC = &Data.Target;
+	AActor* TargetActor = TargetASC->GetAvatarActor();
+	if (!IsValid(TargetActor))
+	{
+		return RawDamage;
+	}
+	
+	if (!TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding))
+	{
+		return RawDamage;
+	}
+	
+	if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Heavy) ||
+		SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
+	{
+		FGameplayEventData EventData;
+		EventData.Instigator = Data.EffectSpec.GetEffectContext().GetInstigator();
+		EventData.Target     = TargetActor;
+		EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Guard_Broken;
+
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			TargetActor, RetrieveGameplayTags::GameplayEvent_Guard_Broken, EventData);
+
+		return RawDamage;
+	}
+	
+	return RawDamage * (1.0f - GetGuardDamageReduction());
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const

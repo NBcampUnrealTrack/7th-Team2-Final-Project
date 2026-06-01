@@ -23,6 +23,9 @@ public:
 	
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveSetHealth(float Value);
+	
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveTestGuardHit(bool bHeavy);
 
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;
