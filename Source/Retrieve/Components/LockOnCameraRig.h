@@ -49,10 +49,7 @@ private:
 	TWeakObjectPtr<AActor> CurrentTarget;
 	TWeakObjectPtr<USpringArmComponent> SpringArm;
 	FVector SavedSocketOffset = FVector::ZeroVector;
-	
+
 	bool bIsTracking = false;
 	bool bIsReturning = false;
-	bool bSavedUseControllerRotationYaw = false;
-	bool bSavedOrientRotationToMovement = true;
-	
 };

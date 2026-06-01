@@ -175,6 +175,13 @@ void URetrieveHeroComponent::BindPlayerInputs()
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
 
+	// Sprint (Hold) — Started: 임계 도달 시점 / Completed: 뗌 시점
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Sprint, ETriggerEvent::Started,   this, &ThisClass::Input_SprintPressed,  false);
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Sprint, ETriggerEvent::Completed, this, &ThisClass::Input_SprintReleased, false);
+
+	// Crouch (Toggle) — Started에서 한 번만 발동
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Crouch, ETriggerEvent::Started, this, &ThisClass::Input_Crouch, false);
+
 	bInputsBound = true;
 }
 
@@ -276,3 +283,58 @@ void URetrieveHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag
 		}
 	}
 }
+
+// --- ALS 연결 액션 입력 ---
+// Sprint/Crouch는 GAS 상태 태그만 부여/해제. ALS API는 캐릭터의 콜백이 자동 동기화.
+// Roll은 즉시성 액션이라 캐릭터 wrapper를 직접 호출 (LooseTag는 ALS LocomotionAction 변화 시 캐릭터가 자동 처리).
+
+void URetrieveHeroComponent::Input_SprintPressed(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_SprintReleased(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_Crouch(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			// Toggle 방식: 이미 있으면 제거, 없으면 부여
+			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Crouching))
+			{
+				ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
+			}
+			else
+			{
+				ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
+			}
+		}
+	}
+}
+

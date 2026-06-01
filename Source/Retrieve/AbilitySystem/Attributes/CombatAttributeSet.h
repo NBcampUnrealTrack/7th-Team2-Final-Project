@@ -18,6 +18,9 @@ class RETRIEVE_API UCombatAttributeSet : public URetrieveAttributeSet
 public:
 	UCombatAttributeSet();
 
+	/** MoveSpeed Attribute의 기준값(cm/s). 이 값이 ALS DA 속도 그대로(=배율 1.0)에 대응합니다. */
+	static constexpr float ReferenceMoveSpeed = 600.f;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;

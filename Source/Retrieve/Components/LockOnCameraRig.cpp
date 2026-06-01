@@ -2,11 +2,14 @@
 
 #include "LockOnCameraRig.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Data/LockOnCameraConfig.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 ULockOnCameraRig::ULockOnCameraRig()
 {
@@ -51,11 +54,11 @@ void ULockOnCameraRig::TickComponent(float DeltaTime, ELevelTick TickType,
 		FRotator DesiredRot = (TargetLoc - CamLoc).Rotation();
 		DesiredRot.Roll = 0.f;
 		DesiredRot.Pitch = FMath::ClampAngle(DesiredRot.Pitch, Config->MinPitch, Config->MaxPitch);
-	
+
 		const FRotator CurrentRot = PC->GetControlRotation();
 		const FRotator NewRot = FMath::RInterpTo(CurrentRot, DesiredRot, DeltaTime, Config->CameraInterpSpeed);
 		PC->SetControlRotation(NewRot);
-	
+
 		const FVector NewOffset = FMath::VInterpTo(SA->SocketOffset, Config->LockOnSocketOffset, DeltaTime, Config->OffsetInterpSpeed);
 		SA->SocketOffset = NewOffset;
 	}
@@ -159,14 +162,16 @@ void ULockOnCameraRig::StartTracking(AActor* Target)
 
 	if (bIsReturning == false)
 	{
-		bSavedOrientRotationToMovement = MoveComp->bOrientRotationToMovement;
-		bSavedUseControllerRotationYaw = Pawn->bUseControllerRotationYaw;
 		SavedSocketOffset = SA->SocketOffset;
 	}
-	
-	MoveComp->bOrientRotationToMovement = false;
-	Pawn->bUseControllerRotationYaw = true;
-	
+
+	// 회전 모드 전환은 GAS 태그로. 캐릭터의 OnLockOnTagChanged 콜백이
+	// 자동으로 SetDesiredRotationMode(ViewDirection)를 호출합니다.
+	if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+	{
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::LockOn_Active);
+	}
+
 	CurrentTarget = Target;
 	bIsTracking = true;
 	bIsReturning = false;
@@ -181,24 +186,19 @@ void ULockOnCameraRig::StopTracking(bool bImmediateRestore)
 	}
 	
 	const bool bWasTracking = bIsTracking;
-	
-	APawn* Pawn = OwnerPawn.Get();
-	UCharacterMovementComponent* MoveComp = MovementComp.Get();
-	USpringArmComponent* SA = SpringArm.Get();
-	
-	if (bWasTracking)
-	{
-		if (IsValid(MoveComp))
-		{
-			MoveComp->bOrientRotationToMovement = bSavedOrientRotationToMovement;
-		}
 
-		if (IsValid(Pawn))
+	APawn* Pawn = OwnerPawn.Get();
+	USpringArmComponent* SA = SpringArm.Get();
+
+	if (bWasTracking && IsValid(Pawn))
+	{
+		// 회전 모드 복귀는 GAS 태그 제거로. 캐릭터 콜백이 자동으로 VelocityDirection 복귀.
+		if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
 		{
-			Pawn->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+			ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::LockOn_Active);
 		}
 	}
-	
+
 	CurrentTarget = nullptr;
 	bIsTracking = false;
 	if (bImmediateRestore)

@@ -31,6 +31,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TSoftObjectPtr<UAnimMontage> DashMontage;
 
+	/** Dash 몽타주 기본 재생 속도. 1.0=ALS 원본. 최종 PlayRate = Base × (MoveSpeed / ReferenceMoveSpeed). */
+	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.1"))
+	float BaseDashPlayRate = 1.35f;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 };

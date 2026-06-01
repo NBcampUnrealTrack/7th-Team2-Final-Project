@@ -5,7 +5,6 @@
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Character/RetrieveCombatCharacter.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/Widget.h"
@@ -562,13 +561,15 @@ void ARetrievePlayerController::TryBindHealthToHUD()
 		return;
 	}
 	
-	ARetrieveCombatCharacter* Combatant = Cast<ARetrieveCombatCharacter>(GetPawn());
-	if (!Combatant)
+	APawn* OwnerPawn = GetPawn();
+	if (!OwnerPawn)
 	{
 		return;
 	}
-	
-	if (URetrieveHealthComponent* Health = Combatant->GetHealthComponent())
+
+	// 모든 Pawn 공통 처리는 컴포넌트 조회로 통일 (TEAMRULE 진입 규약).
+	// Sovereign이 ALS 가지로 옮겨가도, 어떤 자식 가지의 Pawn이든 HealthComponent 보유 시 작동.
+	if (URetrieveHealthComponent* Health = OwnerPawn->FindComponentByClass<URetrieveHealthComponent>())
 	{
 		PlayerStatus->BindToHealth(Health);
 	}

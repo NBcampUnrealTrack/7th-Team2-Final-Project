@@ -2,8 +2,8 @@
 #include "SovereignAnimInstance.h"
 
 #include "AbilitySystemGlobals.h"
-#include "Character/RetrieveCharacter.h"
 #include "Components/RetrieveCharacterMovementComponent.h"
+#include "GameFramework/Character.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -49,7 +49,8 @@ void USovereignAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
-	const ARetrieveCharacter* Character = Cast<ARetrieveCharacter>(GetOwningActor());
+	// ACharacter::GetCharacterMovement()로 직접 접근 — Sovereign이 ALS 가지로 옮겨가도 작동
+	const ACharacter* Character = Cast<ACharacter>(GetOwningActor());
 	if (!Character) { return; }
 
 	URetrieveCharacterMovementComponent* MoveComp = Cast<URetrieveCharacterMovementComponent>(Character->GetCharacterMovement());
