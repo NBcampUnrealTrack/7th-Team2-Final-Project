@@ -2,6 +2,8 @@
 
 #include "CombatReactionComponent.h"
 
+#include "Data/LockOnConfig.h"
+#include "Data/LockOnCameraConfig.h" 
 #include "LockOnCameraRig.h"
 #include "LockOnTargetHighlighter.h"
 #include "Components/LockOnComponent.h"
@@ -31,6 +33,11 @@ void UCombatReactionComponent::BeginPlay()
 	
 	if (IsValid(LockOnComp))
 	{
+		if (IsValid(LockOnConfig) == false)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ReactionComp] LockOnConfig 미지정."));
+		}
+		LockOnComp->SetConfig(LockOnConfig);
 		LockOnComp->OnTargetChanged.AddUniqueDynamic(this, &UCombatReactionComponent::HandleLockOnTargetChanged);
 	}
 	
@@ -43,6 +50,12 @@ void UCombatReactionComponent::BeginPlay()
 	
 	if (IsValid(LockOnCameraRigComp))
 	{
+		if (IsValid(LockOnCameraConfig) == false)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[ReactionComp] LockOnCameraConfig 미지정."));
+		}
+		LockOnCameraRigComp->SetConfig(LockOnCameraConfig);
 		LockOnCameraRigComp->Initialize();
 	}
 	

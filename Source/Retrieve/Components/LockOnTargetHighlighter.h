@@ -12,7 +12,7 @@
  * PostProcess 머티리얼이 Stencil_ID == LockOnStencilValue인 픽셀에 외곽선을 그리도록 한다
  * UCombatReactionComponent가 멤버로 소유(추후 다른 상황에서도 사용시 서브시스템으로 승격)
  */
-UCLASS()
+UCLASS(BlueprintType)
 class RETRIEVE_API ULockOnTargetHighlighter : public UObject
 {
 	GENERATED_BODY()

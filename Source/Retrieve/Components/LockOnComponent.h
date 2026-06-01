@@ -3,13 +3,15 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Engine/EngineTypes.h"
 #include "Engine/TimerHandle.h"
+#include "GameplayTagContainer.h"
 #include "LockOnComponent.generated.h"
 
 class APlayerController;
 class APlayerCameraManager;
 class APawn;
+class ULockOnConfig;
+class UAbilitySystemComponent;   
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnTargetChanged, AActor*, NewTarget);
 
@@ -18,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnTargetChanged, AActor*, New
  * 락온 활성화 시 ASC에 LockOn_Active 태그 부여, 거리/시야/사망을 감시해 자동 해제
  */
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = "Retrieve", meta=(BlueprintSpawnableComponent))
 class RETRIEVE_API ULockOnComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -28,6 +30,8 @@ public:
 	
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	// 튜닝 파라미터 주입
+	void SetConfig(ULockOnConfig* InConfig);
 	// 베스트 후보가 있다면 락온 시작
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|LockOn")
 	bool StartLockOn();
@@ -50,38 +54,10 @@ public:
 	FOnLockOnTargetChanged OnTargetChanged;
 	
 protected:
-	// Search params (1주차 검증 후 ULockOnConfig DataAsset으로 분리 예정)
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Search")
-	float MaxDistance = 2500.f;
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Search")
-	float SphereRadius = 600.f;
-	// SphereTrace 대상 기본은 Pawn
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Search")
-	TArray<TEnumAsByte<EObjectTypeQuery>> SearchObjectTypes;
-	// 시야 검증에 쓸 채널 기본은 Visibility
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Search")
-	TEnumAsByte<ECollisionChannel> LineOfSightChannel = ECC_Visibility;
-	// Scoring weights
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Scoring", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ScreenWeight = 0.7f;
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Scoring", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float DistanceWeight = 0.3f;
-	// 화면 중앙으로부터 정규화 거리 이 이상이면 후보 제외
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Scoring", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float MaxScreenDistance = 0.8f;
-	// Switch / break
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Switch")
-	float SwitchInputThreshold = 0.5f;
-	// 현재 타겟과의 거리가 이 값을 넘으면 자동 해제
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Break")
-	float BreakDistance = 3000.f;
-	// 자동 해제 체크 주기(초). 0.1 = 10Hz.
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|LockOn|Break", meta = (ClampMin = "0.05", ClampMax = "1.0"))
-	float MonitorInterval = 0.1f;
-	// Debug
-	UPROPERTY(EditAnywhere, Category = "Retrieve|LockOn|Debug")
-	bool bDebugDraw = true;
-
+	// 튜닝 파라미터 DataAsset(ReactionComponent에서 주입)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|LockOn")
+	TObjectPtr<ULockOnConfig> Config;
+	
 private:
 	// MonitorTimer 콜백 락온 유지 가능 여부 체크
 	void MonitorTick();
@@ -99,6 +75,10 @@ private:
 	bool ShouldBreakLockOn() const;
 	bool IsTargetDead(const AActor* Target) const;
 	void ApplyLockOnTag(bool bAdd) const;
+	// 타겟 사망 태그 이벤트 구독/해제 (폴링 대체)
+	void SubscribeTargetDeath(AActor* Target);
+	void UnsubscribeTargetDeath();
+	void OnTargetDeadTagChanged(const FGameplayTag Tag, int32 Count);
 	
 	// State
 	TWeakObjectPtr<AActor> CurrentTarget;
@@ -107,4 +87,8 @@ private:
 	TWeakObjectPtr<APlayerCameraManager> CachedCameraManager;
 	
 	FTimerHandle MonitorTimerHandle; 
+	// 사망 이벤트 구독 상태
+	TWeakObjectPtr<UAbilitySystemComponent> SubscribedASC;
+	FDelegateHandle EnemyDeadHandle;
+	FDelegateHandle BossDeadHandle;
 };

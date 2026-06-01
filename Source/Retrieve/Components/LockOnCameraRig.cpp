@@ -2,6 +2,7 @@
 
 #include "LockOnCameraRig.h"
 
+#include "Data/LockOnCameraConfig.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -31,11 +32,13 @@ void ULockOnCameraRig::TickComponent(float DeltaTime, ELevelTick TickType,
 	if (bIsTracking)
 	{
 		// 추적 중 의존성이 무효화되면 모드 갇힘 방지 위해 정리
-		if (IsValid(Pawn) == false || IsValid(PC) == false || IsValid(Target) == false || IsValid(SA) == false)
+		if (IsValid(Pawn) == false || IsValid(PC) == false 
+			|| IsValid(Target) == false
+			|| IsValid(SA) == false || IsValid(Config) == false)
 		{
 			UE_LOG(LogTemp, Warning,
-				TEXT("[LockOnCameraRig] Tracking stopped: runtime reference became invalid (Pawn=%d, PC=%d, Target=%d, SpringArm=%d)"),
-				IsValid(Pawn), IsValid(PC), IsValid(Target), IsValid(SA));
+				TEXT("[LockOnCameraRig] Tracking stopped: runtime reference became invalid (Pawn=%d, PC=%d, Target=%d, SpringArm=%d, Config=%d)"),
+				IsValid(Pawn), IsValid(PC), IsValid(Target), IsValid(SA), IsValid(Config));
 			StopTracking();
 			return;
 		}
@@ -44,16 +47,16 @@ void ULockOnCameraRig::TickComponent(float DeltaTime, ELevelTick TickType,
 		FRotator CamRot;
 		PC->GetPlayerViewPoint(CamLoc, CamRot);
 	
-		const FVector TargetLoc = Target->GetActorLocation() + FVector(0.f, 0.f, TargetVerticalOffset);
+		const FVector TargetLoc = Target->GetActorLocation() + FVector(0.f, 0.f, Config->TargetVerticalOffset);
 		FRotator DesiredRot = (TargetLoc - CamLoc).Rotation();
 		DesiredRot.Roll = 0.f;
-		DesiredRot.Pitch = FMath::ClampAngle(DesiredRot.Pitch, MinPitch, MaxPitch);
+		DesiredRot.Pitch = FMath::ClampAngle(DesiredRot.Pitch, Config->MinPitch, Config->MaxPitch);
 	
 		const FRotator CurrentRot = PC->GetControlRotation();
-		const FRotator NewRot = FMath::RInterpTo(CurrentRot, DesiredRot, DeltaTime, CameraInterpSpeed);
+		const FRotator NewRot = FMath::RInterpTo(CurrentRot, DesiredRot, DeltaTime, Config->CameraInterpSpeed);
 		PC->SetControlRotation(NewRot);
 	
-		const FVector NewOffset = FMath::VInterpTo(SA->SocketOffset, LockOnSocketOffset, DeltaTime, OffsetInterpSpeed);
+		const FVector NewOffset = FMath::VInterpTo(SA->SocketOffset, Config->LockOnSocketOffset, DeltaTime, Config->OffsetInterpSpeed);
 		SA->SocketOffset = NewOffset;
 	}
 	else
@@ -65,7 +68,8 @@ void ULockOnCameraRig::TickComponent(float DeltaTime, ELevelTick TickType,
 			return;
 		}
 		// SocketOffset 백업값으로 보간 복원(모드/카메라 회전은 이미 자유 상태)
-		const FVector NewOffset = FMath::VInterpTo(SA->SocketOffset, SavedSocketOffset, DeltaTime, OffsetInterpSpeed);
+		const float OffsetSpeed = IsValid(Config) ? Config->OffsetInterpSpeed : 6.f;
+		const FVector NewOffset = FMath::VInterpTo(SA->SocketOffset, SavedSocketOffset, DeltaTime, OffsetSpeed);
 		SA->SocketOffset = NewOffset;
 		// 거의 도달했으면 종료 (VInterpTo는 점근적이라 명시적 종료 필요)
 		if (FVector::DistSquared(NewOffset, SavedSocketOffset) < 0.25f)
@@ -106,6 +110,15 @@ void ULockOnCameraRig::Initialize()
 	OwnerPC = Cast<APlayerController>(Pawn->GetController());
 }
 
+void ULockOnCameraRig::SetConfig(ULockOnCameraConfig* InConfig)
+{
+	if (IsValid(InConfig) == false)
+	{
+		return;
+	}
+	Config = InConfig;
+}
+
 void ULockOnCameraRig::StartTracking(AActor* Target)
 {
 	if (IsValid(Target) == false)
@@ -122,11 +135,11 @@ void ULockOnCameraRig::StartTracking(AActor* Target)
 	APawn* Pawn = OwnerPawn.Get();
 	UCharacterMovementComponent* MoveComp = MovementComp.Get();
 	USpringArmComponent* SA = SpringArm.Get();
-	if (IsValid(Pawn) == false || IsValid(MoveComp) == false || IsValid(SA) == false)
+	if (IsValid(Pawn) == false || IsValid(MoveComp) == false || IsValid(SA) == false || IsValid(Config) == false)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("[LockOnCameraRig] StartTracking rejected: dependency invalid (Pawn=%d, MoveComp=%d, SpringArm=%d)"),
-			IsValid(Pawn), IsValid(MoveComp), IsValid(SA));
+	TEXT("[LockOnCameraRig] StartTracking rejected: dependency invalid (Pawn=%d, MoveComp=%d, SpringArm=%d, Config=%d)"),
+	IsValid(Pawn), IsValid(MoveComp), IsValid(SA), IsValid(Config));
 		return;
 	}
 	
