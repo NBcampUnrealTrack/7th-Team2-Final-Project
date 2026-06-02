@@ -228,7 +228,7 @@ UENUM(BlueprintType)
 enum class EBurstAttackType : uint8
 {
 	Cleave           UMETA(DisplayName = "단일 강타"),
-	GroundEruption   UMETA(DisplayName = "지면 분출"),
+	WorldActor       UMETA(DisplayName = "월드 액터 (소환물)"),
 	Projectile       UMETA(DisplayName = "투사체"),
 	Dash             UMETA(DisplayName = "돌진"),
 	AreaOfEffect     UMETA(DisplayName = "주변 AoE")
@@ -259,6 +259,11 @@ struct RETRIEVE_API FBurstHitInstance
 	/** 소켓 오버라이드. 비우면 HitSource 기본값 사용. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	FName SocketOverride = NAME_None;
+
+	/** 발사 시 검기 기울임 각도(도). Projectile 전용. 진행 방향은 정면 고정, 검기 자세만 진행축 기준 회전.
+	 *  예: 3연격을 -30 / 0 / +30 으로 주면 부채살처럼 기울어진 검기. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
+	float LaunchRollAngle = 0.f;
 
 	/** 이 타격에서 재생할 적중 VFX. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
@@ -297,9 +302,9 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	float DashDistance = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EBurstAttackType::AreaOfEffect", ClampMin = "0.0"))
 	float AoeRadius = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::GroundEruption", ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::WorldActor", ClampMin = "0.0"))
 	float WorldSpawnDistance = 300.f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::GroundEruption"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::WorldActor"))
 	TSubclassOf<AActor> WorldSpawnActorClass;
 	// ---- Damage --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Damage")

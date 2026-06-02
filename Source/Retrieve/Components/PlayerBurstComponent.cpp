@@ -1,5 +1,6 @@
 #include "Components/PlayerBurstComponent.h"
 
+#include "AbilitySystem/Player/BurstProjectile.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
@@ -36,11 +38,13 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 	PerHitHitActors.SetNum(HitCount);
 	PerHitPreviousOrigin.SetNum(HitCount);
 	PerHitHasPrevious.SetNum(HitCount);
+	PerHitProjectileSpawned.SetNum(HitCount);
 	for (int32 Index = 0; Index < HitCount; ++Index)
 	{
 		PerHitHitActors[Index].Reset();
 		PerHitPreviousOrigin[Index] = FVector::ZeroVector;
 		PerHitHasPrevious[Index] = false;
+		PerHitProjectileSpawned[Index] = false;
 	}
 
 	UE_LOG(LogRetrieveCombat, Log,
@@ -60,6 +64,7 @@ void UPlayerBurstComponent::EndBurstSkill()
 	PerHitHitActors.Reset();
 	PerHitPreviousOrigin.Reset();
 	PerHitHasPrevious.Reset();
+	PerHitProjectileSpawned.Reset();
 }
 
 void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
@@ -87,11 +92,11 @@ void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
 
 	switch (ActiveSkill->AttackType)
 	{
-	case EBurstAttackType::Cleave:         DoCleaveHit(Hit, HitIndex); break;
-	case EBurstAttackType::GroundEruption: DoGroundEruptionHit(Hit, HitIndex); break;
-	case EBurstAttackType::Projectile:     DoProjectileHit(Hit, HitIndex); break;
-	case EBurstAttackType::Dash:           DoDashHit(Hit, HitIndex); break;
-	case EBurstAttackType::AreaOfEffect:   DoAoEHit(Hit, HitIndex); break;
+	case EBurstAttackType::Cleave:       DoCleaveHit(Hit, HitIndex); break;
+	case EBurstAttackType::WorldActor:   DoWorldActorHit(Hit, HitIndex); break;
+	case EBurstAttackType::Projectile:   DoProjectileHit(Hit, HitIndex); break;
+	case EBurstAttackType::Dash:         DoDashHit(Hit, HitIndex); break;
+	case EBurstAttackType::AreaOfEffect: DoAoEHit(Hit, HitIndex); break;
 	default: break;
 	}
 }
@@ -212,6 +217,11 @@ void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FV
 	}
 }
 
+void UPlayerBurstComponent::ReportProjectileHit(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult)
+{
+	ApplyHitToTarget(Target, Hit, HitResult);
+}
+
 void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult)
 {
 	if (!IsValid(Target) || !ActiveSkill || !IsValid(ActiveSkill->DamageEffect)) return;
@@ -241,13 +251,111 @@ void UPlayerBurstComponent::DoCleaveHit(const FBurstHitInstance& Hit, int32 HitI
 
 void UPlayerBurstComponent::DoProjectileHit(const FBurstHitInstance& Hit, int32 HitIndex)
 {
-	// TODO: ActiveSkill->ProjectileClass를 SpawnActor하고, Projectile OnHit 콜백에서
-	//       이 컴포넌트의 ApplyHitToTarget을 호출하도록 연결.
+	// 중복 스폰 방지: NotifyTick 으로 매 프레임 호출되더라도 같은 HitIndex 는 1회만 발사
+	if (PerHitProjectileSpawned.IsValidIndex(HitIndex) && PerHitProjectileSpawned[HitIndex])
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner) || !ActiveSkill) return;
+	if (!Owner->HasAuthority()) return;
+	if (!IsValid(ActiveSkill->ProjectileClass)) return;
+
+	UWorld* World = Owner->GetWorld();
+	if (!IsValid(World)) return;
+
+	if (!ActiveSkill->ProjectileClass->IsChildOf(ABurstProjectile::StaticClass()))
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[PlayerBurstComponent] DoProjectileHit: ProjectileClass %s is not ABurstProjectile subclass."),
+			*GetNameSafe(ActiveSkill->ProjectileClass));
+		return;
+	}
+
+	const FVector SpawnLocation = ResolveSourceLocation(Hit);
+	// 검기 기울임: 진행 방향은 정면 고정(Vector()는 Roll 무시), 자세만 진행축 기준 회전.
+	FRotator SpawnRotation = Owner->GetActorRotation();
+	SpawnRotation.Roll += Hit.LaunchRollAngle;
+	const FVector LaunchDirection = SpawnRotation.Vector();
+	const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
+
+	APawn* InstigatorPawn = Cast<APawn>(Owner);
+
+	ABurstProjectile* Projectile = World->SpawnActorDeferred<ABurstProjectile>(
+		ActiveSkill->ProjectileClass,
+		SpawnTransform,
+		Owner,
+		InstigatorPawn,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+
+	if (!IsValid(Projectile))
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[PlayerBurstComponent] DoProjectileHit: SpawnActorDeferred failed. Owner=%s, HitIndex=%d"),
+			*GetNameSafe(Owner), HitIndex);
+		return;
+	}
+
+	Projectile->Initialize(Hit, Owner);
+	Projectile->FinishSpawning(SpawnTransform);
+	Projectile->Launch(LaunchDirection, DefaultProjectileSpeed);
+
+	// 스폰 성공 → 같은 HitIndex 재호출 차단
+	if (PerHitProjectileSpawned.IsValidIndex(HitIndex))
+	{
+		PerHitProjectileSpawned[HitIndex] = true;
+	}
+
+	UE_LOG(LogRetrieveCombat, Log,
+		TEXT("[PlayerBurstComponent] DoProjectileHit. HitIndex=%d, Class=%s"),
+		HitIndex,
+		*GetNameSafe(ActiveSkill->ProjectileClass));
 }
 
-void UPlayerBurstComponent::DoGroundEruptionHit(const FBurstHitInstance& Hit, int32 HitIndex)
+void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 HitIndex)
 {
-	SweepAndApply(Hit, ResolveSourceLocation(Hit), GroundEruptionRadius, HitIndex);
+	// 첫 호출 시 World 액터 1개 스폰. 이후 호출은 같은 액터의 영역에서 sweep만 수행.
+	if (HitIndex == 0 && !SpawnedWorldActor.IsValid())
+	{
+		AActor* Owner = GetOwner();
+		if (IsValid(Owner) && Owner->HasAuthority() && ActiveSkill && IsValid(ActiveSkill->WorldSpawnActorClass))
+		{
+			UWorld* World = Owner->GetWorld();
+			if (IsValid(World))
+			{
+				const FVector SpawnLocation = Owner->GetActorLocation()
+					+ Owner->GetActorForwardVector() * ActiveSkill->WorldSpawnDistance;
+				const FRotator SpawnRotation = Owner->GetActorRotation();
+				const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
+
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.Owner = Owner;
+				SpawnParams.Instigator = Cast<APawn>(Owner);
+				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+				AActor* Spawned = World->SpawnActor<AActor>(
+					ActiveSkill->WorldSpawnActorClass, SpawnTransform, SpawnParams);
+
+				if (IsValid(Spawned))
+				{
+					SpawnedWorldActor = Spawned;
+					UE_LOG(LogRetrieveCombat, Log,
+						TEXT("[PlayerBurstComponent] DoWorldActorHit. Spawned %s at %s"),
+						*GetNameSafe(Spawned), *SpawnLocation.ToCompactString());
+				}
+				else
+				{
+					UE_LOG(LogRetrieveCombat, Warning,
+						TEXT("[PlayerBurstComponent] DoWorldActorHit. SpawnActor failed. Class=%s"),
+						*GetNameSafe(ActiveSkill->WorldSpawnActorClass));
+				}
+			}
+		}
+	}
+
+	// 매 HitIndex 마다 sweep + 데미지 적용
+	SweepAndApply(Hit, ResolveSourceLocation(Hit), WorldActorRadius, HitIndex);
 }
 
 void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitIndex)

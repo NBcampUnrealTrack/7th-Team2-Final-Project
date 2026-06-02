@@ -1,0 +1,65 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "BurstWorldActorBase.generated.h"
+
+class USceneComponent;
+class UCurveFloat;
+
+/**
+ * 버스트 스킬의 월드 소환 액터 베이스
+ *
+ * PlayerBurstComponent::DoWorldActorHit 이 SpawnActor 로 생성
+ * 데미지 판정은 컴포넌트의 Sweep 이 담당, 이 액터는 비주얼 + 등장 모션만 책임
+ * 비주얼(Mesh/Niagara)은 BP 자식에서 SceneRoot 아래로 추가
+ *
+ */
+UCLASS()
+class RETRIEVE_API ABurstWorldActorBase : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ABurstWorldActorBase();
+
+protected:
+	virtual void BeginPlay() override;
+
+public:
+	virtual void Tick(float DeltaTime) override;
+
+protected:
+	/** 루트. 비주얼은 BP 에서 이 아래에 붙인다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Burst|World", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneComponent> SceneRoot;
+
+	/** 자체 수명(초). 0 이하면 무제한. BeginPlay 에서 SetLifeSpan. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World", meta = (ClampMin = "0.0"))
+	float LifeTime = 1.5f;
+
+	/** 등장 시작 높이 오프셋. 양수=위에서 시작(내려찍기), 음수=아래에서 시작(솟구침). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Motion")
+	float SpawnHeightOffset = 300.f;
+
+	/** 시작 위치 → 목표 위치 도달 시간(초). 0 이하면 즉시 목표 위치. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Motion", meta = (ClampMin = "0.0"))
+	float MoveDuration = 0.3f;
+
+	/** 보간 가속 곡선(0~1 정규화 시간 → 0~1 진행도). 없으면 EaseIn(가속) 기본. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Motion")
+	TObjectPtr<UCurveFloat> MoveCurve;
+
+private:
+	/** 등장 모션 목표(스폰 시 전달된 위치). */
+	FVector TargetLocation = FVector::ZeroVector;
+
+	/** 등장 모션 시작 위치(목표에서 Z 오프셋 적용). */
+	FVector StartLocation = FVector::ZeroVector;
+
+	/** 등장 모션 경과 시간. */
+	float MoveElapsed = 0.f;
+
+	/** 등장 모션 진행 중 여부. */
+	bool bMoving = false;
+};

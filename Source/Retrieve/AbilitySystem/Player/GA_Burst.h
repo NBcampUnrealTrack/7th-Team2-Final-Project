@@ -45,6 +45,7 @@ private:
 		const TMap<FGameplayTag, int32>& CurrentPattern);
 
 	UFUNCTION() void HandleMontageCompleted();
+	UFUNCTION() void HandleMontageBlendOut();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
 
