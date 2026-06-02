@@ -563,6 +563,69 @@ struct RETRIEVE_API FRetrieveMaterialItemRow : public FTableRowBase
 	FText ShortDescription;
 };
 
+// 화톳불 저장 시 플레이어 복원 기준 스냅샷
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveLoadSnapshotData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FName BonfireId = NAME_None;
+
+	// World Partition 구조 — 단일 퍼시스턴트 레벨이므로 확장 지점으로만 유지
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FName LevelName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FTransform PlayerTransform = FTransform::Identity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	float SavedHealth = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FName EquippedWeaponId = NAME_None;
+};
+
+// 인벤토리 / 진행 상태 저장 데이터
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveInventoryProgressSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FRetrieveInventorySaveData Inventory;
+
+	// 퀘스트 / 대사 분기 구현 시 연결 — 현재는 확장 지점만 유지
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TMap<FName, FGameplayTag> ChoiceHistory;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FGameplayTagContainer ProgressTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FGameplayTag FinalEndingChoiceTag;
+};
+
+// 제작 레시피 데이터 테이블 Row. RowName == RecipeId
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveCraftRecipeRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft")
+	TArray<FRetrieveItemStack> RequiredMaterials;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft")
+	FRetrieveItemStack OutputItem;
+
+	// 해당 태그를 보유한 경우에만 레시피 표시
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft")
+	FGameplayTagContainer RequiredProgressTags;
+};
+
 // UI 아이콘 조회용 테이블. RowName은 ItemId와 동일하게 사용
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FRetrieveItemIconRow : public FTableRowBase
