@@ -5,7 +5,10 @@
 #include "Core/RetrieveSessionState.h"
 #include "RetrieveGameState.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRetrieveSessionStateChanged, ERetrieveSessionState, Previous, ERetrieveSessionState, New);
+class UQuestBranchComponent;
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRetrieveSessionStateChanged, ERetrieveSessionState, Previous,
+                                             ERetrieveSessionState, New);
+
 
 UCLASS()
 class RETRIEVE_API ARetrieveGameState : public AGameStateBase
@@ -23,6 +26,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Session")
 	APawn* GetHostPawn() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
+	UQuestBranchComponent* GetQuestBranchComponent() const { return QuestBranchComponent; }
 	
 	/** 서버 전용. 전환이 수락되면 true를 반환합니다. */
 	bool TransitionTo(ERetrieveSessionState NewState);
@@ -42,6 +48,9 @@ protected:
 	
 	UPROPERTY(Replicated)
 	TObjectPtr<APlayerState> HostPlayerState;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest")
+	TObjectPtr<UQuestBranchComponent> QuestBranchComponent;
 	
 	UFUNCTION()
 	void OnRep_SessionState(ERetrieveSessionState Previous);

@@ -1,8 +1,10 @@
 #include "Core/RetrieveGameMode.h"
 
 #include "RetrieveGameState.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerController.h"
 #include "Player/RetrievePlayerState.h"
+#include "Quest/QuestBranchComponent.h"
 
 ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -34,6 +36,7 @@ void ARetrieveGameMode::OnWorldReadyForGameplay()
 	{
 		GS->TransitionTo(ERetrieveSessionState::MainMenu);
 		GS->TransitionTo(ERetrieveSessionState::InGame); // 메인메뉴 생성 전까지 임시
+		BootstrapNewGameQuest(); // 임시
 	}
 }
 
@@ -45,6 +48,7 @@ void ARetrieveGameMode::HandleNewGame(APlayerController* Requestor)
 	}
 	
 	// TODO: 퀘스트, 봉인 게이트, 가디언 코어 등 필드 리셋 훅 추가
+	BootstrapNewGameQuest();
 	
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
@@ -94,4 +98,19 @@ bool ARetrieveGameMode::IsRequestorHost(const APlayerController* Requestor) cons
 	
 	const ARetrieveGameState* GS = GetRetrieveGameState();
 	return GS && GS->GetHostPlayerState() == Requestor->PlayerState;
+}
+
+void ARetrieveGameMode::BootstrapNewGameQuest()
+{
+	ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS)
+	{
+		return;
+	}
+	
+	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+	{
+		Quest->ResetForTest();
+		Quest->CompleteStep(RetrieveGameplayTags::Quest_Step_Awakening);
+	}
 }

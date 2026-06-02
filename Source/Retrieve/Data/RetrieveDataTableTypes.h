@@ -582,3 +582,32 @@ struct RETRIEVE_API FRetrieveItemIconRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Icon")
 	FLinearColor AccentColor = FLinearColor::White;
 };
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FQuestStep : public FTableRowBase
+{
+	GENERATED_BODY()
+	
+	/** 이 Step의 표준 ID. 행 이름이 아닌 태그로 조회함(Quest.Step.*) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	FGameplayTag StepTag;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest", meta = (MultiLine = true))
+	FText TrackerText;
+	
+	/** 이 Step이 완료되기 전에 이미 완료되어 있어야 하는 태그 목록. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	TArray<FGameplayTag> Prerequisites;
+	
+	/** 선행 조건이 충족되는 즉시 자동 완료됨: SealUnlocked만 true */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	bool bAutoCompleteWhenPrereqsMet = false;
+	
+	/** GameState를 ERetrieveSessionState::Result로 전환함: GameComplete만 true */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	bool bAdvancesSessionToResult = false;
+	
+	/** <Element>SigilActivated 행만 채우기: Channel.Quest.GuardianDefeated 페이로드에 포함됨. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	FGameplayTag UnlockElementTag;
+};
