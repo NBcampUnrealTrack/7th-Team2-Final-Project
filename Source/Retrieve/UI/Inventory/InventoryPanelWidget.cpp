@@ -1,11 +1,14 @@
 #include "UI/Inventory/InventoryPanelWidget.h"
 
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/InventoryComponent.h"
+#include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -22,6 +25,7 @@ UInventoryPanelWidget::UInventoryPanelWidget(const FObjectInitializer& ObjectIni
 {
 	WeaponTabCategoryTag = RetrieveGameplayTags::Item_Weapon;
 	ConsumableTabCategoryTag = RetrieveGameplayTags::Item_Consumable;
+	MaterialTabCategoryTag = RetrieveGameplayTags::Item_Material;
 	CurrentCategoryTag = WeaponTabCategoryTag;
 }
 
@@ -62,6 +66,9 @@ void UInventoryPanelWidget::InitializeInventoryPanel(UInventoryComponent* InInve
 
 void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 {
+	// 탭 전환 시 정렬 모드 초기화 (이전 탭의 정렬 기준이 다른 탭에 남지 않도록)
+	CurrentSortMode = EInventorySortMode::None;
+
 	ActiveTabIndex = TabIndex;
 	OnTabSwitchRequested.Broadcast(TabIndex);
 
@@ -73,6 +80,11 @@ void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 	else if (TabIndex == 1)
 	{
 		CurrentCategoryTag = ConsumableTabCategoryTag;
+		RefreshInventoryView(true);
+	}
+	else if (TabIndex == 2)
+	{
+		CurrentCategoryTag = MaterialTabCategoryTag;
 		RefreshInventoryView(true);
 	}
 
@@ -104,6 +116,7 @@ void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTa
 	RefreshWeaponComparisonText();
 	UpdateQuickSlotActionButtons();
 	OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
+	RefreshSelectedMaterialDetails();
 }
 
 bool UInventoryPanelWidget::ActivateSelectedItem()
@@ -404,6 +417,72 @@ bool UInventoryPanelWidget::GetSelectedConsumableData(FRetrieveConsumableItemRow
 	return false;
 }
 
+bool UInventoryPanelWidget::GetSelectedMaterialData(FRetrieveMaterialItemRow& OutMaterialData) const
+{
+	UDataTable* Table = ResolveMaterialItemTable();
+	if (!Table || SelectedItemId.IsNone() || !IsMaterialCategory(SelectedItemCategoryTag))
+	{
+		return false;
+	}
+
+	if (const FRetrieveMaterialItemRow* Row = Table->FindRow<FRetrieveMaterialItemRow>(SelectedItemId, TEXT("UInventoryPanelWidget::GetSelectedMaterialData")))
+	{
+		OutMaterialData = *Row;
+		return true;
+	}
+	return false;
+}
+
+UDataTable* UInventoryPanelWidget::ResolveMaterialItemTable() const
+{
+	return MaterialItemTable
+		? MaterialItemTable.Get()
+		: LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem"));
+}
+
+void UInventoryPanelWidget::RefreshSelectedMaterialDetails()
+{
+	FRetrieveMaterialItemRow Material;
+	if (!GetSelectedMaterialData(Material))
+	{
+		return;
+	}
+
+	const int32 Quantity = InventoryComponent
+		? InventoryComponent->GetItemCount(SelectedItemId)
+		: 0;
+	const FText DisplayName = Material.DisplayName.IsEmpty()
+		? FText::FromName(SelectedItemId)
+		: Material.DisplayName;
+
+	if (Text_DetailType)
+	{
+		Text_DetailType->SetText(FText::FromString(TEXT("Material")));
+	}
+	if (Text_DetailState)
+	{
+		Text_DetailState->SetText(FText::FromString(FString::Printf(TEXT("Owned: %d"), Quantity)));
+	}
+	if (Text_DetailName)
+	{
+		Text_DetailName->SetText(DisplayName);
+	}
+	if (Text_DetailMainStat)
+	{
+		Text_DetailMainStat->SetText(FText::FromString(FString::Printf(TEXT("Max Stack: %d"), Material.MaxStack)));
+	}
+	if (Text_DetailElement)
+	{
+		Text_DetailElement->SetText(FText::FromString(GetGameplayTagLeaf(Material.ElementTag)));
+	}
+	if (Text_DetailDescription)
+	{
+		Text_DetailDescription->SetText(Material.ShortDescription);
+	}
+}
+
 bool UInventoryPanelWidget::GetItemIconData(FName ItemId, FRetrieveItemIconRow& OutIconData) const
 {
 	if (!ItemIconTable || ItemId.IsNone())
@@ -434,6 +513,7 @@ void UInventoryPanelWidget::HandleInventoryChanged()
 	UpdateQuickSlotPanel();
 	UpdateQuickSlotActionButtons();
 	OnInventoryListChanged.Broadcast();
+	RefreshSelectedMaterialDetails();
 }
 
 void UInventoryPanelWidget::HandleEquippedWeaponChanged(FName WeaponItemId)
@@ -470,12 +550,12 @@ void UInventoryPanelWidget::HandleUnassignQuickSlotClicked()
 
 void UInventoryPanelWidget::HandleAssignSlot4Clicked()
 {
-	AssignSelectedConsumableToSlot(4);
+	AssignSelectedConsumableToSlot(UInventoryComponent::QuickSlotPrimaryKey);
 }
 
 void UInventoryPanelWidget::HandleAssignSlot5Clicked()
 {
-	AssignSelectedConsumableToSlot(5);
+	AssignSelectedConsumableToSlot(UInventoryComponent::QuickSlotSecondaryKey);
 }
 
 void UInventoryPanelWidget::HandleCancelQuickSlotAssignClicked()
@@ -488,6 +568,11 @@ void UInventoryPanelWidget::HandleConsumableSlotChanged(int32 SlotKey, FName Ite
 	UpdateQuickSlotPanel();
 	UpdateQuickSlotActionButtons();
 	OnInventoryListChanged.Broadcast();
+}
+
+void UInventoryPanelWidget::HandleMaterialTabClicked()
+{
+	OpenTab(2);
 }
 
 void UInventoryPanelWidget::BindInventoryEvents()
@@ -508,6 +593,12 @@ void UInventoryPanelWidget::BindInventoryEvents()
 
 void UInventoryPanelWidget::BindButtonEvents()
 {
+	if (Button_TabMaterial)
+	{
+		Button_TabMaterial->OnClicked.RemoveDynamic(this, &ThisClass::HandleMaterialTabClicked);
+		Button_TabMaterial->OnClicked.AddDynamic(this, &ThisClass::HandleMaterialTabClicked);
+	}
+
 	// BindWidgetOptional이므로 BP에서 위젯을 배치하지 않았을 수 있음
 	if (Button_ConfirmEquip)
 	{
@@ -546,6 +637,7 @@ void UInventoryPanelWidget::BindButtonEvents()
 	}
 }
 
+
 void UInventoryPanelWidget::InitOwnerComponents()
 {
 	if (InventoryComponent && WeaponComponent)
@@ -579,9 +671,15 @@ void UInventoryPanelWidget::InitDefaultTags()
 	{
 		ConsumableTabCategoryTag = RetrieveGameplayTags::Item_Consumable;
 	}
+	if (!MaterialTabCategoryTag.IsValid())
+	{
+		MaterialTabCategoryTag = RetrieveGameplayTags::Item_Material;
+	}
 	if (!CurrentCategoryTag.IsValid())
 	{
-		CurrentCategoryTag = ActiveTabIndex == 1 ? ConsumableTabCategoryTag : WeaponTabCategoryTag;
+		if (ActiveTabIndex == 1) { CurrentCategoryTag = ConsumableTabCategoryTag; }
+		else if (ActiveTabIndex == 2) { CurrentCategoryTag = MaterialTabCategoryTag; }
+		else { CurrentCategoryTag = WeaponTabCategoryTag; }
 	}
 }
 
@@ -618,6 +716,11 @@ bool UInventoryPanelWidget::IsConsumableCategory(FGameplayTag ItemCategoryTag) c
 	return ItemCategoryTag.IsValid() && ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable);
 }
 
+bool UInventoryPanelWidget::IsMaterialCategory(FGameplayTag ItemCategoryTag) const
+{
+	return ItemCategoryTag.IsValid() && ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material);
+}
+
 bool UInventoryPanelWidget::ShouldConfirmWeaponSwap() const
 {
 	if (!InventoryComponent || SelectedItemId.IsNone() || !IsWeaponCategory(SelectedItemCategoryTag))
@@ -641,11 +744,11 @@ void UInventoryPanelWidget::UpdateQuickSlotPanel()
 {
 	if (Text_QuickSlot4)
 	{
-		Text_QuickSlot4->SetText(GetQuickSlotDisplayText(4));
+		Text_QuickSlot4->SetText(GetQuickSlotDisplayText(UInventoryComponent::QuickSlotPrimaryKey));
 	}
 	if (Text_QuickSlot5)
 	{
-		Text_QuickSlot5->SetText(GetQuickSlotDisplayText(5));
+		Text_QuickSlot5->SetText(GetQuickSlotDisplayText(UInventoryComponent::QuickSlotSecondaryKey));
 	}
 }
 
@@ -694,16 +797,16 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 		UniformGrid_ItemList->SetMinDesiredSlotWidth(SlotSize);
 		UniformGrid_ItemList->SetMinDesiredSlotHeight(SlotSize);
 		LastInventoryGridAreaSize = GridAreaSize;
-	}
 
-	const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
-	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
-	{
-		UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
-		if (UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Child ? Child->Slot : nullptr))
+		const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
 		{
-			GridSlot->SetHorizontalAlignment(HAlign_Fill);
-			GridSlot->SetVerticalAlignment(VAlign_Fill);
+			UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
+			if (UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Child ? Child->Slot : nullptr))
+			{
+				GridSlot->SetHorizontalAlignment(HAlign_Fill);
+				GridSlot->SetVerticalAlignment(VAlign_Fill);
+			}
 		}
 	}
 }
@@ -757,7 +860,6 @@ void UInventoryPanelWidget::PopulateWeaponSkillIcons(UHorizontalBox* SkillIconBo
 			if (UTexture2D* IconTexture = SkillPreview.Icon.LoadSynchronous())
 			{
 				SkillIcon->SetBrushFromTexture(IconTexture, false);
-				SkillIcon->SetDesiredSizeOverride(FVector2D(24.0f, 24.0f));
 				SkillIcon->SetColorAndOpacity(FLinearColor::White);
 			}
 
@@ -884,4 +986,228 @@ FString UInventoryPanelWidget::GetGameplayTagLeaf(FGameplayTag Tag)
 		TagString = TagString.RightChop(LastDotIndex + 1);
 	}
 	return TagString;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 정렬
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UInventoryPanelWidget::SetSortMode(EInventorySortMode NewMode)
+{
+	CurrentSortMode = NewMode;
+	// 목록 갱신 이벤트를 발행하면 BP가 GetCurrentItemsSorted()를 다시 호출해 UI를 재구성한다
+	OnInventoryListChanged.Broadcast();
+}
+
+void UInventoryPanelWidget::CycleSortByName()
+{
+	if (CurrentSortMode == EInventorySortMode::NameAsc)
+	{
+		SetSortMode(EInventorySortMode::NameDesc);
+	}
+	else if (CurrentSortMode == EInventorySortMode::NameDesc)
+	{
+		SetSortMode(EInventorySortMode::None);
+	}
+	else
+	{
+		SetSortMode(EInventorySortMode::NameAsc);
+	}
+}
+
+void UInventoryPanelWidget::CycleSortByType()
+{
+	if (CurrentSortMode == EInventorySortMode::TypeAsc)
+	{
+		SetSortMode(EInventorySortMode::TypeDesc);
+	}
+	else if (CurrentSortMode == EInventorySortMode::TypeDesc)
+	{
+		SetSortMode(EInventorySortMode::None);
+	}
+	else
+	{
+		SetSortMode(EInventorySortMode::TypeAsc);
+	}
+}
+
+void UInventoryPanelWidget::CycleSortByAttackPower()
+{
+	// 무기 탭이 아닐 때는 공격력 정렬을 허용하지 않는다
+	if (!IsWeaponCategory(CurrentCategoryTag))
+	{
+		return;
+	}
+
+	if (CurrentSortMode == EInventorySortMode::AttackPowerAsc)
+	{
+		SetSortMode(EInventorySortMode::AttackPowerDesc);
+	}
+	else if (CurrentSortMode == EInventorySortMode::AttackPowerDesc)
+	{
+		SetSortMode(EInventorySortMode::None);
+	}
+	else
+	{
+		SetSortMode(EInventorySortMode::AttackPowerAsc);
+	}
+}
+
+TArray<FRetrieveItemStack> UInventoryPanelWidget::GetCurrentItemsSorted() const
+{
+	TArray<FRetrieveItemStack> Items = GetCurrentItems();
+	SortItemStacks(Items);
+	return Items;
+}
+
+void UInventoryPanelWidget::SortItemStacks(TArray<FRetrieveItemStack>& Items) const
+{
+	if (CurrentSortMode == EInventorySortMode::None || Items.Num() < 2)
+	{
+		return;
+	}
+
+	Items.StableSort([this](const FRetrieveItemStack& A, const FRetrieveItemStack& B)
+	{
+		switch (CurrentSortMode)
+		{
+		case EInventorySortMode::NameAsc:
+			return GetItemDisplayName(A) < GetItemDisplayName(B);
+
+		case EInventorySortMode::NameDesc:
+			return GetItemDisplayName(A) > GetItemDisplayName(B);
+
+		case EInventorySortMode::TypeAsc:
+			return GetItemTypeName(A) < GetItemTypeName(B);
+
+		case EInventorySortMode::TypeDesc:
+			return GetItemTypeName(A) > GetItemTypeName(B);
+
+		case EInventorySortMode::AttackPowerAsc:
+			return GetItemAttackPower(A) < GetItemAttackPower(B);
+
+		case EInventorySortMode::AttackPowerDesc:
+			return GetItemAttackPower(A) > GetItemAttackPower(B);
+
+		default:
+			return false;
+		}
+	});
+}
+
+FString UInventoryPanelWidget::GetItemDisplayName(const FRetrieveItemStack& Item) const
+{
+	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
+	{
+		if (const FRetrieveWeaponDataRow* Row = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return Row->DisplayName.ToString();
+		}
+	}
+	else if (IsConsumableCategory(Item.ItemCategoryTag) && ConsumableItemTable)
+	{
+		if (const FRetrieveConsumableItemRow* Row = ConsumableItemTable->FindRow<FRetrieveConsumableItemRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return Row->DisplayName.ToString();
+		}
+	}
+	else if (IsMaterialCategory(Item.ItemCategoryTag))
+	{
+		if (UDataTable* Table = ResolveMaterialItemTable())
+		{
+			if (const FRetrieveMaterialItemRow* Row = Table->FindRow<FRetrieveMaterialItemRow>(
+				Item.ItemId, TEXT("")))
+			{
+				return Row->DisplayName.ToString();
+			}
+		}
+	}
+	// 테이블 미등록 시 ItemId 문자열로 폴백
+	return Item.ItemId.ToString();
+}
+
+FString UInventoryPanelWidget::GetItemTypeName(const FRetrieveItemStack& Item) const
+{
+	// 무기는 WeaponTypeTag(검/쌍검/스태프 등), 그 외는 카테고리 태그 말단 사용
+	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
+	{
+		if (const FRetrieveWeaponDataRow* Row = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return GetGameplayTagLeaf(Row->WeaponTypeTag);
+		}
+	}
+	return GetGameplayTagLeaf(Item.ItemCategoryTag);
+}
+
+float UInventoryPanelWidget::GetItemAttackPower(const FRetrieveItemStack& Item) const
+{
+	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
+	{
+		if (const FRetrieveWeaponDataRow* Row = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return Row->AttackPower;
+		}
+	}
+	return 0.0f;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 최종 스탯 조회
+// ─────────────────────────────────────────────────────────────────────────────
+
+URetrieveAbilitySystemComponent* UInventoryPanelWidget::GetOwnerASC() const
+{
+	const APawn* OwningPawn = GetOwningPlayerPawn();
+	if (!OwningPawn)
+	{
+		return nullptr;
+	}
+	const URetrievePawnExtensionComponent* PawnExt =
+		URetrievePawnExtensionComponent::FindPawnExtensionComponent(OwningPawn);
+	return PawnExt ? PawnExt->GetRetrieveAbilitySystemComponent() : nullptr;
+}
+
+float UInventoryPanelWidget::GetCharacterBaseAttackPower() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	if (!ASC)
+	{
+		return 0.0f;
+	}
+	// GetNumericAttributeBase: Modifier(무기 GE 등) 적용 전 순수 Base 값
+	return ASC->GetNumericAttributeBase(UCombatAttributeSet::GetAttackPowerAttribute());
+}
+
+float UInventoryPanelWidget::GetWeaponBonusAttackPower() const
+{
+	FRetrieveWeaponDataRow CurrentWeapon;
+	return GetCurrentWeaponData(CurrentWeapon) ? CurrentWeapon.AttackPower : 0.0f;
+}
+
+float UInventoryPanelWidget::GetTotalAttackPower() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	if (!ASC)
+	{
+		return 0.0f;
+	}
+	// GetNumericAttribute: 모든 Modifier(무기 GE 포함) 적용 후 최종 값
+	return ASC->GetNumericAttribute(UCombatAttributeSet::GetAttackPowerAttribute());
+}
+
+FText UInventoryPanelWidget::GetFinalStatDisplayText() const
+{
+	const float BaseATK   = GetCharacterBaseAttackPower();
+	const float WeaponATK = GetWeaponBonusAttackPower();
+	const float TotalATK  = GetTotalAttackPower();
+
+	const FString DisplayStr = FString::Printf(
+		TEXT("기본 ATK: %.0f\n무기 보너스: +%.0f\n최종 ATK: %.0f"),
+		BaseATK, WeaponATK, TotalATK);
+
+	return FText::FromString(DisplayStr);
 }

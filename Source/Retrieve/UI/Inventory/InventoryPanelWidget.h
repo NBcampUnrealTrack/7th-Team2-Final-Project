@@ -7,6 +7,7 @@
 #include "InventoryPanelWidget.generated.h"
 
 class UInventoryComponent;
+class URetrieveAbilitySystemComponent;
 class UWeaponComponent;
 class UBorder;
 class UButton;
@@ -17,6 +18,19 @@ class UUniformGridPanel;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrieveInventoryWidgetSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FRetrieveInventorySelectionChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag);
+
+/** 인벤토리 아이템 정렬 기준 */
+UENUM(BlueprintType)
+enum class EInventorySortMode : uint8
+{
+	None            UMETA(DisplayName = "기본 (획득순)"),
+	NameAsc         UMETA(DisplayName = "이름 오름차순"),
+	NameDesc        UMETA(DisplayName = "이름 내림차순"),
+	TypeAsc         UMETA(DisplayName = "타입 오름차순"),
+	TypeDesc        UMETA(DisplayName = "타입 내림차순"),
+	AttackPowerAsc  UMETA(DisplayName = "공격력 오름차순"),  // 무기 탭 전용
+	AttackPowerDesc UMETA(DisplayName = "공격력 내림차순"), // 무기 탭 전용
+};
 
 UCLASS()
 class RETRIEVE_API UInventoryPanelWidget : public URetrieveGamePanelWidget
@@ -35,11 +49,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Data")
 	TObjectPtr<UDataTable> ItemIconTable;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Data")
+	TObjectPtr<UDataTable> MaterialItemTable;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
 	FGameplayTag WeaponTabCategoryTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
 	FGameplayTag ConsumableTabCategoryTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
+	FGameplayTag MaterialTabCategoryTag;
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Events")
 	FRetrieveInventoryWidgetSimpleSignature OnInventoryListChanged;
@@ -85,6 +105,48 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	TArray<FRetrieveItemStack> GetCurrentItems() const;
+
+	// ── 정렬 ──────────────────────────────────────────────────────────────
+	/** 정렬 모드를 직접 지정하고 목록을 갱신한다 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Sort")
+	void SetSortMode(EInventorySortMode NewMode);
+
+	/** 이름순 정렬을 토글한다 (None → NameAsc → NameDesc → None) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Sort")
+	void CycleSortByName();
+
+	/** 타입순 정렬을 토글한다 (None → TypeAsc → TypeDesc → None) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Sort")
+	void CycleSortByType();
+
+	/** 공격력순 정렬을 토글한다 — 무기 탭에서만 의미 있음 (None → AtkAsc → AtkDesc → None) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Sort")
+	void CycleSortByAttackPower();
+
+	/** 현재 정렬 모드 조회 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
+	EInventorySortMode GetCurrentSortMode() const { return CurrentSortMode; }
+
+	/** 현재 탭 아이템을 CurrentSortMode에 따라 정렬해 반환 (BP 목록 갱신 시 GetCurrentItems 대신 사용) */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
+	TArray<FRetrieveItemStack> GetCurrentItemsSorted() const;
+
+	// ── 최종 스탯 조회 ────────────────────────────────────────────────────
+	/** 캐릭터 기본 공격력 (무기 보정 전 Base 값) */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetCharacterBaseAttackPower() const;
+
+	/** 현재 장착된 무기의 공격력 보너스 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetWeaponBonusAttackPower() const;
+
+	/** ASC 어트리뷰트 기준 최종 공격력 (Base + 무기 GE 포함 모든 Modifier 적용 후) */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetTotalAttackPower() const;
+
+	/** 인벤토리 스탯 패널용 포맷 텍스트: "기본 ATK: N\n무기 보너스: +M\n최종 ATK: P" */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	FText GetFinalStatDisplayText() const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FGameplayTag GetCurrentCategoryTag() const { return CurrentCategoryTag; }
@@ -138,12 +200,15 @@ public:
 	bool GetSelectedConsumableData(FRetrieveConsumableItemRow& OutConsumableData) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool GetSelectedMaterialData(FRetrieveMaterialItemRow& OutMaterialData) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool GetItemIconData(FName ItemId, FRetrieveItemIconRow& OutIconData) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void RefreshWeaponComparisonText();
 
-	// 인벤토리 내부 탭 전환 (0: 무기, 1: 소모품)
+	// 인벤토리 내부 탭 전환 (0: 무기, 1: 소모품, 2: 재료)
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void OpenTab(int32 TabIndex);
 
@@ -183,6 +248,9 @@ protected:
 	UFUNCTION()
 	void HandleConsumableSlotChanged(int32 SlotKey, FName ItemId);
 
+	UFUNCTION()
+	void HandleMaterialTabClicked();
+
 	// 컴포넌트 참조
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
@@ -195,10 +263,34 @@ protected:
 	TObjectPtr<UTextBlock> Text_SelectedCompare;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailType;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailMainStat;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailElement;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_DetailDescription;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> ScrollBox_ItemList;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UUniformGridPanel> UniformGrid_ItemList;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UHorizontalBox> HorizontalBox_Tabs;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_TabMaterial;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UHorizontalBox> HorizontalBox_CurrentWeaponSkillIcons;
@@ -252,6 +344,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory")
 	int32 ActiveTabIndex = 0;
 
+	// 현재 정렬 모드 (탭 전환 시 None으로 리셋됨)
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Sort")
+	EInventorySortMode CurrentSortMode = EInventorySortMode::None;
+
 	// 무기 교체 확인 팝업을 우회할 때만 true. TGuardValue로 사용
 	bool bBypassWeaponSwapConfirm = false;
 	FVector2D LastInventoryGridAreaSize = FVector2D::ZeroVector;
@@ -265,10 +361,13 @@ protected:
 	void ClearSelection();
 	bool IsWeaponCategory(FGameplayTag ItemCategoryTag) const;
 	bool IsConsumableCategory(FGameplayTag ItemCategoryTag) const;
+	bool IsMaterialCategory(FGameplayTag ItemCategoryTag) const;
 	bool ShouldConfirmWeaponSwap() const;
 	void ShowWeaponSwapConfirm(bool bShow);
 	void UpdateQuickSlotPanel();
 	void UpdateQuickSlotActionButtons();
+	UDataTable* ResolveMaterialItemTable() const;
+	void RefreshSelectedMaterialDetails();
 	void RefreshInventoryGridLayout();
 	void RefreshWeaponSkillIcons();
 	void PopulateWeaponSkillIcons(UHorizontalBox* SkillIconBox, const TArray<FWeaponSkillPreview>& SkillPreviews) const;
@@ -276,4 +375,13 @@ protected:
 	FString FormatWeaponSummary(const FRetrieveWeaponDataRow& WeaponData) const;
 	FString FormatWeaponSkillList(const FRetrieveWeaponDataRow& WeaponData) const;
 	static FString GetGameplayTagLeaf(FGameplayTag Tag);
+
+	// 정렬 헬퍼
+	void SortItemStacks(TArray<FRetrieveItemStack>& Items) const;
+	FString GetItemDisplayName(const FRetrieveItemStack& Item) const;
+	FString GetItemTypeName(const FRetrieveItemStack& Item) const;
+	float GetItemAttackPower(const FRetrieveItemStack& Item) const;
+
+	// 스탯 조회 헬퍼
+	URetrieveAbilitySystemComponent* GetOwnerASC() const;
 };

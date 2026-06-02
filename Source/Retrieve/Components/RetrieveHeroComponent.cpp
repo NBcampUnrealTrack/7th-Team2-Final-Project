@@ -7,11 +7,15 @@
 #include "RetrievePawnExtensionComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Components/InventoryComponent.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "InputAction.h"
+#include "InputCoreTypes.h"
 #include "Input/RetrieveInputComponent.h"
 #include "Input/RetrieveInputConfig.h"
+
 
 const FName URetrieveHeroComponent::NAME_ActorFeatureName("Hero");
 const FName URetrieveHeroComponent::NAME_BindInputsNow("BindInputsNow");
@@ -161,6 +165,11 @@ void URetrieveHeroComponent::BindPlayerInputs()
 	if (!Subsystem) return;
 	Subsystem->ClearAllMappings();
 
+	const UInputAction* QuickSlot1Action =
+		InputConfig->FindNativeInputActionForTag(RetrieveGameplayTags::Input_UseItem_Slot1, false);
+	const UInputAction* QuickSlot2Action =
+		InputConfig->FindNativeInputActionForTag(RetrieveGameplayTags::Input_UseItem_Slot2, false);
+
 	if (PawnData->DefaultMappingContext)
 	{
 		Subsystem->AddMappingContext(PawnData->DefaultMappingContext, PawnData->DefaultMappingPriority);
@@ -174,6 +183,25 @@ void URetrieveHeroComponent::BindPlayerInputs()
 
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
+	if (QuickSlot1Action)
+	{
+		RetrieveIC->BindAction(
+			QuickSlot1Action,
+			ETriggerEvent::Started,
+			this,
+			&ThisClass::Input_UseConsumableSlot,
+			UInventoryComponent::QuickSlotPrimaryKey);
+	}
+	if (QuickSlot2Action)
+	{
+		RetrieveIC->BindAction(
+			QuickSlot2Action,
+			ETriggerEvent::Started,
+			this,
+			&ThisClass::Input_UseConsumableSlot,
+			UInventoryComponent::QuickSlotSecondaryKey);
+	}
+	
 
 	// Sprint (Hold) — Started: 임계 도달 시점 / Completed: 뗌 시점
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Sprint, ETriggerEvent::Started,   this, &ThisClass::Input_SprintPressed,  false);
@@ -239,6 +267,17 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 	if (Value.Y != 0.0f)
 	{
 		Pawn->AddControllerPitchInput(Value.Y);
+	}
+}
+
+void URetrieveHeroComponent::Input_UseConsumableSlot(int32 SlotKey)
+{
+	if (const APawn* Pawn = GetPawn<APawn>())
+	{
+		if (UInventoryComponent* Inventory = Pawn->FindComponentByClass<UInventoryComponent>())
+		{
+			Inventory->UseConsumableSlot(SlotKey);
+		}
 	}
 }
 

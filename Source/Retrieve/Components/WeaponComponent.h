@@ -2,11 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/RetrieveAbilitySet.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "Components/PawnComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTagContainer.h"
 #include "WeaponComponent.generated.h"
 
+class UGameplayEffect;
 class URetrieveAbilitySystemComponent;
 class UMeshComponent;
 class USceneComponent;
@@ -61,6 +63,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Weapon")
 	TObjectPtr<UDataTable> WeaponDataTable;
 
+	// 무기 장착 시 캐릭터 AttackPower에 가산할 GameplayEffect
+	// GE 설정: Duration=Infinite, Modifier=AttackPower Add, Magnitude=SetByCaller(Data.Weapon.AttackPower)
+	// Blueprint(BP_WeaponComponent 등)에서 GE_WeaponAttackPower 에셋을 할당해야 함
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Weapon|Stats")
+	TSubclassOf<UGameplayEffect> WeaponAttackPowerEffect;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentWeaponDataRow, Category = "Retrieve|Weapon")
 	FName CurrentWeaponDataRow = NAME_None;
 
@@ -81,6 +89,10 @@ protected:
 
 	UPROPERTY(Transient)
 	FRetrieveAbilitySet_GrantedHandles WeaponGrantedHandles;
+
+	// 현재 장착된 무기의 AttackPower GE 핸들 — 언장착 시 제거에 사용
+	UPROPERTY(Transient)
+	FActiveGameplayEffectHandle WeaponAttackPowerEffectHandle;
 
 	UFUNCTION()
 	void OnRep_CurrentWeaponDataRow();

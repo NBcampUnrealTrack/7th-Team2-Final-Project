@@ -6,6 +6,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "GameplayEffect.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
 UWeaponComponent::UWeaponComponent(const FObjectInitializer& ObjectInitializer)
@@ -54,6 +56,16 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 void UWeaponComponent::UnequipWeapon()
 {
 	const FName PreviousWeaponId = CurrentWeaponDataRow;
+
+	// 무기 공격력 GE 먼저 제거 (ClearGrantedWeaponAbilities 전에 수행)
+	if (HasAuthorityToModify() && WeaponAttackPowerEffectHandle.IsValid())
+	{
+		if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
+		{
+			ASC->RemoveActiveGameplayEffect(WeaponAttackPowerEffectHandle);
+		}
+		WeaponAttackPowerEffectHandle = FActiveGameplayEffectHandle();
+	}
 
 	ClearGrantedWeaponAbilities();
 	ClearWeaponVisuals();
@@ -156,12 +168,30 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 {
 	if (HasAuthorityToModify())
 	{
-		// AbilitySet 부여는 서버에서만 처리. 클라이언트 OnRep 경로는 비주얼만 갱신
+		// AbilitySet 부여와 무기 공격력 GE 적용은 서버에서만 처리
+		// 클라이언트 OnRep 경로는 비주얼만 갱신
 		if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
 		{
 			if (URetrieveAbilitySet* AbilitySet = Cast<URetrieveAbilitySet>(WeaponData.WeaponAbilitySet.TryLoad()))
 			{
 				AbilitySet->GiveToAbilitySystem(ASC, &WeaponGrantedHandles, GetOwner());
+			}
+
+			// 무기 AttackPower를 캐릭터 어트리뷰트에 가산
+			// GE_WeaponAttackPower: Infinite, Add on AttackPower, SetByCaller(Data.Weapon.AttackPower)
+			if (WeaponAttackPowerEffect && WeaponData.AttackPower > 0.0f)
+			{
+				FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+				EffectContext.AddSourceObject(this);
+				const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(
+					WeaponAttackPowerEffect, 1.0f, EffectContext);
+				if (SpecHandle.IsValid())
+				{
+					SpecHandle.Data->SetSetByCallerMagnitude(
+						RetrieveGameplayTags::Data_Weapon_AttackPower,
+						WeaponData.AttackPower);
+					WeaponAttackPowerEffectHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
+				}
 			}
 		}
 	}

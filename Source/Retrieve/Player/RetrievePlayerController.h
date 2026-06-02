@@ -159,7 +159,6 @@ protected:
 
 	bool TryHandleMinimapShortcut(FKey Key);
 	bool TryHandlePanelShortcut(FKey Key);
-	bool TryHandleConsumableSlotShortcut(FKey Key);
 	bool CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const;
 	void CenterActiveWorldMapPanel();
 	void RemoveActivePanelImmediately();
