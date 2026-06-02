@@ -182,6 +182,9 @@ void URetrieveHeroComponent::BindPlayerInputs()
 	// Crouch (Toggle) — Started에서 한 번만 발동
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Crouch, ETriggerEvent::Started, this, &ThisClass::Input_Crouch, false);
 
+	// Dash (Tap) — Tap trigger의 Triggered에 바인딩. 시간 내 떼면 1회 발동, 길게 누르면 발동 안 함(Sprint Hold가 작동).
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Dash, ETriggerEvent::Triggered, this, &ThisClass::Input_DashRequest, false);
+
 	bInputsBound = true;
 }
 
@@ -334,6 +337,22 @@ void URetrieveHeroComponent::Input_Crouch(const FInputActionValue& InputActionVa
 			{
 				ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
 			}
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_DashRequest(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+
+	// Tap trigger의 Triggered가 키를 짧게 떼는 순간 1회 호출 → GA_Dash 활성화.
+	// 길게 누르면 Tap이 시간 초과로 발동 안 함 → IA_Sprint의 Hold trigger가 작동.
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_Dash);
 		}
 	}
 }

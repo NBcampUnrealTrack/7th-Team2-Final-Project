@@ -43,6 +43,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	bool TryMantle();
 
+	/** 사망/낙사/Groggy 등 시체화 진입. 시뮬레이션 시작. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	void StartRagdoll();
+
+	/** 시체화 종료 (부활/기상 등). ALS가 GetUp 몽타주 자동 재생. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	bool StopRagdoll();
+
 	/**
 	 * Roll 액션 잠금 시작 + 목표 Yaw 설정.
 	 * ALS StartRollingImplementation과 동일 흐름:

@@ -174,6 +174,16 @@ bool ARetrieveAlsCharacter::TryMantle()
 	return StartMantling();
 }
 
+void ARetrieveAlsCharacter::StartRagdoll()
+{
+	StartRagdolling();
+}
+
+bool ARetrieveAlsCharacter::StopRagdoll()
+{
+	return StopRagdolling();
+}
+
 void ARetrieveAlsCharacter::BeginRollLockoutTowardYaw(float TargetYawAngle)
 {
 	// ALS StartRollingImplementation과 동일 패턴.
