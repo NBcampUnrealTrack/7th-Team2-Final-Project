@@ -57,6 +57,9 @@ protected:
 	void Input_SprintReleased(const FInputActionValue& InputActionValue);
 	void Input_Crouch(const FInputActionValue& InputActionValue);
 
+	/** Shift Tap 같은 시간 기반 트리거가 필요한 어빌리티용. Native + Triggered에 바인딩하여 Tap 검사 정확. */
+	void Input_DashRequest(const FInputActionValue& InputActionValue);
+
 private:
 	/** SetupPlayerInputComponent 시점에 캐시됨; 초기화가 DataInitialized에 도달하면 바인딩을 재시도에 사용됩니다 */
 	UPROPERTY(Transient)

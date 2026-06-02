@@ -50,6 +50,6 @@ void ARetrieveAlsCombatCharacter::HandleDeathStarted(AActor* OwningActor)
 		MoveComp->DisableMovement();
 	}
 
-	// ALS 사망 레그돌 (Phase B에서 결정한 사항: 사망 시에만 발동)
-	StartRagdolling();
+	// ALS 사망 레그돌 (Phase B에서 결정한 사항: 사망 시에만 발동) — wrapper로 호출
+	StartRagdoll();
 }

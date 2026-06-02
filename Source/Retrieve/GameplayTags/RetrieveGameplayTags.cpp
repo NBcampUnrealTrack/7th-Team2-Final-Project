@@ -13,6 +13,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_Look, "Input.Look");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Sprint, "Input.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Crouch, "Input.Crouch");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Dash, "Input.Dash");
 
 	// ---- Player abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Attack, "Ability.Player.Attack");

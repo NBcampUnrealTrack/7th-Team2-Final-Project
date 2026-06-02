@@ -45,10 +45,9 @@ void URetrieveInputComponent::BindAbilityActions(const URetrieveInputConfig* Inp
 		{
 			if (PressedFunc)
 			{
-				// Triggered = 트리거 조건 완전 충족 시점.
-				// Pressed 디폴트 트리거에선 Started==Triggered (즉시 발동).
-				// Hold/Tap 같은 시간 기반 트리거에선 임계 조건이 정확히 작동.
-				BindHandles.Add(BindAction(Action.InputAction, ETriggerEvent::Triggered, Object, PressedFunc, Action.InputTag).GetHandle());
+				// Started = 키 누른 첫 프레임 1회 발동. AbilityInputAction은 즉시 발동이 표준.
+				// Tap/Hold 같은 시간 기반 트리거가 필요한 어빌리티는 Native Input + 별도 핸들러로 처리.
+				BindHandles.Add(BindAction(Action.InputAction, ETriggerEvent::Started, Object, PressedFunc, Action.InputTag).GetHandle());
 			}
 
 			if (ReleasedFunc)
