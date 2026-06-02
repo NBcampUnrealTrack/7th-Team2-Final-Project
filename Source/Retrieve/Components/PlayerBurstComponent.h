@@ -22,6 +22,9 @@ public:
 
     void OnBurstHit(int32 HitIndex);
 
+    /** ABurstProjectile 등 외부 액터가 적중을 보고할 때 호출하는 공개 래퍼. */
+    void ReportProjectileHit(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult);
+
     // 현재 진행 중인 스킬 컨텍스트
     const FSkillCombination* ActiveSkill = nullptr;
 
@@ -29,7 +32,7 @@ private:
     // AttackType별 분기
     void DoCleaveHit(const FBurstHitInstance& Hit, int32 HitIndex);
     void DoProjectileHit(const FBurstHitInstance& Hit, int32 HitIndex);
-    void DoGroundEruptionHit(const FBurstHitInstance& Hit, int32 HitIndex);
+    void DoWorldActorHit(const FBurstHitInstance& Hit, int32 HitIndex);
     void DoDashHit(const FBurstHitInstance& Hit, int32 HitIndex);
     void DoAoEHit(const FBurstHitInstance& Hit, int32 HitIndex);
 
@@ -49,7 +52,10 @@ private:
     float DashRadius = 80.f;
 
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace", meta=(ClampMin="0.0"))
-    float GroundEruptionRadius = 200.f;
+    float WorldActorRadius = 200.f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Burst|Projectile", meta=(ClampMin="0.0"))
+    float DefaultProjectileSpeed = 1500.f;
 
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace")
     bool bDebugDrawTrace = false;
@@ -57,11 +63,14 @@ private:
     UPROPERTY()
     TObjectPtr<USphereComponent> ActiveHitboxComp;
 
-    // GroundEruption 전용
+    // WorldActor 전용 (소환된 월드 액터 참조)
     TWeakObjectPtr<AActor> SpawnedWorldActor;
 
     // HitIndex별 상태
     TArray<TSet<TObjectPtr<AActor>>> PerHitHitActors;
     TArray<FVector> PerHitPreviousOrigin;
     TArray<bool>    PerHitHasPrevious;
+
+    // Projectile 중복 스폰 방지 (HitIndex별 1회 발사)
+    TArray<bool>    PerHitProjectileSpawned;
 };

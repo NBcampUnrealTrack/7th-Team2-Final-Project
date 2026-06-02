@@ -80,6 +80,7 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
     }
 
     MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
+    MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleMontageBlendOut);
     MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
     MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
     MontageTask->ReadyForActivation();
@@ -87,21 +88,37 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 void UGA_Burst::HandleMontageCompleted()
 {
+    UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Montage Completed"));
+    EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+}
+
+void UGA_Burst::HandleMontageBlendOut()
+{
+    UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Montage BlendOut"));
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_Burst::HandleMontageInterrupted()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] Montage Interrupted"));
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
 void UGA_Burst::HandleMontageCancelled()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] Montage Cancelled"));
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
 void UGA_Burst::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+    // 중복 호출 방지: OnBlendOut + OnCompleted 가 둘 다 발동되는 정상 케이스에서
+    // EndAbility 가 두 번 불려도 cleanup/로그가 한 번만 실행되도록 가드.
+    if (!IsEndAbilityValid(Handle, ActorInfo))
+    {
+        return;
+    }
+
     if (MontageTask)
     {
         MontageTask->EndTask();
