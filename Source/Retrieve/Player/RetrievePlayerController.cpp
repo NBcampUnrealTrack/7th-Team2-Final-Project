@@ -23,7 +23,8 @@
 #include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
 
-ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(
+	ObjectInitializer)
 {
 	bShowMouseCursor = false;
 	CheatClass = URetrieveCheatManager::StaticClass();
@@ -46,29 +47,29 @@ UActorComponent* ARetrievePlayerController::GetInteractorComponent() const
 void ARetrievePlayerController::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	if (!IsLocalController())
 	{
 		return;
 	}
-	
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return;
 	}
-	
+
 	SessionListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveSessionStatePayload>(
 		RetrieveGameplayTags::Channel_Session_StateChanged,
 		[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
-		(FGameplayTag /*Channel*/, const FRetrieveSessionStatePayload& Payload)
+	(FGameplayTag /*Channel*/, const FRetrieveSessionStatePayload& Payload)
 		{
 			if (ARetrievePlayerController* RetrievePC = WeakThis.Get())
 			{
 				RetrievePC->HandleSessionStateChanged(Payload.NewState);
 			}
 		});
-	
+
 	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
 		HandleSessionStateChanged(GS->GetSessionState());
@@ -87,7 +88,7 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 		}
 		SessionListener = FGameplayMessageListenerHandle();
 	}
-	
+
 	if (ActiveTopLevelWidget)
 	{
 		ActiveTopLevelWidget->RemoveFromParent();
@@ -106,7 +107,7 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 void ARetrievePlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-	
+
 	if (ARetrievePlayerState* RetrievePS = GetRetrievePlayerState())
 	{
 		if (URetrieveAbilitySystemComponent* RetrieveASC = RetrievePS->GetRetrieveAbilitySystemComponent())
@@ -115,10 +116,26 @@ void ARetrievePlayerController::PlayerTick(float DeltaTime)
 			RetrieveASC->ProcessAbilityInput(DeltaTime, bGamePaused);
 		}
 	}
+	
+	if (const APawn* ControlledPawn = GetPawn())
+	{
+		if (ControlledPawn->GetVelocity().SizeSquared2D() > 25.f)
+		{
+			if (const UWorld* World = GetWorld())
+			{
+				LastInputRealTimeSeconds = World->GetRealTimeSeconds();
+			}
+		}
+	}
 }
 
 bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+	if (UWorld* World = GetWorld())
+	{
+		LastInputRealTimeSeconds = World->GetRealTimeSeconds();
+	}
+	
 	if (Params.Event == IE_Pressed)
 	{
 		if (ActivePanel && Params.Key == EKeys::Escape)
@@ -149,7 +166,7 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 {
 	Super::AcknowledgePossession(InPawn);
-	
+
 	TryBindHealthToHUD();
 }
 
@@ -210,49 +227,59 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 {
 	switch (NewState)
 	{
-		case ERetrieveSessionState::MainMenu:
-		case ERetrieveSessionState::Result:
-			{
-				FInputModeUIOnly Mode;
-				Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-				SetInputMode(Mode);
-				bShowMouseCursor = true;
-				break;
-			}
-	
-		case ERetrieveSessionState::InGame:
-			{
-				FInputModeGameOnly Mode;
-				SetInputMode(Mode);
-				bShowMouseCursor = false;
-				break;
-			}
-	
-		case ERetrieveSessionState::Loading:
-		default:
-			{
-				break;
-			}
+	case ERetrieveSessionState::MainMenu:
+	case ERetrieveSessionState::Result:
+		{
+			FInputModeUIOnly Mode;
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			SetInputMode(Mode);
+			bShowMouseCursor = true;
+			break;
 		}
+
+	case ERetrieveSessionState::InGame:
+		{
+			FInputModeGameOnly Mode;
+			SetInputMode(Mode);
+			bShowMouseCursor = false;
+			break;
+		}
+
+	case ERetrieveSessionState::Loading:
+	default:
+		{
+			break;
+		}
+	}
 }
 
 TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieveSessionState State) const
 {
 	switch (State)
 	{
-		case ERetrieveSessionState::MainMenu:
-			return MainMenuClass;
-		
-		case ERetrieveSessionState::InGame:
-			return HUDClass;
-		
-		case ERetrieveSessionState::Result:
-			return ResultClass;
-		
-		case ERetrieveSessionState::Loading:
-		default:
-			return nullptr;
+	case ERetrieveSessionState::MainMenu:
+		return MainMenuClass;
+
+	case ERetrieveSessionState::InGame:
+		return HUDClass;
+
+	case ERetrieveSessionState::Result:
+		return ResultClass;
+
+	case ERetrieveSessionState::Loading:
+	default:
+		return nullptr;
 	}
+}
+
+float ARetrievePlayerController::GetSecondsSinceLastInput() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 0.f;
+	}
+	return static_cast<float>(World->GetRealTimeSeconds() - LastInputRealTimeSeconds);
 }
 
 void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePanelWidget> PanelClass, FKey ToggleKey)
@@ -521,6 +548,19 @@ void ARetrievePlayerController::Server_RequestQuitToMenu_Implementation()
 	}
 }
 
+void ARetrievePlayerController::Server_RequestRecallLumen_Implementation()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	
+	FRetrieveLumenCommandPayload Message;
+	Message.CommandTag = RetrieveGameplayTags::Channel_Lumen_Command_Recall;
+	Message.Instigator = GetPawn();
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Lumen_Command_Recall, Message);
+}
 
 void ARetrievePlayerController::EnsureHUDViewModel()
 {
@@ -532,19 +572,19 @@ void ARetrievePlayerController::EnsureHUDViewModel()
 	{
 		HUDViewModelInstance = NewObject<UHUDViewModel>(this);
 	}
-	
+
 	UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr;
 	if (!MVVM)
 	{
 		return;
 	}
-	
+
 	UMVVMView* View = MVVM->GetViewFromUserWidget(ActiveTopLevelWidget);
 	if (!View)
 	{
 		return;
 	}
-	
+
 	View->SetViewModel(HUDViewModelBindingName, HUDViewModelInstance);
 }
 
@@ -554,13 +594,13 @@ void ARetrievePlayerController::TryBindHealthToHUD()
 	{
 		return;
 	}
-	
+
 	UPlayerStatusViewModel* PlayerStatus = HUDViewModelInstance->GetPlayerStatus();
 	if (!PlayerStatus)
 	{
 		return;
 	}
-	
+
 	APawn* OwnerPawn = GetPawn();
 	if (!OwnerPawn)
 	{

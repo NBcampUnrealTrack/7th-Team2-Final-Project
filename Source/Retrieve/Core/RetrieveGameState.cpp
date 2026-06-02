@@ -5,10 +5,12 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Net/UnrealNetwork.h"
+#include "Quest/QuestBranchComponent.h"
 
 ARetrieveGameState::ARetrieveGameState(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
 	bReplicates = true;
+	QuestBranchComponent = CreateDefaultSubobject<UQuestBranchComponent>(TEXT("QuestBranch"));
 }
 
 void ARetrieveGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

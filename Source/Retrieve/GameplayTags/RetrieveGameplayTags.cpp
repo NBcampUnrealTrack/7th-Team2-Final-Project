@@ -30,6 +30,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Fire, "Ability.Player.SetElement.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Water, "Ability.Player.SetElement.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Wind, "Ability.Player.SetElement.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_RecallLumen, "Ability.Player.RecallLumen");
 
 	// ---- Enemy / Boss abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
@@ -191,12 +192,21 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_SlotChanged, "Channel.ElementGauge.SlotChanged");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_Full, "Channel.ElementGauge.Full");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_Burst, "Channel.ElementGauge.Burst");
-	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_GuardianDefeated, "Channel.Quest.GuardianDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_World_OutpostActivated, "Channel.World.OutpostActivated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Player_Died, "Channel.Player.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Monster_Died, "Channel.Monster.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Game_QueenDefeated, "Channel.Game.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_PlayerSpotted, "Channel.Enemy.PlayerSpotted");
+	
+	// ---- Message channels: Quest
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_GuardianDefeated, "Channel.Quest.GuardianDefeated");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_StepChanged, "Channel.Quest.StepChanged");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_SealUnlocked, "Channel.Quest.SealUnlocked");
+	
+	// ---- Message channels: Lumen command
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Command_ToggleWait, "Channel.Lumen.Command.ToggleWait");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Command_Recall, "Channel.Lumen.Command.Recall");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Mode_Changed, "Channel.Lumen.Mode.Changed");
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
@@ -205,6 +215,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MoveSpeed, "Data.Init.MoveSpeed");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_IncomingDamageMultiplier, "Data.Init.IncomingDamageMultiplier");
+	
 	/*
 	// ---- Hit react
 	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");
@@ -234,4 +245,18 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Press, "UI.VFX.Button.Press");
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Release, "UI.VFX.Button.Release");
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Tab_Switch, "UI.VFX.Tab.Switch");
+	
+	// ---- Quest steps
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_Awakening, "Quest.Step.Awakening");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SigilCompleted, "Quest.Step.SigilCompleted");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_FireGuardianDefeated, "Quest.Step.FireGuardianDefeated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WindGuardianDefeated, "Quest.Step.WindGuardianDefeated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WaterGuardianDefeated, "Quest.Step.WaterGuardianDefeated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_FireSigilActivated, "Quest.Step.FireSigilActivated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WindSigilActivated, "Quest.Step.WindSigilActivated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WaterSigilActivated, "Quest.Step.WaterSigilActivated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SealUnlocked, "Quest.Step.SealUnlocked");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SealOpened, "Quest.Step.SealOpened");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_QueenDefeated, "Quest.Step.QueenDefeated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_GameComplete, "Quest.Step.GameComplete");
 }

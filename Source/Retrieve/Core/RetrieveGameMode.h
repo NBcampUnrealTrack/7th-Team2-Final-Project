@@ -28,4 +28,7 @@ protected:
 	ARetrieveGameState* GetRetrieveGameState() const;
 
 	bool IsRequestorHost(const APlayerController* Requestor) const;
+
+	/** 호스트 전용. ResetForTest + Awakening 스텝을 완료합니다. */
+	void BootstrapNewGameQuest();
 };

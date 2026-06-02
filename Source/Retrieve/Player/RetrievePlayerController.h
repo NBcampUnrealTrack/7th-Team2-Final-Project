@@ -35,25 +35,28 @@ UCLASS()
 class RETRIEVE_API ARetrievePlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
 public:
 	ARetrievePlayerController(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	ARetrievePlayerState* GetRetrievePlayerState() const;
-	
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI")
 	UHUDViewModel* GetHUDViewModel() const { return HUDViewModelInstance; }
-		
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Retrieve|Interaction")
 	UActorComponent* GetInteractorComponent() const;
-	
+
 	UFUNCTION(Server, Reliable)
 	void Server_RequestNewGame();
-	
+
 	UFUNCTION(Server, Reliable)
 	void Server_RequestRetry();
-	
+
 	UFUNCTION(Server, Reliable)
 	void Server_RequestQuitToMenu();
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestRecallLumen();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void OpenExclusivePanel(TSubclassOf<URetrieveGamePanelWidget> PanelClass, FKey ToggleKey);
@@ -64,34 +67,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Map")
 	void ToggleMinimapRotationMode();
 	
+	float GetSecondsSinceLastInput() const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 	virtual void AcknowledgePossession(APawn* InPawn) override;
-	
+
 	void HandleSessionStateChanged(ERetrieveSessionState NewState);
 	void SwapActiveWidget(ERetrieveSessionState NewState);
 	void UpdateInputMode(ERetrieveSessionState NewState);
-	
+
 	/** HUDViewModelInstance를 생성하고 ActiveTopLevelWidget에 연결합니다. */
 	void EnsureHUDViewModel();
-	
+
 	/** 둘 다 존재하면 PlayerStatus VM을 로컬 폰의 HealthComponent에 바인딩합니다. */
 	void TryBindHealthToHUD();
-	
+
 	/** VM을 해제합니다. HUD 위젯 제거 시 호출됩니다. */
 	void ClearHUDViewModel();
-	
+
 	TSubclassOf<UUserWidget> ResolveWidgetClass(ERetrieveSessionState State) const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|UI")
 	TArray<FRetrievePanelShortcutConfig> PanelShortcuts;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Interaction", meta = (MetaClass = "/Script/Engine.ActorComponent"))
 	TSoftClassPtr<UActorComponent> InteractorComponentClass;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> MainMenuClass;
 
@@ -129,21 +134,21 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Map")
 	bool bEnableMinimapRotationShortcut = true;
-	
+
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveTopLevelWidget;
 
 	/** InGame 상태에서만 활성화되는 토스트 알림 위젯 인스턴스 */
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveToastManager;
-	
+
 	UPROPERTY()
 	TObjectPtr<UHUDViewModel> HUDViewModelInstance;
-	
+
 	/** WBP_HUD의 MVVM 패널에서 설정된 ViewModel 바인딩 이름 */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	FName HUDViewModelBindingName = TEXT("HUDViewModel");
-	
+
 	FGameplayMessageListenerHandle SessionListener;
 
 	UFUNCTION()
@@ -163,4 +168,5 @@ protected:
 	UWeaponComponent* GetPawnWeaponComponent() const;
 
 	bool bActivePanelClosing = false;
+	double LastInputRealTimeSeconds = 0.0;
 };

@@ -4,6 +4,7 @@
 #include "Character/RetrieveCharacter.h"
 #include "LumenCharacter.generated.h"
 
+class ULumenFollowComponent;
 /**
  * 비전투 동반자 NPC. ASC 및 HealthComponent를 갖지 않습니다. (DA_PawnData_Lumen.bRequiresAbilitySystem = false)
  * 호스트 Pawn을 따라갑니다. (ARetrieveGameState::GetHostPawn으로 결정됨)
@@ -16,4 +17,8 @@ class RETRIEVE_API ALumenCharacter : public ARetrieveCharacter
 
 public:
 	ALumenCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
+	TObjectPtr<ULumenFollowComponent> FollowComponent;
 };
