@@ -3,10 +3,30 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "TimerManager.h"
+#include "Data/RetrieveMapIconRegistry.h"
 #include "RetrieveMapSubsystem.generated.h"
 
 class URetrieveMapIconComponent;
 class UTexture2D;
+
+/**
+ * 월드맵 전용 아이콘 스냅샷.
+ * 액터가 World Partition으로 언로드되어도 위치/타입 정보가 유지된다.
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveMapIconSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY() FVector WorldLocation = FVector::ZeroVector;
+	UPROPERTY() ERetrieveMapIconType IconType = ERetrieveMapIconType::POI;
+	UPROPERTY() FText MapLabel;
+	UPROPERTY() bool bShowLabelOnWorldMap = true;
+	UPROPERTY() bool bOverrideIcon = false;
+	UPROPERTY() TObjectPtr<UTexture2D> OverrideTexture;
+	UPROPERTY() FLinearColor OverrideColor = FLinearColor::White;
+	UPROPERTY() float OverrideSize = 16.0f;
+};
 
 /**
  * 월드맵 타일 하나.
@@ -142,7 +162,23 @@ public:
 	void RegisterIcon(URetrieveMapIconComponent* Icon);
 	void UnregisterIcon(URetrieveMapIconComponent* Icon);
 
+	/**
+	 * 현재 월드에 로드된 모든 MapIconComponent를 스캔해서 스냅샷을 갱신.
+	 * Is Spatially Loaded=false 액터의 타이밍 등록 누락을 보완하기 위해
+	 * 월드맵 패널을 열 때 호출한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
+	void RefreshWorldMapSnapshots();
+
+	/** 미니맵용: 현재 로드된 아이콘 컴포넌트 목록 */
 	const TArray<TObjectPtr<URetrieveMapIconComponent>>& GetIcons() const { return Icons; }
+
+	/** 월드맵용: 한 번이라도 등록된 모든 아이콘의 스냅샷 (WP 언로드 후에도 유지) */
+	const TArray<FRetrieveMapIconSnapshot>& GetIconSnapshots() const { return IconSnapshots; }
+
+	/** 디버그: 현재 스냅샷 목록을 Output Log와 화면에 출력 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
+	void DebugPrintIconSnapshots() const;
 
 	bool HasValidBounds() const { return MapExtent > 1.0f; }
 
@@ -152,6 +188,13 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<URetrieveMapIconComponent>> Icons;
+
+	/** 월드맵 전용 영구 스냅샷 배열 */
+	UPROPERTY()
+	TArray<FRetrieveMapIconSnapshot> IconSnapshots;
+
+	/** 액터 → 스냅샷 인덱스 (중복 등록 방지 및 위치 갱신용) */
+	TMap<FObjectKey, int32> SnapshotIndexByActor;
 
 	FTimerHandle BoundsRetryTimerHandle;
 	int32 BoundsRetryAttempts = 0;
