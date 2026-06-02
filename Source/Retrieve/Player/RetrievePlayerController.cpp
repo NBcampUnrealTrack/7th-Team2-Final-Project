@@ -154,10 +154,6 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 			return true;
 		}
 
-		if (TryHandleConsumableSlotShortcut(Params.Key))
-		{
-			return true;
-		}
 	}
 
 	return Super::InputKey(Params);
@@ -420,22 +416,6 @@ bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
 	}
 
 	return false;
-}
-
-bool ARetrievePlayerController::TryHandleConsumableSlotShortcut(FKey Key)
-{
-	const int32 SlotKey = Key == EKeys::Four ? 4 : (Key == EKeys::Five ? 5 : INDEX_NONE);
-	if (SlotKey == INDEX_NONE)
-	{
-		return false;
-	}
-
-	if (UInventoryComponent* InventoryComponent = GetPawnInventoryComponent())
-	{
-		InventoryComponent->UseConsumableSlot(SlotKey);
-	}
-
-	return true;
 }
 
 bool ARetrievePlayerController::CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const

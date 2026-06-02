@@ -1,10 +1,23 @@
 #include "Components/InventoryComponent.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "Animation/AnimMontage.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
+#include "Engine/DataTable.h"
+#include "GameFramework/Character.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
+
+namespace
+{
+constexpr int32 ConsumableSlotKeys[] = {
+	UInventoryComponent::QuickSlotPrimaryKey,
+	UInventoryComponent::QuickSlotSecondaryKey
+};
+}
 
 UInventoryComponent::UInventoryComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -146,7 +159,7 @@ bool UInventoryComponent::RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag,
 		// 수량이 0이 된 소모품은 HUD 슬롯에서 제거
 		if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable) && !HasItem(ItemId))
 		{
-			for (int32 SlotKey : {4, 5})
+			for (const int32 SlotKey : ConsumableSlotKeys)
 			{
 				if (GetSlotField(SlotKey) == ItemId)
 				{
@@ -291,7 +304,12 @@ bool UInventoryComponent::UseConsumableItem(FName ConsumableItemId)
 		return false;
 	}
 
-	// 실제 회복/버프 적용은 UseItem Ability에서 처리. 현재는 UI 테스트용 수량 차감
+	const FRetrieveConsumableItemRow* ConsumableRow = FindConsumableItemRow(ConsumableItemId);
+	if (!ConsumableRow || !ApplyConsumableEffects(*ConsumableRow))
+	{
+		return false;
+	}
+
 	return RemoveItem(ConsumableItemId, Stack->ItemCategoryTag, 1);
 }
 
@@ -319,7 +337,7 @@ bool UInventoryComponent::AssignConsumableSlot(int32 SlotKey, FName ConsumableIt
 	}
 
 	// 같은 소모품이 다른 슬롯에 이미 배정돼 있으면 먼저 해제
-	for (int32 OtherSlot : {4, 5})
+	for (const int32 OtherSlot : ConsumableSlotKeys)
 	{
 		if (OtherSlot != SlotKey && GetSlotField(OtherSlot) == ConsumableItemId)
 		{
@@ -381,18 +399,6 @@ bool UInventoryComponent::UseConsumableSlot(int32 SlotKey)
 		return false;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Consumable Slot %d 사용되었음"), SlotKey);
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			2.0f,
-			FColor::Green,
-			FString::Printf(TEXT("퀵슬롯 %d 사용되었음"), SlotKey)
-		);
-	}
-
 	if (!HasAuthorityToModify())
 	{
 		ServerUseConsumableSlot(SlotKey);
@@ -402,11 +408,81 @@ bool UInventoryComponent::UseConsumableSlot(int32 SlotKey)
 	return UseConsumableItem(SlotItemId);
 }
 
+bool UInventoryComponent::CanCraftItem(FName RecipeId) const
+{
+	const FRetrieveCraftRecipeRow* Recipe = FindCraftRecipeRow(RecipeId, TEXT("CanCraftItem"));
+	if (!Recipe || !IsCraftRecipeValid(*Recipe)) { return false; }
+
+	return HasRequiredCraftMaterials(*Recipe);
+}
+
+int32 UInventoryComponent::GetMaxCraftableCount(FName RecipeId) const
+{
+	const FRetrieveCraftRecipeRow* Recipe = FindCraftRecipeRow(RecipeId, TEXT("GetMaxCraftableCount"));
+	if (!Recipe || !IsCraftRecipeValid(*Recipe) || Recipe->RequiredMaterials.IsEmpty()) { return 0; }
+
+	TMap<FName, int32> RequiredCounts;
+	for (const FRetrieveItemStack& Material : Recipe->RequiredMaterials)
+	{
+		RequiredCounts.FindOrAdd(Material.ItemId) += Material.Quantity;
+	}
+
+	int32 MaxCount = TNumericLimits<int32>::Max();
+	for (const TPair<FName, int32>& Requirement : RequiredCounts)
+	{
+		MaxCount = FMath::Min(MaxCount, GetItemCount(Requirement.Key) / Requirement.Value);
+	}
+	return MaxCount == TNumericLimits<int32>::Max() ? 0 : MaxCount;
+}
+
+FText UInventoryComponent::GetCraftRecipeDisplayName(FName RecipeId) const
+{
+	const FRetrieveCraftRecipeRow* Recipe = FindCraftRecipeRow(RecipeId, TEXT("GetCraftRecipeDisplayName"));
+	return Recipe && !Recipe->DisplayName.IsEmpty()
+		? Recipe->DisplayName
+		: FText::FromName(RecipeId);
+}
+
 bool UInventoryComponent::CraftItem(FName RecipeId)
 {
-	// TODO: 제작 시스템 구현 예정
-	UE_LOG(LogTemp, Warning, TEXT("제작 기능은 아직 구현되지 않았습니다. RecipeId=%s"), *RecipeId.ToString());
-	return false;
+	if (!HasAuthorityToModify())
+	{
+		ServerCraftItem(RecipeId);
+		return true;
+	}
+
+	const FRetrieveCraftRecipeRow* Recipe = FindCraftRecipeRow(RecipeId, TEXT("CraftItem"));
+	if (!Recipe || !IsCraftRecipeValid(*Recipe))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CraftItem] Invalid recipe data. RecipeId=%s"), *RecipeId.ToString());
+		return false;
+	}
+
+	if (!HasRequiredCraftMaterials(*Recipe))
+	{
+		return false;
+	}
+
+	if (!ConsumeCraftMaterials(*Recipe))
+	{
+		return false;
+	}
+
+	if (!AddItem(Recipe->OutputItem.ItemId, Recipe->OutputItem.ItemCategoryTag, Recipe->OutputItem.Quantity))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[CraftItem] Failed to add output item. RecipeId=%s"), *RecipeId.ToString());
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CraftItem] 제작 성공 RecipeId=%s → %s x%d"),
+		*RecipeId.ToString(), *Recipe->OutputItem.ItemId.ToString(), Recipe->OutputItem.Quantity);
+
+	return true;
+}
+
+void UInventoryComponent::ServerCraftItem_Implementation(FName RecipeId)
+{
+	CraftItem(RecipeId);
 }
 
 FName UInventoryComponent::GetConsumableSlotItemId(int32 SlotKey) const
@@ -425,7 +501,7 @@ int32 UInventoryComponent::GetAssignedConsumableSlotKey(FName ConsumableItemId) 
 		return INDEX_NONE;
 	}
 
-	for (int32 SlotKey : {4, 5})
+	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
 		if (GetSlotField(SlotKey) == ConsumableItemId)
 		{
@@ -442,8 +518,8 @@ FRetrieveInventorySaveData UInventoryComponent::MakeInventorySaveData() const
 	SaveData.ConsumableItems = ConsumableItems;
 	SaveData.MaterialItems = MaterialItems;
 	SaveData.EquippedWeaponId = EquippedWeaponId;
-	SaveData.ConsumableSlotItemIds.Add(4, ConsumableSlot4ItemId);
-	SaveData.ConsumableSlotItemIds.Add(5, ConsumableSlot5ItemId);
+	SaveData.ConsumableSlotItemIds.Add(QuickSlotPrimaryKey, ConsumableSlot4ItemId);
+	SaveData.ConsumableSlotItemIds.Add(QuickSlotSecondaryKey, ConsumableSlot5ItemId);
 	return SaveData;
 }
 
@@ -458,8 +534,8 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 	ConsumableItems = SaveData.ConsumableItems;
 	MaterialItems = SaveData.MaterialItems;
 	EquippedWeaponId = SaveData.EquippedWeaponId;
-	ConsumableSlot4ItemId = SaveData.ConsumableSlotItemIds.FindRef(4);
-	ConsumableSlot5ItemId = SaveData.ConsumableSlotItemIds.FindRef(5);
+	ConsumableSlot4ItemId = SaveData.ConsumableSlotItemIds.FindRef(QuickSlotPrimaryKey);
+	ConsumableSlot5ItemId = SaveData.ConsumableSlotItemIds.FindRef(QuickSlotSecondaryKey);
 
 	// 예전 버전 저장 데이터나 잘못된 값 대비, 복원 직후 정리
 	const FRetrieveItemStack* EquippedStack = EquippedWeaponId.IsNone() ? nullptr : FindStack(EquippedWeaponId);
@@ -468,7 +544,7 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 		EquippedWeaponId = NAME_None;
 	}
 
-	for (int32 SlotKey : {4, 5})
+	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
 		FName& SlotItemId = GetMutableSlotField(SlotKey);
 		if (SlotItemId.IsNone())
@@ -496,7 +572,7 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 
 	OnInventoryChanged.Broadcast();
 	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
-	for (int32 SlotKey : {4, 5})
+	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
 		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
 	}
@@ -516,7 +592,7 @@ void UInventoryComponent::OnRep_EquippedWeaponId()
 
 void UInventoryComponent::OnRep_ConsumableSlots()
 {
-	for (int32 SlotKey : {4, 5})
+	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
 		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
 	}
@@ -581,6 +657,183 @@ URetrieveAbilitySystemComponent* UInventoryComponent::GetRetrieveAbilitySystemCo
 	return PawnExt ? PawnExt->GetRetrieveAbilitySystemComponent() : nullptr;
 }
 
+const FRetrieveConsumableItemRow* UInventoryComponent::FindConsumableItemRow(FName ConsumableItemId) const
+{
+	UDataTable* Table = ConsumableItemTable;
+	if (!Table)
+	{
+		Table = LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem"));
+	}
+
+	return Table
+		? Table->FindRow<FRetrieveConsumableItemRow>(ConsumableItemId, TEXT("InventoryComponent::FindConsumableItemRow"))
+		: nullptr;
+}
+
+const FRetrieveCraftRecipeRow* UInventoryComponent::FindCraftRecipeRow(FName RecipeId, const TCHAR* Context) const
+{
+	if (RecipeId.IsNone())
+	{
+		return nullptr;
+	}
+
+	if (UDataTable* Table = ResolveCraftRecipeTable())
+	{
+		if (const FRetrieveCraftRecipeRow* Recipe = Table->FindRow<FRetrieveCraftRecipeRow>(
+			RecipeId, Context, false))
+		{
+			return Recipe;
+		}
+	}
+
+	UDataTable* DefaultTable = LoadObject<UDataTable>(
+		nullptr,
+		TEXT("/Game/Retrieve/Data/Items/DT_CraftRecipe.DT_CraftRecipe"));
+	return DefaultTable && DefaultTable != CraftRecipeTable
+		? DefaultTable->FindRow<FRetrieveCraftRecipeRow>(RecipeId, Context)
+		: nullptr;
+}
+
+UDataTable* UInventoryComponent::ResolveCraftRecipeTable() const
+{
+	return CraftRecipeTable
+		? CraftRecipeTable.Get()
+		: LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Retrieve/Data/Items/DT_CraftRecipe.DT_CraftRecipe"));
+}
+
+bool UInventoryComponent::IsCraftRecipeValid(const FRetrieveCraftRecipeRow& Recipe) const
+{
+	if (Recipe.OutputItem.ItemId.IsNone()
+		|| !Recipe.OutputItem.ItemCategoryTag.IsValid()
+		|| Recipe.OutputItem.Quantity <= 0
+		|| !GetItemsForCategory(Recipe.OutputItem.ItemCategoryTag)
+		|| Recipe.RequiredMaterials.IsEmpty())
+	{
+		return false;
+	}
+
+	for (const FRetrieveItemStack& Material : Recipe.RequiredMaterials)
+	{
+		if (Material.ItemId.IsNone()
+			|| !Material.ItemCategoryTag.IsValid()
+			|| Material.Quantity <= 0
+			|| !GetItemsForCategory(Material.ItemCategoryTag))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool UInventoryComponent::HasRequiredCraftMaterials(const FRetrieveCraftRecipeRow& Recipe) const
+{
+	TMap<FName, int32> RequiredCounts;
+	for (const FRetrieveItemStack& Material : Recipe.RequiredMaterials)
+	{
+		RequiredCounts.FindOrAdd(Material.ItemId) += Material.Quantity;
+	}
+
+	for (const TPair<FName, int32>& Requirement : RequiredCounts)
+	{
+		if (GetItemCount(Requirement.Key) < Requirement.Value)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool UInventoryComponent::ConsumeCraftMaterials(const FRetrieveCraftRecipeRow& Recipe)
+{
+	TMap<FName, FRetrieveItemStack> RequiredMaterials;
+	for (const FRetrieveItemStack& Material : Recipe.RequiredMaterials)
+	{
+		if (FRetrieveItemStack* Requirement = RequiredMaterials.Find(Material.ItemId))
+		{
+			Requirement->Quantity += Material.Quantity;
+		}
+		else
+		{
+			RequiredMaterials.Add(Material.ItemId, Material);
+		}
+	}
+
+	for (const TPair<FName, FRetrieveItemStack>& Requirement : RequiredMaterials)
+	{
+		const FRetrieveItemStack& Material = Requirement.Value;
+		if (!RemoveItem(Material.ItemId, Material.ItemCategoryTag, Material.Quantity))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool UInventoryComponent::ApplyConsumableEffects(const FRetrieveConsumableItemRow& ConsumableRow)
+{
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (!ASC || ASC->HasAnyMatchingGameplayTags(ConsumableRow.BlockedStateTags))
+	{
+		return false;
+	}
+
+	bool bAppliedEffect = false;
+	const FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+
+	if (const UGameplayEffect* HealEffect = ConsumableRow.HealEffect.GetDefaultObject())
+	{
+		ASC->ApplyGameplayEffectToSelf(HealEffect, 1.0f, EffectContext);
+		bAppliedEffect = true;
+	}
+	else if (ConsumableRow.HealAmount > 0.0f)
+	{
+		UGameplayEffect* RuntimeHealEffect = NewObject<UGameplayEffect>(GetTransientPackage());
+		RuntimeHealEffect->DurationPolicy = EGameplayEffectDurationType::Instant;
+
+		FGameplayModifierInfo& HealingModifier = RuntimeHealEffect->Modifiers.AddDefaulted_GetRef();
+		HealingModifier.Attribute = UCombatAttributeSet::GetIncomingHealingAttribute();
+		HealingModifier.ModifierOp = EGameplayModOp::Additive;
+		HealingModifier.ModifierMagnitude = FScalableFloat(ConsumableRow.HealAmount);
+
+		ASC->ApplyGameplayEffectToSelf(RuntimeHealEffect, 1.0f, EffectContext);
+		bAppliedEffect = true;
+	}
+
+	if (const UGameplayEffect* ElementBuffEffect = ConsumableRow.ElementBuffEffect.GetDefaultObject())
+	{
+		ASC->ApplyGameplayEffectToSelf(ElementBuffEffect, 1.0f, EffectContext);
+		bAppliedEffect = true;
+	}
+
+	if (!bAppliedEffect)
+	{
+		return false;
+	}
+
+	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+	{
+		if (UAnimMontage* UseMontage = ConsumableRow.UseMontage.LoadSynchronous())
+		{
+			Character->PlayAnimMontage(UseMontage);
+		}
+	}
+
+	FGameplayEventData EventData;
+	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Item_Used;
+	EventData.Instigator = GetOwner();
+	EventData.Target = GetOwner();
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		GetOwner(),
+		RetrieveGameplayTags::GameplayEvent_Item_Used,
+		EventData);
+
+	return true;
+}
+
 const TArray<FRetrieveItemStack>* UInventoryComponent::GetItemsForCategory(FGameplayTag ItemCategoryTag) const
 {
 	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))    { return &WeaponItems; }
@@ -618,12 +871,12 @@ FRetrieveItemStack* UInventoryComponent::FindMutableStack(FName ItemId)
 
 FName& UInventoryComponent::GetMutableSlotField(int32 SlotKey)
 {
-	return (SlotKey == 4) ? ConsumableSlot4ItemId : ConsumableSlot5ItemId;
+	return SlotKey == QuickSlotPrimaryKey ? ConsumableSlot4ItemId : ConsumableSlot5ItemId;
 }
 
 const FName& UInventoryComponent::GetSlotField(int32 SlotKey) const
 {
-	return (SlotKey == 4) ? ConsumableSlot4ItemId : ConsumableSlot5ItemId;
+	return SlotKey == QuickSlotPrimaryKey ? ConsumableSlot4ItemId : ConsumableSlot5ItemId;
 }
 
 bool UInventoryComponent::HasAuthorityToModify() const
@@ -634,5 +887,5 @@ bool UInventoryComponent::HasAuthorityToModify() const
 
 bool UInventoryComponent::IsValidConsumableSlotKey(int32 SlotKey)
 {
-	return SlotKey == 4 || SlotKey == 5;
+	return SlotKey == QuickSlotPrimaryKey || SlotKey == QuickSlotSecondaryKey;
 }

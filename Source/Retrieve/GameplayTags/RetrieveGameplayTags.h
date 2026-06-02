@@ -215,9 +215,12 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxHealth);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Health);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackPower);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MoveSpeed);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
-
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MoveSpeed);
+    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
+	// 무기 장착 시 AttackPower 가산에 사용하는 SetByCaller 태그
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_AttackPower);
+	
+	
 	/*
 	// ---- Hit react (피격자 반응 제어 마커 — Cue 연동용)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hit_React_Stagger);

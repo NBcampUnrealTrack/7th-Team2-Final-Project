@@ -6,6 +6,7 @@
 #include "RetrieveHeroComponent.generated.h"
 
 struct FInputActionValue;
+class UInputMappingContext;
 
 /**
  * 플레이어 전용. PawnExtensionComponent가 DataInitialized 상태에 도달하는 것을 기다린 후, Enhanced Input을 바인딩합니다.
@@ -48,6 +49,7 @@ protected:
 
 	void Input_Move(const FInputActionValue& InputActionValue);
 	void Input_Look(const FInputActionValue& InputActionValue);
+	void Input_UseConsumableSlot(int32 SlotKey);
 
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
 	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
@@ -64,6 +66,9 @@ private:
 	/** SetupPlayerInputComponent 시점에 캐시됨; 초기화가 DataInitialized에 도달하면 바인딩을 재시도에 사용됩니다 */
 	UPROPERTY(Transient)
 	TObjectPtr<UInputComponent> PendingInputComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> RuntimeMappingContext;
 
 	bool bInputsBound = false;
 

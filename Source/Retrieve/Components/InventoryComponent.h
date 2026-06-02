@@ -25,6 +25,9 @@ class RETRIEVE_API UInventoryComponent : public UPawnComponent
 public:
 	UInventoryComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	static constexpr int32 QuickSlotPrimaryKey = 4;
+	static constexpr int32 QuickSlotSecondaryKey = 5;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
@@ -68,6 +71,25 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool CraftItem(FName RecipeId);
+
+	/** 제작 가능 여부만 검사 (재료 차감 없음). UI 버튼 활성화 판단에 사용 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool CanCraftItem(FName RecipeId) const;
+
+	/** 현재 재료 보유량으로 제작 가능한 최대 횟수. 재료 부족 시 0 반환 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	int32 GetMaxCraftableCount(FName RecipeId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Craft")
+	FText GetCraftRecipeDisplayName(FName RecipeId) const;
+
+	/** 제작 레시피 DataTable. RowName == RecipeId, Row 구조: FRetrieveCraftRecipeRow */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory|Craft")
+	TObjectPtr<UDataTable> CraftRecipeTable;
+
+	/** 소모품 효과 DataTable. RowName == ItemId, Row 구조: FRetrieveConsumableItemRow */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory|Consumable")
+	TObjectPtr<UDataTable> ConsumableItemTable;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FName GetEquippedWeaponId() const { return EquippedWeaponId; }
@@ -154,8 +176,18 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerUseConsumableSlot(int32 SlotKey);
 
+	UFUNCTION(Server, Reliable)
+	void ServerCraftItem(FName RecipeId);
+
 	UWeaponComponent* GetWeaponComponent() const;
 	URetrieveAbilitySystemComponent* GetRetrieveAbilitySystemComponent() const;
+	const FRetrieveConsumableItemRow* FindConsumableItemRow(FName ConsumableItemId) const;
+	UDataTable* ResolveCraftRecipeTable() const;
+	const FRetrieveCraftRecipeRow* FindCraftRecipeRow(FName RecipeId, const TCHAR* Context) const;
+	bool IsCraftRecipeValid(const FRetrieveCraftRecipeRow& Recipe) const;
+	bool HasRequiredCraftMaterials(const FRetrieveCraftRecipeRow& Recipe) const;
+	bool ConsumeCraftMaterials(const FRetrieveCraftRecipeRow& Recipe);
+	bool ApplyConsumableEffects(const FRetrieveConsumableItemRow& ConsumableRow);
 
 	// const 버전 하나만 구현, mutable 버전은 const_cast로 위임
 	const TArray<FRetrieveItemStack>* GetItemsForCategory(FGameplayTag ItemCategoryTag) const;
