@@ -330,15 +330,84 @@ UTexture2D* URetrieveMapSubsystem::GetTextureForUV(const FVector2D& UV) const
 	return BakedMapTexture;
 }
 
+void URetrieveMapSubsystem::RefreshWorldMapSnapshots()
+{
+	UWorld* World = GetWorld();
+	if (!World) { return; }
+
+	int32 Found = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor)) { continue; }
+
+		URetrieveMapIconComponent* IconComp =
+			Actor->FindComponentByClass<URetrieveMapIconComponent>();
+		if (!IsValid(IconComp)) { continue; }
+
+		RegisterIcon(IconComp);
+		++Found;
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[WorldMap] RefreshWorldMapSnapshots — 스캔 완료: 로드된 아이콘 %d개, 스냅샷 총 %d개"),
+		Found, IconSnapshots.Num());
+}
+
+void URetrieveMapSubsystem::DebugPrintIconSnapshots() const
+{
+	UE_LOG(LogTemp, Warning,
+		TEXT("[WorldMap] ─── IconSnapshot 목록 (총 %d개) ───"), IconSnapshots.Num());
+
+	for (int32 i = 0; i < IconSnapshots.Num(); ++i)
+	{
+		const FRetrieveMapIconSnapshot& S = IconSnapshots[i];
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WorldMap]  [%d] Type=%d Loc=(%.0f,%.0f,%.0f) Label=%s"),
+			i,
+			static_cast<int32>(S.IconType),
+			S.WorldLocation.X, S.WorldLocation.Y, S.WorldLocation.Z,
+			*S.MapLabel.ToString());
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Cyan,
+			FString::Printf(TEXT("[WorldMap] IconSnapshots: %d개"), IconSnapshots.Num()));
+	}
+}
+
 void URetrieveMapSubsystem::RegisterIcon(URetrieveMapIconComponent* Icon)
 {
-	if (IsValid(Icon) && IsValid(Icon->GetOwner()))
+	if (!IsValid(Icon) || !IsValid(Icon->GetOwner())) { return; }
+
+	Icons.AddUnique(Icon);
+
+	// 스냅샷 upsert: 이미 등록된 액터면 위치만 갱신, 처음이면 새로 추가
+	const FObjectKey Key(Icon->GetOwner());
+	if (const int32* Idx = SnapshotIndexByActor.Find(Key))
 	{
-		Icons.AddUnique(Icon);
+		IconSnapshots[*Idx].WorldLocation = Icon->GetOwner()->GetActorLocation();
+	}
+	else
+	{
+		FRetrieveMapIconSnapshot Snap;
+		Snap.WorldLocation      = Icon->GetOwner()->GetActorLocation();
+		Snap.IconType           = Icon->IconType;
+		Snap.MapLabel           = Icon->MapLabel;
+		Snap.bShowLabelOnWorldMap = Icon->bShowLabelOnWorldMap;
+		Snap.bOverrideIcon      = Icon->bOverrideIcon;
+		Snap.OverrideTexture    = Icon->OverrideTexture;
+		Snap.OverrideColor      = Icon->OverrideColor;
+		Snap.OverrideSize       = Icon->OverrideSize;
+
+		const int32 NewIdx = IconSnapshots.Add(Snap);
+		SnapshotIndexByActor.Add(Key, NewIdx);
 	}
 }
 
 void URetrieveMapSubsystem::UnregisterIcon(URetrieveMapIconComponent* Icon)
 {
 	Icons.Remove(Icon);
+	// 스냅샷은 제거하지 않음 — 언로드 후에도 월드맵에 아이콘이 유지되어야 함
 }
