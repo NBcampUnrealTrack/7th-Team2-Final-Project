@@ -473,6 +473,15 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FName TraceSocketName = TEXT("Weapon_R");
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FName TraceStartSocketName = TEXT("Weapon_Start");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FName TraceEndSocketName = TEXT("Weapon_End");
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "2"))
+	int32 TraceSegmentCount = 4;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (TitleProperty = "SectionName"))
 	TArray<FWeaponComboStep> ComboSteps;

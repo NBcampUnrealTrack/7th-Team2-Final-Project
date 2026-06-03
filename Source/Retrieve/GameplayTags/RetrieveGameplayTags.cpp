@@ -18,6 +18,9 @@ namespace RetrieveGameplayTags
 	// ---- Player abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Attack, "Ability.Player.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack, "Ability.Player.HeavyAttack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Fire, "Ability.Player.HeavyAttack.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Water, "Ability.Player.HeavyAttack.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Wind, "Ability.Player.HeavyAttack.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Guard, "Ability.Player.Guard");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Parry, "Ability.Player.Parry");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Dash, "Ability.Player.Dash");
@@ -49,6 +52,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dodging, "State.Player.Dodging");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Shielded, "State.Player.Shielded");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_UsingHeavyAttack, "State.Player.UsingHeavyAttack");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Bursting, "State.Player.Bursting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Cinematic, "State.Player.Cinematic");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Staggered, "State.Player.Staggered");
@@ -57,6 +62,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
+
+	// ---- Action state
+	UE_DEFINE_GAMEPLAY_TAG(State_Action_HighMobility, "State.Action.HighMobility");
 
 	// ---- Enemy state
 	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_Idle, "State.Enemy.Idle");
@@ -95,6 +103,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Unblockable, "Attack.Type.Unblockable");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Parryable, "Attack.Type.Parryable");
+
+	// ---- Attack property
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
 
 	// ---- Elements
 	UE_DEFINE_GAMEPLAY_TAG(Element_Fire, "Element.Fire");
@@ -220,20 +231,12 @@ namespace RetrieveGameplayTags
 	// ---- Hit react
 	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");
 
-	// ---- Damage context
-	UE_DEFINE_GAMEPLAY_TAG(Damage_Source_Player, "Damage.Source.Player");
-
-	// ---- Gauge state
-	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_Empty, "State.Gauge.Empty");
-	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_SlotReady, "State.Gauge.SlotReady");
-
-	// ---- Gameplay events: combat
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_HeavyAttack_Launched, "GameplayEvent.HeavyAttack.Launched");
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Success, "GameplayEvent.Guard.Success");
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Break, "GameplayEvent.Guard.Break");
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Fail, "GameplayEvent.Parry.Fail");
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Knockdown, "GameplayEvent.Hit.Knockdown");
-	*/
+	// ---- Gameplay cues: Heavy attack
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Fire, "GameplayCue.HeavyAttack.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Water, "GameplayCue.HeavyAttack.Water");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Water_Active, "GameplayCue.HeavyAttack.Water.Active");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Wind, "GameplayCue.HeavyAttack.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_NoSlot, "GameplayCue.HeavyAttack.NoSlot");
 
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");

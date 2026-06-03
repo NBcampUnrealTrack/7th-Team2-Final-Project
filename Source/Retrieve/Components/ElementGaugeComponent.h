@@ -72,6 +72,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
 	int32 GetSlotCount() const { return SlotCount; }
 
+	// 소비 가능한(충전 완료된) 슬롯이 하나라도 있는지 검사, 잔량 확인엔 GetSlotCount()가 아니라 이 함수 사용
+	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
+	bool HasChargedSlot() const { return ElementSlots.Num() > 0 && ElementSlots[0].bIsFull; }
+
 private:
 	void HandleGameplayEvent(FGameplayTag EventTag, const FGameplayEventData* Payload);
 

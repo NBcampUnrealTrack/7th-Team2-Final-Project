@@ -186,9 +186,15 @@ void URetrieveCheatManager::RetrieveTestGuardHit(bool bHeavy)
     FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GEClass, 1.f, Ctx);
     if (!Spec.IsValid()) return;
 
-    Spec.Data->AddDynamicAssetTag(bHeavy
-        ? RetrieveGameplayTags::Attack_Type_Heavy
-        : RetrieveGameplayTags::Attack_Type_Normal);
+    if (bHeavy)
+    {
+        Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
+        Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
+    }
+    else
+    {
+        Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
+    }
 
     ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 

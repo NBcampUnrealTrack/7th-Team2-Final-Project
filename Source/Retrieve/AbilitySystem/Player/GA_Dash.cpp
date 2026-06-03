@@ -30,9 +30,10 @@ UGA_Dash::UGA_Dash()
 	// 재대시 명시적 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 
-	// 최상위 우선권 (공격/방어를 즉시 취소하고 발동)
+	// 최상위 우선권 (공격/방어/강공격을 즉시 취소하고 발동)
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 }
 
 void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

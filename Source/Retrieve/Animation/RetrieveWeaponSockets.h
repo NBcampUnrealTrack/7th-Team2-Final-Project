@@ -7,4 +7,7 @@ namespace RetrieveWeaponSockets
 	inline const FName Weapon_R(TEXT("Weapon_R"));
 	inline const FName Weapon_L(TEXT("Weapon_L"));
 	inline const FName Shield(TEXT("Shield"));
+	
+	inline const FName Weapon_Start(TEXT("Weapon_Start"));
+	inline const FName Weapon_End(TEXT("Weapon_End"));
 }

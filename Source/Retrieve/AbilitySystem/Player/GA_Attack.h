@@ -32,6 +32,8 @@ private:
 	void StopRuntimeTasks();
 	void CleanupComboTag() const;
 	void ApplyStepDamage();
+	
+	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 
 	UFUNCTION() void HandleImpactBeginEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
@@ -74,6 +76,6 @@ private:
 	int32 CurrentComboIndex = INDEX_NONE;
 	bool bComboQueued = false;
 	
-	FVector PreviousTraceOrigin = FVector::ZeroVector;
-	bool bHasValidPreviousTraceOrigin = false;
+	TArray<FVector> PreviousTracePoints;
+	bool bHasValidPreviousTracePoints = false;
 };

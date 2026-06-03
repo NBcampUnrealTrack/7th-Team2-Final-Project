@@ -20,6 +20,9 @@ namespace RetrieveGameplayTags
 	// ---- Player abilities
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack_Fire);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack_Water);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack_Wind);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Guard);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Parry);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Dash);
@@ -51,6 +54,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dodging);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Guarding);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Parrying);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Shielded);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_UsingHeavyAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Bursting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Cinematic);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Staggered);
@@ -59,6 +64,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_ForcedMove);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Sprinting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Crouching);
+
+	// ---- Action state
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_HighMobility);
 
 	// ---- Enemy state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Idle);
@@ -97,6 +105,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_BossHeavy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Unblockable);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Parryable);
+
+	// ---- Attack property
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_GuardBreak);
 
 	// ---- Elements
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Fire);
@@ -215,30 +226,17 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxHealth);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Health);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackPower);
-    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MoveSpeed);
-    RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MoveSpeed);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
 	// 무기 장착 시 AttackPower 가산에 사용하는 SetByCaller 태그
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_AttackPower);
 	
-	
-	/*
-	// ---- Hit react (피격자 반응 제어 마커 — Cue 연동용)
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hit_React_Stagger);
-
-	// ---- Damage context
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Source_Player);
-
-	// ---- Gauge state (보완)
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_Empty);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gauge_SlotReady);
-
-	// ---- Gameplay events: combat (보완)
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_HeavyAttack_Launched);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Guard_Success);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Guard_Break);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parry_Fail);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Hit_Knockdown);
-	*/
+	// ---- Gameplay cues: Heavy attack
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Fire);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Water);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Water_Active);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Wind);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_NoSlot);
 
 	// ---- UI VFX
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Panel_Open);
