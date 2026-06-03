@@ -131,6 +131,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
 	TArray<FRetrieveItemStack> GetCurrentItemsSorted() const;
 
+	/** Button_SortAttackPower VisibilityDelegate 바인딩용 — 무기 탭일 때만 Visible */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
+	ESlateVisibility GetSortAttackPowerButtonVisibility() const;
+
 	// ── 최종 스탯 조회 ────────────────────────────────────────────────────
 	/** 캐릭터 기본 공격력 (무기 보정 전 Base 값) */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
@@ -147,6 +151,13 @@ public:
 	/** 인벤토리 스탯 패널용 포맷 텍스트: "기본 ATK: N\n무기 보너스: +M\n최종 ATK: P" */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
 	FText GetFinalStatDisplayText() const;
+
+	/**
+	 * HP + ATK 전체 스탯 표시 텍스트.
+	 * DT_CharacterStats에 새 컬럼(float/int) 추가 시 자동으로 출력에 포함됨.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	FText GetFullStatDisplayText() const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FGameplayTag GetCurrentCategoryTag() const { return CurrentCategoryTag; }
@@ -330,6 +341,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_CancelQuickSlotAssign;
+
+	/** 무기 탭일 때만 표시되는 공격력 정렬 버튼 */
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SortAttackPower;
 
 	// 런타임 상태
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory", meta = (Categories = "Item"))
