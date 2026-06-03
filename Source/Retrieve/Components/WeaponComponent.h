@@ -48,6 +48,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
 	UMeshComponent* GetPrimaryEquippedWeaponMesh() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
+	UMeshComponent* GetWeaponMeshForTrace(FName StartSocket, FName EndSocket) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Weapon")
 	FWeaponChangedSignature OnWeaponEquipped;

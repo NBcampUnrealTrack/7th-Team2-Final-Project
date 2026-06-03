@@ -158,6 +158,24 @@ UMeshComponent* UWeaponComponent::GetPrimaryEquippedWeaponMesh() const
 	return nullptr;
 }
 
+UMeshComponent* UWeaponComponent::GetWeaponMeshForTrace(FName StartSocket, FName EndSocket) const
+{
+	if (!StartSocket.IsNone() && !EndSocket.IsNone())
+	{
+		for (UMeshComponent* MeshComponent : EquippedWeaponMeshComponents)
+		{
+			if (IsValid(MeshComponent)
+				&& MeshComponent->DoesSocketExist(StartSocket)
+				&& MeshComponent->DoesSocketExist(EndSocket))
+			{
+				return MeshComponent;
+			}
+		}
+	}
+	
+	return GetPrimaryEquippedWeaponMesh();
+}
+
 bool UWeaponComponent::HasAuthorityToModify() const
 {
 	const AActor* Owner = GetOwner();

@@ -12,6 +12,7 @@
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Logging/RetrieveLogChannels.h"
 
 UGA_Attack::UGA_Attack()
 {
@@ -100,7 +101,8 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	bComboQueued = false;
 	
 	HitActorsThisStep.Reset();
-	bHasValidPreviousTraceOrigin = false;
+	PreviousTracePoints.Reset();
+	bHasValidPreviousTracePoints = false;
 
 	if (MontageTask)
 	{
@@ -169,7 +171,8 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 
 void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
 {
-	bHasValidPreviousTraceOrigin = false;
+	PreviousTracePoints.Reset();
+	bHasValidPreviousTracePoints = false;
 	HitActorsThisStep.Reset();
 }
 
@@ -195,52 +198,96 @@ void UGA_Attack::ApplyStepDamage()
 		return;
 	}
 	
-	const float DamageMul = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
-		? CachedWeaponData.ComboSteps[CurrentComboIndex].DamageMultiplier : 1.0f;
-
-	UMeshComponent* TraceMesh = IsValid(CachedWeaponComponent) ? CachedWeaponComponent->GetPrimaryEquippedWeaponMesh() : nullptr;
-	FName TraceSocket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
-
-	FVector CurrentTraceOrigin = AvatarActor->GetActorLocation();
-	if (IsValid(TraceMesh) && TraceMesh->DoesSocketExist(TraceSocket))
-	{
-		CurrentTraceOrigin = TraceMesh->GetSocketLocation(TraceSocket);
-	}
-
 	UWorld* World = AvatarActor->GetWorld();
 	if (!IsValid(World))
 	{
 		return;
 	}
+
+	TArray<FVector> CurrentPoints;
+	BuildTracePoints(CurrentPoints);
+	if (CurrentPoints.IsEmpty())
+	{
+		return;
+	}
 	
-	const FVector SweepStart = bHasValidPreviousTraceOrigin ? PreviousTraceOrigin : CurrentTraceOrigin;
+	const float DamageMul = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
+		? CachedWeaponData.ComboSteps[CurrentComboIndex].DamageMultiplier : 1.0f;
 	
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
+	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);
 
-	TArray<FHitResult> HitResults;
-	const bool bHit = World->SweepMultiByObjectType(HitResults, SweepStart, CurrentTraceOrigin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(TraceRadius), QueryParams);
-	if (bDebugDrawTrace)
+	const bool bHasPrev = bHasValidPreviousTracePoints && PreviousTracePoints.Num() == CurrentPoints.Num();
+	
+	TArray<FHitResult> AllHits;
+
+	auto SweepSegment = [&](const FVector& SegStart, const FVector& SegEnd)
 	{
-		constexpr float DebugLife = -1.0f; 
-		DrawDebugLine(World, SweepStart, CurrentTraceOrigin, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
-		DrawDebugSphere(World, CurrentTraceOrigin, TraceRadius, 12, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+		TArray<FHitResult> SegmentHits;
+		const bool bHit = World->SweepMultiByObjectType(SegmentHits, SegStart, SegEnd, FQuat::Identity, ObjectQueryParams, TraceShape, QueryParams);
+		if (bDebugDrawTrace)
+		{
+			constexpr float DebugLife = -1.0f;
+			DrawDebugLine(World, SegStart, SegEnd, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
+			DrawDebugSphere(World, SegEnd, TraceRadius, 8, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+		}
+		if (bHit)
+		{
+			AllHits.Append(MoveTemp(SegmentHits));
+		}
+	};
+	
+	for (int32 i = 0; i + 1 < CurrentPoints.Num(); ++i)
+	{
+		SweepSegment(CurrentPoints[i], CurrentPoints[i + 1]);
 	}
 	
-	PreviousTraceOrigin = CurrentTraceOrigin;
-	bHasValidPreviousTraceOrigin = true;
+	if (bHasPrev)
+	{
+		for (int32 i = 0; i < CurrentPoints.Num(); ++i)
+		{
+			SweepSegment(PreviousTracePoints[i], CurrentPoints[i]);
+		}
+	}
+	else if (CurrentPoints.Num() == 1)
+	{
+		SweepSegment(CurrentPoints[0], CurrentPoints[0]);
+	}
 
-	if (!bHit)
+	PreviousTracePoints = CurrentPoints;
+	bHasValidPreviousTracePoints = true;
+
+	if (AllHits.IsEmpty())
 	{
 		return;
 	}
-	for (const FHitResult& Hit : HitResults)
+	
+	for (const FHitResult& Hit : AllHits)
 	{
 		AActor* TargetActor = Hit.GetActor();
-		if (!IsValid(TargetActor) || TargetActor == AvatarActor || HitActorsThisStep.Contains(TargetActor)) continue;
+		if (!IsValid(TargetActor) || TargetActor == AvatarActor) continue;
+		
+		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+		const bool bAlreadyHitThisStep = HitActorsThisStep.Contains(TargetActor);
 
-		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor))
+		// 진단용: 콤보 스텝별로 어디서 데미지가 떨어지는지 추적(피격 상태 태그 + 중복 여부)
+		if (bDebugDrawTrace)
+		{
+			UE_LOG(LogRetrieveCombat, Warning,
+				TEXT("[GA_Attack] Step=%d Target=%s ASC=%s AlreadyHitThisStep=%d | Staggered=%d Hit=%d Groggy=%d Dead=%d"),
+				CurrentComboIndex, *GetNameSafe(TargetActor), TargetASC ? TEXT("Y") : TEXT("N"),
+				bAlreadyHitThisStep ? 1 : 0,
+				(TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Staggered)) ? 1 : 0,
+				(TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Hit)) ? 1 : 0,
+				(TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Groggy)) ? 1 : 0,
+				(TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Dead)) ? 1 : 0);
+		}
+
+		if (bAlreadyHitThisStep) continue;
+
+		if (TargetASC)
 		{
 			FGameplayEffectContextHandle PerHitContext = SourceASC->MakeEffectContext();
 			PerHitContext.AddInstigator(AvatarActor, AvatarActor);
@@ -254,10 +301,50 @@ void UGA_Attack::ApplyStepDamage()
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
 
 			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
-			
+
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActorsThisStep.Add(TargetActor);
 		}
+	}
+}
+
+void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
+{
+	OutPoints.Reset();
+
+	const FName StartSocket = CachedWeaponData.TraceStartSocketName;
+	const FName EndSocket = CachedWeaponData.TraceEndSocketName;
+	
+	UMeshComponent* TraceMesh = IsValid(CachedWeaponComponent)
+		? CachedWeaponComponent->GetWeaponMeshForTrace(StartSocket, EndSocket)
+		: nullptr;
+	
+	if (IsValid(TraceMesh) && !StartSocket.IsNone() && !EndSocket.IsNone()
+		&& TraceMesh->DoesSocketExist(StartSocket) && TraceMesh->DoesSocketExist(EndSocket))
+	{
+		const FVector StartLoc = TraceMesh->GetSocketLocation(StartSocket);
+		const FVector EndLoc = TraceMesh->GetSocketLocation(EndSocket);
+		const int32 SegmentCount = FMath::Max(2, CachedWeaponData.TraceSegmentCount);
+
+		OutPoints.Reserve(SegmentCount);
+		for (int32 i = 0; i < SegmentCount; ++i)
+		{
+			const float Alpha = static_cast<float>(i) / static_cast<float>(SegmentCount - 1);
+			OutPoints.Add(FMath::Lerp(StartLoc, EndLoc, Alpha));
+		}
+		return;
+	}
+	
+	const FName SingleSocket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
+	if (IsValid(TraceMesh) && TraceMesh->DoesSocketExist(SingleSocket))
+	{
+		OutPoints.Add(TraceMesh->GetSocketLocation(SingleSocket));
+		return;
+	}
+	
+	if (const AActor* AvatarActor = GetAvatarActorFromActorInfo())
+	{
+		OutPoints.Add(AvatarActor->GetActorLocation());
 	}
 }
 
@@ -316,7 +403,8 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 	CurrentComboIndex = INDEX_NONE;
 	bComboQueued = false;
 	HitActorsThisStep.Reset();
-	bHasValidPreviousTraceOrigin = false;
+	PreviousTracePoints.Reset();
+	bHasValidPreviousTracePoints = false;
 	CachedWeaponComponent = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);

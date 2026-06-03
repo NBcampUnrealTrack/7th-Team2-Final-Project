@@ -2,6 +2,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffectExtension.h"
+#include "Logging/RetrieveLogChannels.h"
 #include "Net/UnrealNetwork.h"
 
 UCombatAttributeSet::UCombatAttributeSet()
@@ -124,27 +125,35 @@ float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCa
 	{
 		return RawDamage;
 	}
-	
-	if (!TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding))
-	{
-		return RawDamage;
-	}
-	
-	if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Heavy) ||
-		SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
-	{
-		FGameplayEventData EventData;
-		EventData.Instigator = Data.EffectSpec.GetEffectContext().GetInstigator();
-		EventData.Target     = TargetActor;
-		EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Guard_Broken;
 
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			TargetActor, RetrieveGameplayTags::GameplayEvent_Guard_Broken, EventData);
-
-		return RawDamage;
-	}
+	const bool bGuarding = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
+	const bool bShielded = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Shielded);
 	
-	return RawDamage * (1.0f - GetGuardDamageReduction());
+	if (bGuarding)
+	{
+		if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Property_GuardBreak) ||
+			SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
+		{
+			FGameplayEventData EventData;
+			EventData.Instigator = Data.EffectSpec.GetEffectContext().GetInstigator();
+			EventData.Target     = TargetActor;
+			EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Guard_Broken;
+
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				TargetActor, RetrieveGameplayTags::GameplayEvent_Guard_Broken, EventData);
+
+			return RawDamage;
+		}
+
+		return RawDamage * (1.0f - GetGuardDamageReduction());
+	}
+
+	if (bShielded)
+	{
+		return RawDamage * 0.5f;
+	}
+
+	return RawDamage;
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
@@ -205,7 +214,7 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	}
 	
 	// 테스트 코드
-	UE_LOG(LogTemp, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
+	UE_LOG(LogRetrieveCombat, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
 		*AttackerEventTag.ToString(),
 		*TargetEventTag.ToString(),
 		DamageDone,
