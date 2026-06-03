@@ -8,7 +8,9 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/InventoryComponent.h"
+#include "Character/RetrievePawnData.h"
 #include "Components/RetrievePawnExtensionComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -1060,6 +1062,11 @@ TArray<FRetrieveItemStack> UInventoryPanelWidget::GetCurrentItemsSorted() const
 	return Items;
 }
 
+ESlateVisibility UInventoryPanelWidget::GetSortAttackPowerButtonVisibility() const
+{
+	return IsWeaponCategory(CurrentCategoryTag) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+}
+
 void UInventoryPanelWidget::SortItemStacks(TArray<FRetrieveItemStack>& Items) const
 {
 	if (CurrentSortMode == EInventorySortMode::None || Items.Num() < 2)
@@ -1210,4 +1217,68 @@ FText UInventoryPanelWidget::GetFinalStatDisplayText() const
 		BaseATK, WeaponATK, TotalATK);
 
 	return FText::FromString(DisplayStr);
+}
+
+FText UInventoryPanelWidget::GetFullStatDisplayText() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+
+	TArray<FString> Lines;
+
+	// 현재 체력 / 최대 체력 (ASC 없으면 0으로 표시해 포맷 통일)
+	const float HP    = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetHealthAttribute())    : 0.f;
+	const float MaxHP = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetMaxHealthAttribute()) : 0.f;
+	Lines.Add(FString::Printf(TEXT("현재 체력: %.0f / %.0f"), HP, MaxHP));
+
+	// 공격력 분류 (순수 함수들은 ASC 내부에서 개별 null 처리함)
+	Lines.Add(FString::Printf(TEXT("기본 공격력: %.0f"), GetCharacterBaseAttackPower()));
+	Lines.Add(FString::Printf(TEXT("무기 공격력: +%.0f"), GetWeaponBonusAttackPower()));
+	Lines.Add(FString::Printf(TEXT("최종 공격력: %.0f"), GetTotalAttackPower()));
+
+	// DT_CharacterStats 추가 컬럼 자동 표시
+	// MaxHealth, AttackPower는 위에서 이미 처리했으므로 건너뜀
+	if (const APawn* Pawn = GetOwningPlayerPawn())
+	{
+		const URetrievePawnExtensionComponent* PawnExt =
+			URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn);
+		if (PawnExt)
+		{
+			const URetrievePawnData* PawnData = PawnExt->GetPawnData();
+			if (PawnData && PawnData->CharacterStatsTable && !PawnData->CharacterStatsRow.IsNone())
+			{
+				const FCharacterStats* Row = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
+					PawnData->CharacterStatsRow, TEXT("GetFullStatDisplayText"));
+				if (Row)
+				{
+					static const TArray<FName> HandledProps = {
+						GET_MEMBER_NAME_CHECKED(FCharacterStats, MaxHealth),
+						GET_MEMBER_NAME_CHECKED(FCharacterStats, AttackPower),
+					};
+
+					for (TFieldIterator<FNumericProperty> It(FCharacterStats::StaticStruct()); It; ++It)
+					{
+						if (HandledProps.Contains(It->GetFName()))
+						{
+							continue;
+						}
+
+						double Value = 0.0;
+						if (const FDoubleProperty* DP = CastField<FDoubleProperty>(*It))
+							Value = DP->GetPropertyValue_InContainer(Row);
+						else if (const FFloatProperty* FP = CastField<FFloatProperty>(*It))
+							Value = static_cast<double>(FP->GetPropertyValue_InContainer(Row));
+						else if (const FIntProperty* IP = CastField<FIntProperty>(*It))
+							Value = static_cast<double>(IP->GetPropertyValue_InContainer(Row));
+						else
+							continue;
+
+						Lines.Add(FString::Printf(TEXT("%s: %.0f"),
+							*It->GetDisplayNameText().ToString(), Value));
+					}
+				}
+			}
+		}
+	}
+
+	return FText::FromString(FString::Join(Lines, TEXT("\n")));
 }

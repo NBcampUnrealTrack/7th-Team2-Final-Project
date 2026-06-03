@@ -330,8 +330,7 @@ void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerControl
 		Movement->StopMovementImmediately();
 	}
 
-	FTransform SafeTransform = ArrivalTransform;
-	SafeTransform.SetLocation(ArrivalTransform.GetLocation() + FastTravelArrivalOffset);
+	const FTransform SafeTransform = ArrivalTransform;
 
 	const bool bMoved = Pawn->SetActorTransform(
 		SafeTransform, false, nullptr, ETeleportType::TeleportPhysics);
