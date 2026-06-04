@@ -28,6 +28,9 @@ public:
 	
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveTestGuardHit(bool bHeavy);
+	
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveTestHitReact(int32 Strength);
 
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveQuestComplete(const FString& StepTagName);

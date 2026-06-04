@@ -109,6 +109,12 @@ namespace RetrieveGameplayTags
 	// ---- Attack property
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_GuardBreak);
 
+	// ---- Hit react type
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type_Flinch);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type_Stagger);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type_Knockdown);
+
 	// ---- Elements
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Fire);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Element_Water);

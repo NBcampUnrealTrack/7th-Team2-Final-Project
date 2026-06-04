@@ -68,7 +68,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
 	float GetSlotRatio(int32 SlotIndex) const;
 
-	// UI용: 슬롯 개수
+	// UI용: 슬롯 개수(최대치). 주의: 현재 채워진 수가 아니라 슬롯 칸 수(3)를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
 	int32 GetSlotCount() const { return SlotCount; }
 

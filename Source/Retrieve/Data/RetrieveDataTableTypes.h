@@ -5,6 +5,7 @@
 
 #include "GameplayTagContainer.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Combat/RetrieveCombatTypes.h"
 #include "RetrieveDataTableTypes.generated.h"
 
 class UStateTree;
@@ -401,6 +402,10 @@ struct RETRIEVE_API FWeaponComboStep
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FName SectionName = NAME_None;
+
+	// 이 스텝 명중 시 피격자에게 줄 반응 강도. 피니셔(Combo03)는 Stagger, 일반 타는 Flinch로 지정.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
 };
 
 USTRUCT(BlueprintType)
@@ -472,6 +477,7 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UDataTable> WeaponAttackTable;
 	
+	// 버스트 VFX 등 단일 지점 기준으로 쓰는 소켓
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FName TraceSocketName = TEXT("Weapon_R");
 	

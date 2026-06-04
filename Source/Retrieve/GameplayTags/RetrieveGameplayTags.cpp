@@ -107,6 +107,12 @@ namespace RetrieveGameplayTags
 	// ---- Attack property
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
 
+	// ---- Hit react type
+	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type, "HitReact.Type");
+	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type_Flinch, "HitReact.Type.Flinch");
+	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type_Stagger, "HitReact.Type.Stagger");
+	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type_Knockdown, "HitReact.Type.Knockdown");
+
 	// ---- Elements
 	UE_DEFINE_GAMEPLAY_TAG(Element_Fire, "Element.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Element_Water, "Element.Water");
@@ -228,9 +234,6 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MoveSpeed, "Data.Init.MoveSpeed");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_IncomingDamageMultiplier, "Data.Init.IncomingDamageMultiplier");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Weapon_AttackPower, "Data.Weapon.AttackPower");
-	/*
-	// ---- Hit react
-	UE_DEFINE_GAMEPLAY_TAG(Hit_React_Stagger, "Hit.React.Stagger");
 
 	// ---- Gameplay cues: Heavy attack
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Fire, "GameplayCue.HeavyAttack.Fire");

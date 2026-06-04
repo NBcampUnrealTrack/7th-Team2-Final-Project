@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -8,18 +7,18 @@
 class ULockOnComponent;
 class ULockOnCameraRig;
 class ULockOnTargetHighlighter;
-class ULockOnConfig; 
-class ULockOnCameraConfig; 
+class ULockOnConfig;
+class ULockOnCameraConfig;
+class UHitReactionComponent;
+class UAnimMontage;
+class UGameplayEffect;
 
-// class UHitReactionComponent; // TODO 2주차 추가 예정
-// class UCombatFeedbackComponent // TODO 2주차 추가 예정
+// class UCombatFeedbackComponent // TODO: 추가 예정
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnTargetChangedRelay, AActor*, NewTarget);
 
 /**
  * 플레이어의 전투 반응 레이어 Facade
- * LockOn/HitReaction/CombatFeedback sub-component를 런타임에 생성해 Owner Actor에 부착
- * 캐릭터/GA가 이 컴포넌트 1개만 알도록 통합
  */
 UCLASS(ClassGroup = "Retrieve", meta=(BlueprintSpawnableComponent))
 class RETRIEVE_API UCombatReactionComponent : public UActorComponent
@@ -51,6 +50,10 @@ public:
 	// Sub-Comp의 OnTargetChanged를 외부로 릴레이
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|CombatReaction|LockOn")
 	FOnLockOnTargetChangedRelay OnLockOnTargetChanged;
+
+	// HitReaction Facade
+	UFUNCTION(BlueprintPure, Category = "Retrieve|CombatReaction|HitReact")
+	UHitReactionComponent* GetHitReactionComponent() const { return HitReactionComp; }
 protected:
 	// 튜닝 Config 
 	// LockOnComp 전용 탐색/스코어링/해제 파라미터
@@ -67,11 +70,22 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnTargetHighlighter> LockOnHighlighter;
 	
-	// TODO 2주차: UHitReactionComponent
-	// UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
-	// TObjectPtr<UHitReactionComponent> HitReactionComp;
+	// HitReaction 자산(플레이어 전용). 런타임 생성되는 HitReactionComp에 Configure()로 주입.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
+	TSoftObjectPtr<UAnimMontage> FlinchMontage;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
+	TSoftObjectPtr<UAnimMontage> StaggerMontage;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
+	TSoftObjectPtr<UAnimMontage> KnockdownMontage;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
+	TSubclassOf<UGameplayEffect> StaggerEffect;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
+	TSubclassOf<UGameplayEffect> KnockdownEffect;
 
-	// TODO 2주차: UCombatFeedbackComponent
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
+	TObjectPtr<UHitReactionComponent> HitReactionComp;
+
+	// TODO: UCombatFeedbackComponent
 	// UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	// TObjectPtr<UCombatFeedbackComponent> CombatFeedbackComp;
 
