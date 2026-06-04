@@ -16,6 +16,8 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 	
 	SetGenericTeamId(FGenericTeamId(EnemyTeamId));
+	
+	bAllowStrafe = true;
 }
 
 void AEnemyAIController::OnPossess(APawn* InPawn)
@@ -59,15 +61,20 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 
 	if (const APawn* OtherPawn = Cast<APawn>(&Other))
 	{
-		if (const IGenericTeamAgentInterface* TeamAgent =
-			Cast<IGenericTeamAgentInterface>(OtherPawn->GetController()))
+		FGenericTeamId OtherTeamId = FGenericTeamId::NoTeam;
+		if (const IGenericTeamAgentInterface* CtrlTeam = Cast<IGenericTeamAgentInterface>(OtherPawn->GetController()))
 		{
-			Result = FGenericTeamId::GetAttitude(GetGenericTeamId(), TeamAgent->GetGenericTeamId());
+			OtherTeamId = CtrlTeam->GetGenericTeamId();
 		}
-		else if (const IGenericTeamAgentInterface* PawnTeam = Cast<IGenericTeamAgentInterface>(OtherPawn))
+		
+		if (OtherTeamId == FGenericTeamId::NoTeam)   // 컨트롤러 팀 없으면 폰 팀 사용
 		{
-			Result = FGenericTeamId::GetAttitude(GetGenericTeamId(), PawnTeam->GetGenericTeamId());
+			if (const IGenericTeamAgentInterface* PawnTeam = Cast<IGenericTeamAgentInterface>(OtherPawn))
+			{
+				OtherTeamId = PawnTeam->GetGenericTeamId();
+			}
 		}
+		Result = FGenericTeamId::GetAttitude(GetGenericTeamId(), OtherTeamId);
 	}
 	
 	return Result;

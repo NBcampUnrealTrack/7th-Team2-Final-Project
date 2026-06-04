@@ -29,6 +29,7 @@ public class Retrieve : ModuleRules
 			"Slate",
 			"SlateCore",
 			"AIModule",
+			"NavigationSystem", 
 			"Landscape",
 			"ModelViewViewModel",
 			"ALS"

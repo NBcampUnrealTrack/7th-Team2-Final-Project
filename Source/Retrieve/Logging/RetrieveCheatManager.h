@@ -6,6 +6,7 @@
 
 class UAbilitySystemComponent;
 class ARetrieveGameState;
+class UPatternCounterComponent;
 
 /**
  * 
@@ -40,7 +41,17 @@ public:
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveToggleCombatTag();
 
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveOpenCounterWindow(float Duration = 0.f);
+
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveTryCounter();
+	
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveTestCounter();
+	
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;
+	UPatternCounterComponent* GetLockedOnPatternCounter() const;
 	ARetrieveGameState* GetRetrieveGameState() const;
 };

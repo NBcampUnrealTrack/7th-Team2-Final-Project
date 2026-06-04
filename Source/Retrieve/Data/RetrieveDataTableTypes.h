@@ -70,12 +70,15 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
     float Cooldown = 3.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
+	float GroggyDuration = 3.f;
+	
     /** 선택 우선순위. 높을수록 먼저 시도. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     int32 Priority = 0;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
-    FName AnimationRow;
+	TSoftObjectPtr<UAnimMontage> AttackMontage;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag EffectTag;
@@ -125,9 +128,7 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	TArray<FName> PatternSlots;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
-	float GroggyDuration = 3.f;
-
+	// 그로기 종료 후 재진입 대기 시간
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyCooldown = 10.f;
 

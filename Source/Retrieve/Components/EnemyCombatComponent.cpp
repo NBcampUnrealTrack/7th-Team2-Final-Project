@@ -26,28 +26,54 @@ void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<
 
 bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
 {
-	if (!Target) return false;
-
+	if (!Target)
+	{
+		return false;
+	}
+	
 	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC) return false;
-
+	if (!ASC)
+	{
+		return false;
+	}
+	
 	// 기본 공격 Row 유효성 확인
-	if (!PatternTable || BasicAttackRowName.IsNone()) return false;
+	if (!PatternTable || BasicAttackRowName.IsNone())
+	{
+		return false;
+	}
+	
 	const FMonsterPatternRow* Row =
 		PatternTable->FindRow<FMonsterPatternRow>(BasicAttackRowName, TEXT(""));
-	if (!Row || Row->HitboxBoneName.IsNone()) return false;
-
+	if (!Row || Row->HitboxBoneName.IsNone())
+	{
+		return false;
+	}
+	
+	if (IsCooldownReady(BasicAttackRowName))
+	{
+		return false;
+	}
+	
 	ActivePatternRowName = BasicAttackRowName;
 
 	FGameplayEventData EventData;
 	EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
 	EventData.Target     = Target;
 	EventData.Instigator = GetOwner();
+	EventData.OptionalObject = Row->AttackMontage.LoadSynchronous();
 
 	const int32 TriggeredCount =
 		ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_Attack, &EventData);
 
-	return TriggeredCount > 0;
+	
+	if (TriggeredCount <= 0)
+	{
+		return false;
+	}
+	
+	StartCooldown(ActivePatternRowName, Row->Cooldown);
+	return true;
 }
 
 bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
@@ -75,7 +101,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	}
 
 	FGameplayEventData EventData;
-	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
+	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack;
 	EventData.Target   = Target;
 	EventData.Instigator = GetOwner();
 	
@@ -99,6 +125,7 @@ void UEnemyCombatComponent::StopCurrentPattern()
 	}
 
 	FGameplayTagContainer TagsToCancel(RetrieveGameplayTags::Ability_Enemy_Attack);
+	TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 	ASC->CancelAbilities(&TagsToCancel);
 
 	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())

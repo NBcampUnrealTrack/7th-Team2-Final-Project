@@ -35,24 +35,42 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	FistHitbox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FistHitbox->SetSphereRadius(30.f);
 	
+	// 카메라 충돌 방지
+	FistHitbox->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	
 	// 회전 보간 적용
 	bUseControllerRotationYaw = false;
 	
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
-	MoveComp->bUseControllerDesiredRotation = true;
-	MoveComp->bOrientRotationToMovement = false;
+	MoveComp->bUseControllerDesiredRotation = false;
+	MoveComp->bOrientRotationToMovement = true;
 	MoveComp->RotationRate = FRotator(0.f, 360.f, 0.f);
+	
+	// Avoidance
 	MoveComp->bUseRVOAvoidance = true;
+	MoveComp->AvoidanceConsiderationRadius = 200.0f;
+	MoveComp->AvoidanceWeight = 0.5f;
 	
 	if (IsValid(OwnedASC))
 	{
 		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Dead, 
 			EGameplayTagEventType::NewOrRemoved)
-		.AddUObject(this, &ARetrieveEnemyCharacter::OnDeadTagChanged);
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnDeadTagChanged);
 
 		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Chase,
 			EGameplayTagEventType::NewOrRemoved)
-			.AddUObject(this, &ARetrieveEnemyCharacter::OnChaseTagChanged);
+		.AddUObject(this, &ARetrieveEnemyCharacter::OnChaseTagChanged);
+		
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_SpecialAttack,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnSpecialAttackTagChanged);
+		
+		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Attack,
+			EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnAttackTagChanged);
 
 		OwnedASC->RegisterGameplayTagEvent(RetrieveGameplayTags::State_Enemy_Hit,
 			EGameplayTagEventType::NewOrRemoved)
@@ -137,7 +155,12 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 		EnemyCombatComponent->Initialize(PatternTable, Row->PatternSlots);
 		EnemyCombatComponent->SetActiveHitbox(FistHitbox);
 	}
-
+	
+	if (PatternCounterComponent)
+	{
+		PatternCounterComponent->SetGroggyCooldown(Row->GroggyCooldown);
+	}
+	
 	if (DropComponent && !Row->DropRow.IsNone())
 	{
 		// DropComponent::Initialize는 DropTable도 필요
@@ -187,6 +210,16 @@ void ARetrieveEnemyCharacter::OnDeadTagChanged(const FGameplayTag Tag, int32 Cou
 void ARetrieveEnemyCharacter::OnChaseTagChanged(const FGameplayTag Tag, int32 Count)
 {
 	bCachedIsChasing = Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnAttackTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsAttacking =  Count > 0;
+}
+
+void ARetrieveEnemyCharacter::OnSpecialAttackTagChanged(const FGameplayTag Tag, int32 Count)
+{
+	bCachedIsSpecialAttacking =  Count > 0;
 }
 
 void ARetrieveEnemyCharacter::OnHitTagChanged(const FGameplayTag Tag, int32 Count)
