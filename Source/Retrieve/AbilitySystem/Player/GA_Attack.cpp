@@ -16,7 +16,7 @@
 
 namespace
 {
-	// HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립. (CombatContract)
+	// HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립
 	FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
 	{
 		switch (Type)
@@ -24,7 +24,7 @@ namespace
 		case ERetrieveHitReactType::Stagger:   return RetrieveGameplayTags::HitReact_Type_Stagger;
 		case ERetrieveHitReactType::Knockdown: return RetrieveGameplayTags::HitReact_Type_Knockdown;
 		case ERetrieveHitReactType::Flinch:    return RetrieveGameplayTags::HitReact_Type_Flinch;
-		default:                               return FGameplayTag(); // None → 주입 안 함
+		default:                               return FGameplayTag();
 		}
 	}
 }
@@ -101,6 +101,9 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 		ImpactEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
 		ImpactEventTask->ReadyForActivation();
 	}
+
+	// 이 공격이 Parry 당하면 자동으로 self-stagger + cancel
+	StartListeningForParried();
 
 	StartComboStep(0);
 }
@@ -319,7 +322,7 @@ void UGA_Attack::ApplyStepDamage()
 			// Attack.Type (방어 처리 결정)
 			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-			// HitReact.Type (피격 반응 결정) — 데이터테이블의 스텝별 설정에서 주입. 둘은 독립 축.
+			// HitReact.Type (피격 반응 결정)
 			const ERetrieveHitReactType ReactType = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
 				? CachedWeaponData.ComboSteps[CurrentComboIndex].HitReactType
 				: ERetrieveHitReactType::Flinch;

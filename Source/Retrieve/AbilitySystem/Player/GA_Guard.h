@@ -27,17 +27,25 @@ protected:
 private:
 	UFUNCTION() void HandleInputReleased(float TimeHeld);
 	UFUNCTION() void HandleGuardBroken(FGameplayEventData Payload);
+	UFUNCTION() void HandleParrySuccess(FGameplayEventData Payload);
 
 	void StopRuntimeTasks();
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Guard")
 	TSoftObjectPtr<UAnimMontage> GuardMontage;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Guard")
 	TSubclassOf<UGameplayEffect> GuardBreakStaggerEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
+	TSubclassOf<UGameplayEffect> ParryWindowEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
+	TSubclassOf<UGameplayEffect> CounterWindowEffect;
 
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitInputRelease> InputReleaseTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> GuardBrokenTask;
+	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ParrySuccessTask;
 };

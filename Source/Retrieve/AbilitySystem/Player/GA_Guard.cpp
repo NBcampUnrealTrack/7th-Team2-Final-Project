@@ -66,6 +66,30 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		GuardBrokenTask->EventReceived.AddDynamic(this, &ThisClass::HandleGuardBroken);
 		GuardBrokenTask->ReadyForActivation();
 	}
+
+	// 가드 활성 직후 Parry 윈도우 부여
+	if (ParryWindowEffect)
+	{
+		ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, ParryWindowEffect.GetDefaultObject(), GetAbilityLevel());
+	}
+
+	// Parry 성공 수신 → 카운터 윈도우 부여
+	ParrySuccessTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, RetrieveGameplayTags::GameplayEvent_Parry_Success, nullptr, /*OnlyTriggerOnce=*/false, /*OnlyMatchExact=*/true);
+	if (ParrySuccessTask)
+	{
+		ParrySuccessTask->EventReceived.AddDynamic(this, &ThisClass::HandleParrySuccess);
+		ParrySuccessTask->ReadyForActivation();
+	}
+}
+
+void UGA_Guard::HandleParrySuccess(FGameplayEventData /*Payload*/)
+{
+	// 패리 성공 시 카운터 윈도우
+	if (CounterWindowEffect)
+	{
+		ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, CounterWindowEffect.GetDefaultObject(), GetAbilityLevel());
+	}
 }
 
 void UGA_Guard::HandleInputReleased(float /*TimeHeld*/)
@@ -96,6 +120,7 @@ void UGA_Guard::StopRuntimeTasks()
 	if (MontageTask)      { MontageTask->EndTask();      MontageTask = nullptr; }
 	if (InputReleaseTask) { InputReleaseTask->EndTask(); InputReleaseTask = nullptr; }
 	if (GuardBrokenTask)  { GuardBrokenTask->EndTask();  GuardBrokenTask = nullptr; }
+	if (ParrySuccessTask) { ParrySuccessTask->EndTask(); ParrySuccessTask = nullptr; }
 }
 
 void UGA_Guard::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
