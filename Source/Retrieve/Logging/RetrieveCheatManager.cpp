@@ -298,22 +298,23 @@ void URetrieveCheatManager::RetrieveOpenCounterWindow(float Duration)
 
 void URetrieveCheatManager::RetrieveTryCounter()
 {
-    UPatternCounterComponent* Counter = GetLockedOnPatternCounter();
-    if (!Counter) return;
+	UPatternCounterComponent* Counter = GetLockedOnPatternCounter();
+	if (!Counter) return;
 
-    const bool bWasOpen = Counter->IsWindowOpen();
+	const bool bWasOpen = Counter->IsWindowOpen();
 
-    Counter->TryCounter(
-        FGameplayTag::EmptyTag,                       // ActionTag (B7 미정 → 조건 무시)
-        RetrieveGameplayTags::Element_Fire,                       // ElementTag (조건 무시)
-        GetOuterAPlayerController()->GetPawn());
+	Counter->TryCounter(
+		FGameplayTag::EmptyTag,                       // ActionTag (B7 미정 → 조건 무시)
+		RetrieveGameplayTags::Element_Fire,                       // ElementTag (조건 무시)
+		GetOuterAPlayerController()->GetPawn());
 
-    const bool bCountered = bWasOpen && !Counter->IsWindowOpen();
+	const bool bCountered = bWasOpen && !Counter->IsWindowOpen();
 
-    UE_LOG(LogTemp, Display,
-        TEXT("[CheatManager] TryCounter → WindowWasOpen=%s, 결과=%s"),
-        bWasOpen ? TEXT("true") : TEXT("false"),
-        bCountered ? TEXT("카운터 성공") : TEXT("실패(윈도우 닫힘/미오픈)"));
+	UE_LOG(LogTemp, Display,
+		TEXT("[CheatManager] TryCounter → WindowWasOpen=%s, 결과=%s"),
+		bWasOpen ? TEXT("true") : TEXT("false"),
+		bCountered ? TEXT("카운터 성공") : TEXT("실패(윈도우 닫힘/미오픈)"));
+}
 void URetrieveCheatManager::RetrieveTestHitReact(int32 Strength)
 {
     APawn* SelfPawn = GetOuterAPlayerController() ? GetOuterAPlayerController()->GetPawn() : nullptr;
