@@ -27,6 +27,9 @@ public:
 	// 타겟 위치 기준 바라볼 높이 오프셋 (가슴/머리 높이 조준용)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tracking")
 	float TargetVerticalOffset = 60.f;
+	// 애니메이션 종료 후 타겟으로 복귀하는 회전 보간 속도
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tracking")
+	float TurnInterpSpeed = 14.f;
 	// Offset
 	// 락온 중 SpringArm SocketOffset 목표값
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Offset")

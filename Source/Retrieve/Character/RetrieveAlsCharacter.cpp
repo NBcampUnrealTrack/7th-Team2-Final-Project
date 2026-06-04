@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/CombatReactionComponent.h"
 #include "Components/RetrieveCharacterMovementComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
@@ -82,6 +83,20 @@ void ARetrieveAlsCharacter::Tick(float DeltaTime)
 			Loc.Z = CompensationZ;
 			SpringArm->SetRelativeLocation(Loc);
 		}
+	}
+	// 애니메이션 종료 후 타겟으로 Yaw 복귀
+	AActor* Target = TurnTarget.Get();
+	if (IsValid(Target) == false)
+	{
+		return;
+	}
+
+	const float TargetYaw = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D().Rotation().Yaw;
+	const float NewYaw = FMath::RInterpTo(GetActorRotation(), FRotator(0.f, TargetYaw, 0.f), DeltaTime, TurnInterpSpeed).Yaw;
+	SetRotationInstant(NewYaw);
+	if (FMath::Abs(FMath::FindDeltaAngleDegrees(NewYaw, TargetYaw)) <= 1.f)
+	{
+		TurnTarget = nullptr;
 	}
 }
 
@@ -186,6 +201,25 @@ void ARetrieveAlsCharacter::OnAbilitySystemReady()
 void ARetrieveAlsCharacter::OnSprintTagChanged(const FGameplayTag Tag, int32 NewCount)
 {
 	SetDesiredGait(NewCount > 0 ? AlsGaitTags::Sprinting : AlsGaitTags::Running);
+	UCombatReactionComponent* Reaction = FindComponentByClass<UCombatReactionComponent>();
+	if (IsValid(Reaction) == false)
+	{
+		return;
+	}
+
+	if (NewCount > 0)
+	{
+		TurnTarget = nullptr;
+		return;
+	}
+
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	const bool bDodging  = ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Dodging);
+
+	if (GetDesiredRotationMode() == AlsRotationModeTags::ViewDirection && bDodging == false)
+	{
+		TurnYawTowardActor(Reaction->GetLockOnTarget(), Reaction->GetTurnInterpSpeed());
+	}
 }
 
 void ARetrieveAlsCharacter::OnCrouchTagChanged(const FGameplayTag Tag, int32 NewCount)
@@ -220,6 +254,7 @@ void ARetrieveAlsCharacter::BeginRollLockoutTowardYaw(float TargetYawAngle)
 	// ALS StartRollingImplementation과 동일 패턴.
 	// RollingState.TargetYawAngle은 매 프레임 RefreshRollingPhysics가 사용하는 회전 목표.
 	// SetRotationInstant는 actor + LocomotionState 일관 갱신.
+	TurnTarget = nullptr;
 	RollingState.TargetYawAngle = TargetYawAngle;
 	SetRotationInstant(TargetYawAngle, ETeleportType::TeleportPhysics);
 	SetLocomotionAction(AlsLocomotionActionTags::Rolling);
@@ -228,6 +263,36 @@ void ARetrieveAlsCharacter::BeginRollLockoutTowardYaw(float TargetYawAngle)
 void ARetrieveAlsCharacter::EndRollLockout()
 {
 	SetLocomotionAction(FGameplayTag::EmptyTag);
+	// TEST 락온 중 이면 구르기 종료 즉시 타겟 방향으로 스냅
+	UCombatReactionComponent* Reaction = FindComponentByClass<UCombatReactionComponent>();
+	if (IsValid(Reaction) == false)
+	{
+		return;
+	}
+	if (GetDesiredRotationMode() == AlsRotationModeTags::ViewDirection)
+	{
+		TurnYawTowardActor(Reaction->GetLockOnTarget(), Reaction->GetTurnInterpSpeed());
+	}
+}
+
+void ARetrieveAlsCharacter::TurnYawTowardActor(AActor* Target, float InterpSpeed)
+{
+	if (IsValid(Target) == false)
+	{
+		return;
+	}
+
+	const float TargetYaw = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D().Rotation().Yaw;
+
+	if (InterpSpeed <= 0.f)
+	{
+		SetRotationInstant(TargetYaw);
+		TurnTarget = nullptr;
+		return;
+	}
+
+	TurnTarget = Target;
+	TurnInterpSpeed = InterpSpeed;
 }
 
 void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(FGameplayTag PreviousLocomotionAction)

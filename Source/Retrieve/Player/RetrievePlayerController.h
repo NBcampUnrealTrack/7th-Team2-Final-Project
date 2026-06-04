@@ -15,6 +15,7 @@ class URetrieveMinimapWidget;
 class UUserWidget;
 class UWeaponComponent;
 class UHUDViewModel;
+class UAttackFeedbackComponent;
 
 USTRUCT(BlueprintType)
 struct FRetrievePanelShortcutConfig
@@ -168,4 +169,7 @@ protected:
 
 	bool bActivePanelClosing = false;
 	double LastInputRealTimeSeconds = 0.0;
+	// AttackFeedback 관련 멤버변수
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
+	TObjectPtr<UAttackFeedbackComponent> AttackFeedbackComponent;
 };

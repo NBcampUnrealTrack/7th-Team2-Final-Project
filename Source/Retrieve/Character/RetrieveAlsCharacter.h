@@ -64,6 +64,9 @@ public:
 	/** Roll 액션 잠금 해제. (몽타주 NotifyState End가 이미 처리하지만 안전망 용도) */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	void EndRollLockout();
+	
+	/** 애니메이션으로 락온 타겟과의 시점이 틀어졌을때 다시 타겟 방향으로 맞춰주는 보간 */
+	void TurnYawTowardActor(AActor* Target, float InterpSpeed); 
 
 protected:
 	virtual void PostInitializeComponents() override;
@@ -113,4 +116,7 @@ protected:
 private:
 	/** PostInitializeComponents에서 캡슐 디폴트 HalfHeight 캐싱. Crouch 보정용. */
 	float CachedDefaultHalfHeight = 0.f;
+	/** 락온 타겟 유효하면 보간 진행 중 */
+	TWeakObjectPtr<AActor> TurnTarget;
+	float TurnInterpSpeed = 0.f;
 };
