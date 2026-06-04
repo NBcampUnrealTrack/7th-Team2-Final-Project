@@ -58,7 +58,11 @@ void UEncirclementSubsystem::ReleaseSlot(AActor* Target, AActor* Requester)
 	if (FRing* Ring = Rings.Find(Target))
 	{
 		const int32 Idx = Ring->Slots.IndexOfByKey(Requester);
-		if (Idx != INDEX_NONE) Ring->Slots[Idx].Reset();
+		if (Idx != INDEX_NONE)
+		{
+			Ring->Slots[Idx].Reset();
+			UE_LOG(LogTemp, Log, TEXT("[%s] Releasing slot %d"), *GetName(), Idx);
+		}
 	}
 }
 

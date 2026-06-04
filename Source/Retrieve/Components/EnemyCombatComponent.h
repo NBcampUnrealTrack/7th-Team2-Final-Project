@@ -36,7 +36,9 @@ public:
 	void StopCurrentPattern();
 
 	bool IsPatternActive() const;
-
+	
+	bool IsAttackable() const;
+	
 	FName GetActivePatternRowName() const { return ActivePatternRowName; }
 
 	UDataTable* GetPatternTable() const { return PatternTable.Get(); }

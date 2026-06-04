@@ -13,6 +13,7 @@
 #include "Components/PatternCounterComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Logging/RetrieveLogChannels.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
@@ -28,18 +29,22 @@ bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
 {
 	if (!Target)
 	{
+		UE_LOG(LogRetrieveCombat, Error, TEXT("[%s] No Target."), *GetOwner()->GetName());
 		return false;
 	}
 	
 	URetrieveAbilitySystemComponent* ASC = GetASC();
 	if (!ASC)
 	{
+		UE_LOG(LogRetrieveCombat, Error, TEXT("[%s] No ASC."), *GetOwner()->GetName());
 		return false;
 	}
 	
 	// 기본 공격 Row 유효성 확인
 	if (!PatternTable || BasicAttackRowName.IsNone())
 	{
+		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] No PatternTAble or No BasicAttackRowName. BasicAttackRowName = %s")
+			,*GetOwner()->GetName(), *BasicAttackRowName.ToString());
 		return false;
 	}
 	
@@ -47,11 +52,13 @@ bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
 		PatternTable->FindRow<FMonsterPatternRow>(BasicAttackRowName, TEXT(""));
 	if (!Row || Row->HitboxBoneName.IsNone())
 	{
+		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] Basic Attack Row not found."),*GetOwner()->GetName());
 		return false;
 	}
 	
-	if (IsCooldownReady(BasicAttackRowName))
+	if (!IsCooldownReady(BasicAttackRowName))
 	{
+		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] Basic Attack is Now CoolDown."),*GetOwner()->GetName());
 		return false;
 	}
 	
@@ -69,6 +76,7 @@ bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
 	
 	if (TriggeredCount <= 0)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s] No Ability triggered."),*GetOwner()->GetName());
 		return false;
 	}
 	
@@ -124,6 +132,13 @@ void UEnemyCombatComponent::StopCurrentPattern()
 		return;
 	}
 
+	
+	
+	
+	
+	
+	
+	
 	FGameplayTagContainer TagsToCancel(RetrieveGameplayTags::Ability_Enemy_Attack);
 	TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 	ASC->CancelAbilities(&TagsToCancel);
@@ -141,6 +156,11 @@ bool UEnemyCombatComponent::IsPatternActive() const
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
 	return ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack);
+}
+
+bool UEnemyCombatComponent::IsAttackable() const
+{
+	return IsCooldownReady(BasicAttackRowName);
 }
 
 void UEnemyCombatComponent::ActivateHitbox()
