@@ -205,6 +205,14 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	EventData.Target = TargetActor;
 	EventData.EventMagnitude = DamageDone;
 	
+	for (const FGameplayTag& Tag : SourceTags)
+	{
+		if (Tag.MatchesTag(RetrieveGameplayTags::HitReact_Type))
+		{
+			EventData.TargetTags.AddTag(Tag);
+		}
+	}
+
 	EventData.EventTag = AttackerEventTag;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
 	if (TargetActor != AttackerActor)

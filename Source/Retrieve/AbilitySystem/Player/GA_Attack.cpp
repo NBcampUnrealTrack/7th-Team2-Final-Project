@@ -14,6 +14,21 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
+namespace
+{
+	// HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립. (CombatContract)
+	FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
+	{
+		switch (Type)
+		{
+		case ERetrieveHitReactType::Stagger:   return RetrieveGameplayTags::HitReact_Type_Stagger;
+		case ERetrieveHitReactType::Knockdown: return RetrieveGameplayTags::HitReact_Type_Knockdown;
+		case ERetrieveHitReactType::Flinch:    return RetrieveGameplayTags::HitReact_Type_Flinch;
+		default:                               return FGameplayTag(); // None → 주입 안 함
+		}
+	}
+}
+
 UGA_Attack::UGA_Attack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -301,7 +316,17 @@ void UGA_Attack::ApplyStepDamage()
 
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
 
+			// Attack.Type (방어 처리 결정)
 			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
+
+			// HitReact.Type (피격 반응 결정) — 데이터테이블의 스텝별 설정에서 주입. 둘은 독립 축.
+			const ERetrieveHitReactType ReactType = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
+				? CachedWeaponData.ComboSteps[CurrentComboIndex].HitReactType
+				: ERetrieveHitReactType::Flinch;
+			if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactType); ReactTag.IsValid())
+			{
+				PerHitSpec.Data->AddDynamicAssetTag(ReactTag);
+			}
 
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActorsThisStep.Add(TargetActor);

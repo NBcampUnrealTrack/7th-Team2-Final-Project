@@ -37,12 +37,32 @@ void URetrieveAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag&
 		return;
 	}
 
+	int32 MatchCount = 0;
 	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
 		if (AbilitySpec.Ability && AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			InputPressedSpecHandles.AddUnique(AbilitySpec.Handle);
 			InputHeldSpecHandles.AddUnique(AbilitySpec.Handle);
+			++MatchCount;
+		}
+	}
+
+	// TODO(HeavyAttackDebug): 진단용 임시 로그. 원인 확인 후 제거.
+	UE_LOG(LogTemp, Warning, TEXT("[HeavyAttackDebug] InputPressed tag=%s -> %d matching spec(s)"),
+		*InputTag.ToString(), MatchCount);
+
+	if (MatchCount == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HeavyAttackDebug] --- dumping ALL granted ability specs (ability | sourceTags) ---"));
+		for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+		{
+			if (AbilitySpec.Ability)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[HeavyAttackDebug]   %s | sourceTags=[%s]"),
+					*GetNameSafe(AbilitySpec.Ability),
+					*AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple());
+			}
 		}
 	}
 }

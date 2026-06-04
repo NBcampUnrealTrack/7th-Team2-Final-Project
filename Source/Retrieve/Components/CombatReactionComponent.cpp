@@ -1,13 +1,12 @@
-
-
 #include "CombatReactionComponent.h"
 
-#include "Data/LockOnConfig.h"
-#include "Data/LockOnCameraConfig.h" 
-#include "LockOnCameraRig.h"
-#include "LockOnTargetHighlighter.h"
-#include "Components/LockOnComponent.h"
 #include "GameFramework/Actor.h"
+#include "Data/LockOnCameraConfig.h"
+#include "Data/LockOnConfig.h"
+#include "HitReactionComponent.h"
+#include "LockOnCameraRig.h"
+#include "LockOnComponent.h"
+#include "LockOnTargetHighlighter.h"
 
 UCombatReactionComponent::UCombatReactionComponent()
 {
@@ -63,6 +62,17 @@ void UCombatReactionComponent::BeginPlay()
 	{
 		LockOnHighlighter = NewObject<ULockOnTargetHighlighter>(this);
 	}
+	
+	if (IsValid(HitReactionComp) == false)
+	{
+		HitReactionComp = NewObject<UHitReactionComponent>(Owner, TEXT("HitReactionComp"));
+		Owner->AddOwnedComponent(HitReactionComp);
+		HitReactionComp->RegisterComponent();
+	}
+	if (IsValid(HitReactionComp))
+	{
+		HitReactionComp->Configure(FlinchMontage, StaggerMontage, KnockdownMontage, StaggerEffect, KnockdownEffect);
+	}
 }
 
 void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -86,7 +96,13 @@ void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		LockOnHighlighter->Clear();
 		LockOnHighlighter = nullptr;
 	}
-	
+
+	if (IsValid(HitReactionComp))
+	{
+		HitReactionComp->DestroyComponent();
+		HitReactionComp = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 

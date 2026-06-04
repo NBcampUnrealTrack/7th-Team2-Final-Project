@@ -227,6 +227,7 @@ void URetrieveCheatManager::RetrieveTestGuardHit(bool bHeavy)
 
     if (bHeavy)
     {
+        // Heavy = 강도 마커, GuardBreak = 가드 무력화 속성(분리됨). 가드브레이크 테스트엔 둘 다 필요.
         Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
         Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
     }
@@ -313,4 +314,32 @@ void URetrieveCheatManager::RetrieveTryCounter()
         TEXT("[CheatManager] TryCounter → WindowWasOpen=%s, 결과=%s"),
         bWasOpen ? TEXT("true") : TEXT("false"),
         bCountered ? TEXT("카운터 성공") : TEXT("실패(윈도우 닫힘/미오픈)"));
+void URetrieveCheatManager::RetrieveTestHitReact(int32 Strength)
+{
+    APawn* SelfPawn = GetOuterAPlayerController() ? GetOuterAPlayerController()->GetPawn() : nullptr;
+    if (!SelfPawn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] 빙의된 Pawn 없음"));
+        return;
+    }
+
+    FGameplayTag ReactTag;
+    switch (Strength)
+    {
+    case 2:  ReactTag = RetrieveGameplayTags::HitReact_Type_Knockdown; break;
+    case 1:  ReactTag = RetrieveGameplayTags::HitReact_Type_Stagger;   break;
+    default: ReactTag = RetrieveGameplayTags::HitReact_Type_Flinch;    break;
+    }
+	
+    FGameplayEventData EventData;
+    EventData.Instigator = SelfPawn;
+    EventData.Target     = SelfPawn;
+    EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Hit_Normal;
+    EventData.TargetTags.AddTag(ReactTag);
+
+    UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+        SelfPawn, RetrieveGameplayTags::GameplayEvent_Hit_Normal, EventData);
+
+    UE_LOG(LogTemp, Display, TEXT("[CheatManager] RetrieveTestHitReact(Strength=%d -> %s)"),
+        Strength, *ReactTag.ToString());
 }
