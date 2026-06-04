@@ -38,7 +38,7 @@ private:
 	
 private:
 	int32 NumSlots = 10;
-	float Radius   = 150.f;   // 공격 사거리(200) 약간 안쪽
+	float Radius   = 100.f;   // 공격 사거리(200) 약간 안쪽
 
 	TMap<TWeakObjectPtr<AActor>, FRing> Rings;   // TWeakObjectPtr 키 → GC 시 자동 무효
 };

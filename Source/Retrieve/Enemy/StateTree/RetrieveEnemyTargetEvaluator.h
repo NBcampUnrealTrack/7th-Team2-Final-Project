@@ -20,6 +20,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	FVector TargetLocation = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float AttackableRange = 200.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float DistanceToTarget = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
@@ -41,6 +44,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bPatrolable = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bAttackable = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	FVector ChaseLocation = FVector::ZeroVector;
