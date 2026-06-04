@@ -107,6 +107,11 @@ AActor* UCombatReactionComponent::GetLockOnTarget() const
 	return LockOnComp ? LockOnComp->GetCurrentTarget() : nullptr;
 }
 
+float UCombatReactionComponent::GetTurnInterpSpeed() const
+{
+	return LockOnCameraConfig ? LockOnCameraConfig->TurnInterpSpeed : 14.f;
+}
+
 bool UCombatReactionComponent::IsLockedOn() const
 {
 	return LockOnComp && LockOnComp->IsLockedOn();

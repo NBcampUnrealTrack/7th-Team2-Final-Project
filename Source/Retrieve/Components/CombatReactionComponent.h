@@ -42,6 +42,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|CombatReaction|LockOn")
 	AActor* GetLockOnTarget() const;
 	UFUNCTION(BlueprintPure, Category = "Retrieve|CombatReaction|LockOn")
+	float GetTurnInterpSpeed() const;
+	UFUNCTION(BlueprintPure, Category = "Retrieve|CombatReaction|LockOn")
 	bool IsLockedOn() const;
 	// Sub-Comp 직접 접근(디버그/특수용도)
 	UFUNCTION(BlueprintPure, Category = "Retrieve|CombatReaction|LockOn")

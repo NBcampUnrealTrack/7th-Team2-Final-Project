@@ -61,7 +61,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	CameraSpringArm->SetupAttachment(RootComponent);
 	CameraSpringArm->TargetArmLength = 400.0f;
 	CameraSpringArm->bUsePawnControlRotation = true;
-	CameraSpringArm->bDoCollisionTest = true;
+	CameraSpringArm->bDoCollisionTest = false;
 	CameraSpringArm->CameraLagSpeed = 10.f;
 
 	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));

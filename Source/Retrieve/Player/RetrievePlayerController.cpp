@@ -5,6 +5,8 @@
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "Character/RetrieveCombatCharacter.h"
+#include "Components/AttackFeedbackComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/Widget.h"
@@ -28,6 +30,7 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 {
 	bShowMouseCursor = false;
 	CheatClass = URetrieveCheatManager::StaticClass();
+	AttackFeedbackComponent  = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -164,6 +167,10 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 	Super::AcknowledgePossession(InPawn);
 
 	TryBindHealthToHUD();
+	if (AttackFeedbackComponent)
+	{
+		AttackFeedbackComponent->HandlePossessedPawnChanged(InPawn);
+	}
 }
 
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
