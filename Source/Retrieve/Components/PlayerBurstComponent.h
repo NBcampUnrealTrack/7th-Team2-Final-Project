@@ -6,7 +6,6 @@
 
 struct FSkillCombination;
 struct FBurstHitInstance;
-class USphereComponent;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class RETRIEVE_API UPlayerBurstComponent : public UActorComponent
@@ -39,6 +38,9 @@ private:
     // HitSource → 월드 좌표
     FVector ResolveSourceLocation(const FBurstHitInstance& Hit) const;
 
+    // 검(Sword) 히트용 멀티포인트 블레이드 트레이스 포인트 생성. GA_Attack::BuildTracePoints와 동일 방식.
+    void BuildSwordTracePoints(const FBurstHitInstance& Hit, TArray<FVector>& OutPoints) const;
+
     // 공용 Sweep+적용
     void SweepAndApply(const FBurstHitInstance& Hit, const FVector& CurrentOrigin, float Radius, int32 HitIndex);
 
@@ -60,15 +62,13 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace")
     bool bDebugDrawTrace = false;
 
-    UPROPERTY()
-    TObjectPtr<USphereComponent> ActiveHitboxComp;
-
     // WorldActor 전용 (소환된 월드 액터 참조)
     TWeakObjectPtr<AActor> SpawnedWorldActor;
 
     // HitIndex별 상태
     TArray<TSet<TObjectPtr<AActor>>> PerHitHitActors;
-    TArray<FVector> PerHitPreviousOrigin;
+    // HitIndex별 직전 프레임 트레이스 포인트(멀티포인트). 프레임 간 보간 sweep에 사용.
+    TArray<TArray<FVector>> PerHitPreviousPoints;
     TArray<bool>    PerHitHasPrevious;
 
     // Projectile 중복 스폰 방지 (HitIndex별 1회 발사)

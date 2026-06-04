@@ -36,13 +36,13 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 
 	const int32 HitCount = Row->HitSequence.Num();
 	PerHitHitActors.SetNum(HitCount);
-	PerHitPreviousOrigin.SetNum(HitCount);
+	PerHitPreviousPoints.SetNum(HitCount);
 	PerHitHasPrevious.SetNum(HitCount);
 	PerHitProjectileSpawned.SetNum(HitCount);
 	for (int32 Index = 0; Index < HitCount; ++Index)
 	{
 		PerHitHitActors[Index].Reset();
-		PerHitPreviousOrigin[Index] = FVector::ZeroVector;
+		PerHitPreviousPoints[Index].Reset();
 		PerHitHasPrevious[Index] = false;
 		PerHitProjectileSpawned[Index] = false;
 	}
@@ -62,7 +62,7 @@ void UPlayerBurstComponent::EndBurstSkill()
 	ActiveSkill = nullptr;
 	SpawnedWorldActor.Reset();
 	PerHitHitActors.Reset();
-	PerHitPreviousOrigin.Reset();
+	PerHitPreviousPoints.Reset();
 	PerHitHasPrevious.Reset();
 	PerHitProjectileSpawned.Reset();
 }
@@ -158,6 +158,41 @@ FVector UPlayerBurstComponent::ResolveSourceLocation(const FBurstHitInstance& Hi
 	}
 }
 
+void UPlayerBurstComponent::BuildSwordTracePoints(const FBurstHitInstance& Hit, TArray<FVector>& OutPoints) const
+{
+	OutPoints.Reset();
+
+	AActor* Owner = GetOwner();
+	UWeaponComponent* WeaponComp = IsValid(Owner) ? Owner->FindComponentByClass<UWeaponComponent>() : nullptr;
+	if (IsValid(WeaponComp))
+	{
+		const FRetrieveWeaponDataRow& WeaponData = WeaponComp->GetWeaponDataRef();
+		const FName StartSocket = WeaponData.TraceStartSocketName;
+		const FName EndSocket = WeaponData.TraceEndSocketName;
+
+		UMeshComponent* TraceMesh = WeaponComp->GetWeaponMeshForTrace(StartSocket, EndSocket);
+
+		if (IsValid(TraceMesh) && !StartSocket.IsNone() && !EndSocket.IsNone()
+			&& TraceMesh->DoesSocketExist(StartSocket) && TraceMesh->DoesSocketExist(EndSocket))
+		{
+			const FVector StartLoc = TraceMesh->GetSocketLocation(StartSocket);
+			const FVector EndLoc = TraceMesh->GetSocketLocation(EndSocket);
+			const int32 SegmentCount = FMath::Max(2, WeaponData.TraceSegmentCount);
+
+			OutPoints.Reserve(SegmentCount);
+			for (int32 i = 0; i < SegmentCount; ++i)
+			{
+				const float Alpha = static_cast<float>(i) / static_cast<float>(SegmentCount - 1);
+				OutPoints.Add(FMath::Lerp(StartLoc, EndLoc, Alpha));
+			}
+			return;
+		}
+	}
+
+	// 폴백: 양 끝 소켓이 없으면 기존 단일 소켓(SocketOverride/TraceSocketName/Weapon_R) 해석을 그대로 사용.
+	OutPoints.Add(ResolveSourceLocation(Hit));
+}
+
 void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FVector& CurrentOrigin, float Radius, int32 HitIndex)
 {
 	AActor* Owner = GetOwner();
@@ -168,41 +203,74 @@ void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FV
 	UWorld* World = Owner->GetWorld();
 	if (!IsValid(World)) return;
 
-	const bool bHasPrev = PerHitHasPrevious.IsValidIndex(HitIndex) && PerHitHasPrevious[HitIndex];
-	const FVector SweepStart = bHasPrev ? PerHitPreviousOrigin[HitIndex] : CurrentOrigin;
+	// 검(Sword) 히트는 GA_Attack과 동일한 멀티포인트 블레이드 트레이스, 그 외 소스는 단일 origin.
+	TArray<FVector> CurrentPoints;
+	if (Hit.HitSource == EBurstHitSource::Sword)
+	{
+		BuildSwordTracePoints(Hit, CurrentPoints);
+	}
+	if (CurrentPoints.IsEmpty())
+	{
+		CurrentPoints.Add(CurrentOrigin);
+	}
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerBurst_Sweep), false, Owner);
+	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(Radius);
 
-	TArray<FHitResult> HitResults;
-	const bool bHit = World->SweepMultiByObjectType(
-		HitResults,
-		SweepStart,
-		CurrentOrigin,
-		FQuat::Identity,
-		ObjectQueryParams,
-		FCollisionShape::MakeSphere(Radius),
-		QueryParams);
+	const TArray<FVector>* PrevPoints = PerHitPreviousPoints.IsValidIndex(HitIndex) ? &PerHitPreviousPoints[HitIndex] : nullptr;
+	const bool bHasPrev = PerHitHasPrevious.IsValidIndex(HitIndex) && PerHitHasPrevious[HitIndex]
+		&& PrevPoints && PrevPoints->Num() == CurrentPoints.Num();
 
-	if (bDebugDrawTrace)
+	TArray<FHitResult> AllHits;
+
+	auto SweepSegment = [&](const FVector& SegStart, const FVector& SegEnd)
 	{
-		constexpr float DebugLife = -1.0f;
-		DrawDebugLine(World, SweepStart, CurrentOrigin, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
-		DrawDebugSphere(World, CurrentOrigin, Radius, 12, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+		TArray<FHitResult> SegmentHits;
+		const bool bHit = World->SweepMultiByObjectType(SegmentHits, SegStart, SegEnd, FQuat::Identity, ObjectQueryParams, TraceShape, QueryParams);
+		if (bDebugDrawTrace)
+		{
+			constexpr float DebugLife = -1.0f;
+			DrawDebugLine(World, SegStart, SegEnd, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
+			DrawDebugSphere(World, SegEnd, Radius, 12, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+		}
+		if (bHit)
+		{
+			AllHits.Append(MoveTemp(SegmentHits));
+		}
+	};
+
+	// 현재 프레임 블레이드 길이 방향 커버.
+	for (int32 i = 0; i + 1 < CurrentPoints.Num(); ++i)
+	{
+		SweepSegment(CurrentPoints[i], CurrentPoints[i + 1]);
 	}
 
-	if (PerHitPreviousOrigin.IsValidIndex(HitIndex))
+	// 프레임 간 보간(직전 → 현재) 커버. 포인트 수가 같을 때만.
+	if (bHasPrev)
 	{
-		PerHitPreviousOrigin[HitIndex] = CurrentOrigin;
+		for (int32 i = 0; i < CurrentPoints.Num(); ++i)
+		{
+			SweepSegment((*PrevPoints)[i], CurrentPoints[i]);
+		}
+	}
+	else if (CurrentPoints.Num() == 1)
+	{
+		SweepSegment(CurrentPoints[0], CurrentPoints[0]);
+	}
+
+	if (PerHitPreviousPoints.IsValidIndex(HitIndex))
+	{
+		PerHitPreviousPoints[HitIndex] = CurrentPoints;
 		PerHitHasPrevious[HitIndex] = true;
 	}
 
-	if (!bHit) return;
+	if (AllHits.IsEmpty()) return;
 
 	TSet<TObjectPtr<AActor>>* HitSet = PerHitHitActors.IsValidIndex(HitIndex) ? &PerHitHitActors[HitIndex] : nullptr;
 
-	for (const FHitResult& HitResult : HitResults)
+	for (const FHitResult& HitResult : AllHits)
 	{
 		AActor* Target = HitResult.GetActor();
 		if (!IsValid(Target) || Target == Owner) continue;

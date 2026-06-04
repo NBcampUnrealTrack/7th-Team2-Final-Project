@@ -49,6 +49,9 @@ private:
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
 
+	// MontageTask 종료 + BurstComponent 정리. EndAbility/CancelAbility 공용.
+	void CleanupBurst();
+
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	TObjectPtr<UDataTable> SkillCombinationTable;
@@ -59,6 +62,4 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPlayerBurstComponent> CachedBurstComp;
-
-	const FSkillCombination* CachedSkill = nullptr;
 };
