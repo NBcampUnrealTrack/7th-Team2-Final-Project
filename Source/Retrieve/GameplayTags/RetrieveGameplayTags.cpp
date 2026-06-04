@@ -53,6 +53,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Shielded, "State.Player.Shielded");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_CanCounter, "State.Player.CanCounter");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_UsingHeavyAttack, "State.Player.UsingHeavyAttack");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Bursting, "State.Player.Bursting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Cinematic, "State.Player.Cinematic");
@@ -153,6 +154,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Normal, "GameplayEvent.Hit.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Heavy, "GameplayEvent.Hit.Heavy");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Success, "GameplayEvent.Parry.Success");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parried, "GameplayEvent.Parried");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Broken, "GameplayEvent.Guard.Broken");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Dodge_Success, "GameplayEvent.Dodge.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_DodgeCounter_Success, "GameplayEvent.DodgeCounter.Success");

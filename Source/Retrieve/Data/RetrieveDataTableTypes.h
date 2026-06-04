@@ -402,8 +402,7 @@ struct RETRIEVE_API FWeaponComboStep
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FName SectionName = NAME_None;
-
-	// 이 스텝 명중 시 피격자에게 줄 반응 강도. 피니셔(Combo03)는 Stagger, 일반 타는 Flinch로 지정.
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
 };

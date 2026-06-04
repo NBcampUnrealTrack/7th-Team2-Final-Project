@@ -1,4 +1,4 @@
-#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+﻿#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffectExtension.h"
@@ -62,8 +62,8 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 		Data.EffectSpec.GetAllAssetTags(SpecTags);
 
 		const float RawDamage = GetIncomingDamage();
-		const float FinalDamage = HandleIncomingDamage_Guard(Data, RawDamage, SpecTags);
-		
+		const float FinalDamage = HandleIncomingDamage_Defense(Data, RawDamage, SpecTags);
+
 		SetIncomingDamage(0.f);
 
 		if (FinalDamage > 0.f)
@@ -117,7 +117,7 @@ void UCombatAttributeSet::OnRep_GuardDamageReduction(const FGameplayAttributeDat
 }
 
 
-float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags)
+float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags)
 {
 	UAbilitySystemComponent* TargetASC = &Data.Target;
 	AActor* TargetActor = TargetASC->GetAvatarActor();
@@ -126,6 +126,47 @@ float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCa
 		return RawDamage;
 	}
 
+	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
+
+	// 1. PARRY
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying))
+	{
+		if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
+		{
+			return RawDamage;
+		}
+
+		AActor* InstigatorActor = Context.GetInstigator();
+		AActor* CauserActor = Context.GetEffectCauser();
+
+		// (a) 공격자에게 "패리당함" 발행 → 공격자 GA가 self-stagger + cancel
+		if (IsValid(InstigatorActor))
+		{
+			FGameplayEventData ToAttacker;
+			ToAttacker.Instigator = InstigatorActor;
+			ToAttacker.Target = TargetActor;
+			ToAttacker.OptionalObject = CauserActor;
+			ToAttacker.EventTag = RetrieveGameplayTags::GameplayEvent_Parried;
+			ToAttacker.TargetTags = SpecTags;
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
+		}
+
+		// (b) 방어자에게 "패리 성공" 발행 → GA_Guard가 카운터 윈도우 부여 + Cue,
+		//     UElementGaugeComponent가 원소 게이지 충전(ChargeRuleTable에 Parry.Success 행 추가 시).
+		// Instigator는 보상 수령자인 방어자(self)로 둔다. ElementGauge는 Payload.Instigator == Owner
+		// 인 이벤트만 충전하므로 공격자로 두면 무시된다. (소비자 GA_Guard는 payload 미사용 → 안전)
+		FGameplayEventData ToVictim;
+		ToVictim.Instigator = TargetActor;
+		ToVictim.Target = TargetActor;
+		ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
+
+		return 0.f;
+	}
+
+	// 2. GUARD
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
 	const bool bShielded = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Shielded);
 	
@@ -136,8 +177,8 @@ float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCa
 		{
 			FGameplayEventData EventData;
 			EventData.Instigator = Data.EffectSpec.GetEffectContext().GetInstigator();
-			EventData.Target     = TargetActor;
-			EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Guard_Broken;
+			EventData.Target = TargetActor;
+			EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Guard_Broken;
 
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 				TargetActor, RetrieveGameplayTags::GameplayEvent_Guard_Broken, EventData);
@@ -148,11 +189,13 @@ float UCombatAttributeSet::HandleIncomingDamage_Guard(const FGameplayEffectModCa
 		return RawDamage * (1.0f - GetGuardDamageReduction());
 	}
 
+	// 3. SHIELD
 	if (bShielded)
 	{
 		return RawDamage * 0.5f;
 	}
 
+	// 4. 방어 없음
 	return RawDamage;
 }
 
@@ -160,14 +203,14 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 {
 	AActor* AttackerActor = Data.EffectSpec.GetEffectContext().GetInstigator();
 	if (IsValid(AttackerActor) == false) return;
-	
+
 	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
 	if (IsValid(TargetActor) == false) return;
-	
+
 	// 공격자 GE에 붙여둔 태그로 강도 판정
 	FGameplayTagContainer SourceTags;
 	Data.EffectSpec.GetAllAssetTags(SourceTags);
-	
+
 	FGameplayTag AttackerEventTag;
 	for (const FGameplayTag& Tag : SourceTags)
 	{
@@ -178,12 +221,12 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 			break;
 		}
 	}
-	
+
 	if (AttackerEventTag.IsValid() == false)
 	{
 		AttackerEventTag = RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Light;
 	}
-	
+
 	FGameplayTag TargetEventTag;
 	for (const FGameplayTag& Tag : SourceTags)
 	{
@@ -194,17 +237,17 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 			break;
 		}
 	}
-	
+
 	if (TargetEventTag.IsValid() == false)
 	{
 		TargetEventTag = RetrieveGameplayTags::GameplayEvent_Hit_Normal;
 	}
-	
+
 	FGameplayEventData EventData;
 	EventData.Instigator = AttackerActor;
 	EventData.Target = TargetActor;
 	EventData.EventMagnitude = DamageDone;
-	
+
 	for (const FGameplayTag& Tag : SourceTags)
 	{
 		if (Tag.MatchesTag(RetrieveGameplayTags::HitReact_Type))
@@ -220,7 +263,7 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);
 	}
-	
+
 	// 테스트 코드
 	UE_LOG(LogRetrieveCombat, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
 		*AttackerEventTag.ToString(),

@@ -2,12 +2,16 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "AbilitySystemInterface.h"
 #include "Core/RetrieveGameState.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "Components/PatternCounterComponent.h"
+#include "Components/CombatReactionComponent.h"
+#include "Components/EnemyCombatComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
@@ -227,7 +231,6 @@ void URetrieveCheatManager::RetrieveTestGuardHit(bool bHeavy)
 
     if (bHeavy)
     {
-        // Heavy = 강도 마커, GuardBreak = 가드 무력화 속성(분리됨). 가드브레이크 테스트엔 둘 다 필요.
         Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
         Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
     }
@@ -251,10 +254,10 @@ void URetrieveCheatManager::RetrieveTestCounter()
         Counter->SetActivePatternRow(TEXT("Wyvern_AerialDive"), Combat->GetPatternTable());
     }
     
-    Counter->OpenCounterWindow(0.f);          // 같은 프레임에 즉시 열고
+    Counter->OpenCounterWindow(0.f);
     const bool bWasOpen = Counter->IsWindowOpen();
 
-    Counter->TryCounter(                        // 바로 카운터 시도 (AI 개입 불가)
+    Counter->TryCounter(
         FGameplayTag::EmptyTag, RetrieveGameplayTags::Element_Fire,
         GetOuterAPlayerController()->GetPawn());
 
@@ -304,8 +307,8 @@ void URetrieveCheatManager::RetrieveTryCounter()
 	const bool bWasOpen = Counter->IsWindowOpen();
 
 	Counter->TryCounter(
-		FGameplayTag::EmptyTag,                       // ActionTag (B7 미정 → 조건 무시)
-		RetrieveGameplayTags::Element_Fire,                       // ElementTag (조건 무시)
+		FGameplayTag::EmptyTag,
+		RetrieveGameplayTags::Element_Fire,
 		GetOuterAPlayerController()->GetPawn());
 
 	const bool bCountered = bWasOpen && !Counter->IsWindowOpen();

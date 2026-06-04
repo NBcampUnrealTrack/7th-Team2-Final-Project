@@ -65,8 +65,9 @@ private:
 	UFUNCTION() void OnRep_IncomingDamageMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_GuardDamageReduction(const FGameplayAttributeData& OldValue);
 
-	// 방어 상태(State.Player.Guarding / State.Player.Shielded)에 따른 감쇠/가드브레이크 분기 처리, 우선순위: Guarding > Shielded (누적 없음)
-	float HandleIncomingDamage_Guard(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);
+	// 방어 분기 단일 진입점(single source of truth).
+	// 우선순위: Parrying > Guarding > Shielded (누적 없음). 순서 의존 — 분기 순서를 바꾸면 게임플레이가 깨진다.
+	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);
 	// 데미지 적용 후 카메라/플로터/리액션 시스템에 알릴 이벤트 발행
 	void BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const;
 };

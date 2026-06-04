@@ -119,10 +119,6 @@ void URetrieveAbilitySet::GiveToAbilitySystem(URetrieveAbilitySystemComponent* A
 
 		const FGameplayAbilitySpecHandle Handle = ASC->GiveAbility(Spec);
 
-		// TODO(HeavyAttackDebug): 진단용 임시 로그. 원인 확인 후 제거.
-		UE_LOG(LogTemp, Warning, TEXT("[HeavyAttackDebug] Granted %s with InputTag=[%s]"),
-			*GetNameSafe(AbilityToGrant.Ability), *AbilityToGrant.InputTag.ToString());
-
 		if (OutGrantedHandles)
 		{
 			OutGrantedHandles->AddAbilitySpecHandle(Handle);

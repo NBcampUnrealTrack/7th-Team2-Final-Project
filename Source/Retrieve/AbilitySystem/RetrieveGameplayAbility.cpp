@@ -1,5 +1,9 @@
 #include "AbilitySystem/RetrieveGameplayAbility.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "GameplayEffect.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 URetrieveGameplayAbility::URetrieveGameplayAbility(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -15,6 +19,67 @@ void URetrieveGameplayAbility::OnAvatarSet(const FGameplayAbilityActorInfo* Acto
 {
 	Super::OnAvatarSet(ActorInfo, AbilitySpec);
 	TryActivateAbilityOnSpawn(ActorInfo, AbilitySpec);
+}
+
+void URetrieveGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+{
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	
+	if (bAutoListenForParried)
+	{
+		StartListeningForParried();
+	}
+}
+
+void URetrieveGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	if (ParriedTask)
+	{
+		ParriedTask->EndTask();
+		ParriedTask = nullptr;
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void URetrieveGameplayAbility::StartListeningForParried()
+{
+	if (ParriedTask)
+	{
+		return;
+	}
+
+	ParriedTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, RetrieveGameplayTags::GameplayEvent_Parried,
+		/*OptionalExternalTarget=*/nullptr, /*OnlyTriggerOnce=*/true, /*OnlyMatchExact=*/true);
+	if (ParriedTask)
+	{
+		ParriedTask->EventReceived.AddDynamic(this, &URetrieveGameplayAbility::HandleParried);
+		ParriedTask->ReadyForActivation();
+	}
+}
+
+void URetrieveGameplayAbility::HandleParried(FGameplayEventData /*Payload*/)
+{
+	if (!IsActive())
+	{
+		return;
+	}
+	
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+		IsValid(ASC) && ParriedStaggerEffect && HasAuthority(&GetCurrentActivationInfoRef()))
+	{
+		FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
+		Ctx.AddSourceObject(this);
+
+		if (const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(ParriedStaggerEffect, 1.f, Ctx);
+			Spec.IsValid())
+		{
+			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+		}
+	}
+	
+	CancelAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateCancelAbility=*/true);
 }
 
 void URetrieveGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo,
