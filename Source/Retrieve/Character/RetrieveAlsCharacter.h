@@ -89,6 +89,13 @@ protected:
 	/** ALS 데모 디버그 HUD(우측 상단 키 토글 위젯) 비활성화 */
 	virtual void DisplayDebug(UCanvas* Canvas, const FDebugDisplayInfo& DebugDisplay, float& YL, float& YPos) override {}
 
+	/**
+	 * Settings DA를 인스턴스 사본으로 복제 후, 코드 측 강제 값을 적용.
+	 * DA가 .gitignore로 팀 공유가 어려운 항목들을 코드에 박아 일관성 보장.
+	 * 자식이 추가 override 시 Super 먼저 호출 후 자기 값 덮어쓰기.
+	 */
+	virtual void ApplyRetrieveSettingsOverrides();
+
 	/** GAS 태그 → ALS 상태 자동 동기화 핸들러 (RegisterGameplayTagEvent에 바인딩) */
 	virtual void OnSprintTagChanged(const FGameplayTag Tag, int32 NewCount);
 	virtual void OnCrouchTagChanged(const FGameplayTag Tag, int32 NewCount);

@@ -9,6 +9,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Settings/AlsCharacterSettings.h"
 #include "Utility/AlsGameplayTags.h"
 
 
@@ -33,6 +34,36 @@ void ARetrieveAlsCharacter::PostInitializeComponents()
 	{
 		CachedDefaultHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
 	}
+
+	// Settings DA가 .gitignore 처리되어 팀 공유가 어려운 항목들을 코드에서 강제.
+	// 원본 자산을 변경하지 않도록 캐릭터 소유의 인스턴스 사본을 사용.
+	if (Settings)
+	{
+		Settings = DuplicateObject<UAlsCharacterSettings>(Settings, this);
+		ApplyRetrieveSettingsOverrides();
+	}
+}
+
+void ARetrieveAlsCharacter::ApplyRetrieveSettingsOverrides()
+{
+	if (!Settings) { return; }
+
+	// === 낙법 ===
+	// 낙하 Z속도(cm/s) 임계치. h ≈ v²/(2g) 환산:
+	//   700  → ≈ 2.5m
+	//   1000 → ≈ 5.1m  (현재 기본)
+	//   1500 → ≈ 11.5m
+	Settings->Rolling.bStartRollingOnLand         = true;
+	Settings->Rolling.RollingOnLandSpeedThreshold = 1000.0f;
+
+	// === 낙사(Ragdoll on Land) ===
+	// 기본 비활성. 죽음 처리는 GA/wrapper(StartRagdoll)에서 명시적으로 호출.
+	Settings->Ragdolling.bStartRagdollingOnLand = false;
+
+	// === Mantle 자동 활성 ===
+	// DA 측 토글이 갈팡질팡하지 않도록 코드에 명시.
+	Settings->Mantling.bAllowMantling          = true;
+	Settings->Mantling.bAutoStartMantlingInAir = true;
 }
 
 void ARetrieveAlsCharacter::Tick(float DeltaTime)
