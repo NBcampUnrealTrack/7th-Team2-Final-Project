@@ -148,12 +148,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="Retrieve|WorldMap|IconFilter")
 	bool IsIconTypeVisible(ERetrieveMapIconType IconType) const;
 
-	/** 빠른 이동 확인 창. 기본값은 WBP_FastTravelDialog */
+	/** 빠른 이동 확인 창. WBP_FastTravelDialog를 직접 할당 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|FastTravel")
-	TSoftClassPtr<UUserWidget> FastTravelDialogClass;
+	TSubclassOf<UUserWidget> FastTravelDialogClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|FastTravel")
-	TSoftClassPtr<UUserWidget> FastTravelLoadingClass;
+	TSubclassOf<UUserWidget> FastTravelLoadingClass;
 
 	// 플레이어 위치로 뷰 이동 (월드맵 열 때 호출 권장)
 	UFUNCTION(BlueprintCallable, Category="Retrieve|WorldMap")

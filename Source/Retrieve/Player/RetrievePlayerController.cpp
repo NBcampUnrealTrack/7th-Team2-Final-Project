@@ -111,12 +111,17 @@ void ARetrievePlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	if (ARetrievePlayerState* RetrievePS = GetRetrievePlayerState())
+	// 패널이 열려있는 동안은 전투/어빌리티 입력을 차단한다.
+	// 월드맵의 좌클릭 더블클릭 판정이 공격 콤보 입력과 충돌하는 것을 방지.
+	if (!ActivePanel)
 	{
-		if (URetrieveAbilitySystemComponent* RetrieveASC = RetrievePS->GetRetrieveAbilitySystemComponent())
+		if (ARetrievePlayerState* RetrievePS = GetRetrievePlayerState())
 		{
-			const bool bGamePaused = IsPaused();
-			RetrieveASC->ProcessAbilityInput(DeltaTime, bGamePaused);
+			if (URetrieveAbilitySystemComponent* RetrieveASC = RetrievePS->GetRetrieveAbilitySystemComponent())
+			{
+				const bool bGamePaused = IsPaused();
+				RetrieveASC->ProcessAbilityInput(DeltaTime, bGamePaused);
+			}
 		}
 	}
 	
@@ -138,7 +143,7 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 	{
 		LastInputRealTimeSeconds = World->GetRealTimeSeconds();
 	}
-	
+
 	if (Params.Event == IE_Pressed)
 	{
 		if (ActivePanel && Params.Key == EKeys::Escape)
@@ -157,6 +162,12 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 			return true;
 		}
 
+		// 패널이 열려있는 동안은 위에서 처리되지 않은 키보드/게임패드 입력을 차단한다.
+		// 마우스 버튼은 제외(월드맵 패닝·클릭은 Slate UI가 직접 처리).
+		if (ActivePanel && !Params.Key.IsMouseButton())
+		{
+			return true;
+		}
 	}
 
 	return Super::InputKey(Params);

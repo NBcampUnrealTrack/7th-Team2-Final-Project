@@ -25,10 +25,6 @@
 URetrieveWorldMapWidget::URetrieveWorldMapWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	FastTravelDialogClass = TSoftClassPtr<UUserWidget>(
-		FSoftObjectPath(TEXT("/Game/Retrieve/UI/HUD/WBP_FastTravelDialog.WBP_FastTravelDialog_C")));
-	FastTravelLoadingClass = TSoftClassPtr<UUserWidget>(
-		FSoftObjectPath(TEXT("/Game/Retrieve/UI/HUD/WBP_LoadingCutscene.WBP_LoadingCutscene_C")));
 }
 
 void URetrieveWorldMapWidget::NativeConstruct()
@@ -885,11 +881,10 @@ bool URetrieveWorldMapWidget::TryBroadcastBonfireDoubleClick(
 
 			// 빠른 이동 확인 창 직접 오픈
 			APlayerController* PC = GetWorldMapPlayerController();
-			UClass* DialogClass = FastTravelDialogClass.LoadSynchronous();
-			if (!PC || !DialogClass) { break; }
+			if (!PC || !FastTravelDialogClass) { break; }
 
 			CloseActiveFastTravelDialog();
-			UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, DialogClass);
+			UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, FastTravelDialogClass);
 			if (!Dialog) { break; }
 
 			struct FInitParams { FName BonfireId; FText BonfireDisplayName; };
@@ -976,23 +971,16 @@ bool URetrieveWorldMapWidget::HandleBonfireIconClick(
 bool URetrieveWorldMapWidget::TryOpenFastTravelDialog(const ARetrieveBonfireActor& Bonfire)
 {
 	APlayerController* PC = GetWorldMapPlayerController();
-	UClass* DialogClass = FastTravelDialogClass.LoadSynchronous();
-	if (!DialogClass)
-	{
-		DialogClass = LoadClass<UUserWidget>(
-			nullptr,
-			TEXT("/Game/Retrieve/UI/HUD/WBP_FastTravelDialog.WBP_FastTravelDialog_C"));
-	}
-	if (!PC || !DialogClass)
+	if (!PC || !FastTravelDialogClass)
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[WorldMap] 빠른 이동 확인 창 생성 실패 — PC=%s DialogClass=%s"),
 			PC ? TEXT("Valid") : TEXT("None"),
-			DialogClass ? *DialogClass->GetName() : TEXT("None"));
+			FastTravelDialogClass ? *FastTravelDialogClass->GetName() : TEXT("None"));
 		return false;
 	}
 
-	UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, DialogClass);
+	UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, FastTravelDialogClass);
 	if (!Dialog)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[WorldMap] 빠른 이동 확인 창 CreateWidget 실패"));
@@ -1004,7 +992,7 @@ bool URetrieveWorldMapWidget::TryOpenFastTravelDialog(const ARetrieveBonfireActo
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[WorldMap] 빠른 이동 확인 창에 InitDialog 이벤트가 없음 — Class=%s"),
-			*DialogClass->GetName());
+			*FastTravelDialogClass->GetName());
 		return false;
 	}
 
@@ -1132,21 +1120,13 @@ void URetrieveWorldMapWidget::ShowFastTravelLoadingOverlay(APlayerController* PC
 		return;
 	}
 
-	UClass* LoadingClass = FastTravelLoadingClass.LoadSynchronous();
-	if (!LoadingClass)
+	if (!FastTravelLoadingClass)
 	{
-		LoadingClass = LoadClass<UUserWidget>(
-			nullptr,
-			TEXT("/Game/Retrieve/UI/HUD/WBP_LoadingCutscene.WBP_LoadingCutscene_C"));
-	}
-
-	if (!LoadingClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[WorldMap] Fast travel loading overlay class not found"));
+		UE_LOG(LogTemp, Warning, TEXT("[WorldMap] Fast travel loading overlay class not assigned"));
 		return;
 	}
 
-	ActiveFastTravelLoadingOverlay = CreateWidget<UUserWidget>(PC, LoadingClass);
+	ActiveFastTravelLoadingOverlay = CreateWidget<UUserWidget>(PC, FastTravelLoadingClass);
 	if (ActiveFastTravelLoadingOverlay)
 	{
 		ActiveFastTravelLoadingOverlay->AddToViewport(200);
