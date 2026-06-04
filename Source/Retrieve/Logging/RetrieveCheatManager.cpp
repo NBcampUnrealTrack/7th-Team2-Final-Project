@@ -315,6 +315,7 @@ void URetrieveCheatManager::RetrieveTryCounter()
 		bWasOpen ? TEXT("true") : TEXT("false"),
 		bCountered ? TEXT("카운터 성공") : TEXT("실패(윈도우 닫힘/미오픈)"));
 }
+
 void URetrieveCheatManager::RetrieveTestHitReact(int32 Strength)
 {
     APawn* SelfPawn = GetOuterAPlayerController() ? GetOuterAPlayerController()->GetPawn() : nullptr;
