@@ -57,8 +57,10 @@ protected:
 	/** ALS 연결 액션 입력. GAS 상태 태그 부여/해제 + ALS API 호출은 캐릭터가 자동 동기화. */
 	void Input_SprintPressed(const FInputActionValue& InputActionValue);
 	void Input_SprintReleased(const FInputActionValue& InputActionValue);
-	void Input_Crouch(const FInputActionValue& InputActionValue);
-
+	
+	void Input_CrouchPressed(const FInputActionValue& InputActionValue);
+	void Input_CrouchReleased(const FInputActionValue& InputActionValue);
+	
 	/** Shift Tap 같은 시간 기반 트리거가 필요한 어빌리티용. Native + Triggered에 바인딩하여 Tap 검사 정확. */
 	void Input_DashRequest(const FInputActionValue& InputActionValue);
 

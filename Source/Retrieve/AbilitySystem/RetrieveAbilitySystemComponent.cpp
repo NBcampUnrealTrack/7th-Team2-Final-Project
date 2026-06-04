@@ -1,4 +1,5 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Character/Cosmetics/RetrieveAlsAnimInstance.h"
 #include "Character/Cosmetics/SovereignAnimInstance.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Abilities/GameplayAbility.h"
@@ -19,6 +20,12 @@ void URetrieveAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor,
 		if (USovereignAnimInstance* SovereignAnimInst = Cast<USovereignAnimInstance>(ActorInfo->GetAnimInstance()))
 		{
 			SovereignAnimInst->InitializeWithAbilitySystem(this);
+		}
+
+		// ALS 가지 메인 AnimInstance. 동일 Mesh의 AnimInstance는 둘 중 하나만 성공 (안전).
+		if (URetrieveAlsAnimInstance* AlsAnimInst = Cast<URetrieveAlsAnimInstance>(ActorInfo->GetAnimInstance()))
+		{
+			AlsAnimInst->InitializeWithAbilitySystem(this);
 		}
 	}
 }

@@ -208,7 +208,8 @@ void URetrieveHeroComponent::BindPlayerInputs()
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Sprint, ETriggerEvent::Completed, this, &ThisClass::Input_SprintReleased, false);
 
 	// Crouch (Toggle) — Started에서 한 번만 발동
-	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Crouch, ETriggerEvent::Started, this, &ThisClass::Input_Crouch, false);
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Crouch, ETriggerEvent::Started, this, &ThisClass::Input_CrouchPressed, false);
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Crouch, ETriggerEvent::Completed, this, &ThisClass::Input_CrouchReleased, false);
 
 	// Dash (Tap) — Tap trigger의 Triggered에 바인딩. 시간 내 떼면 1회 발동, 길게 누르면 발동 안 함(Sprint Hold가 작동).
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Dash, ETriggerEvent::Triggered, this, &ThisClass::Input_DashRequest, false);
@@ -358,7 +359,21 @@ void URetrieveHeroComponent::Input_SprintReleased(const FInputActionValue& Input
 	}
 }
 
-void URetrieveHeroComponent::Input_Crouch(const FInputActionValue& InputActionValue)
+void URetrieveHeroComponent::Input_CrouchPressed(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn) return;
+	
+	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+		{
+			ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_CrouchReleased(const FInputActionValue& InputActionValue)
 {
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn) return;
@@ -367,15 +382,7 @@ void URetrieveHeroComponent::Input_Crouch(const FInputActionValue& InputActionVa
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
-			// Toggle 방식: 이미 있으면 제거, 없으면 부여
-			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Crouching))
-			{
-				ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
-			}
-			else
-			{
-				ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
-			}
+			ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Crouching);
 		}
 	}
 }
