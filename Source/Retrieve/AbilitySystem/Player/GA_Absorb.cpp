@@ -7,7 +7,9 @@
 
 UGA_Absorb::UGA_Absorb()
 {
-	AbilityTags.AddTag(RetrieveGameplayTags::Ability_Player_Absorb);
+	FGameplayTagContainer Tags;
+	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Absorb);
+	SetAssetTags(Tags);
 }
 
 void UGA_Absorb::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

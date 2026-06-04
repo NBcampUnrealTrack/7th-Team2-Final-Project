@@ -11,9 +11,20 @@
 
 UGA_Burst::UGA_Burst()
 {
-	AbilityTags.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
+    InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	FGameplayTagContainer Tags;
+	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
+	SetAssetTags(Tags);
 
 	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Gauge_Full);
+
+    ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+    ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
+    ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
+    ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+    ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Bursting);
 }
 
 void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -69,7 +80,6 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
     }
 
     CachedBurstComp = BurstComp;
-    CachedSkill = MatchedRow;
     BurstComp->BeginBurstSkill(MatchedRow);
 
     MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, NAME_None, true);
@@ -110,6 +120,21 @@ void UGA_Burst::HandleMontageCancelled()
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
+void UGA_Burst::CleanupBurst()
+{
+    if (MontageTask)
+    {
+        MontageTask->EndTask();
+        MontageTask = nullptr;
+    }
+
+    if (IsValid(CachedBurstComp))
+    {
+        CachedBurstComp->EndBurstSkill();
+    }
+    CachedBurstComp = nullptr;
+}
+
 void UGA_Burst::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
     // 중복 호출 방지: OnBlendOut + OnCompleted 가 둘 다 발동되는 정상 케이스에서
@@ -119,36 +144,14 @@ void UGA_Burst::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamep
         return;
     }
 
-    if (MontageTask)
-    {
-        MontageTask->EndTask();
-        MontageTask = nullptr;
-    }
-
-    if (IsValid(CachedBurstComp))
-    {
-        CachedBurstComp->EndBurstSkill();
-    }
-    CachedBurstComp = nullptr;
-    CachedSkill = nullptr;
+    CleanupBurst();
 
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 void UGA_Burst::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility)
 {
-    if (MontageTask)
-    {
-        MontageTask->EndTask();
-        MontageTask = nullptr;
-    }
-
-    if (IsValid(CachedBurstComp))
-    {
-        CachedBurstComp->EndBurstSkill();
-    }
-    CachedBurstComp = nullptr;
-    CachedSkill = nullptr;
+    CleanupBurst();
 
     Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
 }
