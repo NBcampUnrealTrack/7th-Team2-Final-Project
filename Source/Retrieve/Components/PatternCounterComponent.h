@@ -7,6 +7,7 @@
 #include "PatternCounterComponent.generated.h"
 
 class URetrieveAbilitySystemComponent;
+struct FGameplayEventData;
 
 UCLASS(ClassGroup = "Retrieve", meta = (BlueprintSpawnableComponent))
 class RETRIEVE_API UPatternCounterComponent : public UPawnComponent
@@ -25,7 +26,9 @@ public:
 	bool IsWindowOpen() const { return bWindowOpen; }
 	
 	void TryCounter(FGameplayTag ActionTag, FGameplayTag ElementTag, AActor* Instigator);
-
+	
+	void SetGroggyCooldown(float InCooldown) { GroggyCooldown = InCooldown; }
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -36,6 +39,10 @@ private:
 
 	URetrieveAbilitySystemComponent* GetASC() const;
 
+	void OnAbilitySystemInitialized();
+	void HandleCounterWindowEvent(const FGameplayEventData* Payload); 
+	
+private:
 	bool bWindowOpen = false;
 
 	FMonsterPatternRow ActivePatternData;
@@ -47,4 +54,8 @@ private:
 	float DefaultWindowDuration = 0.5f;
 
 	float GroggyCooldownExpiry = 0.f;
+	
+	float GroggyCooldown = 10.f;
+	
+	FDelegateHandle CounterWindowEventHandle;  
 };

@@ -12,6 +12,12 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
 
+#include "Components/PatternCounterComponent.h"
+#include "Components/CombatReactionComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Components/EnemyCombatComponent.h"
+#include "AbilitySystemInterface.h"
+
 UAbilitySystemComponent* URetrieveCheatManager::GetLocalPlayerASC() const
 {
 	const APlayerController* PC = GetOuterAPlayerController();
@@ -34,6 +40,39 @@ UAbilitySystemComponent* URetrieveCheatManager::GetLocalPlayerASC() const
 		UE_LOG(LogTemp, Warning, TEXT("[CheatManager] ASC 없음 — PawnData/AbilitySet 확인"));
 	}
 	return ASC;
+}
+
+class UPatternCounterComponent* URetrieveCheatManager::GetLockedOnPatternCounter() const
+{
+    const APlayerController* PC = GetOuterAPlayerController();
+    APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+    if (!Pawn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] 빙의된 Pawn 없음"));
+        return nullptr;
+    }
+
+    UCombatReactionComponent* Reaction = Pawn->FindComponentByClass<UCombatReactionComponent>();
+    if (!Reaction)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] CombatReactionComponent 없음"));
+        return nullptr;
+    }
+
+    AActor* Target = Reaction->GetLockOnTarget();
+    if (!Target)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] 락온 대상 없음 — Tab으로 락온 먼저"));
+        return nullptr;
+    }
+
+    UPatternCounterComponent* Counter = Target->FindComponentByClass<UPatternCounterComponent>();
+    if (!Counter)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[CheatManager] 대상에 PatternCounterComponent 없음: %s"),
+            *Target->GetName());
+    }
+    return Counter;
 }
 
 void URetrieveCheatManager::RetrieveKillPlayer()
@@ -199,4 +238,79 @@ void URetrieveCheatManager::RetrieveTestGuardHit(bool bHeavy)
     ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 
     UE_LOG(LogTemp, Display, TEXT("[CheatManager] RetrieveTestGuardHit(bHeavy=%d) 적용"), bHeavy ? 1 : 0);
+}
+
+void URetrieveCheatManager::RetrieveTestCounter()
+{
+    UPatternCounterComponent* Counter = GetLockedOnPatternCounter();
+    if (!Counter) return;
+    
+    if (UEnemyCombatComponent* Combat = Counter->GetOwner()->FindComponentByClass<UEnemyCombatComponent>())
+    {
+        Counter->SetActivePatternRow(TEXT("Wyvern_AerialDive"), Combat->GetPatternTable());
+    }
+    
+    Counter->OpenCounterWindow(0.f);          // 같은 프레임에 즉시 열고
+    const bool bWasOpen = Counter->IsWindowOpen();
+
+    Counter->TryCounter(                        // 바로 카운터 시도 (AI 개입 불가)
+        FGameplayTag::EmptyTag, RetrieveGameplayTags::Element_Fire,
+        GetOuterAPlayerController()->GetPawn());
+
+    bool bGroggy = false;
+    if (IAbilitySystemInterface* ASCIf = Cast<IAbilitySystemInterface>(Counter->GetOwner()))
+    {
+        if (UAbilitySystemComponent* EnemyASC = ASCIf->GetAbilitySystemComponent())
+        {
+            bGroggy = EnemyASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Groggy);
+        }
+    }
+    UE_LOG(LogTemp, Display, TEXT("[CheatManager] 그로기 진입=%s"), bGroggy ? TEXT("true") : TEXT("false"));
+    const bool bCountered = bWasOpen && !Counter->IsWindowOpen();
+
+    UE_LOG(LogTemp, Display,
+        TEXT("[CheatManager] TestCounter → Opened=%s, 결과=%s"),
+        bWasOpen ? TEXT("true") : TEXT("false"),
+        bCountered ? TEXT("카운터 성공") : TEXT("실패"));
+}
+
+void URetrieveCheatManager::RetrieveOpenCounterWindow(float Duration)
+{
+    UPatternCounterComponent* Counter = GetLockedOnPatternCounter();
+    if (!Counter) return;
+
+    AActor* Enemy = Counter->GetOwner();
+
+    FGameplayEventData Payload;
+    Payload.EventTag       = RetrieveGameplayTags::GameplayEvent_PatternCounterWindow;
+    Payload.Instigator     = GetOuterAPlayerController()->GetPawn();
+    Payload.EventMagnitude = Duration;
+    
+    UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+        Enemy, RetrieveGameplayTags::GameplayEvent_PatternCounterWindow, Payload);
+
+    UE_LOG(LogTemp, Display,
+        TEXT("[CheatManager] OpenCounterWindow → %s, Duration=%.2f, WindowOpen=%s"),
+        *Enemy->GetName(), Duration,
+        Counter->IsWindowOpen() ? TEXT("true") : TEXT("false"));
+}
+
+void URetrieveCheatManager::RetrieveTryCounter()
+{
+    UPatternCounterComponent* Counter = GetLockedOnPatternCounter();
+    if (!Counter) return;
+
+    const bool bWasOpen = Counter->IsWindowOpen();
+
+    Counter->TryCounter(
+        FGameplayTag::EmptyTag,                       // ActionTag (B7 미정 → 조건 무시)
+        RetrieveGameplayTags::Element_Fire,                       // ElementTag (조건 무시)
+        GetOuterAPlayerController()->GetPawn());
+
+    const bool bCountered = bWasOpen && !Counter->IsWindowOpen();
+
+    UE_LOG(LogTemp, Display,
+        TEXT("[CheatManager] TryCounter → WindowWasOpen=%s, 결과=%s"),
+        bWasOpen ? TEXT("true") : TEXT("false"),
+        bCountered ? TEXT("카운터 성공") : TEXT("실패(윈도우 닫힘/미오픈)"));
 }

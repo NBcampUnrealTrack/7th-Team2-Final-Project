@@ -23,11 +23,17 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	}
 
 	UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>();
-	if (!Combat || !Combat->RequestBasicAttack(InstanceData.TargetActor))
+	if (!Combat)
 	{
+		UE_LOG(LogStateTree, Error, TEXT("EnemyCombat Component is missing"));
 		return EStateTreeRunStatus::Failed;
 	}
 	
+	if (!Combat->RequestBasicAttack(InstanceData.TargetActor))
+	{
+		UE_LOG(LogStateTree, Error, TEXT("RequestBasicAttack failed"));
+		return EStateTreeRunStatus::Failed;
+	}
 	return EStateTreeRunStatus::Running;
 }
 

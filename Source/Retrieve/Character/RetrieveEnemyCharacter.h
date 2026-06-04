@@ -43,6 +43,12 @@ public:
 	bool IsChasingForAnim() const { return bCachedIsChasing; }
 
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsSpecialAttackingForAnim()     const { return bCachedIsSpecialAttacking; }
+
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
+	bool IsAttackingForAnim()     const { return bCachedIsAttacking; }
+	
+	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
 	bool IsHitForAnim()     const { return bCachedIsHit; }
 
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
@@ -64,6 +70,8 @@ protected:
 	
 	void OnDeadTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnChaseTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnAttackTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnSpecialAttackTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnHitTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnStaggeredTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnGroggyTagChanged(const FGameplayTag Tag, int32 Count);
@@ -127,6 +135,8 @@ private:
 	
 	bool bCachedIsDead      = false;
 	bool bCachedIsChasing   = false;
+	bool bCachedIsAttacking = false;
+	bool bCachedIsSpecialAttacking = false;
 	bool bCachedIsHit       = false;
 	bool bCachedIsStaggered    = false;
 	bool bCachedIsGroggy    = false;

@@ -16,20 +16,51 @@ UPatternCounterComponent::UPatternCounterComponent(const FObjectInitializer& Obj
 void UPatternCounterComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	// TODO (AE2-c): GA 몽타주 AnimNotify 연결 후 ASC GameplayEvent 리스너 등록
-	// URetrieveAbilitySystemComponent* ASC = GetASC();
-	// if (ASC)
-	// {
-	//     ASC->GenericGameplayEventCallbacks
-	//         .FindOrAdd(RetrieveGameplayTags::GameplayEvent_PatternCounterWindow)
-	//         .AddUObject(this, &UPatternCounterComponent::HandleCounterWindowEvent);
-	// }
+	
+	// ASC 초기화 시 등록되도록 예약 걸기
+	if (URetrievePawnExtensionComponent* PawnExtComp = 
+		URetrievePawnExtensionComponent::FindPawnExtensionComponent(GetOwner()))
+	{
+		PawnExtComp->OnAbilitySystemInitialized_RegisterAndCall(
+			FSimpleMulticastDelegate::FDelegate::CreateUObject(
+				this, &UPatternCounterComponent::OnAbilitySystemInitialized));
+	}
 }
 
 void UPatternCounterComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (CounterWindowEventHandle.IsValid())
+	{
+		if (URetrieveAbilitySystemComponent* ASC = GetASC())
+		{
+			ASC->GenericGameplayEventCallbacks
+			   .FindOrAdd(RetrieveGameplayTags::GameplayEvent_PatternCounterWindow)
+			   .Remove(CounterWindowEventHandle);
+		}
+		CounterWindowEventHandle.Reset();
+	}
+	
 	CloseCounterWindow();
 	Super::EndPlay(EndPlayReason);
+}
+
+void UPatternCounterComponent::OnAbilitySystemInitialized()
+{
+	URetrieveAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		return;
+	}
+	
+	CounterWindowEventHandle = ASC->GenericGameplayEventCallbacks
+		.FindOrAdd(RetrieveGameplayTags::GameplayEvent_PatternCounterWindow)
+		.AddUObject(this,&UPatternCounterComponent::HandleCounterWindowEvent);
+}
+
+void UPatternCounterComponent::HandleCounterWindowEvent(const FGameplayEventData* Payload)
+{
+	const float Duration = Payload ? Payload->EventMagnitude : 0.f;
+	OpenCounterWindow(Duration);
 }
 
 void UPatternCounterComponent::SetActivePatternRow(FName RowName, UDataTable* Table)
@@ -72,8 +103,6 @@ void UPatternCounterComponent::CloseCounterWindow()
 
 void UPatternCounterComponent::TryCounter(FGameplayTag ActionTag, FGameplayTag ElementTag, AActor* Instigator)
 {
-	// TODO (B7-b): 플레이어 패링·회피카운터 GA 연결 후 구현
-	// 아래는 조건 매칭 뼈대 — B7 작업 시 채워넣는다.
 	if (!bWindowOpen)
 	{
 		return;
@@ -110,12 +139,15 @@ void UPatternCounterComponent::ApplyCounterResult(AActor* Instigator)
 		FGameplayEventData EventData;
 		EventData.EventTag   = ActivePatternData.CounterEventTag;
 		EventData.Instigator = Instigator;
+		EventData.EventMagnitude  = ActivePatternData.GroggyDuration;
 		ASC->HandleGameplayEvent(ActivePatternData.CounterEventTag, &EventData);
 	}
 
 	if (ActivePatternData.bCanTriggerGroggy)
 	{
 		const float Now = GetWorld()->GetTimeSeconds();
+		const float GroggyDur = ActivePatternData.GroggyDuration; 
+		
 		if (Now >= GroggyCooldownExpiry)
 		{
 			FGameplayEventData GroggyEvent;
@@ -124,7 +156,7 @@ void UPatternCounterComponent::ApplyCounterResult(AActor* Instigator)
 			ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_GroggyTrigger, &GroggyEvent);
 
 			// TODO (B6-a): DT_MonsterData.GroggyCooldown을 읽어서 쿨다운 설정
-			GroggyCooldownExpiry = Now + 15.f;
+			GroggyCooldownExpiry = Now + GroggyDur + GroggyCooldown;
 		}
 	}
 }
