@@ -286,7 +286,7 @@ bool ASpawnerBase::IsPositionHidden(const FVector& WorldPos) const
 		Hit,
 		PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 60.f),
 		WorldPos,
-		ECC_Visibility, Params);
+		ECC_Visibility, Padrams);
 
 	return Hit.bBlockingHit;
 }
