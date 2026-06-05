@@ -261,6 +261,9 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 			GetCapsuleComponent(),
 			FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		MeshComp->SetRelativeTransform(InitialMeshRelativeTransform);
+		
+		MeshComp->bPauseAnims = false;
+		MeshComp->SetComponentTickEnabled(true);
 	}
 	
 	SetActorTransform(SpawnTransform);
@@ -297,7 +300,13 @@ void ARetrieveEnemyCharacter::DeactivateEnemy()
 		MoveComp->GravityScale = 0.0f;
 		MoveComp->SetMovementMode(EMovementMode::MOVE_None);
 	}
-		
+	
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->bPauseAnims = true;
+		MeshComp->SetComponentTickEnabled(false);
+	}
+	
 	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
 	{
 		AI->Deactivate();
