@@ -280,6 +280,33 @@ struct RETRIEVE_API FBurstHitInstance
 };
 
 /**
+ * 원소 반응 규칙. DT_ElementReaction 의 행.
+ * 상태 GE 가 대상에 부여되는 시점에, 대상이 RequiredExistingTag 를 이미 보유하고 있으면
+ * ReactionEffect 를 적용하고 RemoveStatusTag 상태를 제거한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FElementReactionRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** 이 상태 GE 가 대상에 부여될 때 반응을 검사한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reaction")
+	TSubclassOf<UGameplayEffect> IncomingStatusEffect;
+
+	/** 대상이 이 태그를 이미 보유 중이면 반응 발동. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reaction", meta = (Categories = "State.Status"))
+	FGameplayTag RequiredExistingTag;
+
+	/** 반응 시 적용할 효과 (추가 데미지 / 이속 디버프 등). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reaction")
+	TSubclassOf<UGameplayEffect> ReactionEffect;
+
+	/** 반응 시 제거할 상태 태그. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reaction", meta = (Categories = "State.Status"))
+	FGameplayTag RemoveStatusTag;
+};
+
+/**
  * 스킬 조합
  */
 USTRUCT(BlueprintType)

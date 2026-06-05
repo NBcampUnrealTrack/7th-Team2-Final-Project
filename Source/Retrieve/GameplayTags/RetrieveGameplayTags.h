@@ -92,6 +92,7 @@ namespace RetrieveGameplayTags
 	// ---- Status state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Burn);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Cold);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_ColdReaction);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Status_Vulnerable);
 
 	// ---- Combat micro-state

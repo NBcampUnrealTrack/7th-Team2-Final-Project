@@ -6,6 +6,9 @@
 
 struct FSkillCombination;
 struct FBurstHitInstance;
+class UAbilitySystemComponent;
+class UGameplayEffect;
+class UDataTable;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class RETRIEVE_API UPlayerBurstComponent : public UActorComponent
@@ -47,6 +50,10 @@ private:
     // 단일 타격 인플릭트
     void ApplyHitToTarget(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult);
 
+    // 상태 GE 부여 직전 원소 반응 검사 (ReactionTable 기반)
+    void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
+        const TSubclassOf<UGameplayEffect>& IncomingStatusGE);
+
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace", meta=(ClampMin="0.0"))
     float CleaveRadius = 60.f;
 
@@ -61,6 +68,10 @@ private:
 
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace")
     bool bDebugDrawTrace = false;
+
+    // 원소 반응 규칙 테이블 (FElementReactionRow)
+    UPROPERTY(EditDefaultsOnly, Category = "Burst|Reaction")
+    TObjectPtr<UDataTable> ReactionTable;
 
     // WorldActor 전용 (소환된 월드 액터 참조)
     TWeakObjectPtr<AActor> SpawnedWorldActor;

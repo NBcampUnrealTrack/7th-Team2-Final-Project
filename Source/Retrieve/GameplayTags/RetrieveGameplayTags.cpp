@@ -1,4 +1,4 @@
-﻿#include "RetrieveGameplayTags.h"
+#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -90,6 +90,7 @@ namespace RetrieveGameplayTags
 	// ---- Status state
 	UE_DEFINE_GAMEPLAY_TAG(State_Status_Burn, "State.Status.Burn");
 	UE_DEFINE_GAMEPLAY_TAG(State_Status_Cold, "State.Status.Cold");
+	UE_DEFINE_GAMEPLAY_TAG(State_Status_ColdReaction, "State.Status.ColdReaction");
 	UE_DEFINE_GAMEPLAY_TAG(State_Status_Vulnerable, "State.Status.Vulnerable");
 	
 	// ---- Combat micro-state
