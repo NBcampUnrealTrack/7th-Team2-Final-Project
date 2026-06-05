@@ -310,6 +310,63 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 	SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, Hit.DamageMultiplier);
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+
+	// ── 상태 부여 + 원소 반응 ──
+	for (const TSubclassOf<UGameplayEffect>& StatusGE : Hit.StatusEffects)
+	{
+		if (!IsValid(StatusGE)) continue;
+
+		// 상태 부여 "전"에 반응 검사 (기존 상태 + 새로 들어오는 상태)
+		TryElementReaction(SourceASC, TargetASC, StatusGE);
+
+		// 들어온 상태는 반응 여부와 무관하게 적용 (명세: 새 상태는 남김)
+		FGameplayEffectSpecHandle StatusSpec = SourceASC->MakeOutgoingSpec(StatusGE, 1.f, Context);
+		if (StatusSpec.IsValid() && StatusSpec.Data.IsValid())
+		{
+			SourceASC->ApplyGameplayEffectSpecToTarget(*StatusSpec.Data.Get(), TargetASC);
+		}
+	}
+}
+
+void UPlayerBurstComponent::TryElementReaction(UAbilitySystemComponent* SourceASC,
+	UAbilitySystemComponent* TargetASC, const TSubclassOf<UGameplayEffect>& IncomingStatusGE)
+{
+	if (!ReactionTable || !IsValid(SourceASC) || !IsValid(TargetASC) || !IsValid(IncomingStatusGE)) return;
+
+	static const FString Ctx(TEXT("PlayerBurst::TryElementReaction"));
+	TArray<FElementReactionRow*> Rows;
+	ReactionTable->GetAllRows<FElementReactionRow>(Ctx, Rows);
+
+	for (const FElementReactionRow* Row : Rows)
+	{
+		if (!Row || Row->IncomingStatusEffect != IncomingStatusGE) continue;
+		if (!TargetASC->HasMatchingGameplayTag(Row->RequiredExistingTag)) continue;
+
+		// 반응 효과 적용 (추가 데미지 / 이속 디버프 등)
+		if (IsValid(Row->ReactionEffect))
+		{
+			FGameplayEffectContextHandle ReactionCtx = SourceASC->MakeEffectContext();
+			ReactionCtx.AddInstigator(GetOwner(), GetOwner());
+			ReactionCtx.AddSourceObject(this);
+
+			FGameplayEffectSpecHandle RSpec = SourceASC->MakeOutgoingSpec(Row->ReactionEffect, 1.f, ReactionCtx);
+			if (RSpec.IsValid() && RSpec.Data.IsValid())
+			{
+				SourceASC->ApplyGameplayEffectSpecToTarget(*RSpec.Data.Get(), TargetASC);
+			}
+		}
+
+		// 기존 상태 제거
+		if (Row->RemoveStatusTag.IsValid())
+		{
+			TargetASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(Row->RemoveStatusTag));
+		}
+
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[PlayerBurstComponent] Reaction: incoming=%s removed=%s"),
+			*GetNameSafe(IncomingStatusGE), *Row->RemoveStatusTag.ToString());
+
+		break; // 한 상태당 한 반응
+	}
 }
 
 void UPlayerBurstComponent::DoCleaveHit(const FBurstHitInstance& Hit, int32 HitIndex)
