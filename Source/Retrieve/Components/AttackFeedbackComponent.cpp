@@ -9,6 +9,9 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
+#include "Messaging/RetrieveMessageTypes.h"
+#include "UI/HUD/RetrieveDamageFloaterWidget.h"
 
 UAttackFeedbackComponent::UAttackFeedbackComponent()
 {
@@ -18,7 +21,48 @@ UAttackFeedbackComponent::UAttackFeedbackComponent()
 void UAttackFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindFromASC();
+	// 리스너 해제
+	if (DamageListener.IsValid())
+	{
+		UWorld* World = GetWorld();
+		if (IsValid(World))
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(DamageListener);
+		}
+		DamageListener = FGameplayMessageListenerHandle();
+	}
+	// 플로터 정리(항상)
+	for (URetrieveDamageFloaterWidget* Floater : AllFloaters)
+	{
+		if (IsValid(Floater) == false)
+		{
+			continue;
+		}
+		Floater->OnFinished.Unbind();
+		Floater->RemoveFromParent();
+	}
+
+	AllFloaters.Reset();
+	FloaterPool.Reset();
+
 	Super::EndPlay(EndPlayReason);
+}
+
+void UAttackFeedbackComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	UWorld* World = GetWorld();
+	if (IsValid(World) == false)
+	{
+		return;
+	}
+
+	DamageListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveDamageDealtPayload>(
+		RetrieveGameplayTags::Channel_Combat_DamageDealt,
+		[this](FGameplayTag Channel, const FRetrieveDamageDealtPayload& Payload)
+		{
+			HandleDamageDealt(Channel, Payload);
+		});
 }
 
 void UAttackFeedbackComponent::HandlePossessedPawnChanged(APawn* NewPawn)
@@ -77,6 +121,11 @@ void UAttackFeedbackComponent::BindASC()
 				FeedbackCache.Add(Tag, *Row);
 				SubscribedFilter.AddTag(Tag);
 			}
+			else if (Tag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Hit))
+			{
+				// 피격 흔들림: GMS 조회용 캐시만
+				FeedbackCache.Add(Tag, *Row);
+			}
 		}
 	}
 
@@ -131,7 +180,6 @@ void UAttackFeedbackComponent::HandleHitFeedback(FGameplayTag EventTag, const FG
 		return;
 	}
 	PlayCameraShake(*Feedback);
-	// TODO: 대미지 숫자 플로터
 }
 
 void UAttackFeedbackComponent::PlayCameraShake(const FHitFeedback& Feedback) const
@@ -153,4 +201,97 @@ void UAttackFeedbackComponent::PlayCameraShake(const FHitFeedback& Feedback) con
 		return;
 	}
 	PC->ClientStartCameraShake(ShakeClass, Feedback.CameraShakeScale);
+}
+
+void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRetrieveDamageDealtPayload& Payload)
+{
+	APawn* MyPawn = CurrentPawn.Get();
+	if (IsValid(MyPawn) == false )
+	{
+		return;
+	}
+
+	const bool bIsAttacker = Payload.Instigator == MyPawn;
+	const bool bIsVictim = Payload.Target == MyPawn;
+	if (bIsAttacker == false && bIsVictim == false)
+	{
+		return;
+	}
+	// 가해 = 공격 강도 태그 / 피격 = 피격 강도 태그로 흔들림 행 조회
+	const FGameplayTag LookupTag = bIsAttacker ? Payload.HitEventTag : Payload.TargetEventTag;
+	const FHitFeedback* Feedback = FeedbackCache.Find(LookupTag);
+	if (Feedback == nullptr)
+	{
+		return;
+	}
+
+	if (bIsAttacker)
+	{
+		SpawnDamageFloater(Payload.Target, Payload.DamageAmount, *Feedback);
+	}
+	else
+	{
+		PlayCameraShake(*Feedback);
+	}
+}
+
+void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, float DamageValue, const FHitFeedback& Feedback)
+{
+	if (IsValid(Target) == false || IsValid(DamageFloaterClass) == false)
+	{
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetOwner());
+	if (IsValid(PC) == false)
+	{
+		return;
+	}
+
+	// 머리 위 월드 위치 -> 스크린
+	const FVector WorldLoc = Target->GetActorLocation() + FVector(0.f, 0.f, Feedback.FloaterWorldZOffset);
+	FVector2D ScreenPos;
+	if (UGameplayStatics::ProjectWorldToScreen(PC, WorldLoc, ScreenPos, false) == false)
+	{
+		return;
+	}
+
+	URetrieveDamageFloaterWidget* Floater = nullptr;
+	if (FloaterPool.Num() > 0)
+	{
+		Floater = FloaterPool.Pop(EAllowShrinking::No);
+	}
+	else if (AllFloaters.Num() < MaxDamageFloaters)
+	{
+		Floater = CreateWidget<URetrieveDamageFloaterWidget>(PC, DamageFloaterClass);
+		if (IsValid(Floater))
+		{
+			Floater->OnFinished.BindUObject(this, &UAttackFeedbackComponent::ReleaseFloater);
+			AllFloaters.Add(Floater);
+		}
+	}
+
+	if (IsValid(Floater) == false)
+	{
+		return;
+	}
+
+	if (Floater->IsInViewport() == false)
+	{
+		Floater->AddToViewport(FloaterZOrder);
+	}
+	Floater->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
+	Floater->SetPositionInViewport(ScreenPos, true);
+	Floater->Activate(DamageValue, Feedback.DamageNumberScale, Feedback.DamageNumberColor);
+}
+
+void UAttackFeedbackComponent::ReleaseFloater(URetrieveDamageFloaterWidget* Floater)
+{
+	if (IsValid(Floater) == false)
+	{
+		return;
+	}
+
+	Floater->RemoveFromParent();
+	FloaterPool.AddUnique(Floater);
 }

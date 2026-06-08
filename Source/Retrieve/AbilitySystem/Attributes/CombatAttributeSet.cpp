@@ -2,6 +2,8 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffectExtension.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "Net/UnrealNetwork.h"
 
@@ -263,7 +265,6 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);
 	}
-
 	// 테스트 코드
 	UE_LOG(LogRetrieveCombat, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
 		*AttackerEventTag.ToString(),
@@ -271,4 +272,18 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		DamageDone,
 		*GetNameSafe(AttackerActor),
 		*GetNameSafe(TargetActor));
+	
+	// 공격자 측 연출용 메시지(대미지 플로터 등) GMS로 디커플
+	UWorld* World = AttackerActor->GetWorld();
+	if (IsValid(World) == false)
+	{
+		return;
+	}
+	FRetrieveDamageDealtPayload DamageMsg;
+	DamageMsg.Instigator = AttackerActor;
+	DamageMsg.Target = TargetActor;
+	DamageMsg.DamageAmount = DamageDone;
+	DamageMsg.HitEventTag = AttackerEventTag;
+	DamageMsg.TargetEventTag = TargetEventTag;
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Combat_DamageDealt, DamageMsg);
 }
