@@ -9,11 +9,14 @@
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/WeaponComponent.h"
+#include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "Player/RetrievePlayerState.h"
 
 namespace
 {
@@ -61,7 +64,7 @@ bool UGA_Attack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		return false;
 	}
 	
-	if (WeaponComp->GetWeaponDataRef().ComboSteps.IsEmpty())
+	if (WeaponComp->GetWeaponDataRef().AttackComboDefinition.IsNull())
 	{
 		return false;
 	}
@@ -88,6 +91,11 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 	}
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
+	if (!ResolveAttackComboVariant())
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
 
 	ImpactBeginEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, RetrieveGameplayTags::GameplayEvent_Attack_Impact_Begin, nullptr, false, true);
 	if (ImpactBeginEventTask)
@@ -109,36 +117,69 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 	StartComboStep(0);
 }
 
+bool UGA_Attack::ResolveAttackComboVariant()
+{
+	CachedComboSteps.Reset();
+
+	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	if (!IsValid(ComboDefinition))
+	{
+		return false;
+	}
+
+	const FGameplayTag ElementTag = ResolveCurrentElementTag();
+	CachedElementTag = ElementTag;
+	const FAttackComboVariant* Variant = ComboDefinition->ResolveVariant(ElementTag);
+	if (!Variant)
+	{
+		return false;
+	}
+	
+	CachedAttackMontage = Variant->Montage.LoadSynchronous();
+	if (!IsValid(CachedAttackMontage))
+	{
+		return false;
+	}
+	
+	CachedComboSteps = Variant->ComboSteps;
+	return !CachedComboSteps.IsEmpty();
+}
+
+FGameplayTag UGA_Attack::ResolveCurrentElementTag() const
+{
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const APawn* AvatarPawn = Cast<APawn>(AvatarActor);
+	const ARetrievePlayerState* RetrievePlayerState = AvatarPawn ? AvatarPawn->GetPlayerState<ARetrievePlayerState>() : nullptr;
+	return RetrievePlayerState ? RetrievePlayerState->GetCurrentElementTag() : FGameplayTag();
+}
+
 void UGA_Attack::StartComboStep(int32 StepIndex)
 {
-	if (!CachedWeaponData.ComboSteps.IsValidIndex(StepIndex))
+	// 재생 일원화: 모든 타가 동일 경로로 자기 섹션을 새로 재생한다 (예약 방식 제거).
+	if (!CachedComboSteps.IsValidIndex(StepIndex) || !IsValid(CachedAttackMontage))
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 		return;
 	}
 
-	CurrentComboIndex = StepIndex;
-	bComboQueued = false;
-	
-	HitActorsThisStep.Reset();
-	PreviousTracePoints.Reset();
-	bHasValidPreviousTracePoints = false;
-
+	// 직전 타 태스크를 먼저 정리 — 새 재생이 일으키는 OnInterrupted가 EndAbility로 어빌리티를 취소하지 않도록.
 	if (MontageTask)
 	{
 		MontageTask->EndTask();
 		MontageTask = nullptr;
 	}
 
-	const FWeaponComboStep& StepData = CachedWeaponData.ComboSteps[CurrentComboIndex];
-	UAnimMontage* Montage = StepData.Montage.LoadSynchronous();
-	if (!IsValid(Montage))
-	{
-		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
-		return;
-	}
+	CurrentComboIndex = StepIndex;          // 재생 시점에 인덱스 직접 확정 (ImpactBegin 커밋 불필요)
+	PendingComboIndex = INDEX_NONE;
+	bPendingElementRestart = false;
 
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, GetMontagePlayRate(), StepData.SectionName, true);
+	HitActorsThisStep.Reset();
+	PreviousTracePoints.Reset();
+	bHasValidPreviousTracePoints = false;
+
+	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
+
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
@@ -146,10 +187,11 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
+	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleMontageBlendOut);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
 	MontageTask->ReadyForActivation();
-	
+
 	StartListeningComboInput();
 }
 
@@ -177,13 +219,23 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 		return;
 	}
 	
-	const bool bCanChain = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex + 1);
-	const bool bWindowOpen = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Combo_Open);
-
-	if (bCanChain && bWindowOpen)
+	if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Combo_Open))
 	{
-		bComboQueued = true;
-		return;
+		if (ResolveCurrentElementTag() == CachedElementTag)
+		{
+			const int32 NextStep = CurrentComboIndex + 1;
+			if (CachedComboSteps.IsValidIndex(NextStep))
+			{
+				PendingComboIndex = NextStep;   // 예약만 — 현재 섹션은 끊지 않음. OnBlendOut에서 소비(크로스블렌드)
+				bPendingElementRestart = false;
+			}
+			// 마지막 타면 무시 — 현재 몽타주 완주 후 종료
+		}
+		else
+		{
+			bPendingElementRestart = true;  // 다른 원소 → 완주 후 재시작
+			PendingComboIndex = INDEX_NONE;
+		}
 	}
 
 	StartListeningComboInput();
@@ -191,6 +243,7 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 
 void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
 {
+	// 인덱스는 재생 시점(StartComboStep)에 확정됨. 여기서는 이번 스윙의 트레이스/히트 상태만 초기화.
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
 	HitActorsThisStep.Reset();
@@ -231,8 +284,8 @@ void UGA_Attack::ApplyStepDamage()
 		return;
 	}
 	
-	const float DamageMul = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
-		? CachedWeaponData.ComboSteps[CurrentComboIndex].DamageMultiplier : 1.0f;
+	const float DamageMul = CachedComboSteps.IsValidIndex(CurrentComboIndex)
+		? CachedComboSteps[CurrentComboIndex].DamageMultiplier : 1.0f;
 	
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
@@ -324,8 +377,8 @@ void UGA_Attack::ApplyStepDamage()
 			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
 			// HitReact.Type (피격 반응 결정)
-			const ERetrieveHitReactType ReactType = CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex)
-				? CachedWeaponData.ComboSteps[CurrentComboIndex].HitReactType
+			const ERetrieveHitReactType ReactType = CachedComboSteps.IsValidIndex(CurrentComboIndex)
+				? CachedComboSteps[CurrentComboIndex].HitReactType
 				: ERetrieveHitReactType::Flinch;
 			if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactType); ReactTag.IsValid())
 			{
@@ -378,6 +431,18 @@ void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
 	}
 }
 
+void UGA_Attack::HandleMontageBlendOut()
+{
+	// 섹션 자연 종료의 블렌드아웃 시작 시점. 예약된 다음 타가 있으면 여기서 재생 → 공격끼리 크로스블렌드.
+	// 예약이 없으면 아무것도 안 함 → 그대로 블렌드아웃 진행 → OnCompleted가 종료를 처리.
+	// (외부 중단은 OnBlendOut이 아니라 OnInterrupted로 분기되므로 여기서 콤보로 오인하지 않음)
+	const int32 Next = PendingComboIndex;
+	PendingComboIndex = INDEX_NONE;
+	if (CachedComboSteps.IsValidIndex(Next))
+	{
+		StartComboStep(Next);
+	}
+  
 float UGA_Attack::GetMontagePlayRate() const
 {
 	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -392,11 +457,16 @@ float UGA_Attack::GetMontagePlayRate() const
 
 void UGA_Attack::HandleMontageCompleted()
 {
-	if (bComboQueued && CachedWeaponData.ComboSteps.IsValidIndex(CurrentComboIndex + 1))
+	if (bPendingElementRestart)
 	{
-		StartComboStep(CurrentComboIndex + 1);
-		return;
+		bPendingElementRestart = false;
+		if (ResolveAttackComboVariant())   // 현재 원소 다시 읽어 새 몽타주+스텝+CachedElementTag 갱신
+		{
+			StartComboStep(0);             // 새 원소 1타부터
+			return;
+		}
 	}
+	
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -443,11 +513,14 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 	CleanupComboTag();
 
 	CurrentComboIndex = INDEX_NONE;
-	bComboQueued = false;
+	PendingComboIndex = INDEX_NONE;
+	bPendingElementRestart = false;
+	
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
 	CachedWeaponComponent = nullptr;
+	CachedComboSteps.Reset();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

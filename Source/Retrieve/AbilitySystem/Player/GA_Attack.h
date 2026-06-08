@@ -32,7 +32,10 @@ private:
 	void StopRuntimeTasks();
 	void CleanupComboTag() const;
 	void ApplyStepDamage();
+	bool ResolveAttackComboVariant();
 
+	FGameplayTag ResolveCurrentElementTag() const;
+	
 	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 
 	/** 콤보 몽타주 재생 속도. CombatAttributeSet의 AttackSpeedMultiplier를 사용(원소 각성 버프 등 반영). */
@@ -44,6 +47,7 @@ private:
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
+	UFUNCTION() void HandleMontageBlendOut();
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack")
@@ -57,6 +61,12 @@ private:
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> CachedAttackMontage;
+	
+	UPROPERTY(Transient)
+	TArray<FWeaponComboStep> CachedComboSteps;
 	
 	UPROPERTY(Transient) 
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
@@ -76,8 +86,11 @@ private:
 	UPROPERTY(Transient)
 	TSet<TObjectPtr<AActor>> HitActorsThisStep;
 	
+	int32 PendingComboIndex = INDEX_NONE;
 	int32 CurrentComboIndex = INDEX_NONE;
-	bool bComboQueued = false;
+
+	FGameplayTag CachedElementTag;
+	bool bPendingElementRestart = false;
 	
 	TArray<FVector> PreviousTracePoints;
 	bool bHasValidPreviousTracePoints = false;
