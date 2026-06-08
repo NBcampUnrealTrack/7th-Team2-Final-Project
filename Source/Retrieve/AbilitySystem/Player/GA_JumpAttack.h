@@ -1,23 +1,27 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "GA_Attack.generated.h"
+#include "GA_JumpAttack.generated.h"
 
+class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
 class UAbilityTask_WaitGameplayEvent;
-class UAbilityTask_WaitInputPress;
 class UGameplayEffect;
 class UWeaponComponent;
 
+/**
+ * 공중(점프) 상태에서만 발동하는 단발 공중 공격
+ */
 UCLASS()
-class RETRIEVE_API UGA_Attack : public URetrieveGameplayAbility
+class RETRIEVE_API UGA_JumpAttack : public URetrieveGameplayAbility
 {
 	GENERATED_BODY()
 
 public:
-	UGA_Attack();
+	UGA_JumpAttack();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
@@ -27,69 +31,50 @@ protected:
 	virtual void CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility) override;
 
 private:
-	void StartComboStep(int32 StepIndex);
-	void StartListeningComboInput();
 	void StopRuntimeTasks();
-	void CleanupComboTag() const;
-	void ApplyStepDamage();
-	bool ResolveAttackComboVariant();
-
-	FGameplayTag ResolveCurrentElementTag() const;
-	
+	void ApplyHitDamage();
 	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 
-	/** 콤보 몽타주 재생 속도. CombatAttributeSet의 AttackSpeedMultiplier를 사용(원소 각성 버프 등 반영). */
-	float GetMontagePlayRate() const;
+	void UnbindLanded();
 
 	UFUNCTION() void HandleImpactBeginEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
-	UFUNCTION() void HandleInputPressed(float TimeWaited);
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
-	UFUNCTION() void HandleMontageBlendOut();
+	UFUNCTION() void HandleLanded(const FHitResult& Hit);
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack")
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack")
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
 	bool bDebugDrawTrace = false;
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
-	
+
 	UPROPERTY(Transient)
-	TObjectPtr<UAnimMontage> CachedAttackMontage;
-	
-	UPROPERTY(Transient)
-	TArray<FWeaponComboStep> CachedComboSteps;
-	
-	UPROPERTY(Transient) 
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
-	
-	UPROPERTY(Transient) 
+
+	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactBeginEventTask;
-	
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
-	
-	UPROPERTY(Transient) 
-	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
-	
-	UPROPERTY(Transient) 
-	TObjectPtr<UAbilityTask_WaitInputPress> InputPressTask;
 
 	UPROPERTY(Transient)
-	TSet<TObjectPtr<AActor>> HitActorsThisStep;
-	
-	int32 PendingComboIndex = INDEX_NONE;
-	int32 CurrentComboIndex = INDEX_NONE;
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 
-	FGameplayTag CachedElementTag;
-	bool bPendingElementRestart = false;
-	bool bComboChargeBonusGranted = false;
+	UPROPERTY(Transient)
+	TSet<TObjectPtr<AActor>> HitActors;
 	
+	bool bChargeBonusGranted = false;
+
 	TArray<FVector> PreviousTracePoints;
 	bool bHasValidPreviousTracePoints = false;
+
+	// LandedDelegate 구독 해제용
+	UPROPERTY(Transient)
+	TWeakObjectPtr<ACharacter> BoundLandedCharacter;
 };

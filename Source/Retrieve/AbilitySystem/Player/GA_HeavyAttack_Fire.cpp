@@ -18,6 +18,7 @@ UGA_HeavyAttack_Fire::UGA_HeavyAttack_Fire()
 	SetAssetTags(Tags);
 	
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Movement);
+	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Rotation);
 }
 
 void UGA_HeavyAttack_Fire::ExecuteHeavyEffect(const FGameplayTag& /*ConsumedElement*/)

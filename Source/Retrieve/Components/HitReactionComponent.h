@@ -10,6 +10,7 @@
 class UAnimMontage;
 class UGameplayEffect;
 class URetrieveAbilitySystemComponent;
+class URetrieveHitReactionProfile;
 struct FGameplayEventData;
 
 /**
@@ -29,12 +30,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
-	void Configure(
-		const TSoftObjectPtr<UAnimMontage>& InFlinch,
-		const TSoftObjectPtr<UAnimMontage>& InStagger,
-		const TSoftObjectPtr<UAnimMontage>& InKnockdown,
-		const TSubclassOf<UGameplayEffect>& InStaggerEffect,
-		const TSubclassOf<UGameplayEffect>& InKnockdownEffect);
+	void Configure(URetrieveHitReactionProfile* InProfile);
 
 private:
 	URetrieveAbilitySystemComponent* GetASC() const;
@@ -52,14 +48,13 @@ private:
 	void StopActiveMontage();
 
 private:
-	UPROPERTY(Transient) TSoftObjectPtr<UAnimMontage> FlinchMontage;
-	UPROPERTY(Transient) TSoftObjectPtr<UAnimMontage> StaggerMontage;
-	UPROPERTY(Transient) TSoftObjectPtr<UAnimMontage> KnockdownMontage;
+	UPROPERTY(Transient) 
+	TObjectPtr<URetrieveHitReactionProfile> Profile;
 
-	UPROPERTY(Transient) TSubclassOf<UGameplayEffect> StaggerEffect;
-	UPROPERTY(Transient) TSubclassOf<UGameplayEffect> KnockdownEffect;
-
-	UPROPERTY(Transient) TObjectPtr<UAnimMontage> ActiveMontage;
+	UPROPERTY(Transient) 
+	TObjectPtr<UAnimMontage> ActiveMontage;
 
 	FDelegateHandle HitEventHandle;
+	
+	bool bProcessingReaction = false;
 };

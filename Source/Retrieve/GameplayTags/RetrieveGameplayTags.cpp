@@ -25,6 +25,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Parry, "Ability.Player.Parry");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Dash, "Ability.Player.Dash");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Jump, "Ability.Player.Jump");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_JumpAttack, "Ability.Player.JumpAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Burst, "Ability.Player.Burst");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Absorb, "Ability.Player.Absorb");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Interact, "Ability.Player.Interact");
@@ -52,7 +53,6 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dodging, "State.Player.Dodging");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
-	UE_DEFINE_GAMEPLAY_TAG(State_Player_Shielded, "State.Player.Shielded");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_CanCounter, "State.Player.CanCounter");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_UsingHeavyAttack, "State.Player.UsingHeavyAttack");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Bursting, "State.Player.Bursting");

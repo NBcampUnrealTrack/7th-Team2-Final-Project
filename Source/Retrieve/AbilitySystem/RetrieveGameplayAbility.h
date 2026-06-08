@@ -26,12 +26,18 @@ public:
 	ERetrieveAbilityActivationPolicy GetActivationPolicy() const { return ActivationPolicy; }
 
 	virtual void OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& AbilitySpec) override;
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+	
+	static bool IsAvatarAirborne(const FGameplayAbilityActorInfo* ActorInfo);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability")
 	ERetrieveAbilityActivationPolicy ActivationPolicy = ERetrieveAbilityActivationPolicy::OnInputTriggered;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability")
+	bool bBlockActivationWhileAirborne = false;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability|Parry")
 	bool bAutoListenForParried = false;

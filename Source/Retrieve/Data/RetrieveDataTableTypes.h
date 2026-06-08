@@ -326,6 +326,11 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	TMap<FGameplayTag, int32> ElementPattern;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
 	TSoftObjectPtr<UAnimMontage> AttackMontage;
+	// ---- Cast Lock --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
+	bool bLockMovementDuringCast = true;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
+	bool bLockRotationDuringCast = true;
 	// ---- Attack --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack")
 	EBurstAttackType AttackType = EBurstAttackType::Cleave;
@@ -433,6 +438,9 @@ struct RETRIEVE_API FWeaponComboStep
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FGameplayTag ChargeBonusEventTag;
 };
 
 USTRUCT(BlueprintType)
@@ -448,6 +456,27 @@ struct RETRIEVE_API FAttackComboVariant
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo", meta = (TitleProperty = "SectionName"))
 	TArray<FWeaponComboStep> ComboSteps;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponJumpAttack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FName SectionName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FGameplayTag ChargeBonusEventTag;
 };
 
 USTRUCT(BlueprintType)
@@ -531,9 +560,15 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "2"))
 	int32 TraceSegmentCount = 4;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "0.0"))
+	float TraceRadius = 60.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FWeaponJumpAttack JumpAttack;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;

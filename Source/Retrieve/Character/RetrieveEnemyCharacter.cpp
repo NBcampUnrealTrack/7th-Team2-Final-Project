@@ -8,6 +8,7 @@
 #include "Enemy/EnemyAIController.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/DropComponent.h"
 #include "Components/EnemyCombatComponent.h"
@@ -112,6 +113,22 @@ void ARetrieveEnemyCharacter::BeginPlay()
 	{
 		DefaultGravityScale = MoveComp->GravityScale;
 		DefaultMovementMode = MoveComp->MovementMode;
+		BaseMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+	}
+	
+	if (OwnedASC)
+	{
+		OwnedASC->GetGameplayAttributeValueChangeDelegate(UCombatAttributeSet::GetMoveSpeedAttribute())
+			.AddUObject(this, &ARetrieveEnemyCharacter::OnMoveSpeedChanged);
+	}
+}
+
+void ARetrieveEnemyCharacter::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
+{
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		const float Ratio = Data.NewValue / UCombatAttributeSet::ReferenceMoveSpeed;
+		MoveComp->MaxWalkSpeed = BaseMaxWalkSpeed * Ratio;
 	}
 }
 

@@ -20,11 +20,21 @@ UGA_Burst::UGA_Burst()
 
 	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Gauge_Full);
 
+    // 공중/점프 중 버스트 불가
+    bBlockActivationWhileAirborne = true;
+
+    // 상태 게이트(사망/피격/회피) 사용 불가
     ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
     ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
     ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
     ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+
     ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Bursting);
+
+    BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+    BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+    BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
+    BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
 }
 
 void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -60,6 +70,9 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
         return;
     }
     UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Skill=%s"), *MatchedRow->DisplayName.ToString());
+
+    // 시전 중 이동/회전 잠금 (스킬 타입별 데이터)
+    ApplyCastLockTags(MatchedRow);
 
     Gauge->ConsumeAllSlots();
 
@@ -122,6 +135,8 @@ void UGA_Burst::HandleMontageCancelled()
 
 void UGA_Burst::CleanupBurst()
 {
+    RemoveCastLockTags();
+
     if (MontageTask)
     {
         MontageTask->EndTask();
@@ -133,6 +148,48 @@ void UGA_Burst::CleanupBurst()
         CachedBurstComp->EndBurstSkill();
     }
     CachedBurstComp = nullptr;
+}
+
+void UGA_Burst::ApplyCastLockTags(const FSkillCombination* Combo)
+{
+    RemoveCastLockTags();
+
+    UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    if (!Combo || !IsValid(ASC))
+    {
+        return;
+    }
+
+    if (Combo->bLockMovementDuringCast)
+    {
+        AppliedCastLockTags.AddTag(RetrieveGameplayTags::Animation_Lock_Movement);
+    }
+    if (Combo->bLockRotationDuringCast)
+    {
+        AppliedCastLockTags.AddTag(RetrieveGameplayTags::Animation_Lock_Rotation);
+    }
+
+    for (const FGameplayTag& Tag : AppliedCastLockTags)
+    {
+        ASC->AddLooseGameplayTag(Tag);
+    }
+}
+
+void UGA_Burst::RemoveCastLockTags()
+{
+    if (AppliedCastLockTags.IsEmpty())
+    {
+        return;
+    }
+
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+    {
+        for (const FGameplayTag& Tag : AppliedCastLockTags)
+        {
+            ASC->RemoveLooseGameplayTag(Tag);
+        }
+    }
+    AppliedCastLockTags.Reset();
 }
 
 void UGA_Burst::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)

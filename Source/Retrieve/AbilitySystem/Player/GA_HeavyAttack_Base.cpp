@@ -9,26 +9,31 @@
 UGA_HeavyAttack_Base::UGA_HeavyAttack_Base()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-	
-	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
-	
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 	SetAssetTags(Tags);
-	
+
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_UsingHeavyAttack);
-	
+
+	// 공중/점프 중 강공격 불가
+	bBlockActivationWhileAirborne = true;
+
+	// 상태 게이트(회피/경직/다운/사망) 중 + 자기 재발동 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Guarding);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_UsingHeavyAttack);
-	
+
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
-	
+
+	// 시전 중 다른 액션 차단 (공격/가드/대시/버스트 모두 발동 불가)
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
 }
 
 void UGA_HeavyAttack_Base::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

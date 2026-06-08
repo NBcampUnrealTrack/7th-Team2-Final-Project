@@ -182,8 +182,7 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 
 	// 2. GUARD
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
-	const bool bShielded = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Shielded);
-	
+
 	if (bGuarding)
 	{
 		if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Property_GuardBreak) ||
@@ -202,14 +201,7 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 
 		return RawDamage * (1.0f - GetGuardDamageReduction());
 	}
-
-	// 3. SHIELD
-	if (bShielded)
-	{
-		return RawDamage * 0.5f;
-	}
-
-	// 4. 방어 없음
+	
 	return RawDamage;
 }
 

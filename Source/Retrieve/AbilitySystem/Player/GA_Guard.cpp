@@ -20,9 +20,11 @@ UGA_Guard::UGA_Guard()
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Guarding);
 
-	// 공격/회피/경직/다운/사망 중에는 가드 불가
+	// 공중/점프 중 가드 불가
+	bBlockActivationWhileAirborne = true;
+
+	// 상태 게이트(회피/경직/다운/사망) 중 가드 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);

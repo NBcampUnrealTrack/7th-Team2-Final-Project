@@ -10,8 +10,7 @@ class ULockOnTargetHighlighter;
 class ULockOnConfig;
 class ULockOnCameraConfig;
 class UHitReactionComponent;
-class UAnimMontage;
-class UGameplayEffect;
+class URetrieveHitReactionProfile;
 
 // class UCombatFeedbackComponent // TODO: 추가 예정
 
@@ -70,17 +69,8 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnTargetHighlighter> LockOnHighlighter;
 	
-	// HitReaction 자산(플레이어 전용). 런타임 생성되는 HitReactionComp에 Configure()로 주입.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
-	TSoftObjectPtr<UAnimMontage> FlinchMontage;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
-	TSoftObjectPtr<UAnimMontage> StaggerMontage;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
-	TSoftObjectPtr<UAnimMontage> KnockdownMontage;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
-	TSubclassOf<UGameplayEffect> StaggerEffect;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|HitReact")
-	TSubclassOf<UGameplayEffect> KnockdownEffect;
+	TObjectPtr<URetrieveHitReactionProfile> HitReactionProfile;
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<UHitReactionComponent> HitReactionComp;
