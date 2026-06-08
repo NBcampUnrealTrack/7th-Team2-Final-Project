@@ -5,7 +5,6 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -170,7 +169,6 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	CurrentComboIndex = StepIndex;          // 재생 시점에 인덱스 직접 확정 (ImpactBegin 커밋 불필요)
-	PendingComboIndex = INDEX_NONE;
 	bPendingElementRestart = false;
 
 	HitActorsThisStep.Reset();
@@ -179,7 +177,7 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 
 	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
 
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true);
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, 1.f, StepData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
@@ -187,7 +185,6 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
-	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleMontageBlendOut);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
 	MontageTask->ReadyForActivation();
@@ -226,15 +223,14 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 			const int32 NextStep = CurrentComboIndex + 1;
 			if (CachedComboSteps.IsValidIndex(NextStep))
 			{
-				PendingComboIndex = NextStep;   // 예약만 — 현재 섹션은 끊지 않음. OnBlendOut에서 소비(크로스블렌드)
-				bPendingElementRestart = false;
+				StartComboStep(NextStep);   // 같은 원소 → 다음 섹션 즉시 재생 (StartComboStep이 입력 리스닝 재개)
+				return;
 			}
 			// 마지막 타면 무시 — 현재 몽타주 완주 후 종료
 		}
 		else
 		{
 			bPendingElementRestart = true;  // 다른 원소 → 완주 후 재시작
-			PendingComboIndex = INDEX_NONE;
 		}
 	}
 
@@ -431,30 +427,6 @@ void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
 	}
 }
 
-void UGA_Attack::HandleMontageBlendOut()
-{
-	// 섹션 자연 종료의 블렌드아웃 시작 시점. 예약된 다음 타가 있으면 여기서 재생 → 공격끼리 크로스블렌드.
-	// 예약이 없으면 아무것도 안 함 → 그대로 블렌드아웃 진행 → OnCompleted가 종료를 처리.
-	// (외부 중단은 OnBlendOut이 아니라 OnInterrupted로 분기되므로 여기서 콤보로 오인하지 않음)
-	const int32 Next = PendingComboIndex;
-	PendingComboIndex = INDEX_NONE;
-	if (CachedComboSteps.IsValidIndex(Next))
-	{
-		StartComboStep(Next);
-	}
-  
-float UGA_Attack::GetMontagePlayRate() const
-{
-	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		if (const UCombatAttributeSet* Combat = ASC->GetSet<UCombatAttributeSet>())
-		{
-			return FMath::Max(0.1f, Combat->GetAttackSpeedMultiplier());
-		}
-	}
-	return 1.f;
-}
-
 void UGA_Attack::HandleMontageCompleted()
 {
 	if (bPendingElementRestart)
@@ -513,7 +485,6 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 	CleanupComboTag();
 
 	CurrentComboIndex = INDEX_NONE;
-	PendingComboIndex = INDEX_NONE;
 	bPendingElementRestart = false;
 	
 	HitActorsThisStep.Reset();

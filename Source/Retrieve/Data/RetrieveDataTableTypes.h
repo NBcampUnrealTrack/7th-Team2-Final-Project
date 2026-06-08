@@ -14,6 +14,7 @@ class UAnimInstance;
 class UAnimMontage;
 class UGameplayEffect;
 class URetrieveAbilitySet;
+class UAttackComboDefinition;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
@@ -424,17 +425,29 @@ struct RETRIEVE_API FWeaponComboStep
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	TSoftObjectPtr<UAnimMontage> Montage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo", meta = (ClampMin = "0.0"))
 	float DamageMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	FName SectionName = NAME_None;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FAttackComboVariant
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Tags")
+	FGameplayTag ElementTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo", meta = (TitleProperty = "SectionName"))
+	TArray<FWeaponComboStep> ComboSteps;
 };
 
 USTRUCT(BlueprintType)
@@ -519,8 +532,8 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "2"))
 	int32 TraceSegmentCount = 4;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (TitleProperty = "SectionName"))
-	TArray<FWeaponComboStep> ComboSteps;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;

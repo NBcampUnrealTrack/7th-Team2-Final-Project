@@ -5,7 +5,6 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -155,31 +154,61 @@ FGameplayTag UGA_Attack::ResolveCurrentElementTag() const
 
 void UGA_Attack::StartComboStep(int32 StepIndex)
 {
-	// 재생 일원화: 모든 타가 동일 경로로 자기 섹션을 새로 재생한다 (예약 방식 제거).
-	if (!CachedComboSteps.IsValidIndex(StepIndex) || !IsValid(CachedAttackMontage))
+	// 체인: 다음 섹션 예약 (StepIndex >= 1) — 재생도, 인덱스 증가도 하지 않음
+	if (StepIndex != 0)
+	{
+		if (!CachedComboSteps.IsValidIndex(CurrentComboIndex))   // From 방어 (INDEX_NONE 차단)
+		{
+			return;
+		}
+		if (!CachedComboSteps.IsValidIndex(StepIndex) || PendingComboIndex != INDEX_NONE)   // To 방어 + 중복 예약 차단
+		{
+			return;
+		}
+
+		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+		if (!IsValid(ASC))
+		{
+			return;
+		}
+
+		ASC->CurrentMontageSetNextSectionName(
+			CachedComboSteps[CurrentComboIndex].SectionName,       // From = 현재 재생 섹션
+			CachedComboSteps[StepIndex].SectionName); // To   = 예약 섹션
+		PendingComboIndex = StepIndex;
+		return;
+	}
+	
+	// 진입: 첫 섹션 재생
+	if (!CachedComboSteps.IsValidIndex(0))
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 		return;
 	}
 
-	// 직전 타 태스크를 먼저 정리 — 새 재생이 일으키는 OnInterrupted가 EndAbility로 어빌리티를 취소하지 않도록.
+	CurrentComboIndex = 0;
+	PendingComboIndex = INDEX_NONE;
+	bPendingElementRestart = false;
+	
+	HitActorsThisStep.Reset();
+	PreviousTracePoints.Reset();
+	bHasValidPreviousTracePoints = false;
+
 	if (MontageTask)
 	{
 		MontageTask->EndTask();
 		MontageTask = nullptr;
 	}
 
-	CurrentComboIndex = StepIndex;          // 재생 시점에 인덱스 직접 확정 (ImpactBegin 커밋 불필요)
-	PendingComboIndex = INDEX_NONE;
-	bPendingElementRestart = false;
+	if (!IsValid(CachedAttackMontage))
+	{
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+		return;
+	}
 
-	HitActorsThisStep.Reset();
-	PreviousTracePoints.Reset();
-	bHasValidPreviousTracePoints = false;
-
-	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
-
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true);
+	const FWeaponComboStep& StepData = CachedComboSteps[CurrentComboIndex];
+	
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, 1.f, StepData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
@@ -187,11 +216,10 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
-	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleMontageBlendOut);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
 	MontageTask->ReadyForActivation();
-
+	
 	StartListeningComboInput();
 }
 
@@ -223,18 +251,11 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 	{
 		if (ResolveCurrentElementTag() == CachedElementTag)
 		{
-			const int32 NextStep = CurrentComboIndex + 1;
-			if (CachedComboSteps.IsValidIndex(NextStep))
-			{
-				PendingComboIndex = NextStep;   // 예약만 — 현재 섹션은 끊지 않음. OnBlendOut에서 소비(크로스블렌드)
-				bPendingElementRestart = false;
-			}
-			// 마지막 타면 무시 — 현재 몽타주 완주 후 종료
+			StartComboStep(CurrentComboIndex + 1);   // 같은 원소 → 섹션 체인 (seamless)
 		}
 		else
 		{
-			bPendingElementRestart = true;  // 다른 원소 → 완주 후 재시작
-			PendingComboIndex = INDEX_NONE;
+			bPendingElementRestart = true;           // 다른 원소 → 섹션 예약 안 함, 완주 후 재시작
 		}
 	}
 
@@ -243,7 +264,12 @@ void UGA_Attack::HandleInputPressed(float TimeWaited)
 
 void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
 {
-	// 인덱스는 재생 시점(StartComboStep)에 확정됨. 여기서는 이번 스윙의 트레이스/히트 상태만 초기화.
+	if (PendingComboIndex != INDEX_NONE)
+	{
+		CurrentComboIndex = PendingComboIndex;
+		PendingComboIndex = INDEX_NONE;
+	}
+	
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
 	HitActorsThisStep.Reset();
@@ -429,30 +455,6 @@ void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
 	{
 		OutPoints.Add(AvatarActor->GetActorLocation());
 	}
-}
-
-void UGA_Attack::HandleMontageBlendOut()
-{
-	// 섹션 자연 종료의 블렌드아웃 시작 시점. 예약된 다음 타가 있으면 여기서 재생 → 공격끼리 크로스블렌드.
-	// 예약이 없으면 아무것도 안 함 → 그대로 블렌드아웃 진행 → OnCompleted가 종료를 처리.
-	// (외부 중단은 OnBlendOut이 아니라 OnInterrupted로 분기되므로 여기서 콤보로 오인하지 않음)
-	const int32 Next = PendingComboIndex;
-	PendingComboIndex = INDEX_NONE;
-	if (CachedComboSteps.IsValidIndex(Next))
-	{
-		StartComboStep(Next);
-	}
-  
-float UGA_Attack::GetMontagePlayRate() const
-{
-	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		if (const UCombatAttributeSet* Combat = ASC->GetSet<UCombatAttributeSet>())
-		{
-			return FMath::Max(0.1f, Combat->GetAttackSpeedMultiplier());
-		}
-	}
-	return 1.f;
 }
 
 void UGA_Attack::HandleMontageCompleted()
