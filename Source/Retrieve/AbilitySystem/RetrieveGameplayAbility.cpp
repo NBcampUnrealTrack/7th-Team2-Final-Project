@@ -1,7 +1,10 @@
 #include "AbilitySystem/RetrieveGameplayAbility.h"
+
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
@@ -19,6 +22,33 @@ void URetrieveGameplayAbility::OnAvatarSet(const FGameplayAbilityActorInfo* Acto
 {
 	Super::OnAvatarSet(ActorInfo, AbilitySpec);
 	TryActivateAbilityOnSpawn(ActorInfo, AbilitySpec);
+}
+
+bool URetrieveGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	if (bBlockActivationWhileAirborne && IsAvatarAirborne(ActorInfo))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool URetrieveGameplayAbility::IsAvatarAirborne(const FGameplayAbilityActorInfo* ActorInfo)
+{
+	const ACharacter* Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	if (!Character)
+	{
+		return false;
+	}
+
+	const UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement();
+	return (MoveComp && MoveComp->IsFalling()) || Character->bPressedJump;
 }
 
 void URetrieveGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

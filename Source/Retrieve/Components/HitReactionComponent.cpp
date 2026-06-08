@@ -1,4 +1,4 @@
-#include "Components/HitReactionComponent.h"
+﻿#include "Components/HitReactionComponent.h"
 
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Combat/RetrieveHitReactionProfile.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
@@ -19,7 +20,7 @@ UHitReactionComponent::UHitReactionComponent()
 void UHitReactionComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	if (URetrievePawnExtensionComponent* PawnExt =
 		URetrievePawnExtensionComponent::FindPawnExtensionComponent(GetOwner()))
 	{
@@ -45,18 +46,9 @@ void UHitReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void UHitReactionComponent::Configure(
-	const TSoftObjectPtr<UAnimMontage>& InFlinch,
-	const TSoftObjectPtr<UAnimMontage>& InStagger,
-	const TSoftObjectPtr<UAnimMontage>& InKnockdown,
-	const TSubclassOf<UGameplayEffect>& InStaggerEffect,
-	const TSubclassOf<UGameplayEffect>& InKnockdownEffect)
+void UHitReactionComponent::Configure(URetrieveHitReactionProfile* InProfile)
 {
-	FlinchMontage    = InFlinch;
-	StaggerMontage   = InStagger;
-	KnockdownMontage = InKnockdown;
-	StaggerEffect    = InStaggerEffect;
-	KnockdownEffect  = InKnockdownEffect;
+	Profile = InProfile;
 }
 
 URetrieveAbilitySystemComponent* UHitReactionComponent::GetASC() const
@@ -73,7 +65,7 @@ void UHitReactionComponent::OnAbilitySystemReady()
 	{
 		return;
 	}
-	
+
 	FGameplayTagContainer Filter;
 	Filter.AddTag(RetrieveGameplayTags::GameplayEvent_Hit);
 	HitEventHandle = ASC->AddGameplayEventTagContainerDelegate(
@@ -83,7 +75,15 @@ void UHitReactionComponent::OnAbilitySystemReady()
 
 void UHitReactionComponent::HandleHitEvent(FGameplayTag /*MatchingTag*/, const FGameplayEventData* Payload)
 {
+	// TODO(하민): 임시 재진입 차단 -> 추후 식별 태그 없는 공격은 건너뛰기 구현 예정
+	if (bProcessingReaction)
+	{
+		return;
+	}
+
+	bProcessingReaction = true;
 	ApplyReaction(ResolveReactType(Payload));
+	bProcessingReaction = false;
 }
 
 ERetrieveHitReactType UHitReactionComponent::ResolveReactType(const FGameplayEventData* Payload)
@@ -95,7 +95,7 @@ ERetrieveHitReactType UHitReactionComponent::ResolveReactType(const FGameplayEve
 
 	const FGameplayTagContainer& Tags = Payload->TargetTags;
 	if (Tags.HasTagExact(RetrieveGameplayTags::HitReact_Type_Knockdown)) { return ERetrieveHitReactType::Knockdown; }
-	if (Tags.HasTagExact(RetrieveGameplayTags::HitReact_Type_Stagger))   { return ERetrieveHitReactType::Stagger; }
+	if (Tags.HasTagExact(RetrieveGameplayTags::HitReact_Type_Stagger)) { return ERetrieveHitReactType::Stagger; }
 
 	return ERetrieveHitReactType::Flinch;
 }
@@ -103,21 +103,24 @@ ERetrieveHitReactType UHitReactionComponent::ResolveReactType(const FGameplayEve
 void UHitReactionComponent::ApplyReaction(ERetrieveHitReactType ReactType)
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC)
+	if (!ASC || !Profile)
+	{
+		return;
+	}
+	
+	const FRetrieveHitReactionEntry* Entry = Profile->Find(ReactType);
+	if (!Entry)
 	{
 		return;
 	}
 
 	const bool bKnockdownActive = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Knockdown);
-	const bool bStaggerActive   = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Staggered);
+	const bool bStaggerActive = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Staggered);
 
+	// 더 강한 상태가 Active면 약한 반응은 무시 (Knockdown > Stagger > Flinch)
 	switch (ReactType)
 	{
 	case ERetrieveHitReactType::Knockdown:
-		StopActiveMontage();
-		ApplyStateEffect(KnockdownEffect);
-		CancelPlayerActions();
-		PlayMontageSafe(KnockdownMontage);
 		break;
 
 	case ERetrieveHitReactType::Stagger:
@@ -125,10 +128,6 @@ void UHitReactionComponent::ApplyReaction(ERetrieveHitReactType ReactType)
 		{
 			return;
 		}
-		StopActiveMontage();
-		ApplyStateEffect(StaggerEffect);
-		CancelPlayerActions();
-		PlayMontageSafe(StaggerMontage);
 		break;
 
 	case ERetrieveHitReactType::Flinch:
@@ -137,9 +136,21 @@ void UHitReactionComponent::ApplyReaction(ERetrieveHitReactType ReactType)
 		{
 			return;
 		}
-		PlayMontageSafe(FlinchMontage); 
 		break;
 	}
+
+	// 상태/취소가 있는 반응은 이전 몽타주를 끊고 다시 재생
+	if (Entry->StateEffect || Entry->bCancelActions)
+	{
+		StopActiveMontage();
+		ApplyStateEffect(Entry->StateEffect);
+		if (Entry->bCancelActions)
+		{
+			CancelPlayerActions();
+		}
+	}
+
+	PlayMontageSafe(Entry->Montage);
 }
 
 void UHitReactionComponent::ApplyStateEffect(const TSubclassOf<UGameplayEffect>& EffectClass)
@@ -148,7 +159,7 @@ void UHitReactionComponent::ApplyStateEffect(const TSubclassOf<UGameplayEffect>&
 	{
 		return;
 	}
-	
+
 	const AActor* Owner = GetOwner();
 	if (!Owner || !Owner->HasAuthority())
 	{
@@ -177,7 +188,7 @@ void UHitReactionComponent::CancelPlayerActions()
 	{
 		return;
 	}
-	
+
 	FGameplayTagContainer CancelTags;
 	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);

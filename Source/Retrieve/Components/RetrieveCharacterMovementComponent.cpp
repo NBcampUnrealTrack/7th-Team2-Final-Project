@@ -41,6 +41,20 @@ bool URetrieveCharacterMovementComponent::CanAttemptJump() const
 {
 	// Lyra와 동일하게 웅크림 상태는 여기서 막지 않습니다.
 	// 점프 가능 여부의 게임 규칙은 Jump Ability와 GameplayTag에서 판단합니다.
+
+	// 액션(공격/가드/대시/강공격/버스트) 진행 중에 점프 금지
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+	{
+		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Attacking) ||
+			ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding) ||
+			ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Dodging) ||
+			ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_UsingHeavyAttack) ||
+			ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Bursting))
+		{
+			return false;
+		}
+	}
+
 	return IsJumpAllowed() &&
 		(IsMovingOnGround() || IsFalling());
 }

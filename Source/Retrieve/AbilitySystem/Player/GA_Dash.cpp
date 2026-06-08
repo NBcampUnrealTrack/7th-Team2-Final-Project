@@ -19,6 +19,9 @@ UGA_Dash::UGA_Dash()
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
 	SetAssetTags(Tags);
 
+	// 공중/점프 입력 중에는 대시 불가 (베이스 공용 게이트)
+	bBlockActivationWhileAirborne = true;
+
 	// 회피 중 상태 태그
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 
@@ -30,10 +33,9 @@ UGA_Dash::UGA_Dash()
 	// 재대시 명시적 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 
-	// 최상위 우선권 (공격/방어/강공격을 즉시 취소하고 발동)
+	// 공격/방어는 즉시 취소하고 발동
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 }
 
 void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -95,25 +97,6 @@ void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageFinished);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageFinished);
 	MontageTask->ReadyForActivation();
-}
-
-bool UGA_Dash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags,
-	FGameplayTagContainer* OptionalRelevantTags) const
-{
-	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
-	{
-		return false;
-	}
-	
-	const ACharacter* Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
-	const UCharacterMovementComponent* MoveComp = Character ? Character->GetCharacterMovement() : nullptr;
-	if (MoveComp && MoveComp->IsFalling() || Character->bPressedJump)
-	{
-		return false;
-	}
-
-	return true;
 }
 
 FVector UGA_Dash::ResolveDashDirection(const FGameplayAbilityActorInfo* ActorInfo) const

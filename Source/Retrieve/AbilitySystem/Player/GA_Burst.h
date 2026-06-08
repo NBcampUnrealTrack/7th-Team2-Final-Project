@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
 #include "GA_Burst.generated.h"
 
@@ -52,6 +53,10 @@ private:
 	// MontageTask 종료 + BurstComponent 정리. EndAbility/CancelAbility 공용.
 	void CleanupBurst();
 
+	// 스킬 타입별 시전 잠금(이동/회전) 적용/해제
+	void ApplyCastLockTags(const FSkillCombination* Combo);
+	void RemoveCastLockTags();
+
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	TObjectPtr<UDataTable> SkillCombinationTable;
@@ -62,4 +67,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPlayerBurstComponent> CachedBurstComp;
+	
+	FGameplayTagContainer AppliedCastLockTags;
 };

@@ -1,4 +1,4 @@
-#include "AbilitySystem/Player/GA_Attack.h"
+﻿#include "AbilitySystem/Player/GA_Attack.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -18,21 +18,6 @@
 #include "Logging/RetrieveLogChannels.h"
 #include "Player/RetrievePlayerState.h"
 
-namespace
-{
-	// HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립
-	FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
-	{
-		switch (Type)
-		{
-		case ERetrieveHitReactType::Stagger:   return RetrieveGameplayTags::HitReact_Type_Stagger;
-		case ERetrieveHitReactType::Knockdown: return RetrieveGameplayTags::HitReact_Type_Knockdown;
-		case ERetrieveHitReactType::Flinch:    return RetrieveGameplayTags::HitReact_Type_Flinch;
-		default:                               return FGameplayTag();
-		}
-	}
-}
-
 UGA_Attack::UGA_Attack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -42,12 +27,17 @@ UGA_Attack::UGA_Attack()
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	SetAssetTags(Tags);
 
+	// 공중/점프 중 공격 불가
+	bBlockActivationWhileAirborne = true;
+	
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Bursting);
+
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
+	
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 }
 
 bool UGA_Attack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -111,9 +101,6 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 		ImpactEventTask->ReadyForActivation();
 	}
 
-	// 이 공격이 Parry 당하면 자동으로 self-stagger + cancel
-	StartListeningForParried();
-
 	StartComboStep(0);
 }
 
@@ -172,6 +159,7 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	CurrentComboIndex = StepIndex;          // 재생 시점에 인덱스 직접 확정 (ImpactBegin 커밋 불필요)
 	PendingComboIndex = INDEX_NONE;
 	bPendingElementRestart = false;
+	bComboChargeBonusGranted = false;
 
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
@@ -290,6 +278,7 @@ void UGA_Attack::ApplyStepDamage()
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
+	const float TraceRadius = CachedWeaponData.TraceRadius;
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);
 
 	const bool bHasPrev = bHasValidPreviousTracePoints && PreviousTracePoints.Num() == CurrentPoints.Num();
@@ -387,6 +376,21 @@ void UGA_Attack::ApplyStepDamage()
 
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActorsThisStep.Add(TargetActor);
+			
+			if (!bComboChargeBonusGranted)
+			{
+				const FGameplayTag BonusTag = CachedComboSteps.IsValidIndex(CurrentComboIndex)
+					? CachedComboSteps[CurrentComboIndex].ChargeBonusEventTag : FGameplayTag();
+				if (BonusTag.IsValid())
+				{
+					FGameplayEventData BonusEvent;
+					BonusEvent.Instigator = AvatarActor;
+					BonusEvent.Target = TargetActor;
+					BonusEvent.EventTag = BonusTag;
+					UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AvatarActor, BonusTag, BonusEvent);
+					bComboChargeBonusGranted = true;
+				}
+			}
 		}
 	}
 }
@@ -442,7 +446,8 @@ void UGA_Attack::HandleMontageBlendOut()
 	{
 		StartComboStep(Next);
 	}
-  
+}
+
 float UGA_Attack::GetMontagePlayRate() const
 {
 	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())

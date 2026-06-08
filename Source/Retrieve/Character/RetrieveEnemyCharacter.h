@@ -13,6 +13,7 @@ class UDropComponent;
 class USphereComponent;
 
 struct FEnemyPlayerSpottedPayload;
+struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathEnded, AActor*, DeadCharacter);
 	
@@ -75,6 +76,7 @@ protected:
 	void OnHitTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnStaggeredTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnGroggyTagChanged(const FGameplayTag Tag, int32 Count);
+	void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
 	
 private:
 	void OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
@@ -130,6 +132,7 @@ private:
 	// Ragdoll 복구용
 	FTransform InitialMeshRelativeTransform;
 	
+	float BaseMaxWalkSpeed = 0.f;
 	float DefaultGravityScale = 1.0f;
 	EMovementMode DefaultMovementMode;
 	

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "GameplayEffectTypes.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "RetrieveCombatTypes.generated.h"
 
 class AActor;
@@ -10,7 +11,7 @@ class AActor;
 /**
  * 피격자 반응 강도
  *
- *  - Attack.Type.*   = "방어 처리"만 결정 (Guard / Parry / Shield 분기)
+ *  - Attack.Type.*   = "방어 처리"만 결정 (Guard / Parry 분기)
  *  - HitReact.Type.* = "피격 반응"만 결정 (Flinch / Stagger / Knockdown 모션)
  */
 UENUM(BlueprintType)
@@ -21,6 +22,18 @@ enum class ERetrieveHitReactType : uint8
 	Stagger   UMETA(DisplayName = "Stagger"),    // 강한 경직 + HitStop
 	Knockdown UMETA(DisplayName = "Knockdown")   // 다운
 };
+
+// HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립
+inline FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
+{
+	switch (Type)
+	{
+	case ERetrieveHitReactType::Stagger:   return RetrieveGameplayTags::HitReact_Type_Stagger;
+	case ERetrieveHitReactType::Knockdown: return RetrieveGameplayTags::HitReact_Type_Knockdown;
+	case ERetrieveHitReactType::Flinch:    return RetrieveGameplayTags::HitReact_Type_Flinch;
+	default:                               return FGameplayTag();
+	}
+}
 
 /**
  * 패리 성공 시 UI / 카메라 / Cue 레이어에 broadcast 할 메시지 페이로드

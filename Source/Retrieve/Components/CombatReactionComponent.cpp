@@ -1,6 +1,7 @@
 #include "CombatReactionComponent.h"
 
 #include "GameFramework/Actor.h"
+#include "Combat/RetrieveHitReactionProfile.h"
 #include "Data/LockOnCameraConfig.h"
 #include "Data/LockOnConfig.h"
 #include "HitReactionComponent.h"
@@ -71,7 +72,7 @@ void UCombatReactionComponent::BeginPlay()
 	}
 	if (IsValid(HitReactionComp))
 	{
-		HitReactionComp->Configure(FlinchMontage, StaggerMontage, KnockdownMontage, StaggerEffect, KnockdownEffect);
+		HitReactionComp->Configure(HitReactionProfile);
 	}
 }
 
