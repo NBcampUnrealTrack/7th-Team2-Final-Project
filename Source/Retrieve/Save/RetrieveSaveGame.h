@@ -29,6 +29,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	TMap<FName, FTransform> ActivatedBonfireTransforms;
 
+	/** 가디언 코어 흡수로 해방된 원소 태그 목록 (월드 공유 진행 상태) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	FGameplayTagContainer UnlockedElements;
+
+	/** 루멘 각인 완료 여부 (월드 공유 진행 상태) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	bool bLumenEngraved = false;
+
 	// ── 슬롯 메타데이터 (UI 표시용) ─────────────────────────────────────────────
 
 	/** 슬롯 인덱스 (0~MaxSaveSlots-1). WorldState 슬롯은 -1 */

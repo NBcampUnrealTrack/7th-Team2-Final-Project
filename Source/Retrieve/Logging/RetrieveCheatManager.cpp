@@ -15,6 +15,7 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Components/ElementUnlockComponent.h"
 
 #include "Components/PatternCounterComponent.h"
 #include "Components/CombatReactionComponent.h"
@@ -153,6 +154,29 @@ void URetrieveCheatManager::RetrieveQuestComplete(const FString& StepTagName)
 	const bool bStepCompleted = Quest->CompleteStep(Tag);
 	UE_LOG(LogTemp, Display, TEXT("[CheatManager] QuestComplete %s -> %s"),
 	       *StepTagName, bStepCompleted ? TEXT("OK") : TEXT("거부됨(이미 완료됨/전제조건 미충족/행 없음/호스트 아님)"));
+}
+
+void URetrieveCheatManager::RetrieveUnlockWind()
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (!Pawn)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CheatManager] 빙의된 Pawn 없음"));
+		return;
+	}
+
+	UElementUnlockComponent* Unlock = Pawn->FindComponentByClass<UElementUnlockComponent>();
+	if (!Unlock)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CheatManager] ElementUnlockComponent 없음 — SovereignCharacter 확인"));
+		return;
+	}
+
+	Unlock->UnlockElement(RetrieveGameplayTags::Element_Wind);
+
+	UE_LOG(LogTemp, Display, TEXT("[CheatManager] RetrieveUnlockWind -> %s"),
+	       Unlock->IsElementUnlocked(RetrieveGameplayTags::Element_Wind) ? TEXT("해금됨") : TEXT("실패(호스트 아님?)"));
 }
 
 void URetrieveCheatManager::RetrieveLumenToggleWait()

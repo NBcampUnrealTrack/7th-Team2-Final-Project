@@ -59,10 +59,12 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		return false;
 	}
 
-	// 활성화된 화톳불 월드 상태 복사 (WorldState에서)
+	// 월드 공유 상태 복사 (WorldState에서)
 	if (CurrentSaveGame)
 	{
 		SlotSave->ActivatedBonfireTransforms = CurrentSaveGame->ActivatedBonfireTransforms;
+		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
+		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
 	}
 
 	// LoadSnapshot 기록
@@ -295,6 +297,75 @@ bool URetrieveSaveSubsystem::GetBonfireTransform(FName BonfireId, FTransform& Ou
 		return true;
 	}
 	return false;
+}
+
+// ── 원소 해방 (월드 공유 진행 상태) ────────────────────────────────────────────
+
+void URetrieveSaveSubsystem::MarkElementUnlocked(FGameplayTag ElementTag)
+{
+	if (!ElementTag.IsValid()) { return; }
+
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	if (CurrentSaveGame->UnlockedElements.HasTagExact(ElementTag))
+	{
+		return; // 중복
+	}
+
+	CurrentSaveGame->UnlockedElements.AddTag(ElementTag);
+
+	// WorldState 슬롯에 자동 저장
+	const bool bSaved = UGameplayStatics::SaveGameToSlot(
+		CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveSubsystem] 원소 해방 저장 — Element=%s WorldState=%s"),
+		*ElementTag.ToString(), bSaved ? TEXT("OK") : TEXT("FAIL"));
+}
+
+bool URetrieveSaveSubsystem::IsElementUnlocked(FGameplayTag ElementTag) const
+{
+	return CurrentSaveGame && CurrentSaveGame->UnlockedElements.HasTagExact(ElementTag);
+}
+
+FGameplayTagContainer URetrieveSaveSubsystem::GetUnlockedElements() const
+{
+	return CurrentSaveGame ? CurrentSaveGame->UnlockedElements : FGameplayTagContainer();
+}
+
+void URetrieveSaveSubsystem::SetLumenEngraved(bool bEngraved)
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	if (CurrentSaveGame->bLumenEngraved == bEngraved)
+	{
+		return;
+	}
+
+	CurrentSaveGame->bLumenEngraved = bEngraved;
+
+	// WorldState 슬롯에 자동 저장
+	const bool bSaved = UGameplayStatics::SaveGameToSlot(
+		CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveSubsystem] 루멘 각인 상태 저장 — %s WorldState=%s"),
+		bEngraved ? TEXT("true") : TEXT("false"), bSaved ? TEXT("OK") : TEXT("FAIL"));
+}
+
+bool URetrieveSaveSubsystem::IsLumenEngraved() const
+{
+	return CurrentSaveGame && CurrentSaveGame->bLumenEngraved;
 }
 
 // ── 빠른 이동 (World Partition) ───────────────────────────────────────────────

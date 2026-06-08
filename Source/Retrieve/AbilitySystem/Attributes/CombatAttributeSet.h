@@ -57,6 +57,11 @@ public:
 	FGameplayAttributeData GuardDamageReduction;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, GuardDamageReduction)
 
+	/** 공격 몽타주 재생 속도 배율. 기준값 1.0 = 등속. GA_Attack의 PlayRate로 사용됨. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_AttackSpeedMultiplier)
+	FGameplayAttributeData AttackSpeedMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, AttackSpeedMultiplier)
+
 private:
 	UFUNCTION() void OnRep_Health(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
@@ -64,6 +69,7 @@ private:
 	UFUNCTION() void OnRep_MoveSpeed(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_IncomingDamageMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_GuardDamageReduction(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_AttackSpeedMultiplier(const FGameplayAttributeData& OldValue);
 
 	// 방어 분기 단일 진입점(single source of truth).
 	// 우선순위: Parrying > Guarding > Shielded (누적 없음). 순서 의존 — 분기 순서를 바꾸면 게임플레이가 깨진다.

@@ -7,6 +7,7 @@
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/ElementGaugeComponent.h"
+#include "Components/ElementUnlockComponent.h"
 #include "Components/PlayerBurstComponent.h"
 #include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
@@ -56,6 +57,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
+	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
@@ -102,6 +104,11 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	{
 		ElementGaugeComponent->BindToASC();
 	}
+
+	if (ElementUnlockComponent)
+	{
+		ElementUnlockComponent->InitializeWithAbilitySystem(ASC);
+	}
 }
 
 void ASovereignCharacter::UnPossessed()
@@ -111,6 +118,11 @@ void ASovereignCharacter::UnPossessed()
 	if (PawnCosmeticComponent)
 	{
 		PawnCosmeticComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (ElementUnlockComponent)
+	{
+		ElementUnlockComponent->UninitializeFromAbilitySystem();
 	}
 }
 

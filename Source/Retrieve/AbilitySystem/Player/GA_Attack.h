@@ -32,8 +32,11 @@ private:
 	void StopRuntimeTasks();
 	void CleanupComboTag() const;
 	void ApplyStepDamage();
-	
+
 	void BuildTracePoints(TArray<FVector>& OutPoints) const;
+
+	/** 콤보 몽타주 재생 속도. CombatAttributeSet의 AttackSpeedMultiplier를 사용(원소 각성 버프 등 반영). */
+	float GetMontagePlayRate() const;
 
 	UFUNCTION() void HandleImpactBeginEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);

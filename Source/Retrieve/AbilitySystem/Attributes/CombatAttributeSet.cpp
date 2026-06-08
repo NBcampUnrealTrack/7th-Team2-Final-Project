@@ -15,6 +15,7 @@ UCombatAttributeSet::UCombatAttributeSet()
 	InitMoveSpeed(600.f);
 	InitIncomingDamageMultiplier(1.f);
 	InitGuardDamageReduction(0.4f);
+	InitAttackSpeedMultiplier(1.f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -26,6 +27,7 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MoveSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, GuardDamageReduction, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackSpeedMultiplier, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -51,6 +53,11 @@ void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute
 	else if (Attribute == GetGuardDamageReductionAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, 1.f);
+	}
+	else if (Attribute == GetAttackSpeedMultiplierAttribute())
+	{
+		// 재생속도 0/음수 방지
+		NewValue = FMath::Max(0.1f, NewValue);
 	}
 }
 
@@ -116,6 +123,11 @@ void UCombatAttributeSet::OnRep_IncomingDamageMultiplier(const FGameplayAttribut
 void UCombatAttributeSet::OnRep_GuardDamageReduction(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, GuardDamageReduction, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_AttackSpeedMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, AttackSpeedMultiplier, OldValue);
 }
 
 
