@@ -33,6 +33,31 @@ struct FRetrieveElementGaugeFullPayload
 	TArray<FGameplayTag> FilledElements;
 };
 
+/** Channel.Combat.DamageDealt 페이로드 공격자 측 연출(대미지 숫자 플로터 등)에 사용
+ * CombatAttributeSet::BroadcastEvent에서 발행
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveDamageDealtPayload
+{
+	GENERATED_BODY()
+
+	// 대미지를 가한 액터(자기판정용 - 본인이 가한 공격만 연출)
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	TObjectPtr<AActor> Instigator = nullptr;
+	// 피격 액터(플로터 표시 위치 기준)
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	TObjectPtr<AActor> Target = nullptr;
+	// 입힌 대미지량
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	float DamageAmount = 0.f;
+	// 강도 태그(GameplayEvent.Attack.HitSuccess.Light/Heavy) - DT_HitFeedback 조회 키
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	FGameplayTag HitEventTag;
+	// 피격 강도 태그(GameplayEvent.Hit.Normal/.Heavy) - 피격 측 흔들림 조회 키
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	FGameplayTag TargetEventTag;
+};
+
 // ---- 루멘 ---------------------------------------------------------
 
 /** 루멘 Follow/Positioning 모드. 호스트만 쓸 수 있습니다. ULumenFollowComponent에서 Replicate 됩니다. */
