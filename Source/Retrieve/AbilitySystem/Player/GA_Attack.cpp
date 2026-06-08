@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -137,7 +138,7 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 		return;
 	}
 
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, StepData.SectionName, true);
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, GetMontagePlayRate(), StepData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
@@ -375,6 +376,18 @@ void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
 	{
 		OutPoints.Add(AvatarActor->GetActorLocation());
 	}
+}
+
+float UGA_Attack::GetMontagePlayRate() const
+{
+	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (const UCombatAttributeSet* Combat = ASC->GetSet<UCombatAttributeSet>())
+		{
+			return FMath::Max(0.1f, Combat->GetAttackSpeedMultiplier());
+		}
+	}
+	return 1.f;
 }
 
 void UGA_Attack::HandleMontageCompleted()

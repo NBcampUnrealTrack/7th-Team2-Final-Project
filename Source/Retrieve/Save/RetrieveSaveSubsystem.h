@@ -119,6 +119,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool GetBonfireTransform(FName BonfireId, FTransform& OutTransform) const;
 
+	// ── 원소 해방 (월드 공유 진행 상태) ───────────────────────────────
+
+	/**
+	 * 원소 해방 등록. WorldState 슬롯에 즉시 파일 저장.
+	 * 중복 태그는 무시.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void MarkElementUnlocked(FGameplayTag ElementTag);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	bool IsElementUnlocked(FGameplayTag ElementTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	FGameplayTagContainer GetUnlockedElements() const;
+
+	/** 루멘 각인 완료 여부 기록. WorldState 슬롯에 즉시 파일 저장. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void SetLumenEngraved(bool bEngraved);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	bool IsLumenEngraved() const;
+
 	// ── 빠른 이동 (World Partition) ───────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|FastTravel")

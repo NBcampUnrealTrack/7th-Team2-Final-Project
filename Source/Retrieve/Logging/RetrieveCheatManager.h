@@ -35,6 +35,10 @@ public:
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveQuestComplete(const FString& StepTagName);
 
+	/** 바람 원소 해금 (ElementUnlockComponent.UnlockElement(Element.Wind)). WorldState에 영속 저장됨. */
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveUnlockWind();
+
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveLumenToggleWait();
 
