@@ -1,10 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Character/RetrieveCharacter.h"
 #include "LumenCharacter.generated.h"
 
 class ULumenFollowComponent;
+class URetrieveDialogueComponent;
+
 /**
  * 비전투 동반자 NPC. ASC 및 HealthComponent를 갖지 않습니다. (DA_PawnData_Lumen.bRequiresAbilitySystem = false)
  * 호스트 Pawn을 따라갑니다. (ARetrieveGameState::GetHostPawn으로 결정됨)
@@ -17,8 +20,24 @@ class RETRIEVE_API ALumenCharacter : public ARetrieveCharacter
 
 public:
 	ALumenCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	
+	// TODO: RetrtieveDialogueComponent로 이동 예정
+	/** 대화 뷰에 표시될 이름입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
+	FText DisplayName;
+	
+	/** DT_Dialogue 행의 SpeakerTag(Speaker.Lumen)와 일치합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
+	FGameplayTag SpeakerTag;
+	
+	/** 뷰가 열릴 때 토픽 목록이 나타나기 전에 한 번에 하나씩 재생되는 인사말 라인. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
+	TArray<FText> DefaultGreetingLines;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
 	TObjectPtr<ULumenFollowComponent> FollowComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
+	TObjectPtr<URetrieveDialogueComponent> DialogueComponent;
 };

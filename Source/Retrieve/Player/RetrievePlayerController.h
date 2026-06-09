@@ -17,6 +17,7 @@ class URetrieveBossHPBarWidget;
 class UUserWidget;
 class UWeaponComponent;
 class UHUDViewModel;
+class UConversationViewModel;
 class UAttackFeedbackComponent;
 
 USTRUCT(BlueprintType)
@@ -60,7 +61,16 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_RequestRecallLumen();
-
+	
+	UFUNCTION(Server, Reliable)
+	void Server_RequestLumenToggleWait();
+	
+	UFUNCTION(Server, Reliable)
+	void Server_RequestDialogueAdvance(FGameplayTag TopicId);
+	
+	UFUNCTION(Client, Reliable)
+	void Client_OpenConversation(AActor* NPC);
+	
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void OpenExclusivePanel(TSubclassOf<URetrieveGamePanelWidget> PanelClass, FKey ToggleKey);
 
@@ -77,6 +87,8 @@ public:
 	void TryBindBossToHUD(URetrieveHealthComponent* BossHealth, FText BossName);
 	
 	float GetSecondsSinceLastInput() const;
+	
+	void CloseConversation();
 
 protected:
 	virtual void BeginPlay() override;
@@ -88,6 +100,9 @@ protected:
 	void HandleSessionStateChanged(ERetrieveSessionState NewState);
 	void SwapActiveWidget(ERetrieveSessionState NewState);
 	void UpdateInputMode(ERetrieveSessionState NewState);
+	
+	void SetInputModeUIOnlyDuringConversation();
+	void EnsureCinematicCloseListener();
 
 	/** HUDViewModelInstance를 생성하고 ActiveTopLevelWidget에 연결합니다. */
 	void EnsureHUDViewModel();
@@ -121,6 +136,24 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> ResultClass;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
+	TSubclassOf<UUserWidget> ConversationWidgetClass;
+	
+	UPROPERTY()
+	TObjectPtr<UHUDViewModel> HUDViewModelInstance;
+
+	UPROPERTY()
+	TObjectPtr<UUserWidget> ConversationInstance;
+	
+	UPROPERTY()
+	TObjectPtr<UConversationViewModel> ConversationVM;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
+	FName HUDViewModelBindingName = TEXT("HUDViewModel");
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
+	FName ConversationViewModelBindingName = TEXT("ConversationViewModel");
 
 	/**
 	 * 아이템 획득 토스트 알림 위젯 클래스 (WBP_ToastManager).
@@ -158,14 +191,8 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveToastManager;
 
-	UPROPERTY()
-	TObjectPtr<UHUDViewModel> HUDViewModelInstance;
-
-	/** WBP_HUD의 MVVM 패널에서 설정된 ViewModel 바인딩 이름 */
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
-	FName HUDViewModelBindingName = TEXT("HUDViewModel");
-
 	FGameplayMessageListenerHandle SessionListener;
+	FGameplayMessageListenerHandle CinematicCloseHandle;
 
 	UFUNCTION()
 	void HandleActivePanelCloseRequested();

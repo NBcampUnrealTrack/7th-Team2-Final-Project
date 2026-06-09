@@ -4,8 +4,8 @@
 #include "Engine/DataTable.h"
 
 #include "GameplayTagContainer.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Combat/RetrieveCombatTypes.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "RetrieveDataTableTypes.generated.h"
 
 class UStateTree;
@@ -815,6 +815,61 @@ struct RETRIEVE_API FQuestStep : public FTableRowBase
 	/** <Element>SigilActivated 행만 채우기: Channel.Quest.GuardianDefeated 페이로드에 포함됨. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
 	FGameplayTag UnlockElementTag;
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FDialogueRow : public FTableRowBase
+{
+	GENERATED_BODY()
+	
+	// ---- Identity + gating (모든 행 공통)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	FGameplayTag SpeakerTag; // Speaker.Lumen, Speaker.NPC.<id>
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	FGameplayTag TopicId;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	ETopicKind Kind = ETopicKind::Story;
+	
+	/* Topic 버튼에 표시될 텍스트 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	FText Label;
+	
+	/** Topic 선택 이후 표시되는 대사 라인들 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	TArray<FText> Lines;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	FGameplayTag RequiresStep;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	FGameplayTag BlockedByStep;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	int32 Order = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	int32 Priority = 0;
+	
+	// ---- Story 행 전용
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Story")
+	TArray<FName> FollowUpRows; // 이 대사 이후 Topic이 표시될 행 이름; 비어있으면 끝
+	
+	// ---- Command 행 전용
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Command")
+	FGameplayTag CommandChannel; // e.g. Channel.Lumen.Command.ToggleWait
+	
+	// ── Sigil 행 전용 — ApplySigilTopic에서 소비 ────────────────────────────
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Sigil")
+	FGameplayTag SigilStepTag; // Quest.Step.SigilCompleted | <E>SigilActivated
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Sigil")
+	FGameplayTag VfxCue;   
+	
+	// Note: UnlockGE / UnlockElementTag 없음. Sigil과 매핑되는 원소는
+	// 해당 DT_QuestStep 행 (FQuestStep.UnlockElementTag)에 있으며, CompleteStep이 읽는다.
+	// TODO: Channel.Quest.GuardianDefeated{element}이 발행되면 이후 해당 원소 모드 강화
 };
 
 // ---- 버프/디버프 UI DataTable ------------------------------------------------

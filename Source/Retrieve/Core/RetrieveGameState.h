@@ -3,12 +3,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
 #include "Core/RetrieveSessionState.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "RetrieveGameState.generated.h"
 
 class UQuestBranchComponent;
+struct FDialogueRow;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRetrieveSessionStateChanged, ERetrieveSessionState, Previous,
                                              ERetrieveSessionState, New);
-
 
 UCLASS()
 class RETRIEVE_API ARetrieveGameState : public AGameStateBase
@@ -29,6 +31,19 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	UQuestBranchComponent* GetQuestBranchComponent() const { return QuestBranchComponent; }
+	
+	// ---- Dialogue / Cinematic ----
+	const FRetrieveDialogueState& GetDialogueState() const { return DialogueState; }
+	const FRetrieveCinematicState& GetCinematicState() const { return CinematicState; }
+	const UDataTable* GetDialogueTable() const { return DialogueTable; }
+
+	void RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics, bool bShared = true,
+	                     bool bHoldUntilReplaced = false);
+	void AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign);
+	void ApplySigilTopic(const FDialogueRow& Row, APawn* Sovereign);
+	void ClearDialogue();
+	void SetActiveSpeaker(const FText& InSpeakerName);
+	void SetCinematicActive(bool bInActive);
 	
 	/** 서버 전용. 전환이 수락되면 true를 반환합니다. */
 	bool TransitionTo(ERetrieveSessionState NewState);
@@ -52,8 +67,29 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest")
 	TObjectPtr<UQuestBranchComponent> QuestBranchComponent;
 	
+	// ---- Dialogue ----
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dialogue")
+	TObjectPtr<UDataTable> DialogueTable;
+
+	UPROPERTY(ReplicatedUsing = OnRep_DialogueState)
+	FRetrieveDialogueState DialogueState;
+
+	UPROPERTY(ReplicatedUsing = OnRep_CinematicState)
+	FRetrieveCinematicState CinematicState;
+	
+	FText CurrentSpeakerName;
+	
 	UFUNCTION()
 	void OnRep_SessionState(ERetrieveSessionState Previous);
+	
+	UFUNCTION()
+	void OnRep_DialogueState();
+
+	UFUNCTION()
+	void OnRep_CinematicState();
+	
+	const FDialogueRow* FindDialogueRow(FGameplayTag TopicId) const;
+	TArray<FRetrieveDialogueTopic> BuildFollowUpTopics(const FDialogueRow& Row) const;
 	
 	static bool IsLegalTransition(ERetrieveSessionState From, ERetrieveSessionState To);
 	

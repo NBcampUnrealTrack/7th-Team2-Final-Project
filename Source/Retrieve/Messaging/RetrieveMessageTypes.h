@@ -136,7 +136,7 @@ USTRUCT(BlueprintType)
 struct FRetrieveQuestStepPayload
 {
 	GENERATED_BODY()
-	
+
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Quest")
 	FGameplayTag StepTag;
 };
@@ -190,7 +190,108 @@ USTRUCT(BlueprintType)
 struct FRetrieveGuardianDefeatedPayload
 {
 	GENERATED_BODY()
-	
+
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Quest")
 	FGameplayTag GuardianElement;
+};
+
+// ---- 대화 / 시네마틱 --------------------------------------------------
+
+/** 토픽 종류. Story = 대사 라인들, Command = Lumen 커맨드, Sigil = 대화+VFX */
+UENUM(BlueprintType)
+enum class ETopicKind : uint8
+{
+	Story,
+	Command,
+	Sigil
+};
+
+/** 선택 가능한 토픽 하나. 유효하지 않은 TopicId는 대화 종료. */
+USTRUCT(BlueprintType)
+struct FRetrieveDialogueTopic
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FGameplayTag TopicId;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FText Label;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bEnabled = true;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	ETopicKind Kind = ETopicKind::Story;
+};
+
+/** GameState의 Replicated된 대화 상태. 비트 = Lines[] (한 번에 하나씩 재생; Enter/클릭으로 로컬 진행) → Topics[] (마지막 대사 이후 표시). */
+USTRUCT(BlueprintType)
+struct FRetrieveDialogueState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FText SpeakerName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	TArray<FText> Lines;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	TArray<FRetrieveDialogueTopic> Topics;
+
+	/** 호스트 권한 대화. 모두가 대사 + VFX를 볼 수 있지만, 진행은 호스트만 가능합니다. */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bSharedNarrative = true;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bHoldUntilReplaced = false;
+
+	/** RequestDialogue/ClearDialogue 호출마다 증가. 콘텐츠가 동일해도 OnRep이 발생하도록 함. */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	int32 Serial = 0;
+};
+
+/** Channel.Dialogue.LineRequested 로컬 페이로드. */
+USTRUCT(BlueprintType)
+struct FRetrieveDialoguePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FText SpeakerName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	TArray<FText> Lines;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	TArray<FRetrieveDialogueTopic> Topics;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bSharedNarrative = true;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bHoldUntilReplaced = false;
+};
+
+/** 최소한의 시네마틱 상태. */
+USTRUCT(BlueprintType)
+struct FRetrieveCinematicState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Cinematic")
+	bool bActive = false;
+
+	bool IsActive() const { return bActive; }
+};
+
+/** Channel.Cinematic.Changed 로컬 페이로드. */
+USTRUCT(BlueprintType)
+struct FRetrieveCinematicStatePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Cinematic")
+	bool bActive = false;
 };
