@@ -4,6 +4,8 @@
 #include "Character/RetrieveCombatCharacter.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayTagContainer.h"
+#include "GenericTeamAgentInterface.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "RetrieveEnemyCharacter.generated.h"
 
 class URetrieveAbilitySystemComponent;
@@ -19,7 +21,7 @@ struct FOnAttributeChangeData;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathEnded, AActor*, DeadCharacter);
 	
 UCLASS()
-class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter
+class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 
@@ -60,6 +62,11 @@ public:
 	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
 	
 	const FMonsterDataRow* GetMonsterDataRow() const;
+	
+	virtual FGenericTeamId GetGenericTeamId() const override
+	{
+		return FGenericTeamId(static_cast<uint8>(Team));
+	}
 	
 protected:
 	virtual void BeginPlay() override;
@@ -115,6 +122,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Retrieve|AI")
 	float GroupAlertRadius = 1500.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
+	ERetrieveTeam Team = ERetrieveTeam::Enemy;
+	
 	/** DataTable */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Monster")
 	FName MonsterDataRowName;

@@ -15,7 +15,7 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 	
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 	
-	SetGenericTeamId(FGenericTeamId(EnemyTeamId));
+	SetGenericTeamId(FGenericTeamId(static_cast<uint8>(Team)));
 	
 	bAllowStrafe = true;
 }
