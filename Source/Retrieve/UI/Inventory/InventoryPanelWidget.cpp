@@ -1272,8 +1272,8 @@ FText UInventoryPanelWidget::GetFullStatDisplayText() const
 						else
 							continue;
 
-						Lines.Add(FString::Printf(TEXT("%s: %.0f"),
-							*It->GetDisplayNameText().ToString(), Value));
+						const FString PropDisplayName = It->GetAuthoredName();
+						Lines.Add(FString::Printf(TEXT("%s: %.0f"), *PropDisplayName, Value));
 					}
 				}
 			}
