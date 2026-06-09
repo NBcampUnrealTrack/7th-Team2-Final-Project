@@ -53,7 +53,9 @@ protected:
 	void TryRespawnEntry(int32 EntryIndex);
 
 private:
+	bool TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) const;
 	bool IsPositionHidden(const FVector& WorldPos) const;
+	bool IsTriggerActor(const AActor* OtherActor) const;
 	
 	UFUNCTION()
 	void OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp,
@@ -90,6 +92,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Spawner")
 	TArray<FSpawnEntry> SpawnList;
+
+	UPROPERTY(EditAnywhere, Category="Spawner|Test")
+	bool bUseSpawnerLocationWhenSpawnPointMissing = false;
 
 	UPROPERTY(VisibleAnywhere, Category="Spawner")
 	TArray<TWeakObjectPtr<APawn>> SpawnedPawns;

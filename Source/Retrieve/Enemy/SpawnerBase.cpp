@@ -8,6 +8,7 @@
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/SphereComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
+#include "Components/BossHPBarComponent.h"
 
 ASpawnerBase::ASpawnerBase()
 {
@@ -40,12 +41,20 @@ void ASpawnerBase::BeginPlay()
 	DespawnSphereComp->OnComponentEndOverlap.AddDynamic(
 		this, &ASpawnerBase::OnDespawnSphereEndOverlap);
 
-	SpawnAll();
-	DespawnAll();
-
 	if (RespawnTimerHandles.Num() != SpawnList.Num())
 	{
 		RespawnTimerHandles.SetNum(SpawnList.Num());
+	}
+
+	TArray<AActor*> OverlappingActors;
+	SpawnSphereComp->GetOverlappingActors(OverlappingActors);
+	for (AActor* Actor : OverlappingActors)
+	{
+		if (IsTriggerActor(Actor))
+		{
+			SpawnAll();
+			break;
+		}
 	}
 }
 
@@ -83,12 +92,13 @@ void ASpawnerBase::SpawnAll()
 	for (int32 i = 0; i < SpawnList.Num(); ++i)
 	{
 		const FSpawnEntry& Entry = SpawnList[i];
-		if (!Entry.PawnData || !Entry.PawnData->PawnClass || !IsValid(Entry.SpawnPoint))
+		FVector SpawnLocation;
+		if (!Entry.PawnData || !Entry.PawnData->PawnClass || !TryGetSpawnLocation(i, SpawnLocation))
 		{
 			continue;
 		}
 
-		const FTransform SpawnTransform(GetActorRotation(), Entry.SpawnPoint->GetActorLocation());
+		const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
 		APawn* Pawn = EntryPawns[i].Get();
 
 		if (Pawn)
@@ -131,10 +141,32 @@ void ASpawnerBase::SpawnAll()
 	}
 
 	bIsSpawned = true;
+
+	for (const TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
+	{
+		if (APawn* Pawn = WeakPawn.Get())
+		{
+			if (UBossHPBarComponent* BossHPBar = Pawn->FindComponentByClass<UBossHPBarComponent>())
+			{
+				BossHPBar->Show();
+			}
+		}
+	}
 }
 
 void ASpawnerBase::DespawnAll()
 {
+	for (const TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
+	{
+		if (APawn* Pawn = WeakPawn.Get())
+		{
+			if (UBossHPBarComponent* BossHPBar = Pawn->FindComponentByClass<UBossHPBarComponent>())
+			{
+				BossHPBar->Hide();
+			}
+		}
+	}
+
 	bIsSpawned = false;
 
 	for (TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
@@ -174,7 +206,13 @@ void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 		return;
 	}
 
-	if (!IsPositionHidden(SpawnList[EntryIndex].SpawnPoint->GetActorLocation()))
+	FVector SpawnLocation;
+	if (!TryGetSpawnLocation(EntryIndex, SpawnLocation))
+	{
+		return;
+	}
+
+	if (!IsPositionHidden(SpawnLocation))
 	{
 		// 아직 시야에 보임 → 이 에너미만 재시도
 		FTimerDelegate Del;
@@ -184,12 +222,19 @@ void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 		return;
 	}
 
-	const FTransform SpawnTransform(GetActorRotation(), SpawnList[EntryIndex].SpawnPoint->GetActorLocation());
+	const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
 	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[%s] Enemy Respawn Start!"), *GetName());
 		Enemy->ActivateEnemy(SpawnTransform, true);
 		SpawnedPawns.Add(Pawn);
+		if (bIsSpawned)
+		{
+			if (UBossHPBarComponent* BossHPBar = Enemy->FindComponentByClass<UBossHPBarComponent>())
+			{
+				BossHPBar->Show();
+			}
+		}
 	}
 }
 
@@ -261,6 +306,28 @@ void ASpawnerBase::TryRespawn()
 // ──────────────────────────────────────────────
 //  내부: 거리 체크 / 시야 판정
 // ──────────────────────────────────────────────
+bool ASpawnerBase::TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) const
+{
+	if (!SpawnList.IsValidIndex(EntryIndex))
+	{
+		return false;
+	}
+
+	if (const AActor* SpawnPoint = SpawnList[EntryIndex].SpawnPoint)
+	{
+		OutLocation = SpawnPoint->GetActorLocation();
+		return true;
+	}
+
+	if (bUseSpawnerLocationWhenSpawnPointMissing)
+	{
+		OutLocation = GetActorLocation();
+		return true;
+	}
+
+	return false;
+}
+
 bool ASpawnerBase::IsPositionHidden(const FVector& WorldPos) const
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -291,10 +358,26 @@ bool ASpawnerBase::IsPositionHidden(const FVector& WorldPos) const
 	return Hit.bBlockingHit;
 }
 
+bool ASpawnerBase::IsTriggerActor(const AActor* OtherActor) const
+{
+	if (!OtherActor)
+	{
+		return false;
+	}
+
+	if (TriggerActorClass)
+	{
+		return OtherActor->IsA(TriggerActorClass);
+	}
+
+	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	return PC && OtherActor == PC->GetPawn();
+}
+
 void ASpawnerBase::OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (bIsSpawned || !TriggerActorClass || !OtherActor->IsA(TriggerActorClass))
+	if (bIsSpawned || !IsTriggerActor(OtherActor))
 	{
 		return;
 	}
@@ -308,7 +391,7 @@ void ASpawnerBase::OnDespawnSphereEndOverlap(UPrimitiveComponent* OverlappedComp
 	UE_LOG(LogTemp, Warning, TEXT("[Spawner] DespawnEndOverlap - bIsSpawned=%d, SpawnedNum=%d, bAllowRespawn=%d"),
 		bIsSpawned, SpawnedPawns.Num(), bAllowRespawn);
 
-	if (!bIsSpawned || !TriggerActorClass || !OtherActor->IsA(TriggerActorClass))
+	if (!bIsSpawned || !IsTriggerActor(OtherActor))
 	{
 		return;
 	}
@@ -347,6 +430,10 @@ void ASpawnerBase::OnEnemyDeath(AActor* Actor)
 
 	if (!bAllowRespawn)
 	{
+		if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
+		{
+			BossHPBar->Hide();
+		}
 		return;
 	}
 
@@ -354,6 +441,11 @@ void ASpawnerBase::OnEnemyDeath(AActor* Actor)
 	{
 		if (EntryPawns[i].Get() == Actor)
 		{
+			if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
+			{
+				BossHPBar->Hide();
+			}
+
 			FTimerDelegate Del;
 			Del.BindUObject(this, &ASpawnerBase::TryRespawnEntry, i);
 			GetWorld()->GetTimerManager().SetTimer(

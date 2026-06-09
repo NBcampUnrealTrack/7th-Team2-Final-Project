@@ -17,6 +17,8 @@
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "Components/BossHPBarComponent.h"
+#include "Player/RetrievePlayerController.h"
 
 ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -130,6 +132,7 @@ void ARetrieveEnemyCharacter::OnMoveSpeedChanged(const FOnAttributeChangeData& D
 		const float Ratio = Data.NewValue / UCombatAttributeSet::ReferenceMoveSpeed;
 		MoveComp->MaxWalkSpeed = BaseMaxWalkSpeed * Ratio;
 	}
+
 }
 
 void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -305,10 +308,16 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 	{
 		AI->Reactivate();
 	}
+
 }
 
 void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
+	if (UBossHPBarComponent* BossHPBar = FindComponentByClass<UBossHPBarComponent>())
+	{
+		BossHPBar->Hide();
+	}
+
 	SetActorHiddenInGame(true);
 	SetActorEnableCollision(false);
 		
