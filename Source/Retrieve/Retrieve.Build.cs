@@ -32,6 +32,7 @@ public class Retrieve : ModuleRules
 			"NavigationSystem", 
 			"Landscape",
 			"ModelViewViewModel",
+			"FieldNotification",
 			"ALS"
 		});
 
@@ -42,7 +43,13 @@ public class Retrieve : ModuleRules
 
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.Add("UnrealEd");
+			PrivateDependencyModuleNames.AddRange(new string[]
+			{
+				"UnrealEd",
+				"UMGEditor",
+				"ModelViewViewModelBlueprint",
+				"ModelViewViewModelEditor"
+			});
 		}
 
 		// Uncomment if you are using Slate UI

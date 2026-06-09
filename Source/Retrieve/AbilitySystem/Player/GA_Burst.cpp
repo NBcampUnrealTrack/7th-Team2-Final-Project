@@ -1,4 +1,4 @@
-#include "AbilitySystem/Player/GA_Burst.h"
+﻿#include "AbilitySystem/Player/GA_Burst.h"
 
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "AbilitySystemComponent.h"
@@ -7,7 +7,11 @@
 #include "Components/ElementGaugeComponent.h"
 #include "Components/PlayerBurstComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
+#include "Messaging/RetrieveMessageTypes.h"
+#include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
 
 UGA_Burst::UGA_Burst()
 {
@@ -35,6 +39,24 @@ UGA_Burst::UGA_Burst()
     BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
     BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
     BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
+}
+
+void UGA_Burst::OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnAvatarSet(ActorInfo, Spec);
+
+	if (!SkillCombinationTable) return;
+
+	static const FString Context(TEXT("GA_Burst::OnAvatarSet"));
+	TArray<FSkillCombination*> Rows;
+	SkillCombinationTable->GetAllRows<FSkillCombination>(Context, Rows);
+	for (FSkillCombination* Row : Rows)
+	{
+		if (Row && !Row->AttackMontage.IsNull())
+		{
+			Row->AttackMontage.LoadSynchronous();
+		}
+	}
 }
 
 void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -92,8 +114,28 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
         return;
     }
 
+    FRetrieveElementGaugeBurstPayload BurstPayload;
+    BurstPayload.Instigator = Avatar;
+    BurstPayload.ElementPattern = ElementPattern;
+    if (UWorld* World = Avatar->GetWorld())
+    {
+        UGameplayMessageSubsystem::Get(World)
+            .BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Burst, BurstPayload);
+    }
+
+    Gauge->ClearSlot();
+
     CachedBurstComp = BurstComp;
     BurstComp->BeginBurstSkill(MatchedRow);
+
+    if (MatchedRow->BurstUITag.IsValid())
+    {
+        if (URetrieveBuffUIBroadcastComponent* BuffUI =
+            Avatar->FindComponentByClass<URetrieveBuffUIBroadcastComponent>())
+        {
+            BuffUI->BroadcastBuffManual(MatchedRow->BurstUITag);
+        }
+    }
 
     MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, NAME_None, true);
     if (!MontageTask)

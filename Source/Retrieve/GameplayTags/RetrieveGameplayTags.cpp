@@ -150,12 +150,14 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(LocomotionAction_Attack, "Als.LocomotionAction.Attack");
 	
 	// ---- Gameplay events: combat
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_ComboFinisher, "GameplayEvent.ComboFinisher");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_ComboFinisher, "GameplayEvent.Combo.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit, "GameplayEvent.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Normal, "GameplayEvent.Hit.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Hit_Heavy, "GameplayEvent.Hit.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_Hit, "GameplayEvent.Attack.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parry_Success, "GameplayEvent.Parry.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Parried, "GameplayEvent.Parried");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Success, "GameplayEvent.Guard.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Guard_Broken, "GameplayEvent.Guard.Broken");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Dodge_Success, "GameplayEvent.Dodge.Success");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_DodgeCounter_Success, "GameplayEvent.DodgeCounter.Success");
@@ -206,6 +208,21 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Wind, "Item.Material.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Currency_Basic, "Item.Currency.Basic");
 
+	// ---- UI Buff
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff, "UI.Buff");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Item, "UI.Buff.Item");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Item_FireBoost, "UI.Buff.Item.FireBoost");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Item_WaterBoost, "UI.Buff.Item.WaterBoost");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Item_WindBoost, "UI.Buff.Item.WindBoost");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Burst, "UI.Buff.Burst");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Burst_FireSlash, "UI.Buff.Burst.FireSlash");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Burst_WaterVortex, "UI.Buff.Burst.WaterVortex");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Burst_WindSlash, "UI.Buff.Burst.WindSlash");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb, "UI.Buff.Absorb");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Fire, "UI.Buff.Absorb.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Water, "UI.Buff.Absorb.Water");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Wind, "UI.Buff.Absorb.Wind");
+
 	// ---- Message channels
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Session_StateChanged, "Channel.Session.StateChanged");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Combat_Hit, "Channel.Combat.Hit");
@@ -213,12 +230,17 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_SlotChanged, "Channel.ElementGauge.SlotChanged");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_Full, "Channel.ElementGauge.Full");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_Burst, "Channel.ElementGauge.Burst");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Item_ElementBuff, "Channel.Item.ElementBuff");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_World_OutpostActivated, "Channel.World.OutpostActivated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Player_Died, "Channel.Player.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Monster_Died, "Channel.Monster.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Game_QueenDefeated, "Channel.Game.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_PlayerSpotted, "Channel.Enemy.PlayerSpotted");
 	
+	// ---- Message channels: UI Buff
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Apply,  "Channel.UI.Buff.Apply");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Remove, "Channel.UI.Buff.Remove");
+
 	// ---- Message channels: Quest
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_GuardianDefeated, "Channel.Quest.GuardianDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_StepChanged, "Channel.Quest.StepChanged");

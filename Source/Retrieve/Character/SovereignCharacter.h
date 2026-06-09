@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
@@ -15,6 +15,7 @@ class UCombatReactionComponent;
 class UWeaponComponent;
 class UElementGaugeComponent;
 class UPlayerBurstComponent;
+class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
 
 UCLASS()
@@ -59,6 +60,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementUnlockComponent> ElementUnlockComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<URetrieveBuffUIBroadcastComponent> BuffUIBroadcastComponent;
 
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")

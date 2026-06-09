@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
@@ -321,6 +321,7 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	// ---- Name --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Meta")
 	FText DisplayName;
+
 	// ---- Pattern / Motion --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
@@ -352,6 +353,10 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	// ---- FX --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
 	TSoftObjectPtr<USoundBase> CastSound;
+
+	/** 버스트 발동 시 버프 바에 표시할 UI 태그. DT_BuffUIDefinitions Row Name과 일치시킨다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
+	FGameplayTag BurstUITag;
 };
 
 USTRUCT(BlueprintType)
@@ -613,6 +618,9 @@ struct RETRIEVE_API FRetrieveConsumableItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
 	float BuffDuration = 0.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|UI", meta = (Categories = "UI.Buff"))
+	FGameplayTag BuffUITag;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable", meta = (ClampMin = "1"))
 	int32 MaxStack = 10;
 
@@ -771,4 +779,52 @@ struct RETRIEVE_API FQuestStep : public FTableRowBase
 	/** <Element>SigilActivated 행만 채우기: Channel.Quest.GuardianDefeated 페이로드에 포함됨. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
 	FGameplayTag UnlockElementTag;
+};
+
+// ---- 버프/디버프 UI DataTable ------------------------------------------------
+
+/**
+ * DT_BuffUIDefinitions 행.
+ * Row Name = UI 태그 문자열 그대로 (예: "UI.Buff.Debuff.Slow")
+ * GE Asset Tag에 이 태그가 달려 있으면 URetrieveBuffUIBroadcastComponent가
+ * 자동 감지해 버프 바(Channel_UI_Buff_Apply)에 표시한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveBuffUIRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** GE.AssetTags에 포함돼야 할 태그. Row Name과 일치시킨다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	FGameplayTag BuffUITag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI", meta = (MultiLine = true))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI", meta = (MultiLine = true))
+	FText EffectSummary;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI|GAS")
+	TSubclassOf<UGameplayEffect> LinkedGameplayEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	FText DisplayName;
+
+	/** 버프 바에 표시할 아이콘. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	TSoftObjectPtr<UTexture2D> Icon;
+
+	/** 아이콘 틴트. 버프는 하늘색, 디버프는 보라/빨강 계열 권장. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	FLinearColor TintColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	bool bIsDebuff = false;
+
+	/**
+	 * 0이면 GE의 실제 지속시간을 자동으로 읽는다.
+	 * 0 초과이면 이 값을 사용한다 (Instant GE 또는 BroadcastBuffManual 비-GAS 표시용).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI", meta = (ClampMin = 0.0))
+	float DurationOverride = 0.f;
 };

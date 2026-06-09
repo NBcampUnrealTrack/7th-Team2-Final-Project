@@ -1,8 +1,12 @@
 #include "Components/ElementGaugeComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Components/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "Player/RetrievePlayerState.h"
 
 UElementGaugeComponent::UElementGaugeComponent()
@@ -15,6 +19,10 @@ UElementGaugeComponent::UElementGaugeComponent()
 
 void UElementGaugeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ItemMultiplierTimer);
+	}
 	UnbindFromASC();
 	Super::EndPlay(EndPlayReason);
 }
@@ -92,20 +100,77 @@ void UElementGaugeComponent::HandleGameplayEvent(FGameplayTag EventTag, const FG
 
 void UElementGaugeComponent::AddCharge(int32 Amount)
 {
-	if (IsFull()) return;
+	// 배율은 진입부에서 1회만 적용하고, 내부 재귀(AddChargeInternal)에는 전달하지 않는다.
+	// 무기 배율 × 아이템 버프 배율을 함께 적용한다.
+	float Multiplier = ItemChargeMultiplier;
+	if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (const UWeaponComponent* Weapon = OwnerPawn->FindComponentByClass<UWeaponComponent>())
+		{
+			Multiplier *= FMath::Max(Weapon->GetWeaponData().ElementChargeMultiplier, 0.f);
+		}
+	}
 
-	int32 SumAmount = ElementSlots[CurrentSlotIndex].InternalGauge + Amount;
+	AddChargeInternal(FMath::RoundToInt(Amount * Multiplier));
+}
+
+void UElementGaugeComponent::SetItemChargeMultiplier(float Multiplier, float Duration, FGameplayTag BuffUITag)
+{
+	ItemChargeMultiplier = FMath::Max(Multiplier, 0.f);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ItemMultiplierTimer);
+
+		if (Duration > 0.f)
+		{
+			World->GetTimerManager().SetTimer(
+				ItemMultiplierTimer,
+				[this, BuffUITag]()
+				{
+					ItemChargeMultiplier = 1.f;
+					if (BuffUITag.IsValid())
+					{
+						if (UWorld* TimerWorld = GetWorld())
+						{
+							FRetrieveUIBuffRemovePayload RemovePayload;
+							RemovePayload.BuffId = BuffUITag;
+							UGameplayMessageSubsystem::Get(TimerWorld).BroadcastMessage(
+								RetrieveGameplayTags::Channel_UI_Buff_Remove, RemovePayload);
+						}
+					}
+				},
+				Duration,
+				false);
+		}
+	}
+}
+
+void UElementGaugeComponent::AddChargeInternal(int32 ScaledAmount)
+{
+	if (IsFull() || ScaledAmount <= 0) return;
+
+	int32 SumAmount = ElementSlots[CurrentSlotIndex].InternalGauge + ScaledAmount;
 	if (SumAmount >= ElementSlots[CurrentSlotIndex].MaxGauge)
 	{
 		int32 LeftAmount = SumAmount - ElementSlots[CurrentSlotIndex].MaxGauge;
 		CommitSlot();
-		AddCharge(LeftAmount);
+		AddChargeInternal(LeftAmount);
 	}
 	else
 	{
 		ElementSlots[CurrentSlotIndex].InternalGauge = SumAmount;
 
-		UE_LOG(LogTemp, Warning, TEXT("Slot %d : %d%%"), CurrentSlotIndex+1, SumAmount);
+		// 충전 중에도 현재 원소를 반영해 색상이 즉시 표시되도록 한다.
+		if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+		{
+			if (ARetrievePlayerState* PS = OwnerPawn->GetPlayerState<ARetrievePlayerState>())
+			{
+				ElementSlots[CurrentSlotIndex].CurrentElement = PS->GetCurrentElementTag();
+			}
+		}
+
+		OnSlotsChanged.Broadcast();
 	}
 }
 
@@ -118,33 +183,55 @@ void UElementGaugeComponent::CommitSlot()
 	if (!PS) return;
 
 	ElementSlots[CurrentSlotIndex].InternalGauge = ElementSlots[CurrentSlotIndex].MaxGauge;
-	ElementSlots[CurrentSlotIndex].bIsFull = true;
+	ElementSlots[CurrentSlotIndex].bFull = true;
 	ElementSlots[CurrentSlotIndex].CurrentElement = PS->GetCurrentElementTag();
 
-	UE_LOG(LogTemp, Warning, TEXT("Slot %d Charged"), CurrentSlotIndex+1);
-	CurrentSlotIndex++; 
-	
+	CurrentSlotIndex++;
+	OnSlotsChanged.Broadcast();
+
 	if (IsFull())
 	{
-		ASC = GetRetrieveASC();
-		if (!ASC.IsValid()) return;
-
-		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Gauge_Full);
+		if (URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC())
+		{
+			RetrieveASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Gauge_Full);
+		}
+		BroadcastGaugeFull();
 	}
 }
 
-bool UElementGaugeComponent::IsFull()
+void UElementGaugeComponent::BroadcastGaugeFull() const
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	FRetrieveElementGaugeFullPayload Payload;
+	Payload.Instigator = GetOwner();
+	for (const FElementSlot& Slot : ElementSlots)
+	{
+		if (Slot.bFull)
+		{
+			Payload.FilledElements.Add(Slot.CurrentElement);
+		}
+	}
+
+	UGameplayMessageSubsystem::Get(GetWorld())
+		.BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Full, Payload);
+}
+
+bool UElementGaugeComponent::IsFull() const
 {
 	return CurrentSlotIndex >= SlotCount;
 }
 
-TMap<FGameplayTag, int32> UElementGaugeComponent::GetCurrentCombination()
+TMap<FGameplayTag, int32> UElementGaugeComponent::GetCurrentCombination() const
 {
 	TMap<FGameplayTag, int32> ElementPattern;
 
 	for (const FElementSlot& Slot : ElementSlots)
 	{
-		if (Slot.bIsFull)
+		if (Slot.bFull)
 		{
 			int32& Count = ElementPattern.FindOrAdd(Slot.CurrentElement, 0);
 			Count++;
@@ -156,14 +243,14 @@ TMap<FGameplayTag, int32> UElementGaugeComponent::GetCurrentCombination()
 
 FGameplayTag UElementGaugeComponent::ConsumeOldestSlot()
 {
-	if (!ElementSlots[0].bIsFull) return RetrieveGameplayTags::Element_None;
+	if (!ElementSlots[0].bFull) return RetrieveGameplayTags::Element_None;
 
 	if (IsFull())
 	{
-		ASC = GetRetrieveASC();
-		if (!ASC.IsValid()) return RetrieveGameplayTags::Element_None;
+		URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC();
+		if (!RetrieveASC) return RetrieveGameplayTags::Element_None;
 
-		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Gauge_Full, 0);
+		RetrieveASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Gauge_Full, 0);
 	}
 
 	FGameplayTag ElementTag = ElementSlots[0].CurrentElement;
@@ -175,34 +262,37 @@ FGameplayTag UElementGaugeComponent::ConsumeOldestSlot()
 
 	ElementSlots[SlotCount - 1] = FElementSlot();
 
-	UE_LOG(LogTemp, Warning, TEXT("Oldest Slot Consumed"));
-
 	CurrentSlotIndex--;
+	OnSlotsChanged.Broadcast();
 
 	return ElementTag;
 }
 
-void UElementGaugeComponent::ConsumeAllSlots()
+FGameplayTag UElementGaugeComponent::PeekOldestSlot() const
 {
-	ClearSlot();
+	return ElementSlots[0].bFull ? ElementSlots[0].CurrentElement : RetrieveGameplayTags::Element_None;
 }
 
 void UElementGaugeComponent::ClearSlot()
 {
+	const bool bWasFull = IsFull();
+
 	for (int32 i = 0; i < SlotCount; ++i)
 	{
 		ElementSlots[i] = FElementSlot();
 	}
 
-	if (IsFull())
-	{
-		ASC = GetRetrieveASC();
-		if (!ASC.IsValid()) return;
+	CurrentSlotIndex = 0;
 
-		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Gauge_Full, 0);
+	if (bWasFull)
+	{
+		if (URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC())
+		{
+			RetrieveASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Gauge_Full, 0);
+		}
 	}
 
-	CurrentSlotIndex = 0;
+	OnSlotsChanged.Broadcast();
 }
 
 float UElementGaugeComponent::GetSlotRatio(int32 SlotIndex) const

@@ -21,6 +21,10 @@ public:
 	UGA_Burst();
 
 protected:
+	// 어빌리티 부여 시점에 모든 버스트 몽타주를 미리 로드해 발동 시 히치를 방지한다.
+	virtual void OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilitySpec& Spec) override;
+
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
