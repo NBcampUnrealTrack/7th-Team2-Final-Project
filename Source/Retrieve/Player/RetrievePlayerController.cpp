@@ -20,10 +20,40 @@
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
+#include "UI/HUD/RetrieveElementGaugeWidget.h"
+#include "UI/HUD/RetrieveBossHPBarWidget.h"
+#include "UI/ViewModels/BossStatusViewModel.h"
+#include "UI/ViewModels/ElementGaugeViewModel.h"
 #include "UI/ViewModels/HUDViewModel.h"
 #include "UI/ViewModels/PlayerStatusViewModel.h"
+#include "Components/ElementGaugeComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
+
+namespace
+{
+	UWidget* FindBossBarWidget(UUserWidget* TopLevelWidget)
+	{
+		if (!TopLevelWidget)
+		{
+			return nullptr;
+		}
+
+		UWidget* BossBarWidget = TopLevelWidget->GetWidgetFromName(TEXT("WBP_BossHPBar"));
+		if (!BossBarWidget && TopLevelWidget->WidgetTree)
+		{
+			TopLevelWidget->WidgetTree->ForEachWidget([&BossBarWidget](UWidget* Widget)
+			{
+				if (!BossBarWidget && Widget && Widget->GetFName() == TEXT("WBP_BossHPBar"))
+				{
+					BossBarWidget = Widget;
+				}
+			});
+		}
+
+		return BossBarWidget;
+	}
+}
 
 ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -135,6 +165,7 @@ void ARetrievePlayerController::PlayerTick(float DeltaTime)
 			}
 		}
 	}
+
 }
 
 bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
@@ -178,6 +209,7 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 	Super::AcknowledgePossession(InPawn);
 
 	TryBindHealthToHUD();
+	TryBindElementGaugeToHUD();
 	if (AttackFeedbackComponent)
 	{
 		AttackFeedbackComponent->HandlePossessedPawnChanged(InPawn);
@@ -206,14 +238,18 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
 		ActiveTopLevelWidget = CreateWidget<UUserWidget>(this, WidgetClass);
 		if (ActiveTopLevelWidget)
 		{
-			if (NewState == ERetrieveSessionState::InGame)
+			// AddToViewport 전에 인스턴스를 미리 생성 — 자식 UserWidget의 NativeConstruct에서
+			// GetHUDViewModel()이 null이 되지 않도록 보장한다.
+			if (NewState == ERetrieveSessionState::InGame && !HUDViewModelInstance)
 			{
-				EnsureHUDViewModel();
+				HUDViewModelInstance = NewObject<UHUDViewModel>(this);
 			}
 			ActiveTopLevelWidget->AddToViewport();
 			if (NewState == ERetrieveSessionState::InGame)
 			{
+				EnsureHUDViewModel();
 				TryBindHealthToHUD();
+				TryBindElementGaugeToHUD();
 			}
 		}
 	}
@@ -584,6 +620,13 @@ void ARetrievePlayerController::EnsureHUDViewModel()
 	}
 
 	View->SetViewModel(HUDViewModelBindingName, HUDViewModelInstance);
+
+	// 자식 ViewModel도 명시적으로 등록 — WBP_HPBar처럼 클래스 직접 참조 방식과 호환
+	View->SetViewModel(TEXT("PlayerStatus"),  HUDViewModelInstance->GetPlayerStatus());
+	View->SetViewModel(TEXT("ElementGauge"),  HUDViewModelInstance->GetElementGauge());
+	View->SetViewModel(TEXT("BossStatus"),    HUDViewModelInstance->GetBossStatus());
+
+	BindBossStatusViewModelToBossBarWidget();
 }
 
 void ARetrievePlayerController::TryBindHealthToHUD()
@@ -613,6 +656,93 @@ void ARetrievePlayerController::TryBindHealthToHUD()
 	}
 }
 
+void ARetrievePlayerController::TryBindElementGaugeToHUD()
+{
+	if (!HUDViewModelInstance)
+	{
+		return;
+	}
+
+	UElementGaugeViewModel* ElementGaugeVM = HUDViewModelInstance->GetElementGauge();
+	if (!ElementGaugeVM)
+	{
+		return;
+	}
+
+	APawn* OwnerPawn = GetPawn();
+	if (!OwnerPawn)
+	{
+		return;
+	}
+
+	if (UElementGaugeComponent* GaugeComp = OwnerPawn->FindComponentByClass<UElementGaugeComponent>())
+	{
+		ElementGaugeVM->BindToGauge(GaugeComp);
+	}
+
+	// 원소 모드 태그는 ASC(PlayerState)에 있으므로 별도로 바인딩
+	if (ARetrievePlayerState* PS = GetPlayerState<ARetrievePlayerState>())
+	{
+		if (UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
+		{
+			ElementGaugeVM->BindToASC(ASC);
+		}
+	}
+}
+
+void ARetrievePlayerController::TryBindBossToHUD(URetrieveHealthComponent* BossHealth, FText BossName)
+{
+	if (!HUDViewModelInstance)
+	{
+		return;
+	}
+
+	if (UBossStatusViewModel* BossVM = HUDViewModelInstance->GetBossStatus())
+	{
+		BindBossStatusViewModelToBossBarWidget();
+		BossVM->BindToBoss(BossHealth, BossName);
+		ApplyBossStatusToBossBarWidget();
+	}
+}
+
+void ARetrievePlayerController::BindBossStatusViewModelToBossBarWidget()
+{
+	if (!ActiveTopLevelWidget || !HUDViewModelInstance)
+	{
+		return;
+	}
+
+	UWidget* BossBarWidget = FindBossBarWidget(ActiveTopLevelWidget);
+
+	if (URetrieveBossHPBarWidget* BossHPBar = Cast<URetrieveBossHPBarWidget>(BossBarWidget))
+	{
+		BossHPBar->SetBossStatusViewModel(HUDViewModelInstance->GetBossStatus());
+	}
+
+	ApplyBossStatusToBossBarWidget();
+}
+
+void ARetrievePlayerController::ApplyBossStatusToBossBarWidget()
+{
+	if (!ActiveTopLevelWidget || !HUDViewModelInstance)
+	{
+		return;
+	}
+
+	UWidget* BossBarWidget = FindBossBarWidget(ActiveTopLevelWidget);
+	if (!BossBarWidget)
+	{
+		return;
+	}
+
+	const UBossStatusViewModel* BossVM = HUDViewModelInstance->GetBossStatus();
+	const ESlateVisibility DesiredVisibility = BossVM
+		? BossVM->GetSlateVisibility()
+		: ESlateVisibility::Collapsed;
+
+	BossBarWidget->SetVisibility(DesiredVisibility);
+}
+
 void ARetrievePlayerController::ClearHUDViewModel()
 {
 	if (HUDViewModelInstance)
@@ -620,6 +750,17 @@ void ARetrievePlayerController::ClearHUDViewModel()
 		if (UPlayerStatusViewModel* PlayerStatus = HUDViewModelInstance->GetPlayerStatus())
 		{
 			PlayerStatus->UnbindFromHealth();
+		}
+
+		if (UElementGaugeViewModel* ElementGaugeVM = HUDViewModelInstance->GetElementGauge())
+		{
+			ElementGaugeVM->UnbindFromGauge();
+			ElementGaugeVM->UnbindFromASC();
+		}
+
+		if (UBossStatusViewModel* BossVM = HUDViewModelInstance->GetBossStatus())
+		{
+			BossVM->UnbindFromBoss();
 		}
 	}
 }

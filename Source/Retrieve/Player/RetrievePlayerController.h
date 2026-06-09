@@ -12,6 +12,8 @@ class ARetrievePlayerState;
 class UInventoryComponent;
 class URetrieveGamePanelWidget;
 class URetrieveMinimapWidget;
+class URetrieveHealthComponent;
+class URetrieveBossHPBarWidget;
 class UUserWidget;
 class UWeaponComponent;
 class UHUDViewModel;
@@ -67,6 +69,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Map")
 	void ToggleMinimapRotationMode();
+
+	/**
+	 * 보스 전투 시작 시 호출합니다. BossHealth가 null이면 현재 보스 체력바 바인딩을 해제합니다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
+	void TryBindBossToHUD(URetrieveHealthComponent* BossHealth, FText BossName);
 	
 	float GetSecondsSinceLastInput() const;
 
@@ -86,6 +94,13 @@ protected:
 
 	/** 둘 다 존재하면 PlayerStatus VM을 로컬 폰의 HealthComponent에 바인딩합니다. */
 	void TryBindHealthToHUD();
+
+	/** 로컬 폰의 ElementGaugeComponent를 ElementGaugeViewModel에 바인딩합니다. */
+	void TryBindElementGaugeToHUD();
+
+	/** HUD child boss bar instance에 BossStatus VM을 주입합니다. */
+	void BindBossStatusViewModelToBossBarWidget();
+	void ApplyBossStatusToBossBarWidget();
 
 	/** VM을 해제합니다. HUD 위젯 제거 시 호출됩니다. */
 	void ClearHUDViewModel();
