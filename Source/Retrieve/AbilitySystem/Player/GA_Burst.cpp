@@ -96,7 +96,7 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
     // 시전 중 이동/회전 잠금 (스킬 타입별 데이터)
     ApplyCastLockTags(MatchedRow);
 
-    Gauge->ConsumeAllSlots();
+    Gauge->ClearSlot();
 
     UPlayerBurstComponent* BurstComp = Avatar->FindComponentByClass<UPlayerBurstComponent>();
     if (!IsValid(BurstComp))

@@ -63,6 +63,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Dialogue, "State.Player.Modal.Dialogue");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Cinematic, "State.Player.Modal.Cinematic");
 
 	// ---- Action state
 	UE_DEFINE_GAMEPLAY_TAG(State_Action_HighMobility, "State.Action.HighMobility");
@@ -251,6 +253,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Command_Recall, "Channel.Lumen.Command.Recall");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Mode_Changed, "Channel.Lumen.Mode.Changed");
 	
+	// ---- Message channels: Dialogue / Cinematic
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
+	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxHealth, "Data.Init.MaxHealth");
@@ -266,6 +272,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Water_Active, "GameplayCue.HeavyAttack.Water.Active");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Wind, "GameplayCue.HeavyAttack.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_NoSlot, "GameplayCue.HeavyAttack.NoSlot");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Burst, "GameplayCue.Sigil.Burst");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Fire, "GameplayCue.Sigil.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Wind, "GameplayCue.Sigil.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Water, "GameplayCue.Sigil.Water");
 
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");
@@ -292,6 +302,15 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_QueenDefeated, "Quest.Step.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_GameComplete, "Quest.Step.GameComplete");
 	
+	// ---- Dialogue
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_Imprint, "Topic.Lumen.Imprint");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_About, "Topic.Lumen.About");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FollowWait, "Topic.Lumen.FollowWait");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FireSigil, "Topic.Lumen.FireSigil");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WindSigil, "Topic.Lumen.WindSigil");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WaterSigil, "Topic.Lumen.WaterSigil");
+
 	// --- Enemy Types
 	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Normal, "Enemy.Type.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Epic, "Enemy.Type.Epic");

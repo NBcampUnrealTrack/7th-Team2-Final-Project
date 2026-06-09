@@ -65,6 +65,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_ForcedMove);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Sprinting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Crouching);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Modal_Dialogue);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Modal_Cinematic);
 
 	// ---- Action state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_HighMobility);
@@ -243,15 +245,19 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_Buff_Apply);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_Buff_Remove);
 
-	// ---- Quest channels
+	// ---- Message channels: Quest
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Quest_GuardianDefeated);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Quest_StepChanged);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Quest_SealUnlocked);
 
-	// ---- Lumen command channels
+	// ---- Message channels: Lumen command
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Lumen_Command_ToggleWait);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Lumen_Command_Recall);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Lumen_Mode_Changed);
+
+	// ---- Message channels: Dialogue / Cinematic
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Dialogue_LineRequested);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_Changed);
 
 	// ---- Data
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Mul);
@@ -262,13 +268,17 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_IncomingDamageMultiplier);
 	// 무기 장착 시 AttackPower 가산에 사용하는 SetByCaller 태그
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_AttackPower);
-	
+
 	// ---- Gameplay cues: Heavy attack
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Fire);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Water);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Water_Active);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Wind);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_NoSlot);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sigil_Burst);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sigil_Fire);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sigil_Wind);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sigil_Water);
 
 	// ---- UI VFX
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Panel_Open);
@@ -281,7 +291,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Button_Release);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Tab_Switch);
 
-	// --- Quest steps
+	// ---- Quest steps
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_Awakening);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_SigilCompleted);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_FireGuardianDefeated);
@@ -294,7 +304,15 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_SealOpened);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_QueenDefeated);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_GameComplete);
-	
+	// ---- Dialogue
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_Lumen);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_Imprint);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_About);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_FollowWait);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_FireSigil);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WindSigil);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WaterSigil);
+
 	// --- Enemy Types
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Enemy_Type_Normal);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Enemy_Type_Epic);

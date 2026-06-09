@@ -5,7 +5,6 @@
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Character/RetrieveCombatCharacter.h"
 #include "Components/AttackFeedbackComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveHealthComponent.h"
@@ -20,6 +19,7 @@
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
+#include "UI/ViewModels/ConversationViewModel.h"
 #include "UI/HUD/RetrieveElementGaugeWidget.h"
 #include "UI/HUD/RetrieveBossHPBarWidget.h"
 #include "UI/ViewModels/BossStatusViewModel.h"
@@ -60,7 +60,7 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 {
 	bShowMouseCursor = false;
 	CheatClass = URetrieveCheatManager::StaticClass();
-	AttackFeedbackComponent  = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
+	AttackFeedbackComponent = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -85,7 +85,6 @@ void ARetrievePlayerController::BeginPlay()
 	{
 		return;
 	}
-
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -134,6 +133,7 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 		ActiveToastManager = nullptr;
 	}
 
+	CloseConversation();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -154,7 +154,7 @@ void ARetrievePlayerController::PlayerTick(float DeltaTime)
 			}
 		}
 	}
-	
+
 	if (const APawn* ControlledPawn = GetPawn())
 	{
 		if (ControlledPawn->GetVelocity().SizeSquared2D() > 25.f)
@@ -301,6 +301,42 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 			break;
 		}
 	}
+}
+
+void ARetrievePlayerController::SetInputModeUIOnlyDuringConversation()
+{
+	FInputModeUIOnly Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(Mode);
+	bShowMouseCursor = true;
+}
+
+void ARetrievePlayerController::EnsureCinematicCloseListener()
+{
+	if (CinematicCloseHandle.IsValid())
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	CinematicCloseHandle = UGameplayMessageSubsystem::Get(World)
+		.RegisterListener<FRetrieveCinematicStatePayload>(
+			RetrieveGameplayTags::Channel_Cinematic_Changed,
+			[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
+		(FGameplayTag /*Channel*/, const FRetrieveCinematicStatePayload& Message)
+			{
+				if (Message.bActive)
+				{
+					if (ARetrievePlayerController* PC = WeakThis.Get())
+					{
+						PC->CloseConversation();
+					}
+				}
+			});
 }
 
 TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieveSessionState State) const
@@ -589,12 +625,101 @@ void ARetrievePlayerController::Server_RequestRecallLumen_Implementation()
 	{
 		return;
 	}
-	
+
 	FRetrieveLumenCommandPayload Message;
 	Message.CommandTag = RetrieveGameplayTags::Channel_Lumen_Command_Recall;
 	Message.Instigator = GetPawn();
 	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Lumen_Command_Recall, Message);
 }
+
+void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* NPC)
+{
+	UWorld* World = GetWorld();
+	ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	if (GS && GS->GetCinematicState().IsActive())
+	{
+		return;
+	}
+
+	if (!ConversationWidgetClass)
+	{
+		return;
+	}
+
+	if (!ConversationInstance)
+	{
+		ConversationInstance = CreateWidget<UUserWidget>(this, ConversationWidgetClass);
+	}
+
+	if (!ConversationInstance)
+	{
+		return;
+	}
+
+	if (ConversationVM)
+	{
+		ConversationVM->Deinitialize();
+	}
+	ConversationVM = NewObject<UConversationViewModel>(this);
+	ConversationVM->Initialize(World, this);
+	ConversationVM->BuildOpeningTopicsFor(NPC);
+	
+	if (UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr)
+	{
+		if (UMVVMView* View = MVVM->GetViewFromUserWidget(ConversationInstance))
+		{
+			View->SetViewModel(ConversationViewModelBindingName, ConversationVM);
+		}
+	}
+	
+	ConversationInstance->AddToViewport(20);
+	SetInputModeUIOnlyDuringConversation();
+	EnsureCinematicCloseListener();
+}
+
+void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGameplayTag TopicId)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			GS->AdvanceDialogue(TopicId, GetPawn());
+		}
+	}
+}
+
+void ARetrievePlayerController::Server_RequestLumenToggleWait_Implementation()
+{
+}
+
+void ARetrievePlayerController::CloseConversation()
+{
+	if (ConversationInstance)
+	{
+		ConversationInstance->RemoveFromParent();
+		ConversationInstance = nullptr;
+
+		if (ConversationVM)
+		{
+			ConversationVM->Deinitialize();
+			ConversationVM = nullptr;
+		}
+
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		bShowMouseCursor = false;
+	}
+
+	if (CinematicCloseHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicCloseHandle);
+		}
+		CinematicCloseHandle = FGameplayMessageListenerHandle();
+	}
+}
+
 
 void ARetrievePlayerController::EnsureHUDViewModel()
 {
