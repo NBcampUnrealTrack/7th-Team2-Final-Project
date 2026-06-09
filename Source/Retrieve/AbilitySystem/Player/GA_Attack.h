@@ -34,6 +34,11 @@ private:
 	void ApplyStepDamage();
 	bool ResolveAttackComboVariant();
 
+	// 워프 타겟 해석: 락온 우선 → 없으면 전방 콘 검색(URetrieveTargetingLibrary)
+	AActor* ResolveAttackWarpTarget() const;
+	// 현재 타겟 기준 WarpTarget 등록. 타겟 없으면 RemoveWarpTarget(루트모션 유지)
+	void RegisterAttackWarpTarget();
+
 	FGameplayTag ResolveCurrentElementTag() const;
 	
 	void BuildTracePoints(TArray<FVector>& OutPoints) const;
@@ -55,6 +60,25 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack")
 	bool bDebugDrawTrace = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp", meta = (ClampMin = "0.0"))
+	float WarpSearchRange = 350.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp", meta = (ClampMin = "0.0", ClampMax = "180.0"))
+	float WarpSearchHalfAngle = 60.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float WarpRangeWeightRate = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp", meta = (ClampMin = "0.0"))
+	float WarpStandoffOffset = 20.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp", meta = (ClampMin = "0.0"))
+	float WarpMaxVerticalDelta = 120.f;
+
+	// 몽타주 Motion Warping Notify의 "Warp Target Name"과 반드시 동일해야 함
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Attack|Warp")
+	FName AttackWarpTargetName = TEXT("AttackTarget");
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;

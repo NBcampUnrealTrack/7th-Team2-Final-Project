@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "GenericTeamAgentInterface.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "EnemyAIController.generated.h"
 
 class UStateTreeAIComponent;
@@ -57,5 +58,5 @@ protected:
 	
 	// Team
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|AI|Team")
-	uint8 EnemyTeamId = 2;
+	ERetrieveTeam Team = ERetrieveTeam::Enemy;
 };

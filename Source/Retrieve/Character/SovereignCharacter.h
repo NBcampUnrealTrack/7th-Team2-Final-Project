@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
 #include "GenericTeamAgentInterface.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "SovereignCharacter.generated.h"
 
 class URetrievePawnCosmeticComponent;
@@ -17,6 +18,7 @@ class UElementGaugeComponent;
 class UPlayerBurstComponent;
 class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
+class UMotionWarpingComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
@@ -28,7 +30,7 @@ public:
 
 	virtual FGenericTeamId GetGenericTeamId() const override
 	{
-		return FGenericTeamId(PlayerTeamId);
+		return FGenericTeamId(static_cast<uint8>(Team));
 	}
 protected:
 	virtual void InitializeAbilitySystem() override;
@@ -61,6 +63,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementUnlockComponent> ElementUnlockComponent;
 
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|MotionWarping")
+	TObjectPtr<UMotionWarpingComponent> MotionWarpingComponent;
+	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveBuffUIBroadcastComponent> BuffUIBroadcastComponent;
 
@@ -75,5 +80,5 @@ protected:
 	TObjectPtr<UCameraComponent> ThirdPersonCamera;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
-	uint8 PlayerTeamId = 1;
+	ERetrieveTeam Team = ERetrieveTeam::Player;
 };

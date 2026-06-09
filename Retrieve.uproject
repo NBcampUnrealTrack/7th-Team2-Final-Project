@@ -18,7 +18,8 @@
                 "EnhancedInput",
                 "GameplayMessageRuntime",
                 "StateTreeModule",
-                "GameplayStateTreeModule"
+                "GameplayStateTreeModule",
+                "MotionWarping"
             ]
         }
     ],
@@ -79,6 +80,10 @@
         {
             "Name": "SidekickCharacterTool",
             "Enabled": false
+        },
+        {
+            "Name": "MotionWarping",
+            "Enabled": true
         }
     ]
 }

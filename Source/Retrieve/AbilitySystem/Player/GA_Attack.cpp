@@ -5,13 +5,18 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimMontage.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
+#include "MotionWarpingComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
+#include "Combat/RetrieveTargetingLibrary.h"
+#include "Components/CombatReactionComponent.h"
 #include "Components/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -165,6 +170,9 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
 
+	// 이 타 시작 시점에 워프 타겟 1회 확정 (락온 우선 -> 전방 콘). 타겟 없으면 내부에서 RemoveWarpTarget.
+	RegisterAttackWarpTarget();
+
 	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true);
@@ -181,6 +189,75 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	MontageTask->ReadyForActivation();
 
 	StartListeningComboInput();
+}
+
+AActor* UGA_Attack::ResolveAttackWarpTarget() const
+{
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	if (!IsValid(AvatarActor))
+	{
+		return nullptr;
+	}
+
+	// 1) 락온 타겟 우선
+	if (const UCombatReactionComponent* CombatReaction = AvatarActor->FindComponentByClass<UCombatReactionComponent>())
+	{
+		if (AActor* LockOnTarget = CombatReaction->GetLockOnTarget())
+		{
+			return LockOnTarget;
+		}
+	}
+
+	// 2) 비락온 -> 컨트롤 회전 기준 전방 콘 검색
+	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
+	if (!IsValid(SourceChar))
+	{
+		return nullptr;
+	}
+
+	// 소프트 락온: 플레이어가 카메라로 겨눈 방향 기준으로 콘 검색.
+	const FVector Aim = SourceChar->GetControlRotation().Vector();
+	return URetrieveTargetingLibrary::FindBestTarget(
+		SourceChar, WarpSearchRange, WarpSearchHalfAngle, Aim, WarpMaxVerticalDelta, WarpRangeWeightRate);
+}
+
+void UGA_Attack::RegisterAttackWarpTarget()
+{
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	UMotionWarpingComponent* MotionWarping = IsValid(AvatarActor)
+		? AvatarActor->FindComponentByClass<UMotionWarpingComponent>()
+		: nullptr;
+	if (!IsValid(MotionWarping))
+	{
+		return;
+	}
+
+	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
+	AActor* Target = ResolveAttackWarpTarget();
+	if (!IsValid(Target) || !IsValid(SourceChar))
+	{
+		MotionWarping->RemoveWarpTarget(AttackWarpTargetName);   // 타겟 없음 -> 워프 제거, 루트모션 유지
+		return;
+	}
+
+	// 이 콤보 섹션의 루트모션 전진량을 도약 상한으로 사용 (수동값 없이 애님이 곧 거리).
+	float DashDistance = 0.f;
+	if (IsValid(CachedAttackMontage) && CachedComboSteps.IsValidIndex(CurrentComboIndex))
+	{
+		const int32 SectionIdx = CachedAttackMontage->GetSectionIndex(CachedComboSteps[CurrentComboIndex].SectionName);
+		if (SectionIdx != INDEX_NONE)
+		{
+			float SectionStart = 0.f;
+			float SectionEnd = 0.f;
+			CachedAttackMontage->GetSectionStartAndEndTime(SectionIdx, SectionStart, SectionEnd);
+			const FTransform SectionRootMotion = CachedAttackMontage->ExtractRootMotionFromTrackRange(SectionStart, SectionEnd);
+			DashDistance = SectionRootMotion.GetTranslation().Size2D();
+		}
+	}
+
+	const FTransform WarpTransform =
+		URetrieveTargetingLibrary::BuildWarpTransform(SourceChar, Target, WarpStandoffOffset, DashDistance);
+	MotionWarping->AddOrUpdateWarpTargetFromTransform(AttackWarpTargetName, WarpTransform);
 }
 
 void UGA_Attack::StartListeningComboInput()

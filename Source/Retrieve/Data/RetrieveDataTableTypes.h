@@ -21,6 +21,16 @@ class UTexture2D;
 class UNiagaraSystem;
 class USoundBase;
 
+// FGenericTeamId(uint8)에 매핑되는 게임 정의 팀 식별자.
+// 엔진은 NoTeam(255)만 예약하고 팀 의미는 게임이 정의하도록 둠 → 여기서 정의한다.
+UENUM(BlueprintType)
+enum class ERetrieveTeam : uint8
+{
+	Neutral = 0,
+	Player  = 1,
+	Enemy   = 2,
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
 {
