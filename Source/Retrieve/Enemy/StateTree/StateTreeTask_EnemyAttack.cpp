@@ -3,6 +3,7 @@
 #include "StateTreeLinker.h"
 #include "StateTreeExecutionContext.h"
 #include "Components/EnemyCombatComponent.h"
+#include "Enemy/EncirclementSubsystem.h"
 
 bool FStateTreeTask_EnemyAttack::Link(FStateTreeLinker& Linker)
 {
@@ -15,6 +16,15 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime = 0.f;
+	InstanceData.TimeSinceAttackRequested = 0.f;
+
+	InstanceData.bStartAttack = false;
+	InstanceData.bObservedPatternActive = false;
+
+	if (!IsValid(InstanceData.TargetActor))
+	{
+		return EStateTreeRunStatus::Failed;
+	}
 
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
@@ -22,18 +32,23 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 		return EStateTreeRunStatus::Failed;
 	}
 
-	UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>();
-	if (!Combat)
+	InstanceData.CachedCombatComponent = Pawn->FindComponentByClass<UEnemyCombatComponent>();
+	if (!InstanceData.CachedCombatComponent.IsValid())
 	{
-		UE_LOG(LogStateTree, Error, TEXT("EnemyCombat Component is missing"));
+		return EStateTreeRunStatus::Failed;
+	}
+
+	if (!InstanceData.CachedCombatComponent->IsAttackable())
+	{
 		return EStateTreeRunStatus::Failed;
 	}
 	
-	if (!Combat->RequestBasicAttack(InstanceData.TargetActor))
+	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
+	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetActor, Pawn))
 	{
-		UE_LOG(LogStateTree, Error, TEXT("RequestBasicAttack failed"));
 		return EStateTreeRunStatus::Failed;
 	}
+	
 	return EStateTreeRunStatus::Running;
 }
 
@@ -42,24 +57,63 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime += DeltaTime;
+	if (InstanceData.bStartAttack)
+	{
+		InstanceData.TimeSinceAttackRequested += DeltaTime;
+	}
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnemyAttackTask Failed: Pawn missing"));
 		return EStateTreeRunStatus::Failed;
 	}
 	
-	UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>();
-	if (!Combat || !Combat->IsPatternActive())
+	if (!InstanceData.bStartAttack && InstanceData.DistanceToTarget <= InstanceData.AttackRange)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnemyAttackTask Succeeded: PatternInactive"));
-		return EStateTreeRunStatus::Succeeded;
+		if (!InstanceData.CachedCombatComponent.IsValid())
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
+		if (!InstanceData.CachedCombatComponent->IsAttackable())
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
+		InstanceData.bStartAttack = true;
+		InstanceData.bObservedPatternActive = false;
+		InstanceData.TimeSinceAttackRequested = 0.f;
+		if (!InstanceData.CachedCombatComponent->RequestBasicAttack(InstanceData.TargetActor))
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
+		return EStateTreeRunStatus::Running;
+	}
+	else if (InstanceData.bStartAttack)
+	{
+		if (!InstanceData.CachedCombatComponent.IsValid())
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
+		const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
+		if (bPatternActive)
+		{
+			InstanceData.bObservedPatternActive = true;
+		}
+		else if (InstanceData.bObservedPatternActive)
+		{
+			return EStateTreeRunStatus::Succeeded;
+		}
+		else if (InstanceData.TimeSinceAttackRequested >= InstanceData.AttackStartGraceTime)
+		{
+			return EStateTreeRunStatus::Failed;
+		}
 	}
 
 	if (InstanceData.ElapsedTime >= InstanceData.MaxAttackDuration)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnemyAttackTask Succeeded: MaxAttackDuration"));
 		return EStateTreeRunStatus::Failed;
 	}
 
@@ -71,6 +125,10 @@ void FStateTreeTask_EnemyAttack::ExitState(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime = 0.f;
+	InstanceData.TimeSinceAttackRequested = 0.f;
+	
+	InstanceData.bStartAttack = false;
+	InstanceData.bObservedPatternActive = false;
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
@@ -81,5 +139,10 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	if (UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>())
 	{
 		Combat->StopCurrentPattern();
+	}
+	
+	if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+	{
+		Enc->ReleaseAttackToken(InstanceData.TargetActor, Pawn);
 	}
 }

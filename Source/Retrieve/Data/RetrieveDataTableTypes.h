@@ -134,6 +134,32 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyCooldown = 10.f;
 
+	// 범위 지정
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Attack")
+	float AttackableRange = 200.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	float StrafeOffRange = 360.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	float StrafeMinNoise = -100.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	float StrafeMaxNoise = 10.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Moster|Move")
+	float ChaseRange = 1500.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Moster|Move")
+	float RechasableRange = 100.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Moster|Move")
+	float PatrolRange = 1200.f;
+	
+	// 순찰 여부
+	UPROPERTY(EditAnywhere, Category = "Moster|Move")
+	bool bPatrolable = false;
+	
 	/** DT_EnemyDrop의 Row 키. 비어있으면 드랍 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop")
 	FName DropRow;

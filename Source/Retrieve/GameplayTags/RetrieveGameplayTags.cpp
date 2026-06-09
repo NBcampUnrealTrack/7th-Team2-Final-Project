@@ -291,4 +291,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SealOpened, "Quest.Step.SealOpened");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_QueenDefeated, "Quest.Step.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_GameComplete, "Quest.Step.GameComplete");
+	
+	// --- Enemy Types
+	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Normal, "Enemy.Type.Normal");
+	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Epic, "Enemy.Type.Epic");
+	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Boss, "Enemy.Type.Boss");
 }

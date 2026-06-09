@@ -132,13 +132,6 @@ void UEnemyCombatComponent::StopCurrentPattern()
 		return;
 	}
 
-	
-	
-	
-	
-	
-	
-	
 	FGameplayTagContainer TagsToCancel(RetrieveGameplayTags::Ability_Enemy_Attack);
 	TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 	ASC->CancelAbilities(&TagsToCancel);
@@ -155,7 +148,41 @@ void UEnemyCombatComponent::StopCurrentPattern()
 bool UEnemyCombatComponent::IsPatternActive() const
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
-	return ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack);
+	if (!ASC)
+	{
+		return false;
+	}
+	// 과한 검증 코드로 생각돼 주석처리 후 간단화 만일 이후에 과련 이슈가 있다면 해제
+	// if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack)
+	// 	|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_SpecialAttack))
+	// {
+	// 	return true;
+	// }
+	//
+	// auto HasActiveAbilityWithTag = [ASC](const FGameplayTag& AbilityTag)
+	// {
+	// 	FGameplayTagContainer AbilityTags;
+	// 	AbilityTags.AddTag(AbilityTag);
+	//
+	// 	TArray<FGameplayAbilitySpec*> MatchingSpecs;
+	// 	ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(
+	// 		AbilityTags, MatchingSpecs, false);
+	//
+	// 	for (const FGameplayAbilitySpec* Spec : MatchingSpecs)
+	// 	{
+	// 		if (Spec && Spec->IsActive())
+	// 		{
+	// 			return true;
+	// 		}
+	// 	}
+	//
+	// 	return false;
+	// };
+	//
+	// return HasActiveAbilityWithTag(RetrieveGameplayTags::Ability_Enemy_Attack)
+	// 	|| HasActiveAbilityWithTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
+	return ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack)
+		|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_SpecialAttack);
 }
 
 bool UEnemyCombatComponent::IsAttackable() const
