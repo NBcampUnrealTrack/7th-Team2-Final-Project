@@ -7,6 +7,7 @@
 
 class AAIController;
 class APawn;
+class UEnemyCombatComponent;
 
 USTRUCT(BlueprintType)
 struct FRetrieveEnemyTargetEvalInstanceData
@@ -21,6 +22,15 @@ struct FRetrieveEnemyTargetEvalInstanceData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float AttackableRange = 200.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float StrafeOffRange = 450.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float StrafeMinNoise = -100.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float StrafeMaxNoise = 0.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float DistanceToTarget = 0.f;
@@ -39,11 +49,17 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	bool bWasOutOfChaseRange = false;
 	
-	UPROPERTY(EditAnywhere, Category = "Input")
+	UPROPERTY(EditAnywhere, Category = "Output")
 	float ChaseRange = 1500.f;
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
+	float RechasableRange = 100.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bPatrolable = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
+	float PatrolRange = 1200.0f;
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bAttackable = false;
@@ -51,9 +67,14 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	FVector ChaseLocation = FVector::ZeroVector;
 	
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bHasToken = false; 
+	
 	float AccumulatedTime = 0.f;
 	float TimeSinceLastSeen = 0.f;
-	int32 SlotIndex = INDEX_NONE;
+	
+	UPROPERTY()
+	TWeakObjectPtr<UEnemyCombatComponent> CachedCombatComponent = nullptr;
 };
 
 USTRUCT(BlueprintType, meta = (DisplayName = "Enemy Target Evaluator", Category = "Retrieve|AI"))

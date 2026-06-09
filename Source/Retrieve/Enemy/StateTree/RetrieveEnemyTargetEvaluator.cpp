@@ -14,6 +14,7 @@
 #include "Components/RetrieveHealthComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
 #include "Components/EnemyCombatComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
 
 namespace
 {
@@ -43,18 +44,43 @@ bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
 void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Context) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	
+	
 	InstanceData.TargetPlayer = nullptr;
 	InstanceData.DistanceToTarget = 0.f;
 	InstanceData.bTargetLost = true;
 	InstanceData.TimeSinceLastSeen = 0.f;
 	// 첫 Tick에서 즉시 쿼리하도록 AccumulatedTime을 임계값으로 초기화
+	
 	InstanceData.AccumulatedTime = TickInterval;
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
-	InstanceData.SpawnedLocation = Pawn->GetActorLocation();
+	if (Pawn)
+	{
+		InstanceData.SpawnedLocation = Pawn->GetActorLocation();
+		
+		if (UEnemyCombatComponent* CombatComp = Pawn->GetComponentByClass<UEnemyCombatComponent>())
+		{
+			InstanceData.CachedCombatComponent = CombatComp;
+		}
+	}
 	
 	InstanceData.bOutOfChaseRange = false;
-	InstanceData.SlotIndex = INDEX_NONE;
+	
+	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
+	{
+		if (const FMonsterDataRow* Row = Enemy->GetMonsterDataRow())
+		{
+			InstanceData.AttackableRange = Row->AttackableRange;
+			InstanceData.StrafeOffRange = Row->StrafeOffRange;
+			InstanceData.StrafeMinNoise = Row->StrafeMinNoise;
+			InstanceData.StrafeMaxNoise = Row->StrafeMaxNoise;
+			InstanceData.ChaseRange = Row->ChaseRange;
+			InstanceData.RechasableRange = Row->RechasableRange;
+			InstanceData.bPatrolable = Row->bPatrolable;
+			InstanceData.PatrolRange = Row->PatrolRange;
+		}
+	}
 }
 
 void FRetrieveEnemyTargetEvaluator::TreeStop(FStateTreeExecutionContext& Context) const
@@ -64,13 +90,12 @@ void FRetrieveEnemyTargetEvaluator::TreeStop(FStateTreeExecutionContext& Context
 	
 	if (Pawn && InstanceData.TargetPlayer)
 	{
-		if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+		if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 		{
-			EncSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+			EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+			EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 		}
 	}
-	
-	InstanceData.SlotIndex = INDEX_NONE;
 }
 
 void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
@@ -83,9 +108,10 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	{
 		if (IsDeadOrDyingActor(InstanceData.TargetPlayer))
 		{
-			if (UEncirclementSubsystem* EncirComp = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 			{
-				EncirComp->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 			}
 
 			InstanceData.TargetPlayer = nullptr;
@@ -94,36 +120,48 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			InstanceData.DistanceToTarget = 0.f;
 			InstanceData.TimeSinceLastSeen = TargetLostDelay;
 			InstanceData.bTargetLost = true;
-			InstanceData.SlotIndex = INDEX_NONE;
-			UE_LOG(LogStateTree, Error, TEXT("[%s] TargetPlayer Dead."), *Pawn->GetName());
 		}
 		else
 		{
-			const FVector PawnLoc   = Pawn->GetActorLocation();
-			InstanceData.TargetLocation   = InstanceData.TargetPlayer->GetActorLocation();
-			InstanceData.DistanceToTarget = InstanceData.DistanceToTarget = FVector2D::Distance(
+			const FVector PawnLoc = Pawn->GetActorLocation();
+			InstanceData.TargetLocation = InstanceData.TargetPlayer->GetActorLocation();
+			InstanceData.DistanceToTarget = FVector2D::Distance(
 				FVector2D(PawnLoc.X, PawnLoc.Y),
 				FVector2D(InstanceData.TargetLocation.X, InstanceData.TargetLocation.Y)
-)			;
+				);
 		
-			UE_LOG(LogStateTree, Warning, TEXT("[%s] DistanceToTarget is %f. ActorLocation : %s, TargetLocation : %s")
-				, *Pawn->GetName(), InstanceData.DistanceToTarget
-				, *PawnLoc.ToString(), *InstanceData.TargetLocation.ToString());
-			
 			if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 			{
-				if (InstanceData.SlotIndex == INDEX_NONE)   // ★ 슬롯 없으면 즉시 요청 (알림 등 모든 경로 커버)
+				int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
+				if (SlotIndex == INDEX_NONE)
 				{
-					InstanceData.SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
+					SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
 				}
-			
-				InstanceData.ChaseLocation = (InstanceData.SlotIndex != INDEX_NONE)
-					? EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, InstanceData.SlotIndex)
-					: InstanceData.TargetLocation;
 				
-				UE_LOG(LogStateTree, Warning, TEXT("[%s] ChaseLocation is %s.")
-				, *Pawn->GetName()
-				, *InstanceData.ChaseLocation.ToString());
+				if (SlotIndex != INDEX_NONE)
+				{
+					const bool bHadToken = InstanceData.bHasToken;
+					const bool bHasTokenForLocation =
+						EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+					InstanceData.bHasToken = bHasTokenForLocation;
+					const bool bUseOuterRadius = !bHasTokenForLocation;
+					
+					FVector RawTargetLocation = EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, SlotIndex,
+							bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise);
+					
+					if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation)
+					{
+						InstanceData.ChaseLocation = RawTargetLocation;
+					}
+					else
+					{
+						InstanceData.ChaseLocation = FMath::VInterpTo(InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
+					}
+				}
+				else
+				{
+					InstanceData.ChaseLocation = InstanceData.TargetLocation;
+				}
 			}
 			else
 			{
@@ -152,38 +190,31 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	AAIController* AIController = Context.GetExternalDataPtr(AIControllerHandle);
 	if (!AIController || !Pawn)
 	{
-		UE_LOG(LogStateTree, Error, TEXT("Pawn  or AIController is Missing."));
 		return;
 	}
 
 	UAIPerceptionComponent* PerceptionComp = AIController->GetAIPerceptionComponent();
 	if (!PerceptionComp)
 	{
-		UE_LOG(LogStateTree, Error, TEXT("PerceptionComp is Missing."));
 		return;
 	}
 	
 	const float DistanceFromSpawn =
 	FVector::Dist(InstanceData.SpawnedLocation, Pawn->GetActorLocation());
-
-	// InstanceData.bOutOfChaseRange = DistanceFromSpawn >= InstanceData.ChaseRange;
-	UE_LOG(LogTemp, Warning, TEXT("[%s] DistFromSpawn=%.0f ChaseRange=%.0f bOutOfChaseRange=%d"),
-		*Pawn->GetName(), DistanceFromSpawn, InstanceData.ChaseRange, InstanceData.bOutOfChaseRange ? 1 : 0);
 	
 	const bool bNewOutOfChaseRange = DistanceFromSpawn >= InstanceData.ChaseRange;
 
 	if (InstanceData.bWasOutOfChaseRange && !bNewOutOfChaseRange)
 	{
 		// 원점 복귀 완료 → 타깃 즉시 초기화
-		if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+		if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 		{
-			Enc->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+			EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+			EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 		}
 		InstanceData.TargetPlayer   = nullptr;
 		InstanceData.TimeSinceLastSeen = TargetLostDelay;
 		InstanceData.bTargetLost    = true;
-		InstanceData.SlotIndex      = INDEX_NONE;
-		UE_LOG(LogStateTree, Warning, TEXT("[%s] Reset for returning."), *Pawn->GetName());
 	}
 
 	InstanceData.bWasOutOfChaseRange = bNewOutOfChaseRange;
@@ -250,18 +281,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			NearestTarget = Actor;
 		}
 	}
-	
-	/*if (NearestTarget)
-	{
-		UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(Pawn->GetWorld());
-		FNavLocation ProjectedLoc;
-		const bool bOnNavMesh = NavSys && NavSys->ProjectPointToNavigation(
-			NearestTarget->GetActorLocation(), ProjectedLoc, FVector(100.f, 100.f, 250.f));
-		if (!bOnNavMesh)
-		{
-			NearestTarget = nullptr;   // 보여도 NavMesh 밖이면 "안 보이는 것"으로 처리
-		}
-	}	*/
 		
 	if (NearestTarget)
 	{
@@ -269,13 +288,13 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			const bool bHadTarget = InstanceData.TargetPlayer != nullptr;
 			
-			if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 			{
 				if (InstanceData.TargetPlayer)
 				{
-					Enc->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+					EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+					EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 				}
-				InstanceData.SlotIndex = NearestTarget ? Enc->RequestSlot(NearestTarget, Pawn) : INDEX_NONE;
 			}
 			
 			InstanceData.TargetPlayer = NearestTarget;
@@ -304,11 +323,11 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		InstanceData.TimeSinceLastSeen += TickInterval;
 		if (InstanceData.TimeSinceLastSeen >= TargetLostDelay)
 		{
-			if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 			{
-				Enc->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 			}
-			InstanceData.SlotIndex = INDEX_NONE;
 			
 			InstanceData.TargetPlayer = nullptr;
 			InstanceData.DistanceToTarget = 0.f;
@@ -332,13 +351,32 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		}
 	}
 	
-	if (UEnemyCombatComponent* CombatComp = Pawn->GetComponentByClass<UEnemyCombatComponent>())
+	if (InstanceData.CachedCombatComponent.IsValid())
 	{
-		InstanceData.bAttackable = IsValid(InstanceData.TargetPlayer) && CombatComp->IsAttackable()
-			&& InstanceData.AttackableRange > InstanceData.DistanceToTarget;
+		if (UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+		{
+			const bool bHasValidTarget = IsValid(InstanceData.TargetPlayer);
+
+			InstanceData.bHasToken = bHasValidTarget
+				&& EncircleSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+
+			const bool bCanRequestToken = bHasValidTarget
+				&& EncircleSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn);
+
+			InstanceData.bAttackable =
+				bCanRequestToken
+				&& InstanceData.DistanceToTarget <= InstanceData.StrafeOffRange
+				&& InstanceData.CachedCombatComponent->IsAttackable();
+		}
+		else
+		{
+			InstanceData.bHasToken   = false;
+			InstanceData.bAttackable = false;
+		}
 	}
 	else
 	{
+		InstanceData.bHasToken   = false;
 		InstanceData.bAttackable = false;
 	}
 }

@@ -94,6 +94,14 @@ void ARetrieveEnemyCharacter::SetRespawnable(bool NewRespawnable)
 	bRespawnable = NewRespawnable;
 }
 
+const FMonsterDataRow* ARetrieveEnemyCharacter::GetMonsterDataRow() const
+{
+	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(
+	   MonsterDataRowName, TEXT("ARetrieveEnemyCharacter::InitializeComponents"));
+	
+	return Row;
+}
+
 void ARetrieveEnemyCharacter::BeginPlay()
 {
 	Super::BeginPlay();

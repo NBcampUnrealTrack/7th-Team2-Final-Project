@@ -13,6 +13,7 @@ class UDropComponent;
 class USphereComponent;
 
 struct FEnemyPlayerSpottedPayload;
+struct FMonsterDataRow;
 struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathEnded, AActor*, DeadCharacter);
@@ -57,6 +58,8 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
 	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
+	
+	const FMonsterDataRow* GetMonsterDataRow() const;
 	
 protected:
 	virtual void BeginPlay() override;
