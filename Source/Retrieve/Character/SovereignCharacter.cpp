@@ -1,4 +1,4 @@
-#include "Character/SovereignCharacter.h"
+﻿#include "Character/SovereignCharacter.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
@@ -20,6 +20,7 @@
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Input/RetrieveInputComponent.h"
 #include "Player/RetrievePlayerState.h"
+#include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
 
 ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)   // 부모로 ObjectInitializer 전달 → SetDefaultSubobjectClass<URetrieveCharacterMovementComponent> 작동
@@ -58,6 +59,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
+	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
@@ -108,6 +110,11 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	if (ElementUnlockComponent)
 	{
 		ElementUnlockComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	if (BuffUIBroadcastComponent)
+	{
+		BuffUIBroadcastComponent->RefreshAbilitySystemBinding();
 	}
 }
 

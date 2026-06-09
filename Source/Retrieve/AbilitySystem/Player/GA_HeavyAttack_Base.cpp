@@ -48,9 +48,7 @@ void UGA_HeavyAttack_Base::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		return;
 	}
 	
-	const FGameplayTag ConsumedElement = Gauge->ConsumeOldestSlot();
-
-	if (!ConsumedElement.IsValid() || ConsumedElement == RetrieveGameplayTags::Element_None)
+	if (!Gauge->HasChargedSlot())
 	{
 		ExecuteOwnerCue(RetrieveGameplayTags::GameplayCue_HeavyAttack_NoSlot);
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -59,6 +57,14 @@ void UGA_HeavyAttack_Base::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	const FGameplayTag ConsumedElement = Gauge->ConsumeOldestSlot();
+	if (!ConsumedElement.IsValid() || ConsumedElement == RetrieveGameplayTags::Element_None)
+	{
+		ExecuteOwnerCue(RetrieveGameplayTags::GameplayCue_HeavyAttack_NoSlot);
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}

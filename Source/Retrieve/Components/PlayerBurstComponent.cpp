@@ -1,4 +1,4 @@
-#include "Components/PlayerBurstComponent.h"
+﻿#include "Components/PlayerBurstComponent.h"
 
 #include "AbilitySystem/Player/BurstProjectile.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -366,6 +366,70 @@ void UPlayerBurstComponent::TryElementReaction(UAbilitySystemComponent* SourceAS
 			*GetNameSafe(IncomingStatusGE), *Row->RemoveStatusTag.ToString());
 
 		break; // 한 상태당 한 반응
+	}
+
+	for (const TSubclassOf<UGameplayEffect>& StatusGE : Hit.StatusEffects)
+	{
+		if (!IsValid(StatusGE))
+		{
+			continue;
+		}
+
+		TryElementReaction(SourceASC, TargetASC, StatusGE);
+
+		FGameplayEffectSpecHandle StatusSpec = SourceASC->MakeOutgoingSpec(StatusGE, 1.f, Context);
+		if (StatusSpec.IsValid() && StatusSpec.Data.IsValid())
+		{
+			SourceASC->ApplyGameplayEffectSpecToTarget(*StatusSpec.Data.Get(), TargetASC);
+		}
+	}
+}
+
+void UPlayerBurstComponent::TryElementReaction(UAbilitySystemComponent* SourceASC,
+	UAbilitySystemComponent* TargetASC, const TSubclassOf<UGameplayEffect>& IncomingStatusGE)
+{
+	if (!ReactionTable || !IsValid(SourceASC) || !IsValid(TargetASC) || !IsValid(IncomingStatusGE))
+	{
+		return;
+	}
+
+	static const FString Ctx(TEXT("PlayerBurst::TryElementReaction"));
+	TArray<FElementReactionRow*> Rows;
+	ReactionTable->GetAllRows<FElementReactionRow>(Ctx, Rows);
+
+	for (const FElementReactionRow* Row : Rows)
+	{
+		if (!Row || Row->IncomingStatusEffect != IncomingStatusGE)
+		{
+			continue;
+		}
+		if (!TargetASC->HasMatchingGameplayTag(Row->RequiredExistingTag))
+		{
+			continue;
+		}
+
+		if (IsValid(Row->ReactionEffect))
+		{
+			FGameplayEffectContextHandle ReactionCtx = SourceASC->MakeEffectContext();
+			ReactionCtx.AddInstigator(GetOwner(), GetOwner());
+			ReactionCtx.AddSourceObject(this);
+
+			FGameplayEffectSpecHandle RSpec = SourceASC->MakeOutgoingSpec(Row->ReactionEffect, 1.f, ReactionCtx);
+			if (RSpec.IsValid() && RSpec.Data.IsValid())
+			{
+				SourceASC->ApplyGameplayEffectSpecToTarget(*RSpec.Data.Get(), TargetASC);
+			}
+		}
+
+		if (Row->RemoveStatusTag.IsValid())
+		{
+			TargetASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(Row->RemoveStatusTag));
+		}
+
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[PlayerBurstComponent] Reaction: incoming=%s removed=%s"),
+			*GetNameSafe(IncomingStatusGE), *Row->RemoveStatusTag.ToString());
+
+		break;
 	}
 }
 

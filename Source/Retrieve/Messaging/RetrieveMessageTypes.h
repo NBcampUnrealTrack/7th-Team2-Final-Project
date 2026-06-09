@@ -5,6 +5,9 @@
 #include "GameplayTagContainer.h"
 #include "RetrieveMessageTypes.generated.h"
 
+class UTexture2D;
+class UGameplayEffect;
+
 // ---- 세션 ---------------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -20,6 +23,40 @@ struct FRetrieveSessionStatePayload
 };
 
 // ---- 전투 ---------------------------------------------------------
+
+USTRUCT(BlueprintType)
+struct FRetrieveItemElementBuffPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementBuff")
+	TObjectPtr<AActor> Instigator = nullptr;
+
+	// 아이템이 지정한 원소 (Element.Fire/Water/Wind)
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementBuff")
+	FGameplayTag ElementTag;
+
+	// 원소 충전 배율 (기본 1.0, 버프 아이템은 >1.0)
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementBuff")
+	float Multiplier = 1.0f;
+
+	// 버프 지속 시간(초). 0이면 즉시 소멸
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementBuff")
+	float Duration = 0.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FRetrieveElementGaugeBurstPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
+	TObjectPtr<AActor> Instigator = nullptr;
+
+	// 버스트 발동에 쓰인 원소 조합 (Tag → 슬롯 개수)
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
+	TMap<FGameplayTag, int32> ElementPattern;
+};
 
 USTRUCT(BlueprintType)
 struct FRetrieveElementGaugeFullPayload
@@ -102,6 +139,50 @@ struct FRetrieveQuestStepPayload
 	
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Quest")
 	FGameplayTag StepTag;
+};
+
+// ---- UI 버프/디버프 바 ---------------------------------------------------
+
+USTRUCT(BlueprintType)
+struct FRetrieveUIBuffPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FGameplayTag BuffId;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FText DisplayName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FText Description;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FText EffectSummary;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	TSubclassOf<UGameplayEffect> LinkedGameplayEffect;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	TObjectPtr<UTexture2D> Icon = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FLinearColor TintColor = FLinearColor::White;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	float Duration = 0.0f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	bool bIsDebuff = false;
+};
+
+USTRUCT(BlueprintType)
+struct FRetrieveUIBuffRemovePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	FGameplayTag BuffId;
 };
 
 /** Channel.Quest.GuardianDefeated 페이로드. */

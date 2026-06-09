@@ -1,0 +1,321 @@
+#include "UI/HUD/RetrieveElementGaugeWidget.h"
+
+#include "Components/Image.h"
+#include "Components/ProgressBar.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Player/RetrievePlayerController.h"
+#include "UI/RetrieveElementUILibrary.h"
+#include "UI/ViewModels/ElementGaugeViewModel.h"
+#include "UI/ViewModels/HUDViewModel.h"
+
+// ─────────────────────────── NativeConstruct ─────────────────────────────────
+
+void URetrieveElementGaugeWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	ARetrievePlayerController* RPC = Cast<ARetrievePlayerController>(GetOwningPlayer());
+	if (!RPC) return;
+
+	UHUDViewModel* HUDVM = RPC->GetHUDViewModel();
+	if (!HUDVM) return;
+
+	UElementGaugeViewModel* GaugeVM = HUDVM->GetElementGauge();
+	if (!GaugeVM) return;
+
+	// deprecated source 바인딩이 auto-create한 VM을 올바른 인스턴스로 교체
+	if (UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr)
+	{
+		if (UMVVMView* View = MVVM->GetViewFromUserWidget(this))
+		{
+			View->SetViewModel(TEXT("ElementGauge"), GaugeVM);
+			View->SetViewModel(TEXT("ElementGaugeViewModel"), GaugeVM);
+		}
+	}
+
+	InitFromViewModel(GaugeVM);
+
+	// 매 프레임 Percent 보간 + GlowPower 펄스 처리
+	TickHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &ThisClass::TickAnimation));
+}
+
+void URetrieveElementGaugeWidget::NativeDestruct()
+{
+	if (TickHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+		TickHandle.Reset();
+	}
+
+	if (UElementGaugeViewModel* VM = BoundViewModel.Get())
+	{
+		VM->OnSlotsUpdated.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
+		VM->OnCurrentElementChanged.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
+	}
+	Super::NativeDestruct();
+}
+
+// ─────────────────────────── 초기화 ──────────────────────────────────────────
+
+void URetrieveElementGaugeWidget::InitFromViewModel(UElementGaugeViewModel* GaugeVM)
+{
+	BoundViewModel = GaugeVM;
+
+	GaugeVM->OnSlotsUpdated.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
+	GaugeVM->OnSlotsUpdated.AddDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
+	GaugeVM->OnCurrentElementChanged.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
+	GaugeVM->OnCurrentElementChanged.AddDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
+
+	// 초기값 즉시 반영 (애니메이션 없이 스냅)
+	UpdateSlot(0, GaugeVM->GetSlot0Ratio(), GaugeVM->GetSlot0Element(), GaugeVM->GetSlot0IsFull(), /*bImmediate=*/true);
+	UpdateSlot(1, GaugeVM->GetSlot1Ratio(), GaugeVM->GetSlot1Element(), GaugeVM->GetSlot1IsFull(), /*bImmediate=*/true);
+	UpdateSlot(2, GaugeVM->GetSlot2Ratio(), GaugeVM->GetSlot2Element(), GaugeVM->GetSlot2IsFull(), /*bImmediate=*/true);
+	TriggerElementModePulse(GaugeVM->GetCurrentElement(), /*bImmediate=*/true);
+}
+
+// ─────────────────────────── 슬롯 갱신 ───────────────────────────────────────
+
+void URetrieveElementGaugeWidget::HandleGaugeUpdated()
+{
+	UElementGaugeViewModel* VM = BoundViewModel.Get();
+	if (!VM) return;
+
+	UpdateSlot(0, VM->GetSlot0Ratio(), VM->GetSlot0Element(), VM->GetSlot0IsFull());
+	UpdateSlot(1, VM->GetSlot1Ratio(), VM->GetSlot1Element(), VM->GetSlot1IsFull());
+	UpdateSlot(2, VM->GetSlot2Ratio(), VM->GetSlot2Element(), VM->GetSlot2IsFull());
+}
+
+void URetrieveElementGaugeWidget::HandleCurrentElementChanged(FGameplayTag NewElement)
+{
+	TriggerElementModePulse(NewElement, /*bImmediate=*/false);
+}
+
+void URetrieveElementGaugeWidget::UpdateSlot(int32 SlotIndex, float Ratio, FGameplayTag Element, bool bFull, bool bImmediate)
+{
+	// ── Image + DMI 경로 ────────────────────────────────────────────────────
+	if (UImage* Img = GetSlotImage(SlotIndex))
+	{
+		// 원소가 바뀌었을 때만 DMI 교체
+		if (!SlotDMIs[SlotIndex] || CachedElements[SlotIndex] != Element)
+		{
+			CachedElements[SlotIndex] = Element;
+			if (UMaterialInterface* MI = GetMIForElement(Element))
+			{
+				SlotDMIs[SlotIndex] = UMaterialInstanceDynamic::Create(MI, this);
+				Img->SetBrushFromMaterial(SlotDMIs[SlotIndex]);
+			}
+		}
+
+		if (bImmediate)
+		{
+			// 초기화: 보간 없이 즉시 반영, 글로우 0으로 초기화
+			CurrentRatios[SlotIndex] = Ratio;
+			TargetRatios[SlotIndex]  = Ratio;
+			bPrevFull[SlotIndex]     = bFull;
+			bGlowActive[SlotIndex]   = false;
+
+			if (SlotDMIs[SlotIndex])
+			{
+				SlotDMIs[SlotIndex]->SetScalarParameterValue(TEXT("Percent"),   Ratio);
+				SlotDMIs[SlotIndex]->SetScalarParameterValue(TEXT("GlowPower"), 0.f);
+			}
+		}
+		else
+		{
+			// 충전량 증가 → 충전 펄스
+			if (Ratio > TargetRatios[SlotIndex] + 0.01f)
+			{
+				TriggerGlowPulse(SlotIndex, /*bIsFullTransition=*/false);
+			}
+
+			// 슬롯 확정(false → true) → 확정 펄스 (더 강하고 길다)
+			if (bFull && !bPrevFull[SlotIndex])
+			{
+				TriggerGlowPulse(SlotIndex, /*bIsFullTransition=*/true);
+			}
+
+			TargetRatios[SlotIndex] = Ratio;
+			bPrevFull[SlotIndex]    = bFull;
+		}
+		return;
+	}
+
+	// ── ProgressBar 폴백 (Image_Fill_* 없을 때 사용) ─────────────────────
+	if (UProgressBar* PB = GetSlotProgressBar(SlotIndex))
+	{
+		PB->SetPercent(Ratio);
+		PB->SetFillColorAndOpacity(URetrieveElementUILibrary::ElementTagToColor(Element));
+	}
+}
+
+// ─────────────────────────── 애니메이션 Ticker ────────────────────────────────
+
+bool URetrieveElementGaugeWidget::TickAnimation(float DeltaTime)
+{
+	// Percent 보간 속도: 초당 6배 거리 좁힘 (0→1 약 0.4 s)
+	constexpr float InterpSpeed = 6.f;
+
+	for (int32 i = 0; i < SlotCount; ++i)
+	{
+		UMaterialInstanceDynamic* DMI = SlotDMIs[i];
+		if (!DMI) continue;
+
+		// ── Percent 부드러운 보간 ────────────────────────────────────────
+		if (!FMath::IsNearlyEqual(CurrentRatios[i], TargetRatios[i], 0.001f))
+		{
+			CurrentRatios[i] = FMath::FInterpTo(CurrentRatios[i], TargetRatios[i], DeltaTime, InterpSpeed);
+			DMI->SetScalarParameterValue(TEXT("Percent"), CurrentRatios[i]);
+		}
+
+		// ── GlowPower 펄스 (sin 곡선: 0 → Peak → 0) ─────────────────────
+		// GlowPower 파라미터가 머티리얼에 없으면 SetScalarParameterValue가
+		// 무시(silent fail)되므로 안전하다.
+		if (bGlowActive[i])
+		{
+			GlowProgress[i] += DeltaTime;
+
+			if (GlowProgress[i] >= GlowDuration[i])
+			{
+				bGlowActive[i]  = false;
+				GlowProgress[i] = 0.f;
+				DMI->SetScalarParameterValue(TEXT("GlowPower"), 0.f);
+			}
+			else
+			{
+				// sin(0) = 0, sin(PI/2) = 1, sin(PI) = 0 → 자연스러운 펄스
+				const float NormalizedT = GlowProgress[i] / GlowDuration[i];
+				const float GlowValue   = GlowPeaks[i] * FMath::Sin(NormalizedT * PI);
+				DMI->SetScalarParameterValue(TEXT("GlowPower"), GlowValue);
+			}
+		}
+	}
+
+	if (bElementModePulseActive)
+	{
+		ElementModePulseProgress += DeltaTime;
+
+		if (ElementModePulseProgress >= ElementModePulseDuration)
+		{
+			bElementModePulseActive = false;
+			ElementModePulseProgress = 0.f;
+			SetElementIconVisualState(0.f);
+		}
+		else
+		{
+			const float NormalizedT = ElementModePulseProgress / ElementModePulseDuration;
+			SetElementIconVisualState(FMath::Sin(NormalizedT * PI));
+		}
+	}
+
+	return true;  // false를 반환하면 Ticker가 제거되므로 반드시 true
+}
+
+void URetrieveElementGaugeWidget::TriggerGlowPulse(int32 SlotIndex, bool bIsFullTransition)
+{
+	bGlowActive[SlotIndex]  = true;
+	GlowProgress[SlotIndex] = 0.f;
+
+	if (bIsFullTransition)
+	{
+		// 슬롯 확정: 더 밝고(피크 3.5) 더 긴(0.6 s) 펄스
+		GlowDuration[SlotIndex] = 0.6f;
+		GlowPeaks[SlotIndex]    = 3.5f;
+	}
+	else
+	{
+		// 충전 증가: 일반 펄스 (피크 1.8, 0.4 s)
+		GlowDuration[SlotIndex] = 0.4f;
+		GlowPeaks[SlotIndex]    = 1.8f;
+	}
+}
+
+// ─────────────────────────── 유틸 ────────────────────────────────────────────
+
+void URetrieveElementGaugeWidget::TriggerElementModePulse(FGameplayTag NewElement, bool bImmediate)
+{
+	if (!bImmediate && CachedCurrentElement == NewElement)
+	{
+		return;
+	}
+
+	CachedCurrentElement = NewElement;
+	ElementModePulseColor = URetrieveElementUILibrary::ElementTagToColor(NewElement);
+	DispatchElementModeChangedToBlueprint(NewElement);
+
+	if (bImmediate)
+	{
+		bElementModePulseActive = false;
+		ElementModePulseProgress = 0.f;
+		SetElementIconVisualState(0.f);
+		return;
+	}
+
+	bElementModePulseActive = true;
+	ElementModePulseProgress = 0.f;
+	SetElementIconVisualState(1.f);
+}
+
+void URetrieveElementGaugeWidget::DispatchElementModeChangedToBlueprint(FGameplayTag NewElement)
+{
+	UFunction* EventFunction = FindFunction(TEXT("BP_OnElementModeChanged"));
+	if (!EventFunction)
+	{
+		return;
+	}
+
+	struct FElementModeChangedParams
+	{
+		FGameplayTag NewElementTag;
+	};
+
+	FElementModeChangedParams Params;
+	Params.NewElementTag = NewElement;
+	ProcessEvent(EventFunction, &Params);
+}
+
+void URetrieveElementGaugeWidget::SetElementIconVisualState(float PulseAlpha)
+{
+	if (!Image_Element)
+	{
+		return;
+	}
+
+	const float Scale = 1.f + (0.18f * PulseAlpha);
+	Image_Element->SetRenderScale(FVector2D(Scale, Scale));
+	Image_Element->SetColorAndOpacity(FLinearColor::LerpUsingHSV(FLinearColor::White, ElementModePulseColor, 0.35f + (0.45f * PulseAlpha)));
+	Image_Element->SetRenderOpacity(0.85f + (0.15f * PulseAlpha));
+}
+
+UImage* URetrieveElementGaugeWidget::GetSlotImage(int32 SlotIndex) const
+{
+	switch (SlotIndex)
+	{
+	case 0: return Image_Fill_0;
+	case 1: return Image_Fill_1;
+	case 2: return Image_Fill_2;
+	default: return nullptr;
+	}
+}
+
+UProgressBar* URetrieveElementGaugeWidget::GetSlotProgressBar(int32 SlotIndex) const
+{
+	switch (SlotIndex)
+	{
+	case 0: return ProgressBar_Slot0;
+	case 1: return ProgressBar_Slot1;
+	case 2: return ProgressBar_Slot2;
+	default: return nullptr;
+	}
+}
+
+UMaterialInterface* URetrieveElementGaugeWidget::GetMIForElement(const FGameplayTag& Element) const
+{
+	if (Element == RetrieveGameplayTags::Element_Fire)  return MI_Fire;
+	if (Element == RetrieveGameplayTags::Element_Water) return MI_Water;
+	if (Element == RetrieveGameplayTags::Element_Wind)  return MI_Wind;
+	return MI_Empty;
+}

@@ -334,7 +334,13 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	                             MapViewTopLeft.X + MapViewSize.X, MapViewTopLeft.Y + MapViewSize.Y);
 
 	// ── DataAsset 기반 정적 아이콘 (WP 로드 여부 완전 무관) ────────────────────
-	// 화톳불 포함 모든 아이콘 항상 표시. Activated 여부는 히트 판정(HitTestBonfireIcon)에서 체크.
+	// 화톳불 포함 모든 아이콘 항상 표시. 모닥불 타입은 활성화 여부에 따라 색상 구분.
+	const UGameInstance*          GI_Paint   = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub_Paint =
+		GI_Paint ? GI_Paint->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	const URetrieveSaveGame* SaveGame_Paint =
+		SaveSub_Paint ? SaveSub_Paint->GetCurrentSaveGame() : nullptr;
+
 	if (MapSub && MapSub->HasValidBounds() && WorldMapIconData)
 	{
 		for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
@@ -351,6 +357,32 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			Snap.IconType             = Entry.IconType;
 			Snap.MapLabel             = Entry.MapLabel;
 			Snap.bShowLabelOnWorldMap = Entry.bShowLabel;
+
+			// 모닥불 아이콘: 활성화 여부에 따라 색상 구분
+			if (Entry.IconType == ERetrieveMapIconType::Bonfire && IconRegistry)
+			{
+				bool bIsActivated = false;
+
+				// 세이브 데이터에서 이 위치의 모닥불 활성화 여부 확인
+				if (SaveGame_Paint)
+				{
+					const float RadiusSq = FMath::Square(BonfireActivationCheckRadius);
+					for (const TPair<FName, FTransform>& Pair : SaveGame_Paint->ActivatedBonfireTransforms)
+					{
+						if (FVector::DistSquared(Entry.WorldLocation, Pair.Value.GetLocation()) <= RadiusSq)
+						{
+							bIsActivated = true;
+							break;
+						}
+					}
+				}
+
+				const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Entry.IconType);
+				Snap.bOverrideIcon    = true;
+				Snap.OverrideTexture  = Row.IconTexture;
+				Snap.OverrideColor    = bIsActivated ? BonfireActivatedColor : BonfireInactiveColor;
+				Snap.OverrideSize     = Row.IconSize;
+			}
 
 			DrawWorldIcon(OutDrawElements, CurrentLayer, AllottedGeometry, Snap, IconScreen);
 

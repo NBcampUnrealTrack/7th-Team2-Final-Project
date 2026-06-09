@@ -130,6 +130,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
 	TObjectPtr<URetrieveMapIconDataAsset> WorldMapIconData;
 
+	// ── 모닥불 아이콘 색상 ─────────────────────────────────────────────────
+	/** 활성화된 모닥불 아이콘 색상 (빠른 이동 가능) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Bonfire")
+	FLinearColor BonfireActivatedColor = FLinearColor(1.0f, 0.75f, 0.2f, 1.0f);
+
+	/** 비활성화 모닥불 아이콘 색상 (빠른 이동 불가) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Bonfire")
+	FLinearColor BonfireInactiveColor = FLinearColor(0.25f, 0.25f, 0.25f, 0.45f);
+
+	/** 활성화 여부 판정 시 사용하는 위치 매칭 허용 오차 (언리얼 단위) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Bonfire", meta=(ClampMin="50.0"))
+	float BonfireActivationCheckRadius = 300.0f;
+
 	// ── 아이콘 필터 ──────────────────────────────────────────────────────────
 	/**
 	 * 월드맵에서 숨길 아이콘 타입 목록.

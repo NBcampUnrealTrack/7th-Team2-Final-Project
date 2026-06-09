@@ -22,11 +22,13 @@ struct FElementSlot
 	UPROPERTY(BlueprintReadOnly, Category = "Element")
 	int32 MaxGauge = 100;
 	UPROPERTY(BlueprintReadOnly, Category = "Element")
-	bool bIsFull = false;
+	bool bFull = false;
 	// 슬롯 원소
 	UPROPERTY(BlueprintReadOnly, Category = "Element")
 	FGameplayTag CurrentElement = RetrieveGameplayTags::Element_None;
 };
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnElementSlotsChanged);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class RETRIEVE_API UElementGaugeComponent : public UActorComponent
@@ -40,18 +42,24 @@ public:
 
 public:
 	// 게이지 추가
+	UFUNCTION(BlueprintCallable, Category = "Gauge")
 	void AddCharge(int32 Amount);
 	// 슬롯 확정
+	UFUNCTION(BlueprintCallable, Category = "Gauge")
 	void CommitSlot();
 	// 슬롯이 가득 차있는지 확인
-	bool IsFull();
+	UFUNCTION(BlueprintPure, Category = "Gauge")
+	bool IsFull() const;
 	// 현재 조합 반환
-	TMap<FGameplayTag, int32> GetCurrentCombination();
+	UFUNCTION(BlueprintPure, Category = "Gauge")
+	TMap<FGameplayTag, int32> GetCurrentCombination() const;
 	// 첫 번째 슬롯 소비
+	UFUNCTION(BlueprintCallable, Category = "Gauge")
 	FGameplayTag ConsumeOldestSlot();
-	// 전체 슬롯 소비
-	void ConsumeAllSlots();
+	UFUNCTION(BlueprintPure, Category = "Gauge")
+	FGameplayTag PeekOldestSlot() const;
 	// 슬롯 초기화
+	UFUNCTION(BlueprintCallable, Category = "Gauge")
 	void ClearSlot();
 
 	URetrieveAbilitySystemComponent* GetRetrieveASC() const;
@@ -59,6 +67,18 @@ public:
 	// ASC GameplayEvent 구독/해제. SovereignCharacter::InitializeAbilitySystem 에서 호출
 	void BindToASC();
 	void UnbindFromASC();
+
+	// 아이템 사용 시 호출. Duration 초 동안 충전 배율에 Multiplier를 곱한다. Duration=0이면 즉시 해제.
+	// ElementTag는 만료 시 Channel.UI.Buff.Remove 브로드캐스트에 사용된다.
+	void SetItemChargeMultiplier(float Multiplier, float Duration, FGameplayTag BuffUITag = FGameplayTag());
+
+	// 아이템 버프로 적용된 현재 배율 (UI 표시용)
+	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
+	float GetItemChargeMultiplier() const { return ItemChargeMultiplier; }
+
+	// 슬롯 상태 변경 시 브로드캐스트 (ElementGaugeViewModel 구독용)
+	UPROPERTY(BlueprintAssignable)
+	FOnElementSlotsChanged OnSlotsChanged;
 
 	// UI용: 슬롯 배열 읽기
 	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
@@ -74,10 +94,14 @@ public:
 
 	// 소비 가능한(충전 완료된) 슬롯이 하나라도 있는지 검사, 잔량 확인엔 GetSlotCount()가 아니라 이 함수 사용
 	UFUNCTION(BlueprintPure, Category = "Gauge|UI")
-	bool HasChargedSlot() const { return ElementSlots.Num() > 0 && ElementSlots[0].bIsFull; }
+	bool HasChargedSlot() const { return ElementSlots.Num() > 0 && ElementSlots[0].bFull; }
 
 private:
 	void HandleGameplayEvent(FGameplayTag EventTag, const FGameplayEventData* Payload);
+
+	// AddCharge 에서 배율 적용 후 실제 누적 처리. 재귀 시 배율 중복 적용을 막기 위해 분리.
+	void AddChargeInternal(int32 ScaledAmount);
+	void BroadcastGaugeFull() const;
 
 	// 이벤트→충전량 매핑 데이터 테이블 (Row 타입: FElementChargeRule)
 	UPROPERTY(EditDefaultsOnly, Category="Gauge|Charge")
@@ -90,6 +114,10 @@ private:
 	FGameplayTagContainer SubscribedFilter;
 
 	FDelegateHandle GameplayEventHandle;
+
+	// 아이템 버프 배율. SetItemChargeMultiplier로 설정하고 타이머 만료 시 1.0으로 복원.
+	float ItemChargeMultiplier = 1.f;
+	FTimerHandle ItemMultiplierTimer;
 
 	TArray<FElementSlot> ElementSlots;
 	const int32 SlotCount = 3;

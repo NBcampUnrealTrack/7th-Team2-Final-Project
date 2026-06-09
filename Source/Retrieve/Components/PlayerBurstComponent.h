@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -51,6 +51,9 @@ private:
     void ApplyHitToTarget(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult);
 
     // 상태 GE 부여 직전 원소 반응 검사 (ReactionTable 기반)
+    void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
+        const TSubclassOf<UGameplayEffect>& IncomingStatusGE);
+
     void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
         const TSubclassOf<UGameplayEffect>& IncomingStatusGE);
 

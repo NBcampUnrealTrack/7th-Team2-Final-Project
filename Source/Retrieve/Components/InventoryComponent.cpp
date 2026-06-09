@@ -4,12 +4,14 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Animation/AnimMontage.h"
+#include "Components/ElementGaugeComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Character.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
+#include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
 
 namespace
 {
@@ -17,6 +19,29 @@ constexpr int32 ConsumableSlotKeys[] = {
 	UInventoryComponent::QuickSlotPrimaryKey,
 	UInventoryComponent::QuickSlotSecondaryKey
 };
+
+FGameplayTag ResolveItemBuffUITag(const FRetrieveConsumableItemRow& ConsumableRow)
+{
+	if (ConsumableRow.BuffUITag.IsValid())
+	{
+		return ConsumableRow.BuffUITag;
+	}
+
+	if (ConsumableRow.ElementTag == RetrieveGameplayTags::Element_Fire)
+	{
+		return RetrieveGameplayTags::UI_Buff_Item_FireBoost;
+	}
+	if (ConsumableRow.ElementTag == RetrieveGameplayTags::Element_Water)
+	{
+		return RetrieveGameplayTags::UI_Buff_Item_WaterBoost;
+	}
+	if (ConsumableRow.ElementTag == RetrieveGameplayTags::Element_Wind)
+	{
+		return RetrieveGameplayTags::UI_Buff_Item_WindBoost;
+	}
+
+	return FGameplayTag();
+}
 }
 
 UInventoryComponent::UInventoryComponent(const FObjectInitializer& ObjectInitializer)
@@ -807,6 +832,23 @@ bool UInventoryComponent::ApplyConsumableEffects(const FRetrieveConsumableItemRo
 	{
 		ASC->ApplyGameplayEffectToSelf(ElementBuffEffect, 1.0f, EffectContext);
 		bAppliedEffect = true;
+	}
+
+	// 아이템 원소 충전 배율 적용 (ElementBuffMultiplier > 1.0인 경우)
+	if (ConsumableRow.ElementBuffMultiplier > 0.f && ConsumableRow.ElementTag.IsValid())
+	{
+		bAppliedEffect = true;
+
+		const FGameplayTag BuffUITag = ResolveItemBuffUITag(ConsumableRow);
+		if (UElementGaugeComponent* GaugeComp = GetOwner()->FindComponentByClass<UElementGaugeComponent>())
+		{
+			GaugeComp->SetItemChargeMultiplier(ConsumableRow.ElementBuffMultiplier, ConsumableRow.BuffDuration, BuffUITag);
+		}
+
+		if (URetrieveBuffUIBroadcastComponent* BuffUI = GetOwner()->FindComponentByClass<URetrieveBuffUIBroadcastComponent>())
+		{
+			BuffUI->BroadcastBuffManual(BuffUITag, ConsumableRow.BuffDuration);
+		}
 	}
 
 	if (!bAppliedEffect)
