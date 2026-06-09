@@ -35,7 +35,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
 	void ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn = false);
 	void DeactivateEnemy();
-	
+
 	// ABP Property Access 바인딩 전용
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
 	bool IsDeadForAnim()    const { return bCachedIsDead; }
@@ -68,7 +68,6 @@ protected:
 	
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
-	
 	void OnDeadTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnChaseTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnAttackTagChanged(const FGameplayTag Tag, int32 Count);
@@ -112,7 +111,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Retrieve|AI")
 	float GroupAlertRadius = 1500.f;
-	
+
 	/** DataTable */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Monster")
 	FName MonsterDataRowName;
