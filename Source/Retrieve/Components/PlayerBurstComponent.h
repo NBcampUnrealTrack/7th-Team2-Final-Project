@@ -54,9 +54,6 @@ private:
     void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
         const TSubclassOf<UGameplayEffect>& IncomingStatusGE);
 
-    void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
-        const TSubclassOf<UGameplayEffect>& IncomingStatusGE);
-
     UPROPERTY(EditDefaultsOnly, Category = "Burst|Trace", meta=(ClampMin="0.0"))
     float CleaveRadius = 60.f;
 
