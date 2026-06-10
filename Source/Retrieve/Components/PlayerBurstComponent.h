@@ -84,4 +84,7 @@ private:
 
     // Projectile 중복 스폰 방지 (HitIndex별 1회 발사)
     TArray<bool>    PerHitProjectileSpawned;
+
+    // Dash 중복 발사 방지 (HitIndex별 1회 발사)
+    TArray<bool>    PerHitDashLaunched;
 };

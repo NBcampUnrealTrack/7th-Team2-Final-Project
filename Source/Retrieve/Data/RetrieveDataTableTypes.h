@@ -375,6 +375,9 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	TSubclassOf<AActor> ProjectileClass;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EBurstAttackType::Dash", ClampMin = "0.0"))
 	float DashDistance = 0.f;
+	/** DashDistance를 이동하는 데 걸리는 목표 시간. 발사 속도 = DashDistance / DashLaunchDuration. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EBurstAttackType::Dash", ClampMin = "0.01"))
+	float DashLaunchDuration = 0.2f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EBurstAttackType::AreaOfEffect", ClampMin = "0.0"))
 	float AoeRadius = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::WorldActor", ClampMin = "0.0"))

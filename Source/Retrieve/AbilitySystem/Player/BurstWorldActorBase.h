@@ -50,7 +50,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Motion")
 	TObjectPtr<UCurveFloat> MoveCurve;
 
+	/** 퇴장(가라앉기) 길이(초). 0 이하면 가라앉기 없이 즉시 파괴. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Despawn", meta = (ClampMin = "0.0"))
+	float SinkDuration = 0.5f;
+
+	/** 가라앉는 깊이(cm). 퇴장 동안 이만큼 아래로 내려간다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Despawn", meta = (ClampMin = "0.0"))
+	float SinkDepth = 250.f;
+
+	/** 가라앉기 가속 곡선(0~1 → 0~1). 없으면 EaseIn(가속) 기본. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Burst|World|Despawn")
+	TObjectPtr<UCurveFloat> SinkCurve;
+
 private:
+	/** 수명 종료 → 가라앉기 단계 진입. 주변 Niagara 를 끄고 하강을 시작한다. */
+	void BeginSink();
+
 	/** 등장 모션 목표(스폰 시 전달된 위치). */
 	FVector TargetLocation = FVector::ZeroVector;
 
@@ -62,4 +77,16 @@ private:
 
 	/** 등장 모션 진행 중 여부. */
 	bool bMoving = false;
+
+	/** 전체 생존 경과(초). LifeTime 도달 시 가라앉기 시작. */
+	float LifeElapsed = 0.f;
+
+	/** 가라앉기 진행 중 여부. */
+	bool bSinking = false;
+
+	/** 가라앉기 경과(초). */
+	float SinkElapsed = 0.f;
+
+	/** 가라앉기 시작 위치. */
+	FVector SinkStartLocation = FVector::ZeroVector;
 };
