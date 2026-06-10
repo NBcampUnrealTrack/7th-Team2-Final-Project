@@ -188,7 +188,7 @@ void ARetrieveGameState::AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign)
 	switch (Row->Kind)
 	{
 	case ETopicKind::Story:
-		RequestDialogue(Row->Lines, BuildFollowUpTopics(*Row), /*bShared*/ true);
+		RequestDialogue(Row->Lines, BuildFollowUpTopics(*Row), true);
 		break;
 
 	case ETopicKind::Command:
@@ -202,6 +202,7 @@ void ARetrieveGameState::AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign)
 				UGameplayMessageSubsystem::Get(World).BroadcastMessage(Row->CommandChannel, Message);
 			}
 		}
+		RequestDialogue(Row->Lines, {}, true);
 		break;
 
 	case ETopicKind::Sigil:
