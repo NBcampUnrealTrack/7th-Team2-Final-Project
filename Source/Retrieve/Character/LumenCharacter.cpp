@@ -2,6 +2,7 @@
 
 #include "LumenFollowComponent.h"
 #include "Components/RetrieveDialogueComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -11,6 +12,13 @@ ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : 
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
 	bUseControllerRotationYaw = false;
+
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->bOrientRotationToMovement = true;
+		Move->bUseControllerDesiredRotation = false;
+		Move->RotationRate = FRotator(0.f, 540.f, 0.f);
+	}
 
 	FollowComponent = CreateDefaultSubobject<ULumenFollowComponent>(TEXT("FollowComponent"));
 	DialogueComponent = CreateDefaultSubobject<URetrieveDialogueComponent>(TEXT("DialogueComponent"));

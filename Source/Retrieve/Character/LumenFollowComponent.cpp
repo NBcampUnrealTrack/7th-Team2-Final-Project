@@ -166,12 +166,19 @@ void ULumenFollowComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 
 	AActor* LumenActor = GetOwner();
-	LumenActor->SetActorRotation(FRotator(0.f, (Host->GetActorLocation() - LumenActor->GetActorLocation()).Rotation().Yaw, 0.f));
 	const float DistanceToHost = FVector::Distance(Host->GetActorLocation(), LumenActor->GetActorLocation());
+
+	// 멈춰 있을 때만 호스트를 바라봄
+	auto FaceHost = [&]()
+	{
+		const float Yaw = (Host->GetActorLocation() - LumenActor->GetActorLocation()).Rotation().Yaw;
+		LumenActor->SetActorRotation(FRotator(0.f, Yaw, 0.f));
+	};
 
 	if (Mode == EFollowMode::Wait)
 	{
 		StopMove();
+		FaceHost();
 		return;
 	}
 
@@ -183,11 +190,13 @@ void ULumenFollowComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			const FVector Target = Host->GetActorLocation() + ComputeFollowOffset(Host);
 			LumenActor->SetActorLocation(Target, false);
 			LastIssuedTarget = Target;
+			FaceHost();
 			return;
 		}
 		if (DistanceToHost < FollowDistance)
 		{
 			StopMove();
+			FaceHost();
 			return;
 		}
 		DesiredTarget = Host->GetActorLocation() + ComputeFollowOffset(Host);
