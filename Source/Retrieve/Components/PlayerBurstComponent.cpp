@@ -39,12 +39,14 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 	PerHitPreviousPoints.SetNum(HitCount);
 	PerHitHasPrevious.SetNum(HitCount);
 	PerHitProjectileSpawned.SetNum(HitCount);
+	PerHitDashLaunched.SetNum(HitCount);
 	for (int32 Index = 0; Index < HitCount; ++Index)
 	{
 		PerHitHitActors[Index].Reset();
 		PerHitPreviousPoints[Index].Reset();
 		PerHitHasPrevious[Index] = false;
 		PerHitProjectileSpawned[Index] = false;
+		PerHitDashLaunched[Index] = false;
 	}
 
 	UE_LOG(LogRetrieveCombat, Log,
@@ -65,6 +67,7 @@ void UPlayerBurstComponent::EndBurstSkill()
 	PerHitPreviousPoints.Reset();
 	PerHitHasPrevious.Reset();
 	PerHitProjectileSpawned.Reset();
+	PerHitDashLaunched.Reset();
 }
 
 void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
@@ -485,6 +488,34 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 
 void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitIndex)
 {
+	// 중복 발사 방지: NotifyTick 으로 매 프레임 호출되더라도 같은 HitIndex 는 1회만 발사
+	if (!PerHitDashLaunched.IsValidIndex(HitIndex) || !PerHitDashLaunched[HitIndex])
+	{
+		if (PerHitDashLaunched.IsValidIndex(HitIndex))
+		{
+			PerHitDashLaunched[HitIndex] = true;
+		}
+
+		ACharacter* Character = Cast<ACharacter>(GetOwner());
+		const float DashDistance = ActiveSkill ? ActiveSkill->DashDistance : 0.f;
+		const float DashLaunchDuration = ActiveSkill ? ActiveSkill->DashLaunchDuration : 0.f;
+		if (IsValid(Character) && DashDistance > 0.f && DashLaunchDuration > 0.f)
+		{
+			FVector Forward = Character->GetActorForwardVector();
+			Forward.Z = 0.f;
+			Forward = Forward.GetSafeNormal();
+			if (!Forward.IsNearlyZero())
+			{
+				const float LaunchSpeed = DashDistance / DashLaunchDuration;
+				Character->LaunchCharacter(Forward * LaunchSpeed, /*bXYOverride=*/true, /*bZOverride=*/false);
+
+				UE_LOG(LogRetrieveCombat, Log,
+					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, DashDistance=%.1f, LaunchSpeed=%.1f"),
+					HitIndex, DashDistance, LaunchSpeed);
+			}
+		}
+	}
+
 	SweepAndApply(Hit, ResolveSourceLocation(Hit), DashRadius, HitIndex);
 }
 
