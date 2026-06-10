@@ -215,7 +215,7 @@ void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemCo
 		return;
 	}
 
-	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Enemy_Type_Boss);
+	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
 
 	TSubclassOf<UGameplayEffect> GroggyGE = bIsBoss
 		? CachedWeaponData.ParryCounter.BossGroggyEffect
