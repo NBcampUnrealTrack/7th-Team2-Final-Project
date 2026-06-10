@@ -1,26 +1,24 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/EngineTypes.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "GA_JumpAttack.generated.h"
+#include "GA_ParryCounter.generated.h"
 
-class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
 class UGameplayEffect;
 class UWeaponComponent;
 
 /**
- * 공중(점프) 상태에서 발동하는 찍기(슬램) 공격, 데미지는 착지 시점에만 발생
+ * 패리 성공 후 발동하는 카운터 어빌리티
  */
 UCLASS()
-class RETRIEVE_API UGA_JumpAttack : public URetrieveGameplayAbility
+class RETRIEVE_API UGA_ParryCounter : public URetrieveGameplayAbility
 {
 	GENERATED_BODY()
 
 public:
-	UGA_JumpAttack();
+	UGA_ParryCounter();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
@@ -31,21 +29,23 @@ protected:
 
 private:
 	void StopRuntimeTasks();
-	void UnbindLanded();
 
-	void ApplyLandingAoe();
+	AActor* ResolveCounterTarget() const;
+
+	void ApplyCounterToTarget(AActor* TargetActor);
+
+	void ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC) const;
 
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
-	UFUNCTION() void HandleLanded(const FHitResult& Hit);
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
-	bool bDebugDrawTrace = false;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter")
+	FGameplayTag GroggyDurationTag;
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
@@ -55,13 +55,4 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
-
-	UPROPERTY(Transient)
-	TSet<TObjectPtr<AActor>> HitActors;
-
-	bool bChargeBonusGranted = false;
-
-	// LandedDelegate 구독 해제용
-	UPROPERTY(Transient)
-	TWeakObjectPtr<ACharacter> BoundLandedCharacter;
 };

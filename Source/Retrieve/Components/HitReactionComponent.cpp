@@ -75,7 +75,7 @@ void UHitReactionComponent::OnAbilitySystemReady()
 
 void UHitReactionComponent::HandleHitEvent(FGameplayTag /*MatchingTag*/, const FGameplayEventData* Payload)
 {
-	// TODO(하민): 임시 재진입 차단 -> 추후 식별 태그 없는 공격은 건너뛰기 구현 예정
+	// TODO(하민): 임시 재진입 차단 -> 식별 태그 없는 공격 건너뛰기로 대체 예정
 	if (bProcessingReaction)
 	{
 		return;
@@ -107,46 +107,29 @@ void UHitReactionComponent::ApplyReaction(ERetrieveHitReactType ReactType)
 	{
 		return;
 	}
-	
+
 	const FRetrieveHitReactionEntry* Entry = Profile->Find(ReactType);
 	if (!Entry)
 	{
 		return;
 	}
 
-	const bool bKnockdownActive = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Knockdown);
-	const bool bStaggerActive = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Staggered);
-
-	// 더 강한 상태가 Active면 약한 반응은 무시 (Knockdown > Stagger > Flinch)
-	switch (ReactType)
+	// 더 강한 상태가 이미 active면 약한 반응 무시
+	if (!Entry->BlockingStateTags.IsEmpty())
 	{
-	case ERetrieveHitReactType::Knockdown:
-		break;
-
-	case ERetrieveHitReactType::Stagger:
-		if (bKnockdownActive)
+		if (ASC->HasAnyMatchingGameplayTags(Entry->BlockingStateTags))
 		{
 			return;
 		}
-		break;
-
-	case ERetrieveHitReactType::Flinch:
-	default:
-		if (bKnockdownActive || bStaggerActive)
-		{
-			return;
-		}
-		break;
 	}
 
-	// 상태/취소가 있는 반응은 이전 몽타주를 끊고 다시 재생
 	if (Entry->StateEffect || Entry->bCancelActions)
 	{
 		StopActiveMontage();
 		ApplyStateEffect(Entry->StateEffect);
 		if (Entry->bCancelActions)
 		{
-			CancelPlayerActions();
+			CancelOwnerAbilities();
 		}
 	}
 
@@ -181,19 +164,15 @@ void UHitReactionComponent::ApplyStateEffect(const TSubclassOf<UGameplayEffect>&
 	}
 }
 
-void UHitReactionComponent::CancelPlayerActions()
+void UHitReactionComponent::CancelOwnerAbilities()
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC)
+	if (!ASC || !Profile || Profile->AbilitiesToCancel.IsEmpty())
 	{
 		return;
 	}
 
-	FGameplayTagContainer CancelTags;
-	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
-	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
-	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
-	CancelTags.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
+	FGameplayTagContainer CancelTags = Profile->AbilitiesToCancel;
 	ASC->CancelAbilities(&CancelTags, nullptr, nullptr);
 }
 

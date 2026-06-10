@@ -14,10 +14,7 @@ class URetrieveHitReactionProfile;
 struct FGameplayEventData;
 
 /**
- * 플레이어 전용 피격 반응 consumer
- *  - Flinch  : 짧은 cosmetic 몽타주만 (태그/GE/취소 없음)
- *  - Stagger : GE_HitStagger(State.Player.Staggered) + 진행 중 능력 취소 + 몽타주
- *  - Knockdown: GE_HitKnockdown(State.Player.Knockdown) + 취소 + 몽타주
+ * 범용 피격 반응 consumer (플레이어/적 공용)
  */
 UCLASS(ClassGroup = "Retrieve", meta = (BlueprintSpawnableComponent))
 class RETRIEVE_API UHitReactionComponent : public UActorComponent
@@ -43,7 +40,7 @@ private:
 
 	void ApplyReaction(ERetrieveHitReactType ReactType);
 	void ApplyStateEffect(const TSubclassOf<UGameplayEffect>& EffectClass);
-	void CancelPlayerActions();
+	void CancelOwnerAbilities();
 	void PlayMontageSafe(const TSoftObjectPtr<UAnimMontage>& MontagePtr);
 	void StopActiveMontage();
 

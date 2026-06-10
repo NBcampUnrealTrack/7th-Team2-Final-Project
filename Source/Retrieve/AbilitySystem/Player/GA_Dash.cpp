@@ -35,6 +35,8 @@ UGA_Dash::UGA_Dash()
 
 	// 공격/방어는 즉시 취소하고 발동
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_SprintAttack);
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_JumpAttack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 }
 

@@ -11,6 +11,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/PatternCounterComponent.h"
+#include "Combat/RetrieveCombatTypes.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
@@ -353,6 +354,19 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 
 	if (Spec.IsValid())
 	{
+		const FName ReactRowName = ActivePatternRowName.IsNone() ? BasicAttackRowName : ActivePatternRowName;
+		if (PatternTable && !ReactRowName.IsNone())
+		{
+			if (const FMonsterPatternRow* ReactRow =
+				PatternTable->FindRow<FMonsterPatternRow>(ReactRowName, TEXT("OnHitboxOverlap_HitReact")))
+			{
+				if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactRow->HitReactType); ReactTag.IsValid())
+				{
+					Spec.Data->AddDynamicAssetTag(ReactTag);
+				}
+			}
+		}
+
 		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 	}
 	

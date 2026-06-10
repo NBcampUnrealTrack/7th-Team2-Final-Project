@@ -24,6 +24,9 @@ protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
+public:
+	AActor* GetLastParriedAttacker() const { return LastParriedAttacker.Get(); }
+
 private:
 	UFUNCTION() void HandleInputReleased(float TimeHeld);
 	UFUNCTION() void HandleGuardBroken(FGameplayEventData Payload);
@@ -40,6 +43,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
 	TSubclassOf<UGameplayEffect> ParryWindowEffect;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
+	TSubclassOf<UGameplayEffect> ParryCooldownEffect;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
 	TSubclassOf<UGameplayEffect> CounterWindowEffect;
@@ -48,4 +54,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitInputRelease> InputReleaseTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> GuardBrokenTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ParrySuccessTask;
+	
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AActor> LastParriedAttacker;
 };

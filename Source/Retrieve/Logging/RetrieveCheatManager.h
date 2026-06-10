@@ -56,7 +56,11 @@ public:
 	
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveTestCounter();
-	
+
+	/** 패리 없이 GA_ParryCounter 검증용 (CanCounter 태그를 임시 부여 후 발동) */
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveTestParryCounter();
+
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;
 	UPatternCounterComponent* GetLockedOnPatternCounter() const;

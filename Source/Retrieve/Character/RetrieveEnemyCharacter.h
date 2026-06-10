@@ -13,6 +13,8 @@ class UEnemyCombatComponent;
 class UPatternCounterComponent;
 class UDropComponent;
 class USphereComponent;
+class UHitReactionComponent;
+class URetrieveHitReactionProfile;
 
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDataRow;
@@ -112,6 +114,14 @@ protected:
 	/** 사망 시 드랍 아이템 처리 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UDropComponent> DropComponent;
+
+	/** 피격 반응 consumer */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UHitReactionComponent> HitReactionComponent;
+
+	/** 적별로 할당하는 피격 반응 프로파일 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Combat")
+	TObjectPtr<URetrieveHitReactionProfile> HitReactionProfile;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<USphereComponent> FistHitbox;

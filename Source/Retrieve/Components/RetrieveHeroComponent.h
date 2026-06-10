@@ -31,6 +31,8 @@ public:
 	void InitializePlayerInput(UInputComponent* PlayerInputComponent);
 
 	FVector GetCachedMoveInputDirection() const { return CachedMoveInputVector; }
+	
+	float GetTimeSprintingSeconds() const;
 
 	//~ Begin IGameFrameworkInitStateInterface interface
 	virtual FName GetFeatureName() const override { return NAME_ActorFeatureName; }
@@ -75,4 +77,6 @@ private:
 	bool bInputsBound = false;
 
 	FVector CachedMoveInputVector = FVector::ZeroVector;
+	
+	double SprintStartTimeSeconds = -1.0;
 };

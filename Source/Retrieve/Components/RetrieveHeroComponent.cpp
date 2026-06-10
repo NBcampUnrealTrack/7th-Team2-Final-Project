@@ -341,6 +341,7 @@ void URetrieveHeroComponent::Input_SprintPressed(const FInputActionValue& InputA
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
 			ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+			SprintStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 		}
 	}
 }
@@ -355,8 +356,18 @@ void URetrieveHeroComponent::Input_SprintReleased(const FInputActionValue& Input
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
 			ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+			SprintStartTimeSeconds = -1.0;
 		}
 	}
+}
+
+float URetrieveHeroComponent::GetTimeSprintingSeconds() const
+{
+	if (SprintStartTimeSeconds < 0.0 || !GetWorld())
+	{
+		return 0.f;
+	}
+	return static_cast<float>(GetWorld()->GetTimeSeconds() - SprintStartTimeSeconds);
 }
 
 void URetrieveHeroComponent::Input_CrouchPressed(const FInputActionValue& InputActionValue)
