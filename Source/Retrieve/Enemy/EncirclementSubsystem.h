@@ -35,7 +35,8 @@ public:
 	
 	/** 슬롯의 월드 좌표(타깃 중심 링). Step2에서 NavMesh 투영 추가. */
 	FVector GetSlotLocation(const AActor* Target, int32 SlotIndex,
-		bool bUseOuterRadius = false, float MinNoise = 0.f, float MaxNoise = 0.f) const;
+		bool bUseOuterRadius = false, float MinNoise = 0.f, float MaxNoise = 0.f,
+		float InnerRadiusOverride = 0.f, float OuterRadiusOverride = 0.f) const;
 	
 	/** 배정된 슬롯의 인덱스를 반환 */
 	int32 GetCurrentSlot(AActor* Target, AActor* Requester) const;
@@ -59,6 +60,9 @@ private:
 	
 	FRing& FindOrAddRing(AActor* Target);
 	void CompactInvalidAttackTokens(FRing& Ring) const;
+	int32 GetAttackTokenCost(const AActor* Requester) const;
+	int32 GetAttackTokenBudget(const FRing& Ring, const AActor* Requester) const;
+	int32 GetCurrentAttackTokenCost(const FRing& Ring) const;
 	
 	void DrawDebug() const; 
 	
@@ -68,7 +72,7 @@ private:
 	float OuterRadius = 300.f;   // 공격 사거리(200) 약간 안쪽
 	
 	// 어택 토큰 패턴 적용
-	int32 MaxAttackTokens = 3;
+	int32 DefaultAttackTokenBudget = 3;
 	
 	TMap<TWeakObjectPtr<AActor>, FRing> Rings;   // TWeakObjectPtr 키 → GC 시 자동 무효
 };

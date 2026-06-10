@@ -75,6 +75,8 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.StrafeOffRange = Row->StrafeOffRange;
 			InstanceData.StrafeMinNoise = Row->StrafeMinNoise;
 			InstanceData.StrafeMaxNoise = Row->StrafeMaxNoise;
+			InstanceData.OrbitInnerRadius = Row->OrbitInnerRadius;
+			InstanceData.OrbitOuterRadius = Row->OrbitOuterRadius;
 			InstanceData.ChaseRange = Row->ChaseRange;
 			InstanceData.RechasableRange = Row->RechasableRange;
 			InstanceData.bPatrolable = Row->bPatrolable;
@@ -147,7 +149,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					const bool bUseOuterRadius = !bHasTokenForLocation;
 					
 					FVector RawTargetLocation = EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, SlotIndex,
-							bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise);
+							bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise,
+							InstanceData.OrbitInnerRadius, InstanceData.OrbitOuterRadius);
 					
 					if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation)
 					{
@@ -356,7 +359,11 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		if (UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 		{
 			const bool bHasValidTarget = IsValid(InstanceData.TargetPlayer);
-
+			
+			InstanceData.bSpecialAttackable = bHasValidTarget
+				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
+				InstanceData.TargetPlayer,RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
+			
 			InstanceData.bHasToken = bHasValidTarget
 				&& EncircleSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
 
@@ -365,18 +372,20 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 			InstanceData.bAttackable =
 				bCanRequestToken
-				&& InstanceData.DistanceToTarget <= InstanceData.StrafeOffRange
+				&& InstanceData.DistanceToTarget <= InstanceData.AttackableRange
 				&& InstanceData.CachedCombatComponent->IsAttackable();
 		}
 		else
 		{
 			InstanceData.bHasToken   = false;
 			InstanceData.bAttackable = false;
+			InstanceData.bSpecialAttackable = false;
 		}
 	}
 	else
 	{
 		InstanceData.bHasToken   = false;
 		InstanceData.bAttackable = false;
+		InstanceData.bSpecialAttackable = false;
 	}
 }

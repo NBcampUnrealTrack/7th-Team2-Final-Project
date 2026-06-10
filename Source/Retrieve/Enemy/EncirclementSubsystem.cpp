@@ -2,6 +2,8 @@
 #include "NavigationSystem.h"
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
+#include "Character/RetrieveEnemyCharacter.h"
+#include "Data/RetrieveDataTableTypes.h"
 
 static TAutoConsoleVariable<int32> CVarEncircleDebug(
 	TEXT("Encircle.Debug"), 0,
@@ -79,7 +81,10 @@ bool UEncirclementSubsystem::RequestAttackToken(AActor* Target, AActor* Requeste
 		return true;
 	}
 	
-	if (Ring.AttackTokens.Num() >= MaxAttackTokens)
+	const int32 CurrentCost = GetCurrentAttackTokenCost(Ring);
+	const int32 RequestCost = GetAttackTokenCost(Requester);
+	const int32 TokenBudget = GetAttackTokenBudget(Ring, Requester);
+	if (CurrentCost + RequestCost > TokenBudget)
 	{
 		return false;
 	}
@@ -112,7 +117,7 @@ bool UEncirclementSubsystem::CanRequestAttackToken(AActor* Target, AActor* Reque
 
 	if (const FRing* Ring = Rings.Find(Target))
 	{
-		int32 ValidTokenCount = 0;
+		int32 ValidTokenCost = 0;
 		for (const TWeakObjectPtr<AActor>& Token : Ring->AttackTokens)
 		{
 			if (Token.Get() == Requester)
@@ -120,16 +125,17 @@ bool UEncirclementSubsystem::CanRequestAttackToken(AActor* Target, AActor* Reque
 				return true;
 			}
 
-			if (Token.IsValid())
+			if (const AActor* TokenActor = Token.Get())
 			{
-				++ValidTokenCount;
+				ValidTokenCost += GetAttackTokenCost(TokenActor);
 			}
 		}
 
-		return ValidTokenCount < MaxAttackTokens;
+		return ValidTokenCost + GetAttackTokenCost(Requester) <= GetAttackTokenBudget(*Ring, Requester);
 	}
 
-	return true;
+	const FRing EmptyRing;
+	return GetAttackTokenCost(Requester) <= GetAttackTokenBudget(EmptyRing, Requester);
 }
 
 void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requester)
@@ -147,7 +153,7 @@ void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requeste
 }
 
 FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 SlotIndex,
-	bool bUseOuterRadius, float MinNoise, float MaxNoise) const
+	bool bUseOuterRadius, float MinNoise, float MaxNoise, float InnerRadiusOverride, float OuterRadiusOverride) const
 {
 	if (!Target || SlotIndex < 0 || SlotIndex >= NumSlots)
 	{
@@ -156,7 +162,9 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 	
 	const float StepAngle = 2.f * PI / NumSlots;
 	const float Angle = SlotIndex * StepAngle;
-	float TargetRadius = bUseOuterRadius ? OuterRadius : InnerRadius;
+	const float EffectiveInnerRadius = InnerRadiusOverride > 0.f ? InnerRadiusOverride : InnerRadius;
+	const float EffectiveOuterRadius = OuterRadiusOverride > 0.f ? OuterRadiusOverride : OuterRadius;
+	float TargetRadius = bUseOuterRadius ? EffectiveOuterRadius : EffectiveInnerRadius;
 	
 	if (bUseOuterRadius)
 	{
@@ -273,6 +281,50 @@ void UEncirclementSubsystem::CompactInvalidAttackTokens(FRing& Ring) const
 		{
 			return !Token.IsValid();
 		});
+}
+
+int32 UEncirclementSubsystem::GetAttackTokenCost(const AActor* Requester) const
+{
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Requester);
+	const FMonsterDataRow* Row = Enemy ? Enemy->GetMonsterDataRow() : nullptr;
+	return Row ? FMath::Max(1, Row->AttackTokenCost) : 1;
+}
+
+int32 UEncirclementSubsystem::GetAttackTokenBudget(const FRing& Ring, const AActor* Requester) const
+{
+	int32 Budget = DefaultAttackTokenBudget;
+
+	auto ApplyBudgetFromActor = [&Budget](const AActor* Actor)
+	{
+		const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Actor);
+		const FMonsterDataRow* Row = Enemy ? Enemy->GetMonsterDataRow() : nullptr;
+		if (Row && Row->AttackTokenBudget > 0)
+		{
+			Budget = FMath::Max(Budget, Row->AttackTokenBudget);
+		}
+	};
+
+	ApplyBudgetFromActor(Requester);
+	for (const TWeakObjectPtr<AActor>& Token : Ring.AttackTokens)
+	{
+		ApplyBudgetFromActor(Token.Get());
+	}
+
+	return FMath::Max(1, Budget);
+}
+
+int32 UEncirclementSubsystem::GetCurrentAttackTokenCost(const FRing& Ring) const
+{
+	int32 Cost = 0;
+	for (const TWeakObjectPtr<AActor>& Token : Ring.AttackTokens)
+	{
+		if (const AActor* TokenActor = Token.Get())
+		{
+			Cost += GetAttackTokenCost(TokenActor);
+		}
+	}
+
+	return Cost;
 }
 
 void UEncirclementSubsystem::DrawDebug() const

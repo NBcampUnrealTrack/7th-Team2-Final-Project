@@ -14,6 +14,7 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
@@ -65,8 +66,8 @@ bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
 	ActivePatternRowName = BasicAttackRowName;
 
 	FGameplayEventData EventData;
-	EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
-	EventData.Target     = Target;
+	EventData.EventTag= RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
+	EventData.Target = Target;
 	EventData.Instigator = GetOwner();
 	EventData.OptionalObject = Row->AttackMontage.LoadSynchronous();
 
@@ -91,17 +92,25 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 		return false;
 	}
 
-	const FMonsterPatternRow* BestPattern = FindBestPattern(Target);
-	if (!BestPattern || BestPattern->HitboxBoneName == NAME_None)
+	FName BestPatternRowName = NAME_None;
+	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_SpecialAttack, &BestPatternRowName);
+	if (!BestPattern)
 	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] No SpecialAttack pattern found. Target=%s"),
+			*GetOwner()->GetName(),
+			*GetNameSafe(Target));
+		
 		return false;
 	}
-
+	
 	URetrieveAbilitySystemComponent* ASC = GetASC();
 	if (!ASC)
 	{
 		return false;
 	}
+
+	ActivePatternRowName = BestPatternRowName;
 	
 	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 	{
@@ -109,19 +118,37 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	}
 
 	FGameplayEventData EventData;
+	EventData.OptionalObject = BestPattern->AttackMontage.LoadSynchronous();
 	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack;
-	EventData.Target   = Target;
+	EventData.Target = Target;
 	EventData.Instigator = GetOwner();
 	
 	const int32 TriggeredCount = ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack, &EventData);
-
+	
+	UE_LOG(LogRetrieveCombat, Display,
+		TEXT("[%s] SpecialAttack Event TriggeredCount=%d Row=%s Montage=%s Target=%s"),
+		*GetOwner()->GetName(),
+		TriggeredCount,
+		*BestPatternRowName.ToString(),
+		*GetNameSafe(EventData.OptionalObject.Get()),
+		*GetNameSafe(Target));
+	
 	if (TriggeredCount <= 0)
 	{
+		UE_LOG(LogRetrieveCombat, Warning,
+		TEXT("[%s] SpecialAttack event did not trigger ability. Row=%s"),
+		*GetOwner()->GetName(),
+		*BestPatternRowName.ToString());
 		return false;
 	}
 	
 	StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
 	return true;
+}
+
+bool UEnemyCombatComponent::HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const
+{
+	return FindBestPattern(Target, PatternType) != nullptr;
 }
 
 void UEnemyCombatComponent::StopCurrentPattern()
@@ -203,32 +230,34 @@ void UEnemyCombatComponent::ActivateHitbox()
 			TEXT(""))
 		: nullptr;
 
-	if (Row && !Row->HitboxBoneName.IsNone())
-	{
-		if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
-		{
-			if (!ActiveHitboxComp->AttachToComponent(
-				OwnerChar->GetMesh(),
-				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-				Row->HitboxBoneName))
-			{
-				UE_LOG(LogSkeletalMesh, Error, TEXT("[%s] HitBox attachment failed"), *GetName());
-			}
-		}
-		
-		ActiveHitboxComp->SetSphereRadius(Row->HitboxRadius);
-		ActiveHitboxComp->SetRelativeLocation(Row->HitboxOffset);
-	}
-	else if (Row == nullptr)
+	HitActors.Empty();
+	
+	if (!Row)
 	{
 		UE_LOG(LogDataTable, Error, TEXT("[%s] Row is inValid"), *GetName());
-	}
-	else if (Row->HitboxBoneName.IsNone())
-	{
-		UE_LOG(LogDataTable, Error, TEXT("[%s] Bone name is none"), *GetName());
+		ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		return;
 	}
 	
-	HitActors.Empty();
+	if (Row->HitboxBoneName.IsNone())
+	{
+		ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		return;
+	}
+	
+	if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
+	{
+		if (!ActiveHitboxComp->AttachToComponent(
+			OwnerChar->GetMesh(),
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			Row->HitboxBoneName))
+		{
+			UE_LOG(LogSkeletalMesh, Error, TEXT("[%s] HitBox attachment failed"), *GetName());
+		}
+	}
+	
+	ActiveHitboxComp->SetSphereRadius(Row->HitboxRadius);
+	ActiveHitboxComp->SetRelativeLocation(Row->HitboxOffset);
 	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 }
 
@@ -330,7 +359,7 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 	UE_LOG(LogDamage, Display, TEXT("[%s] Hit "), *GetName())
 }
 
-const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
+const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName) const
 {
 	if (!PatternTable || PatternSlots.IsEmpty() || !GetOwner())
 	{
@@ -338,9 +367,10 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
 	}
 
 	const FVector PawnLocation = GetOwner()->GetActorLocation();
-	const float DistanceSq     = FVector::DistSquared(PawnLocation, Target->GetActorLocation());
+	const float DistanceSq = FVector::DistSquared(PawnLocation, Target->GetActorLocation());
 
 	const FMonsterPatternRow* BestRow = nullptr;
+	FName BestRowName = NAME_None;
 	int32 BestPriority = MIN_int32;
 
 	for (const FName& RowName : PatternSlots)
@@ -352,7 +382,19 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
 			continue;
 		}
 		
-		if (DistanceSq > FMath::Square(Row->ActivationRange))
+		if (RequiredPatternType.IsValid() &&
+			!Row->PatternType.MatchesTagExact(RequiredPatternType))
+		{
+			continue;
+		}
+		
+		if (DistanceSq > FMath::Square(Row->MaxActivationRange))
+		{
+			continue;
+		}
+		
+		if (Row->MinActivationRange > 0.f &&
+			DistanceSq < FMath::Square(Row->MinActivationRange))
 		{
 			continue;
 		}
@@ -365,12 +407,21 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target)
 		if (Row->Priority > BestPriority)
 		{
 			BestPriority = Row->Priority;
-			ActivePatternRowName = RowName;
 			BestRow = Row;
+			BestRowName = RowName;
 		}
 	}
 	
-	UE_LOG(LogDataTable, Display, TEXT("[%s] Set ActivePatternRowName : %s"), *GetName(), *ActivePatternRowName.ToString());
+	if (OutRowName)
+	{
+		*OutRowName = BestRowName;
+	}
+	
+	UE_LOG(LogDataTable, Display,
+		TEXT("[%s] FindBestPattern Type=%s Result=%s Distance=%.1f"),
+		*GetName(), *RequiredPatternType.ToString(),
+		*BestRowName.ToString(), FMath::Sqrt(DistanceSq));
+	
 	return BestRow;
 }
 

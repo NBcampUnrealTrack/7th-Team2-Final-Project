@@ -354,6 +354,7 @@ void UGA_Attack::ApplyStepDamage()
 	
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
 	const float TraceRadius = CachedWeaponData.TraceRadius;
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);

@@ -173,6 +173,7 @@ void UGA_JumpAttack::ApplyHitDamage()
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_JumpAttack_Impact), false, AvatarActor);
 	const float TraceRadius = CachedWeaponData.TraceRadius;
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);

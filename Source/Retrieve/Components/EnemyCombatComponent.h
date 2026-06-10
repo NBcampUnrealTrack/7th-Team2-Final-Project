@@ -10,6 +10,7 @@ class USphereComponent;
 class UGameplayEffect;
 
 struct FMonsterPatternRow;
+struct FGameplayTag;
 
 /**
  * 적의 공격 패턴 선택·발동·쿨다운을 담당한다.
@@ -32,7 +33,9 @@ public:
 	bool RequestBasicAttack(AActor* Target);
 	
 	bool RequestPatternByPriority(AActor* Target);
-
+	
+	bool HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const;
+	
 	void StopCurrentPattern();
 
 	bool IsPatternActive() const;
@@ -57,7 +60,8 @@ private:
 						 UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
 						 bool bFromSweep, const FHitResult& SweepResult);
 	
-	const FMonsterPatternRow* FindBestPattern(AActor* Target);
+	const FMonsterPatternRow* FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType
+		, FName* OutRowName = nullptr) const;
 	bool IsCooldownReady(FName RowName) const;
 	void StartCooldown(FName RowName, float Duration);
 	URetrieveAbilitySystemComponent* GetASC() const;

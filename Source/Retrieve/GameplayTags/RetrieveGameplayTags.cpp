@@ -310,9 +310,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FireSigil, "Topic.Lumen.FireSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WindSigil, "Topic.Lumen.WindSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WaterSigil, "Topic.Lumen.WaterSigil");
-
-	// --- Enemy Types
-	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Normal, "Enemy.Type.Normal");
-	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Epic, "Enemy.Type.Epic");
-	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Boss, "Enemy.Type.Boss");
+	
+	// --- Monster Types
+	UE_DEFINE_GAMEPLAY_TAG(Monster_Type_Normal, "Monster.Type.Normal");
+	UE_DEFINE_GAMEPLAY_TAG(Monster_Type_Epic, "Monster.Type.Epic");
+	UE_DEFINE_GAMEPLAY_TAG(Monster_Type_Boss, "Monster.Type.Boss");
 }

@@ -42,6 +42,8 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	FistHitbox->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	// GetCapsuleComponent()->SetCollisionObjectType(ECC_GameTraceChannel1);
+	// GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	
 	// 회전 보간 적용

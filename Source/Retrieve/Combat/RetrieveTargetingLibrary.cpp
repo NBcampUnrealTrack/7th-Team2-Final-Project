@@ -43,11 +43,14 @@ AActor* URetrieveTargetingLibrary::FindBestTarget(ACharacter* Source, float Rang
 
 	TArray<FOverlapResult> Overlaps;
 	const FCollisionQueryParams Params(SCENE_QUERY_STAT(RetrieveWarpAcquire), false, Source);
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	World->OverlapMultiByObjectType(
 		Overlaps,
 		Origin,
 		FQuat::Identity,
-		FCollisionObjectQueryParams(ECC_Pawn),
+		ObjectQueryParams,
 		FCollisionShape::MakeSphere(Range),
 		Params);
 
