@@ -31,6 +31,12 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float StrafeMaxNoise = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float OrbitInnerRadius = 160.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float OrbitOuterRadius = 300.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	float DistanceToTarget = 0.f;
@@ -63,6 +69,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bAttackable = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bSpecialAttackable = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	FVector ChaseLocation = FVector::ZeroVector;

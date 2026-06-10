@@ -219,6 +219,7 @@ void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FV
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerBurst_Sweep), false, Owner);
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(Radius);
 

@@ -6,6 +6,7 @@
 #include "AbilitySystemInterface.h"
 #include "Camera/PlayerCameraManager.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -244,12 +245,15 @@ void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 
 	// SphereTrace
 	TArray<FHitResult> Hits;
+	TArray<TEnumAsByte<EObjectTypeQuery>> SearchObjectTypes = Config->SearchObjectTypes;
+	SearchObjectTypes.AddUnique(TEnumAsByte<EObjectTypeQuery>(UEngineTypes::ConvertToObjectType(ECC_GameTraceChannel1)));
+
 	UKismetSystemLibrary::SphereTraceMultiForObjects(
 		this,
 		CamLoc,
 		TraceEnd,
 		Config->SphereRadius,
-		Config->SearchObjectTypes,
+		SearchObjectTypes,
 		false,
 		IgnoreActors,
 		Config->bDebugDraw ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,

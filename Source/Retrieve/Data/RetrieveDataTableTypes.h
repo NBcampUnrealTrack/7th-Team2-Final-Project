@@ -76,48 +76,63 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag PatternType;
 
+	/** 발동 최대 거리 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
-    float ActivationRange = 200.f;
+	float MaxActivationRange = 200.f;
+	
+	/** 발동 최소 거리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
+	float MinActivationRange = 0.f;
 
+	/** 패턴 쿨타임 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
     float Cooldown = 3.f;
 
+	/** 파훼 시 그로기 지속 시간 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyDuration = 3.f;
 	
     /** 선택 우선순위. 높을수록 먼저 시도. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     int32 Priority = 0;
-
+	
+	/** 재생할 애니메이션 몽타주 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	TSoftObjectPtr<UAnimMontage> AttackMontage;
-
+	
+	/** 피격 시 적용할 효과 태그 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag EffectTag;
 	
-	/** 카운터 관련 */
+	/** 패링 가능 여부 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     bool bCanBeParried = false;
 
+	/** 파훼 시 Gorggy 트기거 작동 여부 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     bool bCanTriggerGroggy = false;
 
+	/** 파훼 성공 시 발생시킬 이벤트 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag CounterEventTag;
 
+	/** 파훼에 필요한 원소 모드. 없으면 None  */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag RequiredElementTag;
 
+	/** 파훼에 필요한 행동. 패링 / 회피 / 강공격 등 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag RequiredActionTag;
 	
-	// 충돌체 관련
+	/** 피격 판정 HitBox가 부착될 Bone 이름 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
 	FName HitboxBoneName = NAME_None;
 
+	/** 피격 판정 HitBox의 반지름 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(ClampMin="0.0"))
 	float HitboxRadius = 30.f;
 
+	/** 피격 판정 HitBox의 본의로부터의 Offset */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
 	FVector HitboxOffset = FVector::ZeroVector;
 };
@@ -131,42 +146,67 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Stats")
 	FName StatsRow;
 
+	/** 일반 / 에픽 / 보스 구분 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Stats")
 	FGameplayTag MonsterType;
 	
+	/** 몬스터 또는 보스가 사용하는 주요 원소 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Stats")
 	FGameplayTag ElementTag;
 	
+	/** Monster가 보유한 공격 패턴들의 Row 이름. DT_MonsterPatternRow의 Row 이름. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	TArray<FName> PatternSlots;
 
-	// 그로기 종료 후 재진입 대기 시간
+	/** 그로기 종료 후 재진입 대기 시간 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyCooldown = 10.f;
 
-	// 범위 지정
+	/** 범위 지정 - 공격 가능 범위 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Attack")
 	float AttackableRange = 200.f;
 	
+	/** 범위 지정 - Strafe 진입 범위 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
 	float StrafeOffRange = 360.f;
 	
+	/** Strafe 위치 지정 시 최소 노이즈 값 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
 	float StrafeMinNoise = -100.f;
 	
+	/** Strafe 위치 지정 시 최대 노이즈 값 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
 	float StrafeMaxNoise = 10.f;
+
+	/** 공격권 비용. 기본 1, 큰 몬스터는 2 이상 권장 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Attack", meta=(ClampMin="1"))
+	int32 AttackTokenCost = 1;
+
+	/** 타겟 주변 공격권 총 예산. 0 이하면 시스템 기본값 사용 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Attack", meta=(ClampMin="0"))
+	int32 AttackTokenBudget = 0;
+
+	/** 공격권 보유 몬스터가 사용할 안쪽 배회 반경 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move", meta=(ClampMin="0.0"))
+	float OrbitInnerRadius = 160.f;
+
+	/** 공격권이 없는 몬스터가 사용할 바깥 배회 반경 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move", meta=(ClampMin="0.0"))
+	float OrbitOuterRadius = 300.f;
 	
+	/** 범위 지정 - 추적 가능 범위 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float ChaseRange = 1500.f;
 	
+	/** Return -> Chase 가능해지는 스폰 지점과의 거리 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float RechasableRange = 100.f;
 	
+	/** Patrol 범위 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float PatrolRange = 1200.f;
 	
-	// 순찰 여부
+	/** 순찰 여부 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;
 	
@@ -184,21 +224,19 @@ struct RETRIEVE_API FBossStatsRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Stats")
     FName StatsRow;
 
+	/** 보스 페이즈 수 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase", meta=(ClampMin="1", ClampMax="3"))
     int32 PhaseCount = 1;
 
+	/** 2페이즈 진입 HP 비율  */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase", meta=(ClampMin="0.0", ClampMax="1.0"))
     float Phase2HPThreshold = 0.5f;
 
+	/** 3페이즈 진입 HP 비율. 없으면 0 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase", meta=(ClampMin="0.0", ClampMax="1.0"))
     float Phase3HPThreshold = 0.25f;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Groggy", meta=(ClampMin="0.0"))
-    float GroggyDuration = 5.f;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Groggy", meta=(ClampMin="0.0"))
-    float GroggyCooldown = 15.f;
-
+	/** 처치 시 해방할 원소 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Drop")
     FGameplayTag UnlockElementTag;
 };
@@ -212,6 +250,7 @@ struct RETRIEVE_API FEnemyListRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Spawn")
     FName MonsterDataRow;
 
+	/** 사용할 AI State Tree 에셋 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Spawn")
     TSoftObjectPtr<UStateTree> AIStateTree;
 
@@ -219,6 +258,7 @@ struct RETRIEVE_API FEnemyListRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Spawn")
     FName DropRow;
 
+	/** 등장 섹션 / 지역 태그 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Spawn")
     FGameplayTag SectionTag;
 };

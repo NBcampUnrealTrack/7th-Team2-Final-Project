@@ -52,6 +52,7 @@ void UGA_HeavyAttack_Fire::ApplyRadialDamage()
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_HeavyAttack_Fire), false, AvatarActor);
 
 	TArray<FOverlapResult> Overlaps;
