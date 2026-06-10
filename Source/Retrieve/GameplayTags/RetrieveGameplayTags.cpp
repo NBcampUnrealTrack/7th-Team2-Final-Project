@@ -35,6 +35,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Water, "Ability.Player.SetElement.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Wind, "Ability.Player.SetElement.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_RecallLumen, "Ability.Player.RecallLumen");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SprintAttack, "Ability.Player.SprintAttack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_ParryCounter, "Ability.Player.ParryCounter");
 
 	// ---- Enemy / Boss abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
@@ -65,6 +67,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Dialogue, "State.Player.Modal.Dialogue");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Cinematic, "State.Player.Modal.Cinematic");
+
+	// ---- Cooldown
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Player_Parry, "Cooldown.Player.Parry");
 
 	// ---- Action state
 	UE_DEFINE_GAMEPLAY_TAG(State_Action_HighMobility, "State.Action.HighMobility");

@@ -1,26 +1,25 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/EngineTypes.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "GA_JumpAttack.generated.h"
+#include "GA_SprintAttack.generated.h"
 
-class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
+class UAbilityTask_WaitGameplayEvent;
 class UGameplayEffect;
 class UWeaponComponent;
 
 /**
- * 공중(점프) 상태에서 발동하는 찍기(슬램) 공격, 데미지는 착지 시점에만 발생
+ * 스프린트 중 공격 입력 시 발동하는 단발 찌르기 공격
  */
 UCLASS()
-class RETRIEVE_API UGA_JumpAttack : public URetrieveGameplayAbility
+class RETRIEVE_API UGA_SprintAttack : public URetrieveGameplayAbility
 {
 	GENERATED_BODY()
 
 public:
-	UGA_JumpAttack();
+	UGA_SprintAttack();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
@@ -31,20 +30,20 @@ protected:
 
 private:
 	void StopRuntimeTasks();
-	void UnbindLanded();
+	void ApplyHitDamage();
+	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 
-	void ApplyLandingAoe();
-
+	UFUNCTION() void HandleImpactBeginEvent(FGameplayEventData Payload);
+	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
-	UFUNCTION() void HandleLanded(const FHitResult& Hit);
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|SprintAttack")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|JumpAttack")
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|SprintAttack")
 	bool bDebugDrawTrace = false;
 
 	UPROPERTY(Transient)
@@ -54,14 +53,21 @@ private:
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactBeginEventTask;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+	
+	bool bMovementStopped = false;
 
 	UPROPERTY(Transient)
 	TSet<TObjectPtr<AActor>> HitActors;
 
 	bool bChargeBonusGranted = false;
 
-	// LandedDelegate 구독 해제용
-	UPROPERTY(Transient)
-	TWeakObjectPtr<ACharacter> BoundLandedCharacter;
+	TArray<FVector> PreviousTracePoints;
+	bool bHasValidPreviousTracePoints = false;
 };

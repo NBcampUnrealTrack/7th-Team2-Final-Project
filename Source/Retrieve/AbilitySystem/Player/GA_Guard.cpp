@@ -68,11 +68,17 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		GuardBrokenTask->EventReceived.AddDynamic(this, &ThisClass::HandleGuardBroken);
 		GuardBrokenTask->ReadyForActivation();
 	}
-
-	// 가드 활성 직후 Parry 윈도우 부여
-	if (ParryWindowEffect)
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bParryOnCooldown = ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Cooldown_Player_Parry);
+	if (ParryWindowEffect && !bParryOnCooldown)
 	{
 		ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, ParryWindowEffect.GetDefaultObject(), GetAbilityLevel());
+
+		if (ParryCooldownEffect)
+		{
+			ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, ParryCooldownEffect.GetDefaultObject(), GetAbilityLevel());
+		}
 	}
 
 	// Parry 성공 수신 → 카운터 윈도우 부여
@@ -85,9 +91,10 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	}
 }
 
-void UGA_Guard::HandleParrySuccess(FGameplayEventData /*Payload*/)
+void UGA_Guard::HandleParrySuccess(FGameplayEventData Payload)
 {
-	// 패리 성공 시 카운터 윈도우
+	LastParriedAttacker = const_cast<AActor*>(Cast<AActor>(Payload.OptionalObject));
+
 	if (CounterWindowEffect)
 	{
 		ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, CounterWindowEffect.GetDefaultObject(), GetAbilityLevel());

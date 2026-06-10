@@ -18,6 +18,8 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Components/BossHPBarComponent.h"
+#include "Components/HitReactionComponent.h"
+#include "Combat/RetrieveHitReactionProfile.h"
 #include "Player/RetrievePlayerController.h"
 
 ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& ObjectInitializer)
@@ -30,6 +32,7 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	EnemyCombatComponent = CreateDefaultSubobject<UEnemyCombatComponent>(TEXT("EnemyCombatComponent"));
 	PatternCounterComponent = CreateDefaultSubobject<UPatternCounterComponent>(TEXT("PatternCounterComponent"));
 	DropComponent = CreateDefaultSubobject<UDropComponent>(TEXT("DropComponent"));
+	HitReactionComponent = CreateDefaultSubobject<UHitReactionComponent>(TEXT("HitReactionComponent"));
 	
 	FistHitbox = CreateDefaultSubobject<USphereComponent>(TEXT("FistHitbox"));
 	FistHitbox->SetupAttachment(GetMesh());  
@@ -189,6 +192,11 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	if (PatternCounterComponent)
 	{
 		PatternCounterComponent->SetGroggyCooldown(Row->GroggyCooldown);
+	}
+
+	if (HitReactionComponent && HitReactionProfile)
+	{
+		HitReactionComponent->Configure(HitReactionProfile);
 	}
 	
 	if (DropComponent && !Row->DropRow.IsNone())

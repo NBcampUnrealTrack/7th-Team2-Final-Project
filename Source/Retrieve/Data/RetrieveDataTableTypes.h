@@ -103,8 +103,12 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 피격 시 적용할 효과 태그 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag EffectTag;
-	
-	/** 패링 가능 여부 */
+
+	/** 적중 시 피격자 반응 강도 (방어판정/데미지와 독립) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|HitReact")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+
+	/** 카운터 관련 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     bool bCanBeParried = false;
 
@@ -543,6 +547,30 @@ struct RETRIEVE_API FAttackComboVariant
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponSprintAttack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FName SectionName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FGameplayTag ChargeBonusEventTag;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Sprint", meta = (ClampMin = "0.0"))
+	float RequiredSprintDuration = 0.5f;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FWeaponJumpAttack
 {
 	GENERATED_BODY()
@@ -561,6 +589,38 @@ struct RETRIEVE_API FWeaponJumpAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	FGameplayTag ChargeBonusEventTag;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
+	float LandingAoeRadius = 250.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
+	float DiveDownSpeed = 0.f;
+};
+
+
+// 패리 성공 후 카운터 공격 데이터, 적 타입(Normal, Boss)에 따라 다른 Groggy GE 적용
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FParryCounterData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Motion")
+	TSoftObjectPtr<UAnimMontage> CounterMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Groggy")
+	TSubclassOf<UGameplayEffect> NormalGroggyEffect;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Groggy")
+	TSubclassOf<UGameplayEffect> BossGroggyEffect;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Groggy", meta = (ClampMin = "0.0"))
+	float GroggyDuration = 3.f;
 };
 
 USTRUCT(BlueprintType)
@@ -652,7 +712,13 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FWeaponSprintAttack SprintAttack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FWeaponJumpAttack JumpAttack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FParryCounterData ParryCounter;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;

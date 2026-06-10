@@ -37,6 +37,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SetElement_Water);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SetElement_Wind);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_RecallLumen);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SprintAttack);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_ParryCounter);
 
 	// ---- Enemy / Boss abilities
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
@@ -67,6 +69,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Crouching);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Modal_Dialogue);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Modal_Cinematic);
+
+	// ---- Cooldown
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Player_Parry);
 
 	// ---- Action state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_HighMobility);

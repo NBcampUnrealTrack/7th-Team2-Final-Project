@@ -166,13 +166,11 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 				InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
 		}
 
-		// (b) 방어자에게 "패리 성공" 발행 → GA_Guard가 카운터 윈도우 부여 + Cue,
-		//     UElementGaugeComponent가 원소 게이지 충전(ChargeRuleTable에 Parry.Success 행 추가 시).
-		// Instigator는 보상 수령자인 방어자(self)로 둔다. ElementGauge는 Payload.Instigator == Owner
-		// 인 이벤트만 충전하므로 공격자로 두면 무시된다. (소비자 GA_Guard는 payload 미사용 → 안전)
+		// (b) 방어자에게 "패리 성공" 발행 → GA_Guard가 카운터 윈도우 부여 + Cue
 		FGameplayEventData ToVictim;
 		ToVictim.Instigator = TargetActor;
 		ToVictim.Target = TargetActor;
+		ToVictim.OptionalObject = InstigatorActor;
 		ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 			TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
