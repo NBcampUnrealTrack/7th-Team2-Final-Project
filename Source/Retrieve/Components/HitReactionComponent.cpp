@@ -15,6 +15,7 @@
 UHitReactionComponent::UHitReactionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	ReactionSuppressionTags.AddTag(RetrieveGameplayTags::State_Player_Bursting);
 }
 
 void UHitReactionComponent::BeginPlay()
@@ -75,6 +76,15 @@ void UHitReactionComponent::OnAbilitySystemReady()
 
 void UHitReactionComponent::HandleHitEvent(FGameplayTag /*MatchingTag*/, const FGameplayEventData* Payload)
 {
+	// 버스트 등 억제 상태 중에는 데미지는 받되 피격 반응(몽타주/어빌리티 캔슬)은 건너뛴다.
+	if (const URetrieveAbilitySystemComponent* ASC = GetASC())
+	{
+		if (!ReactionSuppressionTags.IsEmpty() && ASC->HasAnyMatchingGameplayTags(ReactionSuppressionTags))
+		{
+			return;
+		}
+	}
+
 	// TODO(하민): 임시 재진입 차단 -> 식별 태그 없는 공격 건너뛰기로 대체 예정
 	if (bProcessingReaction)
 	{
