@@ -275,6 +275,28 @@ void ARetrieveAlsCharacter::EndRollLockout()
 	}
 }
 
+void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(FGameplayTag PreviousLocomotionMode)
+{
+	// 착지(InAir→Grounded) 판정 바로 그 시점에서만 낙법을 억제
+	// Super가 bStartRollingOnLand + 낙하속도로 낙법을 발동하므로, 
+	// 억제 요청 시 그 순간에만 bStartRollingOnLand를 끄고 Super 호출 후 즉시 복구
+	const bool bLanding = GetLocomotionMode() == AlsLocomotionModeTags::Grounded
+		&& PreviousLocomotionMode == AlsLocomotionModeTags::InAir;
+
+	if (bLanding && bSuppressLandingRoll && Settings)
+	{
+		const bool bPrev = Settings->Rolling.bStartRollingOnLand;
+		Settings->Rolling.bStartRollingOnLand = false;
+		Super::NotifyLocomotionModeChanged(PreviousLocomotionMode);
+		Settings->Rolling.bStartRollingOnLand = bPrev;
+
+		bSuppressLandingRoll = false; // 1회 소비
+		return;
+	}
+
+	Super::NotifyLocomotionModeChanged(PreviousLocomotionMode);
+}
+
 void ARetrieveAlsCharacter::TurnYawTowardActor(AActor* Target, float InterpSpeed)
 {
 	if (IsValid(Target) == false)

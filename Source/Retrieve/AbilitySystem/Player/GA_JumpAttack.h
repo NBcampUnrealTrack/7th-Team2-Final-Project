@@ -12,7 +12,8 @@ class UGameplayEffect;
 class UWeaponComponent;
 
 /**
- * 공중(점프) 상태에서 발동하는 찍기(슬램) 공격, 데미지는 착지 시점에만 발생
+ * 공중(점프) 상태에서 발동하는 찍기(슬램) 공격으로, 데미지는 착지 시점에만 발생
+ * 발동 시 DiveGravityScale로 급강하하며, 발동 시점의 지면 높이에 따라 피해를 차등 적용
  */
 UCLASS()
 class RETRIEVE_API UGA_JumpAttack : public URetrieveGameplayAbility
@@ -32,8 +33,8 @@ protected:
 private:
 	void StopRuntimeTasks();
 	void UnbindLanded();
-
 	void ApplyLandingAoe();
+	void ResolveHeightTier();
 
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
@@ -60,6 +61,13 @@ private:
 	TSet<TObjectPtr<AActor>> HitActors;
 
 	bool bChargeBonusGranted = false;
+	
+	float ResolvedDamageMultiplier = 1.f;
+	ERetrieveHitReactType ResolvedHitReactType = ERetrieveHitReactType::Flinch;
+	float ResolvedAoeRadius = 0.f;
+	
+	float SavedGravityScale = 1.f;
+	bool bGravityModified = false;
 
 	// LandedDelegate 구독 해제용
 	UPROPERTY(Transient)
