@@ -3,6 +3,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/BossPhaseComponent.h"
 #include "Components/EnemyCombatComponent.h"
+#include "Components/NormalMonsterHealthBarComponent.h"
 #include "Components/RetrieveHealthComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
@@ -16,6 +17,11 @@ ARetrieveBossCharacter::ARetrieveBossCharacter(const FObjectInitializer& ObjectI
 	: Super(ObjectInitializer)
 {
 	BossPhaseComponent = CreateDefaultSubobject<UBossPhaseComponent>(TEXT("BossPhaseComponent"));
+
+	if (NormalHealthBarComponent)
+	{
+		NormalHealthBarComponent->SetHealthBarEnabled(false);
+	}
 }
 
 void ARetrieveBossCharacter::InitializeComponents()
