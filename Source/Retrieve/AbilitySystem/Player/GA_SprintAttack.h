@@ -60,8 +60,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
-	
-	bool bMovementStopped = false;
 
 	UPROPERTY(Transient)
 	TSet<TObjectPtr<AActor>> HitActors;

@@ -4,13 +4,16 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
@@ -92,15 +95,30 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	
+	ResolveHeightTier();
 
 	ACharacter* Character = Cast<ACharacter>(AvatarActor);
-	
-	if (Character && CachedWeaponData.JumpAttack.DiveDownSpeed > 0.f)
-	{
-		Character->LaunchCharacter(FVector(0.f, 0.f, -CachedWeaponData.JumpAttack.DiveDownSpeed),
-			/*bXYOverride=*/false, /*bZOverride=*/true);
-	}
 
+	// 찍기 착지 시 낙법(ALS Rolling on Land) 억제
+	if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(AvatarActor))
+	{
+		AlsChar->SetSuppressLandingRoll(true);
+	}
+	
+	if (Character)
+	{
+		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+		{
+			if (CachedWeaponData.JumpAttack.DiveGravityScale > 0.f)
+			{
+				SavedGravityScale = MoveComp->GravityScale;
+				MoveComp->GravityScale = CachedWeaponData.JumpAttack.DiveGravityScale;
+				bGravityModified = true;
+			}
+		}
+	}
+	
 	if (Character)
 	{
 		Character->LandedDelegate.AddDynamic(this, &ThisClass::HandleLanded);
@@ -140,12 +158,12 @@ void UGA_JumpAttack::ApplyLandingAoe()
 		return;
 	}
 
-	const float Radius = CachedWeaponData.JumpAttack.LandingAoeRadius;
+	const float Radius = ResolvedAoeRadius;
 	if (Radius <= 0.f)
 	{
 		return;
 	}
-	
+
 	FVector Center = AvatarActor->GetActorLocation();
 	const FName Socket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
 	if (IsValid(CachedWeaponComponent))
@@ -176,7 +194,7 @@ void UGA_JumpAttack::ApplyLandingAoe()
 		return;
 	}
 
-	const float DamageMul = CachedWeaponData.JumpAttack.DamageMultiplier;
+	const float DamageMul = ResolvedDamageMultiplier;
 
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
@@ -197,7 +215,7 @@ void UGA_JumpAttack::ApplyLandingAoe()
 		PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
 		PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedWeaponData.JumpAttack.HitReactType); ReactTag.IsValid())
+		if (const FGameplayTag ReactTag = HitReactTypeToTag(ResolvedHitReactType); ReactTag.IsValid())
 		{
 			PerHitSpec.Data->AddDynamicAssetTag(ReactTag);
 		}
@@ -218,6 +236,69 @@ void UGA_JumpAttack::ApplyLandingAoe()
 				bChargeBonusGranted = true;
 			}
 		}
+	}
+}
+
+void UGA_JumpAttack::ResolveHeightTier()
+{
+	const FWeaponJumpAttack& Data = CachedWeaponData.JumpAttack;
+	
+	ResolvedDamageMultiplier = Data.DamageMultiplier;
+	ResolvedHitReactType = Data.HitReactType;
+	ResolvedAoeRadius = Data.LandingAoeRadius;
+
+	if (Data.HeightTiers.IsEmpty())
+	{
+		return;
+	}
+
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	UWorld* World = AvatarActor ? AvatarActor->GetWorld() : nullptr;
+	if (!IsValid(AvatarActor) || !IsValid(World))
+	{
+		return;
+	}
+	
+	float HalfHeight = 0.f;
+	if (const ACharacter* Char = Cast<ACharacter>(AvatarActor))
+	{
+		if (const UCapsuleComponent* Capsule = Char->GetCapsuleComponent())
+		{
+			HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+		}
+	}
+	const FVector Start = AvatarActor->GetActorLocation() - FVector(0.f, 0.f, HalfHeight);
+	const FVector End = Start - FVector(0.f, 0.f, 100000.f);
+
+	float MeasuredHeight = TNumericLimits<float>::Max();
+	FHitResult GroundHit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(GA_JumpAttack_HeightProbe), false, AvatarActor);
+	if (World->LineTraceSingleByChannel(GroundHit, Start, End, ECC_Visibility, Params))
+	{
+		MeasuredHeight = FMath::Max(0.f, static_cast<float>((Start - GroundHit.ImpactPoint).Size()));
+	}
+
+	// MinHeight <= 측정높이 인 구간 중 MinHeight가 가장 큰 구간 선택
+	const FJumpAttackHeightTier* Best = nullptr;
+	for (const FJumpAttackHeightTier& Tier : Data.HeightTiers)
+	{
+		if (MeasuredHeight >= Tier.MinHeight && (!Best || Tier.MinHeight > Best->MinHeight))
+		{
+			Best = &Tier;
+		}
+	}
+
+	if (Best)
+	{
+		ResolvedDamageMultiplier = Best->DamageMultiplier;
+		ResolvedHitReactType = Best->HitReactType;
+		ResolvedAoeRadius = (Best->AoeRadiusOverride > 0.f) ? Best->AoeRadiusOverride : Data.LandingAoeRadius;
+	}
+
+	if (bDebugDrawTrace)
+	{
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[JumpAttack] Height=%.0f -> DamageMul=%.2f, Radius=%.0f"),
+			MeasuredHeight, ResolvedDamageMultiplier, ResolvedAoeRadius);
 	}
 }
 
@@ -269,6 +350,18 @@ void UGA_JumpAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 {
 	StopRuntimeTasks();
 	UnbindLanded();
+	
+	if (bGravityModified)
+	{
+		if (const ACharacter* Char = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			if (UCharacterMovementComponent* MoveComp = Char->GetCharacterMovement())
+			{
+				MoveComp->GravityScale = SavedGravityScale;
+			}
+		}
+		bGravityModified = false;
+	}
 
 	HitActors.Reset();
 	bChargeBonusGranted = false;

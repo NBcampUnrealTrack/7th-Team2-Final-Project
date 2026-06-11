@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -66,7 +65,11 @@ public:
 	void EndRollLockout();
 	
 	/** 애니메이션으로 락온 타겟과의 시점이 틀어졌을때 다시 타겟 방향으로 맞춰주는 보간 */
-	void TurnYawTowardActor(AActor* Target, float InterpSpeed); 
+	void TurnYawTowardActor(AActor* Target, float InterpSpeed);
+
+	/** 다음 착지 1회의 낙법(ALS Rolling on Land)을 억제하도록 표시 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	void SetSuppressLandingRoll(bool bSuppress) { bSuppressLandingRoll = bSuppress; }
 
 protected:
 	virtual void PostInitializeComponents() override;
@@ -107,6 +110,9 @@ protected:
 	/** ALS LocomotionAction 변화 → GAS State 태그 미러링 (Rolling→Dodging 등) */
 	virtual void NotifyLocomotionActionChanged(FGameplayTag PreviousLocomotionAction) override;
 
+	/** ALS 착지 낙법 판정 시점. bSuppressLandingRoll이 켜져 있으면 이 착지 1회의 낙법을 억제 */
+	virtual void NotifyLocomotionModeChanged(FGameplayTag PreviousLocomotionMode) override;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Pawn")
 	TObjectPtr<const URetrievePawnData> DefaultPawnData;
 
@@ -119,4 +125,7 @@ private:
 	/** 락온 타겟 유효하면 보간 진행 중 */
 	TWeakObjectPtr<AActor> TurnTarget;
 	float TurnInterpSpeed = 0.f;
+
+	/** true면 다음 착지 1회의 낙법을 억제 (NotifyLocomotionModeChanged에서 소비). JumpAttack이 발동 시 설정 */
+	bool bSuppressLandingRoll = false;
 };

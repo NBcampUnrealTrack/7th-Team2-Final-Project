@@ -570,6 +570,25 @@ struct RETRIEVE_API FWeaponSprintAttack
 	float RequiredSprintDuration = 0.5f;
 };
 
+// JumpAttack 높이 구간, 발동 시점 지면 높이가 MinHeight 이상이면 후보가 되고 후보 중 MinHeight가 가장 큰 구간이 선택됨
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FJumpAttackHeightTier
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "JumpAttack|Tier", meta = (ClampMin = "0.0"))
+	float MinHeight = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "JumpAttack|Tier", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "JumpAttack|Tier")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "JumpAttack|Tier", meta = (ClampMin = "0.0"))
+	float AoeRadiusOverride = 0.f;
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FWeaponJumpAttack
 {
@@ -589,12 +608,15 @@ struct RETRIEVE_API FWeaponJumpAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	FGameplayTag ChargeBonusEventTag;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
 	float LandingAoeRadius = 250.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
-	float DiveDownSpeed = 0.f;
+	float DiveGravityScale = 0.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam")
+	TArray<FJumpAttackHeightTier> HeightTiers;
 };
 
 

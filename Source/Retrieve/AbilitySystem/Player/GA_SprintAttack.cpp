@@ -9,7 +9,6 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/RetrieveHeroComponent.h"
@@ -83,6 +82,12 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 		return;
 	}
 
+	// SprintAttack 후에 다시 Sprint + 워밍업을 거쳐야 재발동
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+	}
+
 	AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
 	CachedWeaponComponent = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
 	if (!IsValid(CachedWeaponComponent))
@@ -126,17 +131,6 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
 	MontageTask->ReadyForActivation();
-
-	// 스프린트 관성을 끊고 공격 중 입력 이동 차단 — EndAbility에서 Walking으로 복구
-	if (ACharacter* Char = Cast<ACharacter>(AvatarActor))
-	{
-		if (UCharacterMovementComponent* MoveComp = Char->GetCharacterMovement())
-		{
-			MoveComp->StopMovementImmediately();
-			MoveComp->DisableMovement();
-			bMovementStopped = true;
-		}
-	}
 }
 
 void UGA_SprintAttack::HandleImpactBeginEvent(FGameplayEventData Payload)
@@ -345,18 +339,6 @@ void UGA_SprintAttack::StopRuntimeTasks()
 void UGA_SprintAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopRuntimeTasks();
-
-	if (bMovementStopped)
-	{
-		if (const ACharacter* Char = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
-		{
-			if (UCharacterMovementComponent* MoveComp = Char->GetCharacterMovement())
-			{
-				MoveComp->SetMovementMode(MOVE_Walking);
-			}
-		}
-		bMovementStopped = false;
-	}
 
 	HitActors.Reset();
 	PreviousTracePoints.Reset();
