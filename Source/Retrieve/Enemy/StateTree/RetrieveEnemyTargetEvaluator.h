@@ -62,6 +62,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	float RechasableRange = 100.f;
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
+	float MoveAcceptableRadius = 5.f;
+	
+	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bPatrolable = false;
 	
 	UPROPERTY(EditAnywhere, Category = "Output")

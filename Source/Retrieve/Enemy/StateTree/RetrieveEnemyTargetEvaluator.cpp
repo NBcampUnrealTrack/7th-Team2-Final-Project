@@ -15,6 +15,7 @@
 #include "Enemy/EncirclementSubsystem.h"
 #include "Components/EnemyCombatComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Logging/RetrieveLogChannels.h"
 
 namespace
 {
@@ -81,6 +82,7 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.RechasableRange = Row->RechasableRange;
 			InstanceData.bPatrolable = Row->bPatrolable;
 			InstanceData.PatrolRange = Row->PatrolRange;
+			InstanceData.MoveAcceptableRadius = Row->MoveAcceptableRadius;
 		}
 	}
 }
@@ -131,44 +133,49 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				FVector2D(PawnLoc.X, PawnLoc.Y),
 				FVector2D(InstanceData.TargetLocation.X, InstanceData.TargetLocation.Y)
 				);
-		
-			if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			const bool bFreezeChaseLocation = InstanceData.CachedCombatComponent.IsValid()
+				&& InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
+			
+			if (!bFreezeChaseLocation)
 			{
-				int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
-				if (SlotIndex == INDEX_NONE)
+				if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 				{
-					SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
-				}
-				
-				if (SlotIndex != INDEX_NONE)
-				{
-					const bool bHadToken = InstanceData.bHasToken;
-					const bool bHasTokenForLocation =
-						EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
-					InstanceData.bHasToken = bHasTokenForLocation;
-					const bool bUseOuterRadius = !bHasTokenForLocation;
-					
-					FVector RawTargetLocation = EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, SlotIndex,
-							bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise,
-							InstanceData.OrbitInnerRadius, InstanceData.OrbitOuterRadius);
-					
-					if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation)
+					int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
+					if (SlotIndex == INDEX_NONE)
 					{
-						InstanceData.ChaseLocation = RawTargetLocation;
+						SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
+					}
+				
+					if (SlotIndex != INDEX_NONE)
+					{
+						const bool bHadToken = InstanceData.bHasToken;
+						const bool bHasTokenForLocation =
+							EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+						InstanceData.bHasToken = bHasTokenForLocation;
+						const bool bUseOuterRadius = !bHasTokenForLocation;
+					
+						FVector RawTargetLocation = EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, SlotIndex,
+								bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise,
+								InstanceData.OrbitInnerRadius, InstanceData.OrbitOuterRadius);
+					
+						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation)
+						{
+							InstanceData.ChaseLocation = RawTargetLocation;
+						}
+						else
+						{
+							InstanceData.ChaseLocation = FMath::VInterpTo(InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
+						}
 					}
 					else
 					{
-						InstanceData.ChaseLocation = FMath::VInterpTo(InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
+						InstanceData.ChaseLocation = InstanceData.TargetLocation;
 					}
 				}
 				else
 				{
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
-			}
-			else
-			{
-				InstanceData.ChaseLocation = InstanceData.TargetLocation;
 			}
 		}
 	}
@@ -180,6 +187,20 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			InstanceData.OwnedTags.Reset();
 			ASC->GetOwnedGameplayTags(InstanceData.OwnedTags);
+		}
+	}
+
+	if (InstanceData.CachedCombatComponent.IsValid())
+	{
+		const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
+		if (bPatternActive)
+		{
+			InstanceData.bSpecialAttackable = false;
+			InstanceData.bAttackable = false;
+		}
+		else if (InstanceData.CachedCombatComponent->IsSpecialAttackEvaluationLocked())
+		{
+			InstanceData.bSpecialAttackable = false;
 		}
 	}
 	
@@ -360,18 +381,32 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			const bool bHasValidTarget = IsValid(InstanceData.TargetPlayer);
 			
-			InstanceData.bSpecialAttackable = bHasValidTarget
-				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
-				InstanceData.TargetPlayer,RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
-			
 			InstanceData.bHasToken = bHasValidTarget
 				&& EncircleSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
 
 			const bool bCanRequestToken = bHasValidTarget
 				&& EncircleSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn);
 
+			const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
+			const bool bSpecialAttackEvaluationLocked =
+				InstanceData.CachedCombatComponent->IsSpecialAttackEvaluationLocked();
+
+			InstanceData.bSpecialAttackable = bCanRequestToken
+				&& !bPatternActive
+				&& !bSpecialAttackEvaluationLocked
+				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
+					InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
+			UE_LOG(LogRetrieveCombat, Warning,
+				TEXT("[EnemyTargetEvaluator] SpecialCheck Target=%s CanToken=%d PatternActive=%d SpecialLock=%d Distance=%.1f"),
+				*GetNameSafe(InstanceData.TargetPlayer),
+				bCanRequestToken,
+				bPatternActive,
+				bSpecialAttackEvaluationLocked,
+				InstanceData.DistanceToTarget);
+			
 			InstanceData.bAttackable =
 				bCanRequestToken
+				&& !bPatternActive
 				&& InstanceData.DistanceToTarget <= InstanceData.AttackableRange
 				&& InstanceData.CachedCombatComponent->IsAttackable();
 		}

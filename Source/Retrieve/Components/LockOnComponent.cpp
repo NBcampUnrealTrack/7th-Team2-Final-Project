@@ -286,7 +286,14 @@ void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 		{
 			continue;
 		}
-		
+
+		// ASC가 없는 액터는 락온 대상에서 제외 (루멘 동반자 등 비전투 NPC)
+		const IAbilitySystemInterface* ASCIface = Cast<IAbilitySystemInterface>(HitActor);
+		if (!ASCIface || !ASCIface->GetAbilitySystemComponent())
+		{
+			continue;
+		}
+
 		OutCandidates.Add(HitActor);
 	}
 }

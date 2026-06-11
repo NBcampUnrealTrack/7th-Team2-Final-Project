@@ -41,6 +41,11 @@ public:
 	bool IsPatternActive() const;
 	
 	bool IsAttackable() const;
+
+	bool IsSpecialAttackEvaluationLocked() const;
+	
+	void SetMovementLockedByAttack(bool bLocked);
+	bool IsMovementLockedByAttack() const { return bMovementLockedByAttack; }
 	
 	FName GetActivePatternRowName() const { return ActivePatternRowName; }
 
@@ -64,6 +69,7 @@ private:
 		, FName* OutRowName = nullptr) const;
 	bool IsCooldownReady(FName RowName) const;
 	void StartCooldown(FName RowName, float Duration);
+	void LockSpecialAttackEvaluation(float Duration);
 	URetrieveAbilitySystemComponent* GetASC() const;
 
 	UPROPERTY()
@@ -88,4 +94,12 @@ private:
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+	
+	bool bMovementLockedByAttack = false;
+	float MovementLockOriginalMaxWalkSpeed = -1.f;
+
+	float SpecialAttackEvaluationLockUntilTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|SpecialAttack", meta = (ClampMin = "0.0"))
+	float SpecialAttackEvaluationLockDuration = 0.5f;
 };
