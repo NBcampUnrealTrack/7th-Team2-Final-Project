@@ -7,6 +7,7 @@
 #include "RetrieveGameState.generated.h"
 
 class UQuestBranchComponent;
+class UGuardianCoreSpawnerComponent;
 struct FDialogueRow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRetrieveSessionStateChanged, ERetrieveSessionState, Previous,
@@ -66,6 +67,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest")
 	TObjectPtr<UQuestBranchComponent> QuestBranchComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|GuardianCore")
+	TObjectPtr<UGuardianCoreSpawnerComponent> GuardianCoreSpawner;
 	
 	// ---- Dialogue ----
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dialogue")

@@ -1,6 +1,8 @@
 #include "Core/RetrieveGameState.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayCueFunctionLibrary.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerState.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -8,11 +10,13 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Net/UnrealNetwork.h"
 #include "Quest/QuestBranchComponent.h"
+#include "World/GuardianCoreSpawnerComponent.h"
 
 ARetrieveGameState::ARetrieveGameState(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
 	bReplicates = true;
 	QuestBranchComponent = CreateDefaultSubobject<UQuestBranchComponent>(TEXT("QuestBranch"));
+	GuardianCoreSpawner = CreateDefaultSubobject<UGuardianCoreSpawnerComponent>(TEXT("GuardianCoreSpawner"));
 }
 
 void ARetrieveGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -225,7 +229,7 @@ void ARetrieveGameState::ApplySigilTopic(const FDialogueRow& Row, APawn* Soverei
 	}
 	if (Row.RequiresStep.IsValid() && !QuestComp->IsStepCompleted(Row.RequiresStep))
 	{
-		return; // 전제 조건 미충족
+		return; // 전제 조건 미충족 (e.g. <Element>GuardianDefeated 미완료)
 	}
 
 	// 1. VFX 적용 — GameplayCue는 모든 클라이언트에 복제됨
@@ -238,6 +242,20 @@ void ARetrieveGameState::ApplySigilTopic(const FDialogueRow& Row, APawn* Soverei
 
 	// 2. 퀘스트 기록
 	QuestComp->CompleteStep(Row.SigilStepTag);
+
+	// 3. 원소 해방
+	const FGameplayTag ElementToUnlock = QuestComp->GetUnlockElementForStep(Row.SigilStepTag);
+	if (ElementToUnlock.IsValid() && Sovereign)
+	{
+		// TODO(coop): 모든 플레이어의 ASC에 전개
+		FGameplayEventData Payload;
+		Payload.EventTag = RetrieveGameplayTags::GameplayEvent_Core_Absorb;
+		Payload.Instigator = Sovereign;
+		Payload.InstigatorTags.AddTag(ElementToUnlock);
+
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			Sovereign, RetrieveGameplayTags::GameplayEvent_Core_Absorb, Payload);
+	}
 
 	// 3. 이어서 대화
 	RequestDialogue(Row.Lines, {}, true);

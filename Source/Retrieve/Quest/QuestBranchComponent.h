@@ -26,6 +26,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	bool IsStepCompleted(FGameplayTag StepTag) const;
+	
+	/** 해당 스텝 행의 UnlockElementTag Getter. (<Element>SigilActivated 행만 태그를 포함함.)
+	 *  ApplySigilTopic이 GameplayEvent.Core.Absorb를 발동하기 위해 읽습니다. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
+	FGameplayTag GetUnlockElementForStep(FGameplayTag StepTag) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	FGameplayTag GetCurrentTrackerStep() const { return CurrentTrackerStep; }
