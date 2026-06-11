@@ -40,7 +40,6 @@ UGA_Attack::UGA_Attack()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Sprinting);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_CanCounter);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);

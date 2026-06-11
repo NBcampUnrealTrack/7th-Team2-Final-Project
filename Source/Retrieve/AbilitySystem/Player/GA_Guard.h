@@ -50,6 +50,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
 	TSubclassOf<UGameplayEffect> CounterWindowEffect;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Guard|Parry")
+	TSubclassOf<UGameplayEffect> ParryStaggerEffect;
+
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitInputRelease> InputReleaseTask;
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> GuardBrokenTask;
