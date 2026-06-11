@@ -16,7 +16,7 @@
 #include "Components/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
-#include "GameFramework/SpringArmComponent.h"
+#include "Components/RetrieveCameraBoom.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Input/RetrieveInputComponent.h"
@@ -63,11 +63,13 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
 	
-	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
+	CameraSpringArm = CreateDefaultSubobject<URetrieveCameraBoom>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
 	CameraSpringArm->TargetArmLength = 400.0f;
 	CameraSpringArm->bUsePawnControlRotation = true;
-	CameraSpringArm->bDoCollisionTest = false;
+	CameraSpringArm->bDoCollisionTest = true;
+	CameraSpringArm->ProbeSize = 8.0f;
+	CameraSpringArm->bEnableCameraLag = true;
 	CameraSpringArm->CameraLagSpeed = 10.f;
 
 	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
