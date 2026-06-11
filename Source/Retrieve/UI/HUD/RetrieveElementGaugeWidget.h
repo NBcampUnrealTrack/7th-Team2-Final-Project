@@ -1,8 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
-#include "GameplayTagContainer.h"
+#include "UI/RetrieveElementAwareWidget.h"
 #include "RetrieveElementGaugeWidget.generated.h"
 
 class UImage;
@@ -29,7 +28,7 @@ class UElementGaugeViewModel;
  *   Vector Parameter  : EmptyColor     (비어있는 영역 색상)
  */
 UCLASS()
-class RETRIEVE_API URetrieveElementGaugeWidget : public UUserWidget
+class RETRIEVE_API URetrieveElementGaugeWidget : public URetrieveElementAwareWidget
 {
 	GENERATED_BODY()
 
@@ -75,6 +74,9 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
+	// 원소 모드 변경 시 TriggerElementModePulse 수행 후 Super로 dispatch 위임
+	virtual void NativeOnElementModeChanged(FGameplayTag NewElement) override;
+
 private:
 	static constexpr int32 SlotCount = 3;
 
@@ -110,9 +112,6 @@ private:
 	UFUNCTION()
 	void HandleGaugeUpdated();
 
-	UFUNCTION()
-	void HandleCurrentElementChanged(FGameplayTag NewElement);
-
 	/**
 	 * 슬롯 비율/원소 갱신.
 	 * @param bFull       슬롯이 확정 완료됐는지
@@ -126,7 +125,6 @@ private:
 	/** GlowPower 펄스 트리거. bIsFullTransition이면 더 강하고 길다 */
 	void TriggerGlowPulse(int32 SlotIndex, bool bIsFullTransition);
 	void TriggerElementModePulse(FGameplayTag NewElement, bool bImmediate);
-	void DispatchElementModeChangedToBlueprint(FGameplayTag NewElement);
 	void SetElementIconVisualState(float PulseAlpha);
 
 	UImage*              GetSlotImage(int32 SlotIndex) const;

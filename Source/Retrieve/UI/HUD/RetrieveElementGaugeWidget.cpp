@@ -54,7 +54,7 @@ void URetrieveElementGaugeWidget::NativeDestruct()
 	if (UElementGaugeViewModel* VM = BoundViewModel.Get())
 	{
 		VM->OnSlotsUpdated.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
-		VM->OnCurrentElementChanged.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
+		// OnCurrentElementChanged 해제는 URetrieveElementAwareWidget::NativeDestruct에서 처리
 	}
 	Super::NativeDestruct();
 }
@@ -67,8 +67,7 @@ void URetrieveElementGaugeWidget::InitFromViewModel(UElementGaugeViewModel* Gaug
 
 	GaugeVM->OnSlotsUpdated.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
 	GaugeVM->OnSlotsUpdated.AddDynamic(this, &URetrieveElementGaugeWidget::HandleGaugeUpdated);
-	GaugeVM->OnCurrentElementChanged.RemoveDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
-	GaugeVM->OnCurrentElementChanged.AddDynamic(this, &URetrieveElementGaugeWidget::HandleCurrentElementChanged);
+	// OnCurrentElementChanged 구독은 URetrieveElementAwareWidget::NativeConstruct에서 일원화
 
 	// 초기값 즉시 반영 (애니메이션 없이 스냅)
 	UpdateSlot(0, GaugeVM->GetSlot0Ratio(), GaugeVM->GetSlot0Element(), GaugeVM->GetSlot0IsFull(), /*bImmediate=*/true);
@@ -89,9 +88,10 @@ void URetrieveElementGaugeWidget::HandleGaugeUpdated()
 	UpdateSlot(2, VM->GetSlot2Ratio(), VM->GetSlot2Element(), VM->GetSlot2IsFull());
 }
 
-void URetrieveElementGaugeWidget::HandleCurrentElementChanged(FGameplayTag NewElement)
+void URetrieveElementGaugeWidget::NativeOnElementModeChanged(FGameplayTag NewElement)
 {
 	TriggerElementModePulse(NewElement, /*bImmediate=*/false);
+	Super::NativeOnElementModeChanged(NewElement);
 }
 
 void URetrieveElementGaugeWidget::UpdateSlot(int32 SlotIndex, float Ratio, FGameplayTag Element, bool bFull, bool bImmediate)
@@ -244,7 +244,6 @@ void URetrieveElementGaugeWidget::TriggerElementModePulse(FGameplayTag NewElemen
 
 	CachedCurrentElement = NewElement;
 	ElementModePulseColor = URetrieveElementUILibrary::ElementTagToColor(NewElement);
-	DispatchElementModeChangedToBlueprint(NewElement);
 
 	if (bImmediate)
 	{
@@ -257,24 +256,6 @@ void URetrieveElementGaugeWidget::TriggerElementModePulse(FGameplayTag NewElemen
 	bElementModePulseActive = true;
 	ElementModePulseProgress = 0.f;
 	SetElementIconVisualState(1.f);
-}
-
-void URetrieveElementGaugeWidget::DispatchElementModeChangedToBlueprint(FGameplayTag NewElement)
-{
-	UFunction* EventFunction = FindFunction(TEXT("BP_OnElementModeChanged"));
-	if (!EventFunction)
-	{
-		return;
-	}
-
-	struct FElementModeChangedParams
-	{
-		FGameplayTag NewElementTag;
-	};
-
-	FElementModeChangedParams Params;
-	Params.NewElementTag = NewElement;
-	ProcessEvent(EventFunction, &Params);
 }
 
 void URetrieveElementGaugeWidget::SetElementIconVisualState(float PulseAlpha)
