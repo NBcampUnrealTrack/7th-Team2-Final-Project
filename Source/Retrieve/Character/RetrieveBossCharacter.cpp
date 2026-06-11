@@ -38,18 +38,18 @@ void ARetrieveBossCharacter::InitializeComponents()
 
 void ARetrieveBossCharacter::HandleDeathStarted(AActor* OwningActor)
 {
-	// Super(EnemyCharacter)는 호출하지 않습니다.
-	// 이유: EnemyCharacter::HandleDeathStarted가 State.Enemy.Dead 태그를 적용하고
-	//       GameplayEvent.Enemy.Die를 전송하는데, 보스는 State.Boss.Dead / Boss.Die를 사용합니다.
-
-	// 1. State.Boss.Dead 적용 → StateTree Dead 분기 진입, LockOn 해제
+	ARetrieveCombatCharacter::HandleDeathStarted(OwningActor);
+	
 	if (OwnedASC)
 	{
-		OwnedASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Boss_Dead);
+		OwnedASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
 	}
 
-	if (!HasAuthority()) { return; }
-
+	if (!HasAuthority())
+	{
+		return;
+	}
+	
 	// 2. Channel.Monster.Died 브로드캐스트 (퀘스트·킬카운터 등 공통 리스너 처리)
 	const URetrieveHealthComponent* HC = GetHealthComponent();
 	FMonsterDiedPayload DiedPayload;
@@ -69,9 +69,12 @@ void ARetrieveBossCharacter::HandleDeathStarted(AActor* OwningActor)
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		this, RetrieveGameplayTags::GameplayEvent_Boss_Die, EventData);
 
-	// 4. 가디언 vs 여왕 분기
+	
 	const FBossStatsRow* Row = GetBossStatsRow();
-	if (!Row) { return; }
+	if (!Row)
+	{
+		return;
+	}
 
 	if (Row->UnlockElementTag.IsValid())
 	{
