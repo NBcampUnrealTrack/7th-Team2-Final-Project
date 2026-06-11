@@ -3,6 +3,7 @@
 #include "LockOnComponent.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "AbilitySystemInterface.h"
 #include "Camera/PlayerCameraManager.h"
 #include "DrawDebugHelpers.h"
@@ -51,6 +52,11 @@ void ULockOnComponent::SetConfig(ULockOnConfig* InConfig)
 
 bool ULockOnComponent::StartLockOn()
 {
+	if (ShouldSuppressLockOn())
+	{
+		return false; // 억제 조건 충족 시 락온 시도 자체를 무시 (예: 특정 상태 태그 보유)
+	}
+	
 	if (IsValid(Config) == false)
 	{
 		UE_LOG(LogTemp, Warning,
@@ -576,6 +582,11 @@ void ULockOnComponent::SetCurrentTarget(AActor* NewTarget)
 
 bool ULockOnComponent::ShouldBreakLockOn() const
 {
+	if (ShouldSuppressLockOn())
+	{
+		return true; // 억제 조건 만족 시 즉시 락온 해제 (예: 수영 중)
+	}
+	
 	if (bLockOnActive == false || IsValid(Config) == false)
 	{
 		return false;
@@ -605,6 +616,18 @@ bool ULockOnComponent::ShouldBreakLockOn() const
 		return true;
 	}
 
+	return false;
+}
+
+bool ULockOnComponent::ShouldSuppressLockOn() const
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	if (IsValid(ASC))
+	{
+		 return ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming);
+		// 나중에 Cinematic/Dead 등 다른 억제 조건도 여기에 OR로 추가 가능
+	}
+	
 	return false;
 }
 

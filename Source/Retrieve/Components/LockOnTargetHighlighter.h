@@ -30,7 +30,7 @@ protected:
 	void ToggleHighlight(AActor* Target, bool bEnable);
 	// 메시에 적용하는 CustomDepth Stencil 값
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|LockOn|Highlight")
-	int32 LockOnStencilValue = 3;
+	int32 LockOnStencilValue = 255;
 	// 현재 외곽선이 적용된 액터
 	TWeakObjectPtr<AActor> CurrentHighlighted;
 };

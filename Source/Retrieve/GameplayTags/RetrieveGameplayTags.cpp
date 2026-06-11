@@ -66,6 +66,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming, "State.Player.Swimming");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming_UnderWater, "State.Player.Swimming.UnderWater");
+	
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Dialogue, "State.Player.Modal.Dialogue");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Modal_Cinematic, "State.Player.Modal.Cinematic");
 
