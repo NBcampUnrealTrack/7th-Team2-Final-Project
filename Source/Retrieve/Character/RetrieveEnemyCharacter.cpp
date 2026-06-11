@@ -1,4 +1,4 @@
-#include "Character/RetrieveEnemyCharacter.h"
+﻿#include "Character/RetrieveEnemyCharacter.h"
 
 #include "Abilities/GameplayAbilityTypes.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -12,6 +12,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/DropComponent.h"
 #include "Components/EnemyCombatComponent.h"
+#include "Components/NormalMonsterHealthBarComponent.h"
 #include "Components/PatternCounterComponent.h"
 #include "Components/RetrieveHealthComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
@@ -32,6 +33,9 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	EnemyCombatComponent = CreateDefaultSubobject<UEnemyCombatComponent>(TEXT("EnemyCombatComponent"));
 	PatternCounterComponent = CreateDefaultSubobject<UPatternCounterComponent>(TEXT("PatternCounterComponent"));
 	DropComponent = CreateDefaultSubobject<UDropComponent>(TEXT("DropComponent"));
+	NormalHealthBarComponent = CreateDefaultSubobject<UNormalMonsterHealthBarComponent>(TEXT("NormalHealthBarComponent"));
+	NormalHealthBarComponent->SetupAttachment(GetRootComponent());
+	NormalHealthBarComponent->SetRelativeLocation(FVector(0.f, 0.f, 120.f));
 	HitReactionComponent = CreateDefaultSubobject<UHitReactionComponent>(TEXT("HitReactionComponent"));
 	
 	FistHitbox = CreateDefaultSubobject<USphereComponent>(TEXT("FistHitbox"));

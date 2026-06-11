@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Character/RetrieveCombatCharacter.h"
@@ -12,6 +12,7 @@ class URetrieveAbilitySystemComponent;
 class UEnemyCombatComponent;
 class UPatternCounterComponent;
 class UDropComponent;
+class UNormalMonsterHealthBarComponent;
 class USphereComponent;
 class UHitReactionComponent;
 class URetrieveHitReactionProfile;
@@ -122,6 +123,10 @@ protected:
 	/** 적별로 할당하는 피격 반응 프로파일 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<URetrieveHitReactionProfile> HitReactionProfile;
+	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UNormalMonsterHealthBarComponent> NormalHealthBarComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<USphereComponent> FistHitbox;
