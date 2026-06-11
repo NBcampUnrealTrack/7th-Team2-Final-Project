@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "GameplayEffect.h"
@@ -98,6 +99,28 @@ void UGA_Guard::HandleParrySuccess(FGameplayEventData Payload)
 	if (CounterWindowEffect)
 	{
 		ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, CounterWindowEffect.GetDefaultObject(), GetAbilityLevel());
+	}
+
+	if (ParryStaggerEffect && HasAuthority(&GetCurrentActivationInfoRef()))
+	{
+		if (AActor* Attacker = LastParriedAttacker.Get())
+		{
+			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Attacker);
+			UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+			if (TargetASC && SourceASC && !TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss))
+			{
+				AActor* AvatarActor = GetAvatarActorFromActorInfo();
+				FGameplayEffectContextHandle Ctx = SourceASC->MakeEffectContext();
+				Ctx.AddInstigator(AvatarActor, AvatarActor);
+				Ctx.AddSourceObject(this);
+
+				const FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(ParryStaggerEffect, GetAbilityLevel(), Ctx);
+				if (Spec.IsValid())
+				{
+					SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+				}
+			}
+		}
 	}
 }
 
