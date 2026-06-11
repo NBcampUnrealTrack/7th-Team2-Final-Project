@@ -1,4 +1,4 @@
-﻿#include "AbilitySystem/Player/GA_Attack.h"
+#include "AbilitySystem/Player/GA_Attack.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -177,7 +177,7 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 
 	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
 
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true);
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CachedAttackMontage, GetMontagePlayRate(), StepData.SectionName, true, 1.f, 0.f, /*bAllowInterruptAfterBlendOut=*/true);
 	if (!MontageTask)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);

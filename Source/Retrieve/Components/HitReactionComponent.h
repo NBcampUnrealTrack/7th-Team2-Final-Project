@@ -45,7 +45,12 @@ private:
 	void StopActiveMontage();
 
 private:
-	UPROPERTY(Transient) 
+	// 이 태그들 중 하나라도 오너 ASC에 있으면 피격 반응을 건너뛴다(데미지는 정상 적용).
+	// 예: 버스트 시전 중 슈퍼아머. 플레이어/적 공용이므로 인스턴스별로 조정 가능.
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HitReaction")
+	FGameplayTagContainer ReactionSuppressionTags;
+
+	UPROPERTY(Transient)
 	TObjectPtr<URetrieveHitReactionProfile> Profile;
 
 	UPROPERTY(Transient) 
