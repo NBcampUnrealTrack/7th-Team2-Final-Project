@@ -107,6 +107,12 @@ void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 	}
 }
 
+FGameplayTag ARetrieveBossCharacter::GetUnlockElementTag() const
+{
+	const FBossStatsRow* Row = GetBossStatsRow();
+	return Row ? Row->UnlockElementTag : FGameplayTag();
+}
+
 const FBossStatsRow* ARetrieveBossCharacter::GetBossStatsRow() const
 {
 	if (!BossStatsTable || BossStatsRowName.IsNone()) { return nullptr; }

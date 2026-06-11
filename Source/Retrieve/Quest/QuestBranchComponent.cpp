@@ -27,6 +27,12 @@ bool UQuestBranchComponent::IsStepCompleted(FGameplayTag StepTag) const
 	return CompletedSteps.Contains(StepTag);
 }
 
+FGameplayTag UQuestBranchComponent::GetUnlockElementForStep(FGameplayTag StepTag) const
+{
+	const FQuestStep* Row = FindRow(StepTag);
+	return Row ? Row->UnlockElementTag : FGameplayTag();
+}
+
 const FQuestStep* UQuestBranchComponent::FindRow(FGameplayTag StepTag) const
 {
 	if (!QuestStepTable)
