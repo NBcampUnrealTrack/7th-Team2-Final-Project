@@ -1,8 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
-#include "GameplayTagContainer.h"
+#include "UI/RetrieveElementAwareWidget.h"
 #include "UI/VFX/RetrieveUIVFXTypes.h"
 #include "RetrieveUIVFXWidget.generated.h"
 
@@ -33,7 +32,7 @@ struct FRetrieveActiveUIVFX
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRetrieveUIVFXFinishedSignature, FGameplayTag, EffectTag);
 
 UCLASS(Abstract, Blueprintable)
-class RETRIEVE_API URetrieveUIVFXWidget : public UUserWidget
+class RETRIEVE_API URetrieveUIVFXWidget : public URetrieveElementAwareWidget
 {
 	GENERATED_BODY()
 
