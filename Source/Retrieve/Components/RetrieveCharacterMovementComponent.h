@@ -52,4 +52,8 @@ protected:
 
 	UPROPERTY(Transient)
 	bool bHasReplicatedAcceleration = false;
+
+	// 수영 중 Sprint 가속 배율 (표면/수중 동일 단일 속도에 적용). TODO(6.5): SwimSettings
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Swim")
+	float SwimSprintMultiplier = 1.5f;
 };

@@ -120,6 +120,8 @@ protected:
 	TObjectPtr<URetrievePawnExtensionComponent> PawnExtensionComponent;
 
 private:
+	void RefreshSwimmingRotation(float DeltaTime);	
+	
 	/** PostInitializeComponents에서 캡슐 디폴트 HalfHeight 캐싱. Crouch 보정용. */
 	float CachedDefaultHalfHeight = 0.f;
 	/** 락온 타겟 유효하면 보간 진행 중 */

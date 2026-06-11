@@ -22,6 +22,9 @@ namespace RetrieveCharacterMovement
 URetrieveCharacterMovementComponent::URetrieveCharacterMovementComponent(const FObjectInitializer& ObjectInitializer)
 	: Super()   // UAlsCharacterMovementComponent 생성자는 ObjectInitializer 인자를 받지 않음
 {
+	NavAgentProps.bCanSwim = true;
+	MaxSwimSpeed = 300.f;                   // TODO(M2): URetrieveSwimSettings로 이동
+	BrakingDecelerationSwimming = 800.f;   // TODO(M2): URetrieveSwimSettings로 이동
 }
 
 void URetrieveCharacterMovementComponent::SimulateMovement(float DeltaTime)
@@ -150,6 +153,21 @@ float URetrieveCharacterMovementComponent::GetMaxSpeed() const
 		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Animation_Lock_Movement))
 		{
 			return 0.0f;
+		}
+
+		// 수영: 단일 속도 + Sprint 가속 (표면/수중 동일). ALS gait는 수영에 안 닿으므로 여기서 직접.
+		if (IsSwimming())
+		{
+			float Base = MaxSwimSpeed;
+			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Sprinting))
+			{
+				Base *= SwimSprintMultiplier;
+			}
+			if (const UCombatAttributeSet* AttrSet = ASC->GetSet<UCombatAttributeSet>())
+			{
+				return Base * (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+			}
+			return Base;
 		}
 
 		// ALS Gait 기반 베이스 속도에 MoveSpeed Attribute 배율 적용

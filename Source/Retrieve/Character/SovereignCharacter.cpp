@@ -13,6 +13,7 @@
 #include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SwimDetectionComponent.h"
 #include "Components/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
@@ -62,6 +63,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
+	SwimDetectionComponent = CreateDefaultSubobject<USwimDetectionComponent>(TEXT("SwimDetectionComponent"));
 	
 	CameraSpringArm = CreateDefaultSubobject<URetrieveCameraBoom>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);

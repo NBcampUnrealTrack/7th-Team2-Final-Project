@@ -1,6 +1,7 @@
 ﻿#include "Components/RetrieveHeroComponent.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "AbilitySystemInterface.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputCoreTypes.h"
@@ -9,6 +10,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveCameraBoom.h"
+#include "Components/SwimDetectionComponent.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -225,6 +227,24 @@ void URetrieveHeroComponent::Input_Move(const FInputActionValue& InputActionValu
 	if (!Pawn) return;
 
 	const FVector2D Value = InputActionValue.Get<FVector2D>();
+
+	// 수영 분기: 수중=3D(pitch 포함) / 표면=평면
+	if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+	{
+		if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+		{
+			const FRotator ControlRot = Pawn->GetControlRotation();
+			const bool bUnderwater = SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater);
+			const FVector Fwd   = bUnderwater ? ControlRot.Vector()
+			                                  : FRotator(0.f, ControlRot.Yaw, 0.f).Vector();
+			const FVector Right = FRotator(0.f, ControlRot.Yaw, 0.f).RotateVector(FVector::RightVector);
+			Pawn->AddMovementInput(Fwd,   Value.Y);
+			Pawn->AddMovementInput(Right, Value.X);
+			CachedMoveInputVector = (Fwd * Value.Y + Right * Value.X).GetSafeNormal();
+			return;
+		}
+	}
+
 	const FRotator MovementRotation(0.0f, Pawn->GetControlRotation().Yaw, 0.0f);
 
 	const FVector ForwardDirection = MovementRotation.RotateVector(FVector::ForwardVector);
@@ -310,6 +330,22 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 		return;
 	}
 
+	// 수영 중 Jump = 상승 트림 (Jump GA 스킵)
+	if (InputTag == RetrieveGameplayTags::Ability_Player_Jump)
+	{
+		if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+		{
+			if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+			{
+				if (USwimDetectionComponent* Swim = Pawn->FindComponentByClass<USwimDetectionComponent>())
+				{
+					Swim->SetSwimVerticalInput(1.f);
+				}
+				return;
+			}
+		}
+	}
+
 	if (InputTag == RetrieveGameplayTags::Ability_Player_Jump)
 	{
 		if (const APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
@@ -336,6 +372,22 @@ void URetrieveHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag
 	if (!Pawn)
 	{
 		return;
+	}
+
+	// 수영 중 Jump 뗌 = 상승 트림 종료
+	if (InputTag == RetrieveGameplayTags::Ability_Player_Jump)
+	{
+		if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+		{
+			if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+			{
+				if (USwimDetectionComponent* Swim = Pawn->FindComponentByClass<USwimDetectionComponent>())
+				{
+					Swim->SetSwimVerticalInput(0.f);
+				}
+				return;
+			}
+		}
 	}
 
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
@@ -394,7 +446,20 @@ void URetrieveHeroComponent::Input_CrouchPressed(const FInputActionValue& InputA
 {
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn) return;
-	
+
+	// 수영 중 Crouch = 하강 트림 (Crouching 스탠스 스킵)
+	if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+	{
+		if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+		{
+			if (USwimDetectionComponent* Swim = Pawn->FindComponentByClass<USwimDetectionComponent>())
+			{
+				Swim->SetSwimVerticalInput(-1.f);
+			}
+			return;
+		}
+	}
+
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
@@ -408,6 +473,19 @@ void URetrieveHeroComponent::Input_CrouchReleased(const FInputActionValue& Input
 {
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn) return;
+
+	// 수영 중 Crouch 뗌 = 하강 트림 종료
+	if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+	{
+		if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+		{
+			if (USwimDetectionComponent* Swim = Pawn->FindComponentByClass<USwimDetectionComponent>())
+			{
+				Swim->SetSwimVerticalInput(0.f);
+			}
+			return;
+		}
+	}
 
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 	{

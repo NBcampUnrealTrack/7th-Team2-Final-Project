@@ -6,6 +6,7 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "SovereignCharacter.generated.h"
 
+class USwimDetectionComponent;
 class URetrievePawnCosmeticComponent;
 class UCameraComponent;
 class UInventoryComponent;
@@ -69,6 +70,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveBuffUIBroadcastComponent> BuffUIBroadcastComponent;
 
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<USwimDetectionComponent> SwimDetectionComponent;
+	
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<USkeletalMeshComponent> VisualMesh;

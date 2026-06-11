@@ -7,6 +7,7 @@
 #include "Components/RetrieveCharacterMovementComponent.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
+#include "Field/FieldSystemObjects.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -71,6 +72,13 @@ void ARetrieveAlsCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	const URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+	{
+		RefreshSwimmingRotation(DeltaTime);
+		return;
+	}
+	
 	// Crouch 시 ACharacter가 발 위치 유지를 위해 actor.Z를 내림. 그 변화량을 SpringArm Z로 역보정.
 	if (USpringArmComponent* SpringArm = GetCameraSpringArm())
 	{
@@ -344,4 +352,25 @@ void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(FGameplayTag PreviousL
 	};
 
 	SyncTag(AlsLocomotionActionTags::Rolling, RetrieveGameplayTags::State_Player_Dodging);
+}
+
+void ARetrieveAlsCharacter::RefreshSwimmingRotation(float DeltaTime)
+{
+	// const FVector LocalVelocity = GetVelocity();
+	// if (LocalVelocity.SizeSquared2D() < KINDA_SMALL_NUMBER)
+	// {
+	// 	return; // 가속도 없으면 현재 방향을 유지한다.
+	// }
+	//
+	// const float TargetYaw = LocalVelocity.GetSafeNormal2D().Rotation().Yaw;
+	// const float NewYaw = FMath::RInterpTo(GetActorRotation(), FRotator(0.f, TargetYaw, 0.f), DeltaTime, 8.f /*추후 DataDriven*/).Yaw;
+	// SetRotationInstant(NewYaw);
+	const FAlsLocomotionState& LocoState = GetLocomotionState();
+	if (!LocoState.bHasVelocity)
+	{
+		return; // 가속도 없으면 현재 방향을 유지한다.
+	}
+	UE_LOG(LogTemp, Log, TEXT("VelocityYawAngle: %f"), LocoState.VelocityYawAngle);
+	const float HalfLife = CalculateGroundedMovingRotationInterpolationHalfLife();
+	SetRotationExtraSmooth(LocoState.VelocityYawAngle, DeltaTime, HalfLife, 800.f);
 }

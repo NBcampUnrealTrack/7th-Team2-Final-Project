@@ -73,6 +73,7 @@ private:
 	AActor* PickSwitchTarget(const TArray<AActor*>& Candidates, FVector2D InputDir) const;
 	void SetCurrentTarget(AActor* NewTarget);
 	bool ShouldBreakLockOn() const;
+	bool ShouldSuppressLockOn() const;
 	bool IsTargetDead(const AActor* Target) const;
 	void ApplyLockOnTag(bool bAdd) const;
 	// 타겟 사망 태그 이벤트 구독/해제 (폴링 대체)
