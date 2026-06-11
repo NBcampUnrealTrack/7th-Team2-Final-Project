@@ -22,6 +22,12 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	UPROPERTY(EditAnywhere, Category = "Input", meta=(Optional))
 	float DistanceToTarget = TNumericLimits<float>::Max();
 	
+	UPROPERTY(EditAnywhere, Category = "Input")
+	FVector ChaseLocation = FVector::ZeroVector;
+	
+	UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.0"))
+	float MoveAcceptableRadius = 30.f;
+	
 	// 이 시간(초)을 초과하면 GA 완료 여부와 무관하게 Succeeded 반환
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.5"))
 	float MaxAttackDuration = 5.f;
@@ -41,6 +47,8 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	
 	bool bStartAttack = false;
 	bool bObservedPatternActive = false;
+	
+	FVector LastMoveRequestLocation = FVector::ZeroVector;
 	
 	UPROPERTY()
 	TWeakObjectPtr<UEnemyCombatComponent> CachedCombatComponent = nullptr;

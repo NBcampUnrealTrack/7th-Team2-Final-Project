@@ -4,6 +4,10 @@
 #include "StateTreeExecutionContext.h"
 #include "Components/EnemyCombatComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
+#include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 bool FStateTreeTask_EnemyAttack::Link(FStateTreeLinker& Linker)
 {
@@ -75,6 +79,34 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 		if (InstanceData.DistanceToTarget > AttackStartRange)
 		{
 			InstanceData.TimeInSoftAttackRange = 0.f;
+			
+			if (AAIController* AIC = Pawn->GetController<AAIController>())
+			{
+				const bool bCanMove = InstanceData.CachedCombatComponent.IsValid()
+					&& !InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
+
+				if (bCanMove && !InstanceData.ChaseLocation.IsNearlyZero())
+				{
+					const float MoveDeltaSq = FVector::DistSquared2D(
+						InstanceData.LastMoveRequestLocation,
+						InstanceData.ChaseLocation);
+
+					if (InstanceData.LastMoveRequestLocation.IsNearlyZero() 
+						|| MoveDeltaSq > FMath::Square(50.f))
+					{
+						AIC->MoveToLocation(
+							InstanceData.ChaseLocation,
+							InstanceData.MoveAcceptableRadius,
+							true,
+							true,
+							true,
+							true);
+
+						InstanceData.LastMoveRequestLocation = InstanceData.ChaseLocation;
+					}
+				}
+			}
+			
 			return EStateTreeRunStatus::Running;
 		}
 
@@ -101,6 +133,25 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			InstanceData.bStartAttack = true;
 			InstanceData.bObservedPatternActive = false;
 			InstanceData.TimeSinceAttackRequested = 0.f;
+			
+			if (AAIController* AIC = Pawn->GetController<AAIController>())
+			{
+				AIC->StopMovement();
+			
+				if (UPathFollowingComponent* PathFollowing = AIC->GetPathFollowingComponent())
+				{
+					PathFollowing->AbortMove(*AIC, FPathFollowingResultFlags::ForcedScript);
+				}
+			}
+			
+			if (ACharacter* Character = Cast<ACharacter>(Pawn))
+			{
+				if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+				{
+					MoveComp->StopMovementImmediately();
+				}
+			}
+			
 			if (!InstanceData.CachedCombatComponent->RequestBasicAttack(InstanceData.TargetActor))
 			{
 				return EStateTreeRunStatus::Failed;
@@ -149,6 +200,8 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
+	
+	InstanceData.LastMoveRequestLocation = FVector::ZeroVector;
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)

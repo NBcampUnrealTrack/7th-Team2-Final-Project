@@ -4,6 +4,7 @@
 #include "StateTreeExecutionContext.h"
 #include "Components/EnemyCombatComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
+#include "Logging/RetrieveLogChannels.h"
 
 bool FStateTreeTask_EnemyPatternAttack::Link(FStateTreeLinker& Linker)
 {
@@ -20,7 +21,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::EnterState(
 
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
-
+	
 	if (!IsValid(InstanceData.TargetActor))
 	{
 		return EStateTreeRunStatus::Failed;
@@ -39,7 +40,10 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::EnterState(
 	}
 
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
-	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetActor, Pawn))
+	const bool bTokenRequested =
+	EncircleSubsystem && EncircleSubsystem->RequestAttackToken(InstanceData.TargetActor, Pawn);
+
+	if (!bTokenRequested)
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -70,7 +74,10 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 			return EStateTreeRunStatus::Failed;
 		}
 
-		if (!InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetActor))
+		const bool bRequested =
+			InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetActor);
+
+		if (!bRequested)
 		{
 			return EStateTreeRunStatus::Failed;
 		}
@@ -88,6 +95,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 		}
 
 		const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
+		
+		UE_LOG(LogRetrieveCombat, Warning,
+		TEXT("[EnemyPatternAttack] Tick Active=%d Observed=%d TimeSinceRequest=%.2f"),
+		bPatternActive,
+		InstanceData.bObservedPatternActive,
+		InstanceData.TimeSinceAttackRequested);
+		
 		if (bPatternActive)
 		{
 			InstanceData.bObservedPatternActive = true;

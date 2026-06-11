@@ -210,6 +210,9 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float PatrolRange = 1200.f;
 	
+	/** 이동 오차 허용 범위 */
+	UPROPERTY(EditAnywhere, Category = "Moster|Move")
+	float MoveAcceptableRadius = 5.f;
 	/** 순찰 여부 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;

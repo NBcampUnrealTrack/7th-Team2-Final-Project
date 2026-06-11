@@ -166,10 +166,10 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 	const float EffectiveOuterRadius = OuterRadiusOverride > 0.f ? OuterRadiusOverride : OuterRadius;
 	float TargetRadius = bUseOuterRadius ? EffectiveOuterRadius : EffectiveInnerRadius;
 	
-	if (bUseOuterRadius)
+	/*if (bUseOuterRadius)
 	{
 		TargetRadius += FMath::FRandRange(MinNoise, MaxNoise);
-	}
+	}*/
 	
 	const FVector Offset(FMath::Cos(Angle) * TargetRadius, FMath::Sin(Angle) * TargetRadius, 0.f);
 	const FVector RawLocation = Target->GetActorLocation() + Offset;

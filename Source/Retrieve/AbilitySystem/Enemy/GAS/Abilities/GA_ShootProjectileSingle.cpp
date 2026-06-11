@@ -33,19 +33,27 @@ void UGA_ShootProjectileSingle::ActivateAbility(const FGameplayAbilitySpecHandle
 	const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-
+	
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectileSingle] CommitAbility failed Owner=%s"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()));
+		
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
 	CachedTargetActor = TriggerEventData ? const_cast<AActor*>(TriggerEventData->Target.Get()) : nullptr;
 
-	if (const UAnimMontage* Montage = ResolveMontage(TriggerEventData))
+	const UAnimMontage* Montage = ResolveMontage(TriggerEventData);
+	const bool bHasMontage = Montage != nullptr;
+	
+	if (bHasMontage)
 	{
 		MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this, NAME_None, const_cast<UAnimMontage*>(Montage), 1.f, NAME_None, true);
+		
 		if (MontageTask)
 		{
 			MontageTask->OnCompleted.AddDynamic(this, &UGA_ShootProjectileSingle::OnMontageCompleted);
@@ -60,8 +68,16 @@ void UGA_ShootProjectileSingle::ActivateAbility(const FGameplayAbilitySpecHandle
 	{
 		World->GetTimerManager().SetTimer(
 			SpawnTimerHandle, this, &UGA_ShootProjectileSingle::SpawnProjectile, ProjectileSpawnDelay, false);
-		World->GetTimerManager().SetTimer(
-			FinishTimerHandle, this, &UGA_ShootProjectileSingle::FinishAbility, ProjectileSpawnDelay + 0.2f, false);
+
+		if (!bHasMontage)
+		{
+			World->GetTimerManager().SetTimer(
+				FinishTimerHandle,
+				this,
+				&UGA_ShootProjectileSingle::FinishAbility,
+				ProjectileSpawnDelay + 0.2f,
+				false);
+		}
 	}
 }
 
@@ -90,8 +106,16 @@ void UGA_ShootProjectileSingle::EndAbility(const FGameplayAbilitySpecHandle Hand
 
 void UGA_ShootProjectileSingle::SpawnProjectile()
 {
-	if (!HasAuthority(&GetCurrentActivationInfoRef()) || !ProjectileClass)
+	
+	if (!HasAuthority(&GetCurrentActivationInfoRef()))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[GA_ShootProjectileSingle] Spawn skipped: no authority"));
+		return;
+	}
+
+	if (!ProjectileClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GA_ShootProjectileSingle] Spawn skipped: ProjectileClass is null"));
 		return;
 	}
 
@@ -116,7 +140,14 @@ void UGA_ShootProjectileSingle::SpawnProjectile()
 	FVector Direction = AvatarActor->GetActorForwardVector();
 	if (CachedTargetActor)
 	{
-		Direction = (CachedTargetActor->GetActorLocation() - SpawnLocation).GetSafeNormal();
+		FVector AimLocation = CachedTargetActor->GetActorLocation();
+
+		if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(CachedTargetActor->GetRootComponent()))
+		{
+			AimLocation = RootPrimitive->Bounds.Origin;
+		}
+
+		Direction = (AimLocation - SpawnLocation).GetSafeNormal();
 		SpawnRotation = Direction.Rotation();
 	}
 
@@ -161,6 +192,7 @@ void UGA_ShootProjectileSingle::OnMontageCompleted()
 
 void UGA_ShootProjectileSingle::OnMontageInterrupted()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[GA_ShootProjectileSingle] Montage Interrupted"));
 	if (IsActive())
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);

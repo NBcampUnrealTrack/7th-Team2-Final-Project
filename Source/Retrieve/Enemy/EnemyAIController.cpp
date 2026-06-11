@@ -74,6 +74,14 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 				OtherTeamId = PawnTeam->GetGenericTeamId();
 			}
 		}
+
+		// 컨트롤러·폰 모두 팀 인터페이스가 없으면 Neutral 처리
+		// (기본 solver는 NoTeam(255) != Enemy(2) = Hostile로 판정하므로 명시적으로 차단)
+		if (OtherTeamId == FGenericTeamId::NoTeam)
+		{
+			return ETeamAttitude::Neutral;
+		}
+
 		Result = FGenericTeamId::GetAttitude(GetGenericTeamId(), OtherTeamId);
 	}
 	

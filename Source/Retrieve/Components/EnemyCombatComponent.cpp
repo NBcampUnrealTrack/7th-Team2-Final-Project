@@ -16,6 +16,7 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
@@ -93,6 +94,11 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 		return false;
 	}
 
+	UE_LOG(LogRetrieveCombat, Display,
+		TEXT("[%s] RequestPatternByPriority Target=%s"),
+		*GetOwner()->GetName(),
+		*GetNameSafe(Target));
+	
 	FName BestPatternRowName = NAME_None;
 	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_SpecialAttack, &BestPatternRowName);
 	if (!BestPattern)
@@ -144,6 +150,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 	}
 	
 	StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
+	LockSpecialAttackEvaluation(SpecialAttackEvaluationLockDuration);
 	return true;
 }
 
@@ -216,6 +223,46 @@ bool UEnemyCombatComponent::IsPatternActive() const
 bool UEnemyCombatComponent::IsAttackable() const
 {
 	return IsCooldownReady(BasicAttackRowName);
+}
+
+bool UEnemyCombatComponent::IsSpecialAttackEvaluationLocked() const
+{
+	const UWorld* World = GetWorld();
+	return World && World->GetTimeSeconds() < SpecialAttackEvaluationLockUntilTime;
+}
+
+void UEnemyCombatComponent::SetMovementLockedByAttack(bool bLocked)
+{
+	if (bMovementLockedByAttack == bLocked)
+	{
+		return;
+	}
+
+	bMovementLockedByAttack = bLocked;
+
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* MoveComp = OwnerCharacter->GetCharacterMovement();
+	if (!MoveComp)
+	{
+		return;
+	}
+
+	if (bLocked)
+	{
+		MovementLockOriginalMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+		MoveComp->StopMovementImmediately();
+		MoveComp->MaxWalkSpeed = 0.f;
+	}
+	else if (MovementLockOriginalMaxWalkSpeed >= 0.f)
+	{
+		MoveComp->MaxWalkSpeed = MovementLockOriginalMaxWalkSpeed;
+		MovementLockOriginalMaxWalkSpeed = -1.f;
+	}
 }
 
 void UEnemyCombatComponent::ActivateHitbox()
@@ -431,11 +478,6 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 		*OutRowName = BestRowName;
 	}
 	
-	UE_LOG(LogDataTable, Display,
-		TEXT("[%s] FindBestPattern Type=%s Result=%s Distance=%.1f"),
-		*GetName(), *RequiredPatternType.ToString(),
-		*BestRowName.ToString(), FMath::Sqrt(DistanceSq));
-	
 	return BestRow;
 }
 
@@ -452,6 +494,19 @@ bool UEnemyCombatComponent::IsCooldownReady(FName RowName) const
 void UEnemyCombatComponent::StartCooldown(FName RowName, float Duration)
 {
 	CooldownExpiry.Add(RowName, GetWorld()->GetTimeSeconds() + Duration);
+}
+
+void UEnemyCombatComponent::LockSpecialAttackEvaluation(float Duration)
+{
+	if (Duration <= 0.f)
+	{
+		return;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		SpecialAttackEvaluationLockUntilTime = World->GetTimeSeconds() + Duration;
+	}
 }
 
 URetrieveAbilitySystemComponent* UEnemyCombatComponent::GetASC() const
