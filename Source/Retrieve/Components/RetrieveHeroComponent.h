@@ -51,6 +51,7 @@ protected:
 
 	void Input_Move(const FInputActionValue& InputActionValue);
 	void Input_Look(const FInputActionValue& InputActionValue);
+	void Input_Zoom(const FInputActionValue& InputActionValue); 
 	void Input_UseConsumableSlot(int32 SlotKey);
 
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);

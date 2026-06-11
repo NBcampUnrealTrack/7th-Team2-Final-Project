@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/InventoryComponent.h"
+#include "Components/RetrieveCameraBoom.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -183,6 +184,7 @@ void URetrieveHeroComponent::BindPlayerInputs()
 
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Zoom, ETriggerEvent::Triggered, this, &ThisClass::Input_Zoom, false);
 	if (QuickSlot1Action)
 	{
 		RetrieveIC->BindAction(
@@ -269,6 +271,24 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 	{
 		Pawn->AddControllerPitchInput(Value.Y);
 	}
+}
+
+void URetrieveHeroComponent::Input_Zoom(const FInputActionValue& InputActionValue)
+{
+	APawn* Pawn = GetPawn<APawn>();
+	if (IsValid(Pawn) == false)
+	{
+		return;
+	}
+
+	const float Value = InputActionValue.Get<float>();
+
+	URetrieveCameraBoom* Boom = Pawn->FindComponentByClass<URetrieveCameraBoom>();
+	if (IsValid(Boom) == false)
+	{
+		return;
+	}
+	Boom->AddZoomInput(Value);
 }
 
 void URetrieveHeroComponent::Input_UseConsumableSlot(int32 SlotKey)
