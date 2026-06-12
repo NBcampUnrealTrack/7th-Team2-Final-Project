@@ -19,15 +19,34 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void Launch(const FVector& Direction, float Speed = 1200.f);
-
+	
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void ConfigureHoming(AActor* TargetActor, float StartDelay, float Duration, float Strength);
+	
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetProjectileLifetime(float Lifetime);
+	
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetGravityScale(float GravityScale);
+	
 protected:
 	virtual void BeginPlay() override;
-
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	UFUNCTION()
 	void OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
 		bool bFromSweep, const FHitResult& SweepResult);
 
+	UFUNCTION()
+	void OnProjectileStopped(const FHitResult& ImpactResult);
+	
+private:
+	bool IsIgnoredActor(const AActor* OtherActor) const;
+	void StartHoming(float Strength);
+	void StopHoming();
+	
+protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyProjectile", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<USphereComponent> CollisionSphere;
 
@@ -45,7 +64,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Knockback", meta=(ClampMin="0.0"))
 	float KnockbackUpwardStrength = 400.f;
-
+	
 private:
-	bool IsIgnoredActor(const AActor* OtherActor) const;
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> HomingTargetActor;
+
+	FTimerHandle HomingStartTimerHandle;
+	FTimerHandle HomingStopTimerHandle;
 };

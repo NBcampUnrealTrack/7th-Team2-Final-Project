@@ -4,6 +4,7 @@
 #include "StateTreeExecutionContext.h"
 #include "Components/EnemyCombatComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
 bool FStateTreeTask_EnemyPatternAttack::Link(FStateTreeLinker& Linker)
@@ -22,7 +23,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::EnterState(
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
 	
-	if (!IsValid(InstanceData.TargetActor))
+	if (!IsValid(InstanceData.TargetPlayer))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -41,7 +42,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::EnterState(
 
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 	const bool bTokenRequested =
-	EncircleSubsystem && EncircleSubsystem->RequestAttackToken(InstanceData.TargetActor, Pawn);
+	EncircleSubsystem && EncircleSubsystem->RequestAttackToken(InstanceData.TargetPlayer, Pawn);
 
 	if (!bTokenRequested)
 	{
@@ -75,11 +76,11 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 		}
 
 		const bool bRequested =
-			InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetActor);
+			InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 
 		if (!bRequested)
 		{
-			return EStateTreeRunStatus::Failed;
+			return EStateTreeRunStatus::Succeeded;
 		}
 
 		InstanceData.bStartAttack = true;
@@ -95,12 +96,6 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 		}
 
 		const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
-		
-		UE_LOG(LogRetrieveCombat, Warning,
-		TEXT("[EnemyPatternAttack] Tick Active=%d Observed=%d TimeSinceRequest=%.2f"),
-		bPatternActive,
-		InstanceData.bObservedPatternActive,
-		InstanceData.TimeSinceAttackRequested);
 		
 		if (bPatternActive)
 		{
@@ -147,6 +142,6 @@ void FStateTreeTask_EnemyPatternAttack::ExitState(
 
 	if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 	{
-		Enc->ReleaseAttackToken(InstanceData.TargetActor, Pawn);
+		Enc->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 	}
 }

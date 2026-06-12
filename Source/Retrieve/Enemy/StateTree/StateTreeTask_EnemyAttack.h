@@ -14,7 +14,7 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, meta=(Optional))
-	TObjectPtr<AActor> TargetActor = nullptr;
+	TObjectPtr<AActor> TargetPlayer = nullptr;
 	
 	UPROPERTY(EditAnywhere, Category = "Input", meta=(Optional))
 	float AttackRange = 200.f;

@@ -195,7 +195,12 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_Die);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_Die);
-
+	
+	// ---- Gameplay events: enemy combat : special attack
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_ProjectileRapid);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_ProjectileRain);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_ProjectileHoming);
+	
 	// ---- Gameplay events: element / core / item
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_Unlock);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_ModeChange);

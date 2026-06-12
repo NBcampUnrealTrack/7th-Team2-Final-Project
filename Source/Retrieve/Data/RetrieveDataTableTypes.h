@@ -68,6 +68,48 @@ struct RETRIEVE_API FEnemyDropRow : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FMonsterProjectilePatternConfig
+{
+	GENERATED_BODY()
+
+	/** 각 투사체 발사 시점. 비어 있으면 투사체 패턴 설정을 사용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	TArray<float> ProjectileFireDelays;
+
+	/** 투사체 속도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float ProjectileSpeed = 1200.f;
+	
+	/** 투사체 생존 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float ProjectileLifetime = 5.f;
+	
+	/** 유도 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	bool bUseHoming = false;
+
+	/** 발사 후 유도 시작까지의 지연 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float HomingStartDelay = 0.f;
+
+	/** 유도 지속 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float HomingDuration = 0.f;
+
+	/** 유도 강도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float HomingStrength = 0.f;
+	
+	/** 중력 적용 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	bool bUseGravity = false;
+
+	/** 중력 강도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
+	float ProjectileGravityScale = 0.f;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 {
     GENERATED_BODY()
@@ -75,7 +117,11 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
     /** 패턴 유형. Pattern.Type.Melee / Ranged / Special / PhaseTransition */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag PatternType;
-
+	
+	/** 이 패턴을 실행할 GameplayEvent. 비어있으면 패턴 유형별 기본 이벤트를 사용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
+	FGameplayTag AbilityEventTag;
+	
 	/** 발동 최대 거리 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
 	float MaxActivationRange = 200.f;
@@ -99,6 +145,10 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 재생할 애니메이션 몽타주 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	TSoftObjectPtr<UAnimMontage> AttackMontage;
+
+	/** 투사체 패턴 설정. 투사체를 사용하지 않는 패턴은 기본값을 사용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	FMonsterProjectilePatternConfig ProjectileConfig;
 	
 	/** 피격 시 적용할 효과 태그 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")

@@ -8,6 +8,7 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 bool FStateTreeTask_EnemyAttack::Link(FStateTreeLinker& Linker)
 {
@@ -26,7 +27,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
 
-	if (!IsValid(InstanceData.TargetActor))
+	if (!IsValid(InstanceData.TargetPlayer))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -43,13 +44,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 		return EStateTreeRunStatus::Failed;
 	}
 
-	if (!InstanceData.CachedCombatComponent->IsAttackable())
+	if (!InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
 	
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
-	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetActor, Pawn))
+	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetPlayer, Pawn))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -125,7 +126,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 				return EStateTreeRunStatus::Failed;
 			}
 
-			if (!InstanceData.CachedCombatComponent->IsAttackable())
+			if (!InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer))
 			{
 				return EStateTreeRunStatus::Failed;
 			}
@@ -152,7 +153,8 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 				}
 			}
 			
-			if (!InstanceData.CachedCombatComponent->RequestBasicAttack(InstanceData.TargetActor))
+			if (!InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetPlayer
+				, RetrieveGameplayTags::Ability_Enemy_Attack))
 			{
 				return EStateTreeRunStatus::Failed;
 			}
@@ -216,6 +218,6 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	
 	if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 	{
-		Enc->ReleaseAttackToken(InstanceData.TargetActor, Pawn);
+		Enc->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 	}
 }

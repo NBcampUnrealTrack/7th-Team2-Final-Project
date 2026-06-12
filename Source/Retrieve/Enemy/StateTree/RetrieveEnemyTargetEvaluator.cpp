@@ -390,25 +390,29 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
 			const bool bSpecialAttackEvaluationLocked =
 				InstanceData.CachedCombatComponent->IsSpecialAttackEvaluationLocked();
+			const bool bSpecialAttackRetryCooldownReady =
+				InstanceData.CachedCombatComponent->IsSpecialAttackRetryCooldownReady();
 
 			InstanceData.bSpecialAttackable = bCanRequestToken
 				&& !bPatternActive
 				&& !bSpecialAttackEvaluationLocked
+				&& bSpecialAttackRetryCooldownReady
 				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
 					InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 			UE_LOG(LogRetrieveCombat, Warning,
-				TEXT("[EnemyTargetEvaluator] SpecialCheck Target=%s CanToken=%d PatternActive=%d SpecialLock=%d Distance=%.1f"),
+				TEXT("[EnemyTargetEvaluator] SpecialCheck Target=%s CanToken=%d PatternActive=%d SpecialLock=%d SpecialRetryCooldownReady=%d Distance=%.1f"),
 				*GetNameSafe(InstanceData.TargetPlayer),
 				bCanRequestToken,
 				bPatternActive,
 				bSpecialAttackEvaluationLocked,
+				bSpecialAttackRetryCooldownReady,
 				InstanceData.DistanceToTarget);
 			
 			InstanceData.bAttackable =
 				bCanRequestToken
 				&& !bPatternActive
 				&& InstanceData.DistanceToTarget <= InstanceData.AttackableRange
-				&& InstanceData.CachedCombatComponent->IsAttackable();
+				&& InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
 		}
 		else
 		{
