@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Settings/RetrieveSwimSettings.h"
 
 namespace RetrieveCharacterMovement
 {
@@ -23,8 +24,6 @@ URetrieveCharacterMovementComponent::URetrieveCharacterMovementComponent(const F
 	: Super()   // UAlsCharacterMovementComponent 생성자는 ObjectInitializer 인자를 받지 않음
 {
 	NavAgentProps.bCanSwim = true;
-	MaxSwimSpeed = 300.f;                   // TODO(M2): URetrieveSwimSettings로 이동
-	BrakingDecelerationSwimming = 800.f;   // TODO(M2): URetrieveSwimSettings로 이동
 }
 
 void URetrieveCharacterMovementComponent::SimulateMovement(float DeltaTime)
@@ -60,6 +59,11 @@ bool URetrieveCharacterMovementComponent::CanAttemptJump() const
 
 	return IsJumpAllowed() &&
 		(IsMovingOnGround() || IsFalling());
+}
+
+void URetrieveCharacterMovementComponent::NotifySwimEntry()
+{
+	bPlunging = (Velocity.Z <= -GetDefault<URetrieveSwimSettings>()->PlungeEntrySpeed);
 }
 
 void URetrieveCharacterMovementComponent::InitializeComponent()
@@ -156,16 +160,18 @@ float URetrieveCharacterMovementComponent::GetMaxSpeed() const
 		}
 
 		// 수영: 단일 속도 + Sprint 가속 (표면/수중 동일). ALS gait는 수영에 안 닿으므로 여기서 직접.
-		if (IsSwimming())
+		// Flying 기반이라 IsSwimming()이 false -> 태그로 판별.
+		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
 		{
-			float Base = MaxSwimSpeed;
+			const URetrieveSwimSettings* Swim = GetDefault<URetrieveSwimSettings>();
+				float Base = Swim->MaxSwimSpeed;
 			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Sprinting))
 			{
-				Base *= SwimSprintMultiplier;
+				Base *= Swim->SwimSprintMultiplier;
 			}
 			if (const UCombatAttributeSet* AttrSet = ASC->GetSet<UCombatAttributeSet>())
 			{
-				return Base * (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+				Base *= (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
 			}
 			return Base;
 		}
@@ -182,3 +188,69 @@ float URetrieveCharacterMovementComponent::GetMaxSpeed() const
 
 	return Super::GetMaxSpeed();
 }
+
+void URetrieveCharacterMovementComponent::CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration)
+{
+	bool bSwimTag = false;
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+	{
+		bSwimTag = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming);
+	}
+
+	const bool bSwim = (MovementMode == MOVE_Flying && bSwimTag);
+	const URetrieveSwimSettings* Swim = GetDefault<URetrieveSwimSettings>();
+
+	float PreVz = 0.f;
+	float InputZ = 0.f;
+	if (bSwim) // 수평엔 swim 값 치환(Flying 은닉), 수직은 아래에서 전담
+	{
+		PreVz = Velocity.Z;
+		InputZ = Acceleration.Z;
+		Friction = Swim->SwimDrag;
+		BrakingDeceleration = Swim->SwimBraking;
+	}
+
+	Super::CalcVelocity(DeltaTime, Friction, bFluid, BrakingDeceleration);
+
+	if (bSwim)
+	{
+		const float Depth = WaterSurfaceZ - GetActorLocation().Z;
+
+		// 수면 추종 피드포워드(누적 방지: 최종에만 더하고 다음 프레임 고유속도에서 제거).
+		const float SurfaceVelZ = (DeltaTime > 0.f)
+			? FMath::Clamp((WaterSurfaceZ - PrevWaterSurfaceZ) / DeltaTime, -Swim->MaxSwimSpeed, Swim->MaxSwimSpeed)
+			: 0.f;
+		const float OwnPreVz = PreVz - PrevSurfaceVelZ; // 직전 FF 제거 → 캐릭터 고유 수직속도
+
+		float VertAccel = InputZ;
+		if (InputZ >= 0.f) // 다이브 입력 중엔 부력 억제
+		{
+			const float Error = FMath::Clamp(Depth - Swim->FloatOffset, -Swim->MaxBuoyancyDepth, Swim->MaxBuoyancyDepth);
+			VertAccel += Error * Swim->BuoyancyStiffness - OwnPreVz * Swim->BuoyancyDamping;
+		}
+		float OwnVz = OwnPreVz + VertAccel * DeltaTime;
+
+		if (OwnVz < 0.f && GetGroundInfo().GroundDistance <= Swim->FloorCapDistance) // 자체 하강만 바닥 캡
+		{
+			OwnVz = 0.f;
+		}
+		if (!bPlunging)
+		{
+			OwnVz = FMath::Clamp(OwnVz, -Swim->MaxSwimSpeed, Swim->MaxSwimSpeed);
+		}
+		if (OwnVz > 0.f && Depth < Swim->SurfaceSoftBand) // 수면 위 상승 모멘텀 차단
+		{
+			OwnVz *= FMath::Clamp(Depth / Swim->SurfaceSoftBand, 0.f, 1.f);
+		}
+
+		Velocity.Z = OwnVz + SurfaceVelZ;
+		PrevWaterSurfaceZ = WaterSurfaceZ;
+		PrevSurfaceVelZ = SurfaceVelZ;
+	}
+
+	if (bPlunging && Velocity.SizeSquared() <= FMath::Square(Swim->MaxSwimSpeed))
+	{
+		bPlunging = false;
+	}
+}
+

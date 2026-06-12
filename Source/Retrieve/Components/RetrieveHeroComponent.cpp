@@ -11,6 +11,7 @@
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveCameraBoom.h"
 #include "Components/SwimDetectionComponent.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -335,11 +336,28 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 	{
 		if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
 		{
-			if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
+			if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater))
 			{
 				if (USwimDetectionComponent* Swim = Pawn->FindComponentByClass<USwimDetectionComponent>())
 				{
 					Swim->SetSwimVerticalInput(1.f);
+				}
+				return;
+			}
+		}
+	}
+
+	// 수면 수영 중 Jump = climb-out (수영=EmptyTag라 인자없는 StartMantling 무반응 → 전용 경로)
+	if (InputTag == RetrieveGameplayTags::Ability_Player_Jump)
+	{
+		if (UAbilitySystemComponent* SwimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+		{
+			if (SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming)
+				&& !SwimASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater))
+			{
+				if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(Pawn))
+				{
+					AlsChar->TryMantleFromWater();
 				}
 				return;
 			}
@@ -412,6 +430,7 @@ void URetrieveHeroComponent::Input_SprintPressed(const FInputActionValue& InputA
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
+			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater)) { return; } // 수중 = Sprint 불가(표면 자유형만)
 			ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
 			SprintStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 		}

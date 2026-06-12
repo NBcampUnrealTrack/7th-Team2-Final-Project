@@ -32,16 +32,15 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Swim")
-	float ChestThreshold = 40.f; // 진입: (수면Z - 액터Z) > 이 값. TODO(6.5): SwimSettings
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Swim")
-	float WadeThreshold = 25.f; // 이탈(히스테리시스)
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Swim")
-	float UnderwaterDepthThreshold = 150.f; // 이 깊이보다 깊으면 수중 모드(3D). TODO(6.5)
+	// 깊이 임계/바닥 거리 등 튜너블은 URetrieveSwimSettings(Project Settings > Retrieve > Swim)로 이전됨.
 
 private:
+	/** 바닥 체크 헬퍼 */
+	bool HasFloorBelow() const;
+
+	/** 스폰/로드로 이미 물 안에 있을 때(BeginOverlap 미발화) 다음 틱 초기 진입 검사. */
+	void CheckInitialWaterOverlap();
+
 	/** MOVE_Flying 직접 제어. 진입=MOVE_Flying(중력 off·표면클램프 없음), 해제=MOVE_Falling. */
 	void SetSwimming(bool bEnable);
 

@@ -12,6 +12,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Settings/AlsCharacterSettings.h"
+#include "Settings/RetrieveSwimSettings.h"
 #include "Utility/AlsGameplayTags.h"
 
 
@@ -247,6 +248,17 @@ bool ARetrieveAlsCharacter::TryMantle()
 	return StartMantling();
 }
 
+bool ARetrieveAlsCharacter::TryMantleFromWater()
+{
+	// 수영 climb-out 전용 트레이스. 값은 Project Settings > Retrieve > Swim > ClimbOut.
+	return StartMantling(GetDefault<URetrieveSwimSettings>()->SwimClimbOutTrace);
+}
+
+bool ARetrieveAlsCharacter::IsMantling() const
+{
+	return GetLocomotionAction() == AlsLocomotionActionTags::Mantling;
+}
+
 void ARetrieveAlsCharacter::StartRagdoll()
 {
 	StartRagdolling();
@@ -356,21 +368,11 @@ void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(FGameplayTag PreviousL
 
 void ARetrieveAlsCharacter::RefreshSwimmingRotation(float DeltaTime)
 {
-	// const FVector LocalVelocity = GetVelocity();
-	// if (LocalVelocity.SizeSquared2D() < KINDA_SMALL_NUMBER)
-	// {
-	// 	return; // 가속도 없으면 현재 방향을 유지한다.
-	// }
-	//
-	// const float TargetYaw = LocalVelocity.GetSafeNormal2D().Rotation().Yaw;
-	// const float NewYaw = FMath::RInterpTo(GetActorRotation(), FRotator(0.f, TargetYaw, 0.f), DeltaTime, 8.f /*추후 DataDriven*/).Yaw;
-	// SetRotationInstant(NewYaw);
 	const FAlsLocomotionState& LocoState = GetLocomotionState();
 	if (!LocoState.bHasVelocity)
 	{
 		return; // 가속도 없으면 현재 방향을 유지한다.
 	}
-	UE_LOG(LogTemp, Log, TEXT("VelocityYawAngle: %f"), LocoState.VelocityYawAngle);
-	const float HalfLife = CalculateGroundedMovingRotationInterpolationHalfLife();
-	SetRotationExtraSmooth(LocoState.VelocityYawAngle, DeltaTime, HalfLife, 800.f);
+	const URetrieveSwimSettings* Swim = GetDefault<URetrieveSwimSettings>();
+	SetRotationExtraSmooth(LocoState.VelocityYawAngle, DeltaTime, Swim->SwimRotationHalfLife, Swim->SwimRotationSpeed);
 }
