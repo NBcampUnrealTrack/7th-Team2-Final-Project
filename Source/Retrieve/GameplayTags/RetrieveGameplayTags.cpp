@@ -195,6 +195,11 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_Die, "GameplayEvent.Enemy.Die");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Boss_Die, "GameplayEvent.Boss.Die");
 
+	// ---- Gameplay events: enemy combat : special attack
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileRapid, "GameplayEvent.Enemy.SpecialAttack.ProjectileRapid");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileRain, "GameplayEvent.Enemy.SpecialAttack.ProjectileRain");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileHoming, "GameplayEvent.Enemy.SpecialAttack.ProjectileHoming");
+	
 	// ---- Gameplay events: element / core / item
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_Unlock, "GameplayEvent.Element.Unlock");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_ModeChange, "GameplayEvent.Element.ModeChange");

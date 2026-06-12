@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "TimerManager.h"
 
 AEnemyProjectile::AEnemyProjectile()
 {
@@ -42,8 +43,62 @@ void AEnemyProjectile::Launch(const FVector& Direction, float Speed)
 	{
 		return;
 	}
-
+	
+	ProjectileMovement->InitialSpeed = Speed;
+	ProjectileMovement->MaxSpeed = Speed;
 	ProjectileMovement->Velocity = Direction.GetSafeNormal() * Speed;
+}
+
+void AEnemyProjectile::ConfigureHoming(AActor* TargetActor, float StartDelay, float Duration, float Strength)
+{
+	if (!ProjectileMovement || !IsValid(TargetActor) || Strength <= 0.f)
+	{
+		return;
+	}
+
+	HomingTargetActor = TargetActor;
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (StartDelay <= 0.f)
+	{
+		StartHoming(Strength);
+	}
+	else
+	{
+		World->GetTimerManager().SetTimer(
+			HomingStartTimerHandle,
+			FTimerDelegate::CreateUObject(this, &AEnemyProjectile::StartHoming, Strength),
+			StartDelay,
+			false);
+	}
+
+	if (Duration > 0.f)
+	{
+		World->GetTimerManager().SetTimer(
+			HomingStopTimerHandle,
+			this,
+			&AEnemyProjectile::StopHoming,
+			StartDelay + Duration,
+			false);
+	}
+}
+
+void AEnemyProjectile::SetProjectileLifetime(float Lifetime)
+{
+	if (Lifetime > 0.f)
+	{
+		SetLifeSpan(Lifetime);
+	}
+}
+
+void AEnemyProjectile::SetGravityScale(float GravityScale)
+{
+	ProjectileMovement->ProjectileGravityScale = GravityScale;
 }
 
 void AEnemyProjectile::BeginPlay()
@@ -54,11 +109,28 @@ void AEnemyProjectile::BeginPlay()
 	{
 		CollisionSphere->OnComponentBeginOverlap.AddDynamic(this, &AEnemyProjectile::OnProjectileOverlap);
 	}
+	
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->OnProjectileStop.AddDynamic(
+			this, &AEnemyProjectile::OnProjectileStopped);
+	}
+}
+
+void AEnemyProjectile::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HomingStartTimerHandle);
+		World->GetTimerManager().ClearTimer(HomingStopTimerHandle);
+	}
+    
+	Super::EndPlay(EndPlayReason);
 }
 
 void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-	bool bFromSweep, const FHitResult& SweepResult)
+                                           UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+                                           bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (!OtherActor || IsIgnoredActor(OtherActor))
 	{
@@ -101,6 +173,11 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 	Destroy();
 }
 
+void AEnemyProjectile::OnProjectileStopped(const FHitResult& ImpactResult)
+{
+	Destroy();
+}
+
 bool AEnemyProjectile::IsIgnoredActor(const AActor* OtherActor) const
 {
 	if (OtherActor == this || OtherActor == GetOwner() || OtherActor == GetInstigator())
@@ -117,4 +194,35 @@ bool AEnemyProjectile::IsIgnoredActor(const AActor* OtherActor) const
 	}
 
 	return false;
+}
+
+void AEnemyProjectile::StartHoming(float Strength)
+{
+	if (!ProjectileMovement || !IsValid(HomingTargetActor))
+	{
+		return;
+	}
+
+	UPrimitiveComponent* TargetComponent =
+		Cast<UPrimitiveComponent>(HomingTargetActor->GetRootComponent());
+
+	if (!TargetComponent)
+	{
+		return;
+	}
+
+	ProjectileMovement->HomingTargetComponent = TargetComponent;
+	ProjectileMovement->HomingAccelerationMagnitude = Strength;
+	ProjectileMovement->bIsHomingProjectile = true;
+}
+
+void AEnemyProjectile::StopHoming()
+{
+	if (!ProjectileMovement)
+	{
+		return;
+	}
+
+	ProjectileMovement->bIsHomingProjectile = false;
+	ProjectileMovement->HomingTargetComponent = nullptr;
 }

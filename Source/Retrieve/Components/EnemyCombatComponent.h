@@ -29,10 +29,8 @@ class RETRIEVE_API UEnemyCombatComponent : public UPawnComponent
 public:
 	/** AEnemyCharacter::BeginPlay에서 DT_MonsterData 파싱 후 호출 */
 	void Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots);
-
-	bool RequestBasicAttack(AActor* Target);
 	
-	bool RequestPatternByPriority(AActor* Target);
+	bool RequestPatternByPriority(AActor* Target, FGameplayTag RequiredPatternType);
 	
 	bool HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const;
 	
@@ -40,9 +38,11 @@ public:
 
 	bool IsPatternActive() const;
 	
-	bool IsAttackable() const;
+	bool IsAttackable(AActor* Target) const;
 
 	bool IsSpecialAttackEvaluationLocked() const;
+	bool IsSpecialAttackRetryCooldownReady() const;
+	void StartSpecialAttackRetryCooldown();
 	
 	void SetMovementLockedByAttack(bool bLocked);
 	bool IsMovementLockedByAttack() const { return bMovementLockedByAttack; }
@@ -75,9 +75,6 @@ private:
 	UPROPERTY()
 	TObjectPtr<UDataTable> PatternTable;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|BasicAttack")
-	FName BasicAttackRowName;
-	
 	UPROPERTY(VisibleAnywhere)
 	FName ActivePatternRowName;
 	
@@ -102,4 +99,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|SpecialAttack", meta = (ClampMin = "0.0"))
 	float SpecialAttackEvaluationLockDuration = 0.5f;
+
+	float SpecialAttackRetryCooldownUntilTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|SpecialAttack", meta = (ClampMin = "0.0"))
+	float SpecialAttackRetryCooldownDuration = 1.5f;
 };

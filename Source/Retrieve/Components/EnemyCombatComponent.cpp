@@ -22,85 +22,38 @@ void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<
 {
 	PatternTable = InPatternTable;
 	PatternSlots = InPatternSlots;
-	if (!PatternSlots.IsEmpty())
-	{
-		BasicAttackRowName = PatternSlots[0];
-	}
 }
 
-bool UEnemyCombatComponent::RequestBasicAttack(AActor* Target)
-{
-	if (!Target)
-	{
-		UE_LOG(LogRetrieveCombat, Error, TEXT("[%s] No Target."), *GetOwner()->GetName());
-		return false;
-	}
-	
-	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC)
-	{
-		UE_LOG(LogRetrieveCombat, Error, TEXT("[%s] No ASC."), *GetOwner()->GetName());
-		return false;
-	}
-	
-	// 기본 공격 Row 유효성 확인
-	if (!PatternTable || BasicAttackRowName.IsNone())
-	{
-		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] No PatternTAble or No BasicAttackRowName. BasicAttackRowName = %s")
-			,*GetOwner()->GetName(), *BasicAttackRowName.ToString());
-		return false;
-	}
-	
-	const FMonsterPatternRow* Row =
-		PatternTable->FindRow<FMonsterPatternRow>(BasicAttackRowName, TEXT(""));
-	if (!Row || Row->HitboxBoneName.IsNone())
-	{
-		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] Basic Attack Row not found."),*GetOwner()->GetName());
-		return false;
-	}
-	
-	if (!IsCooldownReady(BasicAttackRowName))
-	{
-		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] Basic Attack is Now CoolDown."),*GetOwner()->GetName());
-		return false;
-	}
-	
-	ActivePatternRowName = BasicAttackRowName;
-
-	FGameplayEventData EventData;
-	EventData.EventTag= RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
-	EventData.Target = Target;
-	EventData.Instigator = GetOwner();
-	EventData.OptionalObject = Row->AttackMontage.LoadSynchronous();
-
-	const int32 TriggeredCount =
-		ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_Attack, &EventData);
-
-	
-	if (TriggeredCount <= 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] No Ability triggered."),*GetOwner()->GetName());
-		return false;
-	}
-	
-	StartCooldown(ActivePatternRowName, Row->Cooldown);
-	return true;
-}
-
-bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
+bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTag RequiredPatternType)
 {
 	if (!Target)
 	{
 		return false;
 	}
-
+	
+	FGameplayTag DefaultEventTag;
+	bool bIsSpecialAttack = false;
+	if (RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_Attack))
+	{
+		DefaultEventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
+	}
+	else if (RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_SpecialAttack))
+	{
+		DefaultEventTag = RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack;
+		bIsSpecialAttack = true;
+	}
+	else
+	{
+		return false;
+	}
+	
 	UE_LOG(LogRetrieveCombat, Display,
 		TEXT("[%s] RequestPatternByPriority Target=%s"),
 		*GetOwner()->GetName(),
 		*GetNameSafe(Target));
 	
 	FName BestPatternRowName = NAME_None;
-	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_SpecialAttack, &BestPatternRowName);
+	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RequiredPatternType, &BestPatternRowName);
 	if (!BestPattern)
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
@@ -108,6 +61,21 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 			*GetOwner()->GetName(),
 			*GetNameSafe(Target));
 		
+		return false;
+	}
+	
+	/** SpecialGolbalCooldown은 SpecialAttack 시도 시에만 */
+	if (bIsSpecialAttack)
+	{
+		StartSpecialAttackRetryCooldown();
+	}
+	/** 일반 공격은 HitBox가 기반이기에 체크 필요*/
+	else if (BestPattern->HitboxBoneName.IsNone())
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] Attack pattern has no HitboxBoneName. Row=%s"),
+			*GetOwner()->GetName(),
+			*BestPatternRowName.ToString());
 		return false;
 	}
 	
@@ -126,17 +94,21 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 
 	FGameplayEventData EventData;
 	EventData.OptionalObject = BestPattern->AttackMontage.LoadSynchronous();
-	EventData.EventTag = RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack;
+	
+	const FGameplayTag AbilityEventTag = BestPattern->AbilityEventTag.IsValid()
+	? BestPattern->AbilityEventTag : DefaultEventTag;
+	EventData.EventTag = AbilityEventTag;
 	EventData.Target = Target;
 	EventData.Instigator = GetOwner();
 	
-	const int32 TriggeredCount = ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack, &EventData);
+	const int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
 	
 	UE_LOG(LogRetrieveCombat, Display,
-		TEXT("[%s] SpecialAttack Event TriggeredCount=%d Row=%s Montage=%s Target=%s"),
+		TEXT("[%s] SpecialAttack Event TriggeredCount=%d Row=%s EventTag=%s Montage=%s Target=%s"),
 		*GetOwner()->GetName(),
 		TriggeredCount,
 		*BestPatternRowName.ToString(),
+		*AbilityEventTag.ToString(),
 		*GetNameSafe(EventData.OptionalObject.Get()),
 		*GetNameSafe(Target));
 	
@@ -146,11 +118,21 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target)
 		TEXT("[%s] SpecialAttack event did not trigger ability. Row=%s"),
 		*GetOwner()->GetName(),
 		*BestPatternRowName.ToString());
+		ActivePatternRowName = NAME_None;
+		if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+		{
+			PatternCounter->CloseCounterWindow();
+		}
 		return false;
 	}
 	
 	StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
-	LockSpecialAttackEvaluation(SpecialAttackEvaluationLockDuration);
+	
+	if (bIsSpecialAttack)
+	{
+		LockSpecialAttackEvaluation(SpecialAttackEvaluationLockDuration);
+	}
+	
 	return true;
 }
 
@@ -220,15 +202,35 @@ bool UEnemyCombatComponent::IsPatternActive() const
 		|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_SpecialAttack);
 }
 
-bool UEnemyCombatComponent::IsAttackable() const
+bool UEnemyCombatComponent::IsAttackable(AActor* Target) const
 {
-	return IsCooldownReady(BasicAttackRowName);
+	return FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_Attack) != nullptr;
 }
 
 bool UEnemyCombatComponent::IsSpecialAttackEvaluationLocked() const
 {
 	const UWorld* World = GetWorld();
 	return World && World->GetTimeSeconds() < SpecialAttackEvaluationLockUntilTime;
+}
+
+bool UEnemyCombatComponent::IsSpecialAttackRetryCooldownReady() const
+{
+	const UWorld* World = GetWorld();
+	return !World || World->GetTimeSeconds() >= SpecialAttackRetryCooldownUntilTime;
+}
+
+void UEnemyCombatComponent::StartSpecialAttackRetryCooldown()
+{
+	if (SpecialAttackRetryCooldownDuration <= 0.f)
+	{
+		return;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		SpecialAttackRetryCooldownUntilTime =
+			World->GetTimeSeconds() + SpecialAttackRetryCooldownDuration;
+	}
 }
 
 void UEnemyCombatComponent::SetMovementLockedByAttack(bool bLocked)
@@ -272,12 +274,12 @@ void UEnemyCombatComponent::ActivateHitbox()
 		return;
 	}
 	
-	const FMonsterPatternRow* Row = PatternTable
-		? PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName == NAME_None 
-			? BasicAttackRowName : ActivePatternRowName,
-			TEXT(""))
-		: nullptr;
-
+	if (ActivePatternRowName.IsNone())
+	{
+		return;
+	}
+	
+	const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName, TEXT(""));
 	HitActors.Empty();
 	
 	if (!Row)
@@ -401,11 +403,10 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 
 	if (Spec.IsValid())
 	{
-		const FName ReactRowName = ActivePatternRowName.IsNone() ? BasicAttackRowName : ActivePatternRowName;
-		if (PatternTable && !ReactRowName.IsNone())
+		if (PatternTable && !ActivePatternRowName.IsNone())
 		{
 			if (const FMonsterPatternRow* ReactRow =
-				PatternTable->FindRow<FMonsterPatternRow>(ReactRowName, TEXT("OnHitboxOverlap_HitReact")))
+				PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName, TEXT("OnHitboxOverlap_HitReact")))
 			{
 				if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactRow->HitReactType); ReactTag.IsValid())
 				{

@@ -14,9 +14,8 @@ struct FStateTreeTask_EnemyPatternAttackInstanceData
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, meta=(Optional))
-	TObjectPtr<AActor> TargetActor = nullptr;
-
-
+	TObjectPtr<AActor> TargetPlayer = nullptr;
+	
 	UPROPERTY(EditAnywhere, Category = "Input", meta=(Optional))
 	float DistanceToTarget = TNumericLimits<float>::Max();
 
