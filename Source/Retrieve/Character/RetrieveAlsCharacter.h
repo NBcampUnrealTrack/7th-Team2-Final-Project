@@ -42,6 +42,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	bool TryMantle();
 
+	/** 수면 climb-out. 수영(EmptyTag)에선 인자 없는 StartMantling이 무반응이라 전용 트레이스로 직접 호출. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	bool TryMantleFromWater();
+
+	/** 맨틀 액션 진행 중인지. (ALS LocomotionAction 캡슐화 — 카메라 등 외부가 ALS를 모르게) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	bool IsMantling() const;
+
 	/** 사망/낙사/Groggy 등 시체화 진입. 시뮬레이션 시작. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	void StartRagdoll();
@@ -119,8 +127,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<URetrievePawnExtensionComponent> PawnExtensionComponent;
 
+	// 수영 회전 튜너블은 URetrieveSwimSettings(Project Settings > Retrieve > Swim)로 이전됨.
+
 private:
-	void RefreshSwimmingRotation(float DeltaTime);	
+	void RefreshSwimmingRotation(float DeltaTime);
 	
 	/** PostInitializeComponents에서 캡슐 디폴트 HalfHeight 캐싱. Crouch 보정용. */
 	float CachedDefaultHalfHeight = 0.f;

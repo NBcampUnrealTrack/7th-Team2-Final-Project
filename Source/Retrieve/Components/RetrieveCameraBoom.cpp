@@ -3,6 +3,7 @@
 #include "RetrieveCameraBoom.h"
 
 #include "AbilitySystemComponent.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -36,6 +37,16 @@ void URetrieveCameraBoom::UpdateDesiredArmLocation(bool bDoTrace, bool bDoLocati
 	{
 		TargetArmLength = FMath::FInterpTo(TargetArmLength, DesiredArmLength, DeltaTime, ZoomInterpSpeed);
 	}
+
+	// 맨틀 중 충돌 테스트 off: 캡슐이 턱 솔리드를 타고 올라 프로브가 붕괴 → 카메라 허리 관통 방지
+	if (const ARetrieveAlsCharacter* OwnerChar = Cast<ARetrieveAlsCharacter>(GetOwner()))
+	{
+		if (OwnerChar->IsMantling())
+		{
+			bDoTrace = false;
+		}
+	}
+
 	Super::UpdateDesiredArmLocation(bDoTrace, bDoLocationLag, bDoRotationLag, DeltaTime);
 	// 붐에 붙은 자식 카메라 캐싱
 	if (IsValid(ChildCamera) == false)

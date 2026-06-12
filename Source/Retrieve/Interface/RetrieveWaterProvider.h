@@ -21,7 +21,11 @@ public:
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Retrieve|Water")
 	float GetWaterSurfaceZ(const FVector& Location) const;
-	
+
+	/** 위치가 수중(채널 안)인지 + 수면 Z. 호수=항상 true, 강=스플라인 채널 판정. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Retrieve|Water")
+	bool TryGetWaterColumn(const FVector& Location, float& OutSurfaceZ) const;
+
 	/**
 	 * 위치 별 물살 속도(cm/s)
 	 */

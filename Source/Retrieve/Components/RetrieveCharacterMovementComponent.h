@@ -9,19 +9,19 @@ USTRUCT(BlueprintType)
 struct FRetrieveCharacterGroundInfo
 {
 	GENERATED_BODY()
-		
+
 	FRetrieveCharacterGroundInfo()
 		: LastUpdateFrame(0)
 		, GroundDistance(0.0f)
 	{
 	}
-	
+
 	uint64 LastUpdateFrame;
-	
+
 	UPROPERTY(BlueprintReadOnly)
 	FHitResult GroundHitResult;
-	
-	UPROPERTY(BlueprintReadOnly)	
+
+	UPROPERTY(BlueprintReadOnly)
 	float GroundDistance;
 };
 
@@ -32,7 +32,7 @@ class RETRIEVE_API URetrieveCharacterMovementComponent : public UAlsCharacterMov
 
 public:
 	URetrieveCharacterMovementComponent(const FObjectInitializer& ObjectInitializer);
-	
+
 	virtual void SimulateMovement(float DeltaTime) override;
 	virtual bool CanAttemptJump() const override;
 
@@ -43,6 +43,12 @@ public:
 
 	virtual FRotator GetDeltaRotation(float DeltaTime) const override;
 	virtual float GetMaxSpeed() const override;
+	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
+
+	/** SwimDetection이 매 틱 push하는 수면 Z. 부력 깊이 오차에 사용. */
+	void SetWaterSurfaceZ(float InSurfaceZ) { WaterSurfaceZ = InSurfaceZ; }
+	void NotifySwimEntry();  // 입수 전환 시 SwimDetection이 호출 - 착수 속도로 플런지 판정
+	bool IsPlunging() const { return bPlunging; }
 
 protected:
 	virtual void InitializeComponent() override;
@@ -53,7 +59,17 @@ protected:
 	UPROPERTY(Transient)
 	bool bHasReplicatedAcceleration = false;
 
-	// 수영 중 Sprint 가속 배율 (표면/수중 동일 단일 속도에 적용). TODO(6.5): SwimSettings
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Swim")
-	float SwimSprintMultiplier = 1.5f;
+	// 수영 튜너블은 전부 URetrieveSwimSettings(Project Settings > Retrieve > Swim)로 이전됨.
+
+	UPROPERTY(Transient)
+	bool bPlunging = false;
+
+	UPROPERTY(Transient)
+	float WaterSurfaceZ = 0.f;
+
+	UPROPERTY(Transient)
+	float PrevWaterSurfaceZ = 0.f; // 수면 추종 피드포워드용 직전 프레임 수면 Z
+
+	UPROPERTY(Transient)
+	float PrevSurfaceVelZ = 0.f; // 직전 프레임 피드포워드 속도(누적 방지용 제거값)
 };

@@ -34,7 +34,8 @@ public class Retrieve : ModuleRules
 			"ModelViewViewModel",
 			"FieldNotification",
 			"ALS",
-			"MotionWarping"
+			"MotionWarping",
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
