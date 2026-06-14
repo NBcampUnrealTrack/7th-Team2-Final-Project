@@ -1,5 +1,6 @@
 #include "UI/Inventory/InventoryPanelWidget.h"
 
+#include "UI/RetrieveItemDescriptionHelper.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Border.h"
@@ -11,16 +12,21 @@
 #include "Character/RetrievePawnData.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/UniformGridPanel.h"
 #include "Components/UniformGridSlot.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/WeaponComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Engine/Texture2D.h"
+#include "UObject/UnrealType.h"
 
 UInventoryPanelWidget::UInventoryPanelWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -35,11 +41,13 @@ void UInventoryPanelWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	InitDefaultTags();
+	ResolveDefaultTooltipWidgetClasses();
 	InitOwnerComponents();
 	BindInventoryEvents();
 	BindButtonEvents();
 	ShowWeaponSwapConfirm(false);
 	HideQuickSlotAssignDialog();
+	MarkInventoryTooltipsDirty();
 	RefreshInventoryView(false);
 	RefreshWeaponComparisonText();
 	UpdateQuickSlotPanel();
@@ -51,6 +59,7 @@ void UInventoryPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	RefreshInventoryGridLayout();
+	SuppressBlueprintManagedTooltip();
 }
 
 void UInventoryPanelWidget::InitializeInventoryPanel(UInventoryComponent* InInventoryComponent, UWeaponComponent* InWeaponComponent)
@@ -58,7 +67,9 @@ void UInventoryPanelWidget::InitializeInventoryPanel(UInventoryComponent* InInve
 	InventoryComponent = InInventoryComponent;
 	WeaponComponent = InWeaponComponent;
 	InitDefaultTags();
+	ResolveDefaultTooltipWidgetClasses();
 	BindInventoryEvents();
+	MarkInventoryTooltipsDirty();
 	RefreshInventoryView(false);
 	RefreshWeaponComparisonText();
 	UpdateQuickSlotPanel();
@@ -72,6 +83,7 @@ void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 	CurrentSortMode = EInventorySortMode::None;
 
 	ActiveTabIndex = TabIndex;
+	MarkInventoryTooltipsDirty();
 	OnTabSwitchRequested.Broadcast(TabIndex);
 
 	if (TabIndex == 0)
@@ -89,7 +101,6 @@ void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 		CurrentCategoryTag = MaterialTabCategoryTag;
 		RefreshInventoryView(true);
 	}
-
 	PlayUIVFXOnWidget(
 		RetrieveGameplayTags::UI_VFX_Tab_Switch,
 		UniformGrid_ItemList ? Cast<UWidget>(UniformGrid_ItemList.Get()) : GetRootWidget());
@@ -116,6 +127,7 @@ void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTa
 	ShowWeaponSwapConfirm(false);
 	HideQuickSlotAssignDialog();
 	RefreshWeaponComparisonText();
+	RefreshSelectedDetailState();
 	UpdateQuickSlotActionButtons();
 	OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
 	RefreshSelectedMaterialDetails();
@@ -162,6 +174,7 @@ bool UInventoryPanelWidget::EquipSelectedWeapon()
 	const bool bEquipped = InventoryComponent->RequestEquipWeapon(SelectedItemId);
 	if (bEquipped)
 	{
+		MarkInventoryTooltipsDirty();
 		RefreshWeaponComparisonText();
 		OnEquipmentChanged.Broadcast();
 		OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
@@ -180,6 +193,7 @@ bool UInventoryPanelWidget::UnequipCurrentWeapon()
 	const bool bUnequipped = InventoryComponent->RequestUnequipWeapon();
 	if (bUnequipped)
 	{
+		MarkInventoryTooltipsDirty();
 		ShowWeaponSwapConfirm(false);
 		RefreshWeaponComparisonText();
 		OnEquipmentChanged.Broadcast();
@@ -201,6 +215,7 @@ bool UInventoryPanelWidget::UseSelectedConsumable()
 	const bool bUsed = InventoryComponent->UseConsumableItem(UsedItemId);
 	if (bUsed)
 	{
+		MarkInventoryTooltipsDirty();
 		if (InventoryComponent->GetItemCount(UsedItemId) <= 0)
 		{
 			ClearSelection();
@@ -246,6 +261,7 @@ bool UInventoryPanelWidget::AssignSelectedConsumableToSlot(int32 SlotKey)
 	const bool bAssigned = InventoryComponent->AssignConsumableSlot(SlotKey, SelectedItemId);
 	if (bAssigned)
 	{
+		MarkInventoryTooltipsDirty();
 		HideQuickSlotAssignDialog();
 		UpdateQuickSlotPanel();
 		UpdateQuickSlotActionButtons();
@@ -265,6 +281,7 @@ bool UInventoryPanelWidget::UnassignSelectedConsumableSlot()
 	const bool bUnassigned = InventoryComponent->UnassignConsumableSlot(SlotKey);
 	if (bUnassigned)
 	{
+		MarkInventoryTooltipsDirty();
 		HideQuickSlotAssignDialog();
 		UpdateQuickSlotPanel();
 		UpdateQuickSlotActionButtons();
@@ -463,10 +480,7 @@ void UInventoryPanelWidget::RefreshSelectedMaterialDetails()
 	{
 		Text_DetailType->SetText(FText::FromString(TEXT("Material")));
 	}
-	if (Text_DetailState)
-	{
-		Text_DetailState->SetText(FText::FromString(FString::Printf(TEXT("Owned: %d"), Quantity)));
-	}
+	// Text_DetailState는 RefreshSelectedDetailState()에서 "보유 N개" 형식으로 통일 처리
 	if (Text_DetailName)
 	{
 		Text_DetailName->SetText(DisplayName);
@@ -500,17 +514,99 @@ bool UInventoryPanelWidget::GetItemIconData(FName ItemId, FRetrieveItemIconRow& 
 	return false;
 }
 
+FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag ItemCategoryTag) const
+{
+	if (ItemId.IsNone())
+	{
+		return FText::GetEmpty();
+	}
+
+	// 순수 아이템 설명 — Helper에 위임 (DisplayName, 스탯, ShortDescription, SkillPreviews)
+	FText BaseDesc = URetrieveItemDescriptionHelper::BuildItemDescription(
+		ItemId, ItemCategoryTag,
+		ConsumableItemTable, ResolveMaterialItemTable(), WeaponDataTable);
+
+	if (BaseDesc.IsEmpty())
+	{
+		// 매칭되는 테이블이 없는 경우 폴백
+		const int32 Quantity = InventoryComponent ? InventoryComponent->GetItemCount(ItemId) : 0;
+		TArray<FString> Lines;
+		FRetrieveItemStack FallbackStack;
+		FallbackStack.ItemId = ItemId;
+		FallbackStack.ItemCategoryTag = ItemCategoryTag;
+		FallbackStack.Quantity = Quantity;
+		Lines.Add(GetItemDisplayName(FallbackStack));
+		if (ItemCategoryTag.IsValid())
+		{
+			Lines.Add(FString::Printf(TEXT("Type: %s"), *GetItemTypeName(FallbackStack)));
+		}
+		if (Quantity > 0)
+		{
+			Lines.Add(FString::Printf(TEXT("Owned: %d"), Quantity));
+		}
+		return FText::FromString(FString::Join(Lines, TEXT("\n")));
+	}
+
+	// 인벤토리 전용 컨텍스트 라인 추가
+	const int32 Quantity = InventoryComponent ? InventoryComponent->GetItemCount(ItemId) : 0;
+	TArray<FString> ContextLines;
+
+	if (IsWeaponCategory(ItemCategoryTag))
+	{
+		ContextLines.Add(IsWeaponItemEquipped(ItemId) ? TEXT("Equipped") : TEXT("In storage"));
+	}
+	else if (IsConsumableCategory(ItemCategoryTag) && ConsumableItemTable)
+	{
+		if (const FRetrieveConsumableItemRow* Row = ConsumableItemTable->FindRow<FRetrieveConsumableItemRow>(
+			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
+		{
+			ContextLines.Add(FString::Printf(TEXT("Owned: %d / Max %d"), Quantity, Row->MaxStack));
+		}
+		const int32 SlotKey = InventoryComponent
+			? InventoryComponent->GetAssignedConsumableSlotKey(ItemId) : INDEX_NONE;
+		if (SlotKey != INDEX_NONE)
+		{
+			ContextLines.Add(FString::Printf(TEXT("Quick Slot: %d"), SlotKey));
+		}
+	}
+	else if (IsMaterialCategory(ItemCategoryTag))
+	{
+		if (UDataTable* Table = ResolveMaterialItemTable())
+		{
+			if (const FRetrieveMaterialItemRow* Row = Table->FindRow<FRetrieveMaterialItemRow>(
+				ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
+			{
+				ContextLines.Add(FString::Printf(TEXT("Owned: %d / Max %d"), Quantity, Row->MaxStack));
+			}
+		}
+	}
+
+	if (ContextLines.IsEmpty())
+	{
+		return BaseDesc;
+	}
+
+	return FText::FromString(BaseDesc.ToString()
+		+ TEXT("\n──────────────\n")
+		+ FString::Join(ContextLines, TEXT("\n")));
+}
+
 void UInventoryPanelWidget::RefreshWeaponComparisonText()
 {
 	if (Text_SelectedCompare)
 	{
 		Text_SelectedCompare->SetText(FText::FromString(BuildWeaponComparisonText()));
 	}
+	if (Text_FinalStatDisplay)
+	{
+		Text_FinalStatDisplay->SetText(GetFullStatDisplayText());
+	}
 	RefreshWeaponSkillIcons();
 }
 
 void UInventoryPanelWidget::HandleInventoryChanged()
 {
+	MarkInventoryTooltipsDirty();
 	RefreshWeaponComparisonText();
 	UpdateQuickSlotPanel();
 	UpdateQuickSlotActionButtons();
@@ -520,12 +616,59 @@ void UInventoryPanelWidget::HandleInventoryChanged()
 
 void UInventoryPanelWidget::HandleEquippedWeaponChanged(FName WeaponItemId)
 {
+	MarkInventoryTooltipsDirty();
 	RefreshWeaponComparisonText();
+	RefreshSelectedDetailState();
 	OnEquipmentChanged.Broadcast();
 	OnInventoryListChanged.Broadcast();
 	if (IsWeaponCategory(SelectedItemCategoryTag))
 	{
 		OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
+	}
+}
+
+FText UInventoryPanelWidget::GetSelectedItemStateText() const
+{
+	if (SelectedItemId.IsNone() || !InventoryComponent)
+	{
+		return FText::GetEmpty();
+	}
+
+	if (IsWeaponCategory(SelectedItemCategoryTag))
+	{
+		return IsSelectedWeaponEquipped()
+			? INVTEXT("장착 중")
+			: INVTEXT("보관 중");
+	}
+
+	if (IsConsumableCategory(SelectedItemCategoryTag))
+	{
+		const int32 SlotKey = InventoryComponent->GetAssignedConsumableSlotKey(SelectedItemId);
+		if (SlotKey == UInventoryComponent::QuickSlotPrimaryKey)
+		{
+			return INVTEXT("퀵슬롯 4");
+		}
+		if (SlotKey == UInventoryComponent::QuickSlotSecondaryKey)
+		{
+			return INVTEXT("퀵슬롯 5");
+		}
+		return INVTEXT("없음");
+	}
+
+	if (IsMaterialCategory(SelectedItemCategoryTag))
+	{
+		const int32 Count = InventoryComponent->GetItemCount(SelectedItemId);
+		return FText::Format(INVTEXT("보유 {0}개"), Count);
+	}
+
+	return FText::GetEmpty();
+}
+
+void UInventoryPanelWidget::RefreshSelectedDetailState()
+{
+	if (Text_DetailState)
+	{
+		Text_DetailState->SetText(GetSelectedItemStateText());
 	}
 }
 
@@ -567,6 +710,7 @@ void UInventoryPanelWidget::HandleCancelQuickSlotAssignClicked()
 
 void UInventoryPanelWidget::HandleConsumableSlotChanged(int32 SlotKey, FName ItemId)
 {
+	MarkInventoryTooltipsDirty();
 	UpdateQuickSlotPanel();
 	UpdateQuickSlotActionButtons();
 	OnInventoryListChanged.Broadcast();
@@ -576,6 +720,7 @@ void UInventoryPanelWidget::HandleMaterialTabClicked()
 {
 	OpenTab(2);
 }
+
 
 void UInventoryPanelWidget::BindInventoryEvents()
 {
@@ -590,6 +735,7 @@ void UInventoryPanelWidget::BindInventoryEvents()
 
 		InventoryComponent->OnConsumableSlotChanged.RemoveDynamic(this, &ThisClass::HandleConsumableSlotChanged);
 		InventoryComponent->OnConsumableSlotChanged.AddDynamic(this, &ThisClass::HandleConsumableSlotChanged);
+
 	}
 }
 
@@ -685,9 +831,27 @@ void UInventoryPanelWidget::InitDefaultTags()
 	}
 }
 
+void UInventoryPanelWidget::ResolveDefaultTooltipWidgetClasses()
+{
+	if (!ItemDetailTooltipWidgetClass)
+	{
+		ItemDetailTooltipWidgetClass = LoadClass<UUserWidget>(
+			nullptr,
+			TEXT("/Game/Retrieve/UI/Inventory/WBP_ItemDetailTooltip.WBP_ItemDetailTooltip_C"));
+	}
+
+	if (!ItemCompareTooltipWidgetClass)
+	{
+		ItemCompareTooltipWidgetClass = LoadClass<UUserWidget>(
+			nullptr,
+			TEXT("/Game/Retrieve/UI/Inventory/WBP_ItemCompareTooltip.WBP_ItemCompareTooltip_C"));
+	}
+}
+
 void UInventoryPanelWidget::RefreshInventoryView(bool bClearSelection)
 {
 	InitDefaultTags();
+	MarkInventoryTooltipsDirty();
 
 	if (bClearSelection)
 	{
@@ -722,6 +886,7 @@ bool UInventoryPanelWidget::IsMaterialCategory(FGameplayTag ItemCategoryTag) con
 {
 	return ItemCategoryTag.IsValid() && ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material);
 }
+
 
 bool UInventoryPanelWidget::ShouldConfirmWeaponSwap() const
 {
@@ -811,6 +976,547 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 			}
 		}
 	}
+
+	const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
+	const FName EquippedWeaponId = InventoryComponent ? InventoryComponent->GetEquippedWeaponId() : NAME_None;
+	const bool bTooltipCacheSizeChanged =
+		AppliedTooltipItemIds.Num() != ChildCount
+		|| AppliedTooltipCategoryTags.Num() != ChildCount
+		|| AppliedTooltipCompareFlags.Num() != ChildCount;
+	const bool bEquippedWeaponChanged = AppliedTooltipEquippedWeaponId != EquippedWeaponId;
+
+	if (bGridAreaChanged || bInventoryTooltipsDirty || bTooltipCacheSizeChanged || bEquippedWeaponChanged)
+	{
+		ApplyInventorySlotTooltips();
+	}
+}
+
+void UInventoryPanelWidget::MarkInventoryTooltipsDirty()
+{
+	bInventoryTooltipsDirty = true;
+}
+
+void UInventoryPanelWidget::ApplyInventorySlotTooltips()
+{
+	if (!UniformGrid_ItemList)
+	{
+		return;
+	}
+
+	const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
+	const TArray<FRetrieveItemStack> Items = GetCurrentItemsSorted();
+	AppliedTooltipItemIds.SetNum(ChildCount);
+	AppliedTooltipCategoryTags.SetNum(ChildCount);
+	AppliedTooltipCompareFlags.SetNum(ChildCount);
+
+	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+	{
+		UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
+
+		if (!Child)
+		{
+			continue;
+		}
+
+		ClearWidgetTooltipRecursive(Child);
+		DisableLegacyTooltipRecursive(Child);
+
+		if (!Items.IsValidIndex(ChildIndex))
+		{
+			Child->SetToolTip(nullptr);
+			AppliedTooltipItemIds[ChildIndex] = NAME_None;
+			AppliedTooltipCategoryTags[ChildIndex] = FGameplayTag();
+			AppliedTooltipCompareFlags[ChildIndex] = false;
+			continue;
+		}
+
+		const FRetrieveItemStack& Item = Items[ChildIndex];
+		const bool bUseCompareTooltip = ShouldUseCompareTooltipForItem(Item);
+		const bool bTooltipAlreadyApplied =
+			AppliedTooltipItemIds[ChildIndex] == Item.ItemId
+			&& AppliedTooltipCategoryTags[ChildIndex] == Item.ItemCategoryTag
+			&& AppliedTooltipCompareFlags[ChildIndex] == bUseCompareTooltip
+			&& Child->GetToolTip() != nullptr;
+
+		if (!bTooltipAlreadyApplied)
+		{
+			Child->SetToolTip(CreateInventorySlotTooltip(Item));
+			AppliedTooltipItemIds[ChildIndex] = Item.ItemId;
+			AppliedTooltipCategoryTags[ChildIndex] = Item.ItemCategoryTag;
+			AppliedTooltipCompareFlags[ChildIndex] = bUseCompareTooltip;
+		}
+	}
+
+	AppliedTooltipEquippedWeaponId = InventoryComponent ? InventoryComponent->GetEquippedWeaponId() : NAME_None;
+	bInventoryTooltipsDirty = false;
+}
+
+void UInventoryPanelWidget::ClearWidgetTooltipRecursive(UWidget* Widget) const
+{
+	if (!Widget)
+	{
+		return;
+	}
+
+	Widget->SetToolTipText(FText::GetEmpty());
+	Widget->SetToolTip(nullptr);
+
+	if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+	{
+		if (UserWidget->WidgetTree)
+		{
+			UserWidget->WidgetTree->ForEachWidget([this, Widget](UWidget* TreeWidget)
+			{
+				if (TreeWidget && TreeWidget != Widget)
+				{
+					ClearWidgetTooltipRecursive(TreeWidget);
+				}
+			});
+		}
+	}
+
+	if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+	{
+		const int32 ChildCount = PanelWidget->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			ClearWidgetTooltipRecursive(PanelWidget->GetChildAt(ChildIndex));
+		}
+	}
+}
+
+void UInventoryPanelWidget::DisableLegacyTooltipRecursive(UWidget* Widget) const
+{
+	if (!Widget)
+	{
+		return;
+	}
+
+	if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+	{
+		if (FFloatProperty* HoverDelayProperty = FindFProperty<FFloatProperty>(UserWidget->GetClass(), TEXT("HoverDelay")))
+		{
+			HoverDelayProperty->SetPropertyValue_InContainer(UserWidget, TNumericLimits<float>::Max());
+		}
+
+		if (UFunction* HideFunction = UserWidget->FindFunction(TEXT("HideTooltip")))
+		{
+			UserWidget->ProcessEvent(HideFunction, nullptr);
+		}
+
+		if (UserWidget->WidgetTree)
+		{
+			UserWidget->WidgetTree->ForEachWidget([this, Widget](UWidget* TreeWidget)
+			{
+				if (TreeWidget && TreeWidget != Widget)
+				{
+					DisableLegacyTooltipRecursive(TreeWidget);
+				}
+			});
+		}
+	}
+
+	if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+	{
+		const int32 ChildCount = PanelWidget->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			DisableLegacyTooltipRecursive(PanelWidget->GetChildAt(ChildIndex));
+		}
+	}
+}
+
+void UInventoryPanelWidget::SuppressBlueprintManagedTooltip()
+{
+	if (UFunction* HideFunction = FindFunction(TEXT("HideTooltip")))
+	{
+		ProcessEvent(HideFunction, nullptr);
+	}
+
+	if (FObjectProperty* TooltipRefProperty = FindFProperty<FObjectProperty>(GetClass(), TEXT("CurrentTooltipRef")))
+	{
+		if (UWidget* CurrentTooltip = Cast<UWidget>(TooltipRefProperty->GetObjectPropertyValue_InContainer(this)))
+		{
+			CurrentTooltip->SetVisibility(ESlateVisibility::Collapsed);
+			CurrentTooltip->RemoveFromParent();
+			TooltipRefProperty->SetObjectPropertyValue_InContainer(this, nullptr);
+		}
+	}
+}
+
+bool UInventoryPanelWidget::IsWidgetOrDescendantHovered(const UWidget* Widget) const
+{
+	if (!Widget)
+	{
+		return false;
+	}
+
+	if (Widget->IsHovered())
+	{
+		return true;
+	}
+
+	if (const UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+	{
+		const int32 ChildCount = PanelWidget->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			if (IsWidgetOrDescendantHovered(PanelWidget->GetChildAt(ChildIndex)))
+			{
+				return true;
+			}
+		}
+	}
+
+	if (const UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+	{
+		if (UserWidget->WidgetTree)
+		{
+			bool bAnyTreeWidgetHovered = false;
+			UserWidget->WidgetTree->ForEachWidget([this, Widget, &bAnyTreeWidgetHovered](UWidget* TreeWidget)
+			{
+				if (!bAnyTreeWidgetHovered && TreeWidget && TreeWidget != Widget)
+				{
+					bAnyTreeWidgetHovered = IsWidgetOrDescendantHovered(TreeWidget);
+				}
+			});
+			if (bAnyTreeWidgetHovered)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool UInventoryPanelWidget::ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const
+{
+	return IsWeaponCategory(Item.ItemCategoryTag)
+		&& InventoryComponent
+		&& WeaponDataTable
+		&& !InventoryComponent->GetEquippedWeaponId().IsNone()
+		&& InventoryComponent->GetEquippedWeaponId() != Item.ItemId
+		&& ItemCompareTooltipWidgetClass;
+}
+
+UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemStack& Item)
+{
+	ResolveDefaultTooltipWidgetClasses();
+
+	if (Item.ItemId.IsNone())
+	{
+		return nullptr;
+	}
+
+	const bool bUseCompareTooltip = ShouldUseCompareTooltipForItem(Item);
+	TSubclassOf<UUserWidget> TooltipClass = bUseCompareTooltip
+		? ItemCompareTooltipWidgetClass
+		: ItemDetailTooltipWidgetClass;
+	if (!TooltipClass)
+	{
+		return nullptr;
+	}
+
+	UUserWidget* TooltipWidget = CreateWidget<UUserWidget>(GetOwningPlayer(), TooltipClass);
+	if (!TooltipWidget)
+	{
+		return nullptr;
+	}
+
+	TooltipWidget->SetToolTipText(FText::GetEmpty());
+	TooltipWidget->SetToolTip(nullptr);
+
+	if (bUseCompareTooltip)
+	{
+		const FRetrieveWeaponDataRow* CurrentWeapon = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
+			InventoryComponent->GetEquippedWeaponId(),
+			TEXT("InventoryTooltip::CurrentWeapon"),
+			false);
+		const FRetrieveWeaponDataRow* HoveredWeapon = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
+			Item.ItemId,
+			TEXT("InventoryTooltip::HoveredWeapon"),
+			false);
+
+		if (CurrentWeapon && HoveredWeapon)
+		{
+			return CreateInventoryCompareTooltip(*CurrentWeapon, *HoveredWeapon);
+		}
+	}
+	else
+	{
+		InvokeTooltipTextFunction(
+			TooltipWidget,
+			TEXT("SetDetailInfo"),
+			{
+				GetItemDisplayName(Item),
+				BuildItemTooltipText(Item.ItemId, Item.ItemCategoryTag).ToString()
+			});
+	}
+
+	return TooltipWidget;
+}
+
+UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
+	const FRetrieveWeaponDataRow& CurrentWeapon,
+	const FRetrieveWeaponDataRow& HoveredWeapon)
+{
+	if (!WidgetTree)
+	{
+		return nullptr;
+	}
+
+	USizeBox* RootBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	UVerticalBox* LineBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	if (!RootBox || !Background || !LineBox)
+	{
+		return nullptr;
+	}
+
+	RootBox->SetWidthOverride(260.0f);
+	RootBox->SetContent(Background);
+
+	Background->SetPadding(FMargin(8.0f, 7.0f));
+	Background->SetBrushColor(FLinearColor(0.015f, 0.018f, 0.03f, 0.92f));
+	Background->SetContent(LineBox);
+
+	const FLinearColor TitleColor(1.0f, 0.86f, 0.38f, 1.0f);
+	const FLinearColor BodyColor(0.92f, 0.92f, 0.86f, 1.0f);
+	const FLinearColor MutedColor(0.68f, 0.68f, 0.64f, 1.0f);
+	const FLinearColor PositiveColor(0.22f, 0.95f, 0.32f, 1.0f);
+	const FLinearColor NegativeColor(0.95f, 0.22f, 0.22f, 1.0f);
+
+	AddTooltipTextLine(LineBox, TEXT("무기 비교"), TitleColor, true);
+	AddTooltipTextLine(LineBox, HoveredWeapon.DisplayName.ToString(), BodyColor, true);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("Grade: %s"), *GetGameplayTagLeaf(HoveredWeapon.WeaponGradeTag)), BodyColor, false);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("Type: %s"), *GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag)), BodyColor, false);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("Element: %s"), *GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)), BodyColor, false);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("Attack Power: %.0f"), HoveredWeapon.AttackPower), BodyColor, false);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("Element Charge: x%.2f"), HoveredWeapon.ElementChargeMultiplier), BodyColor, false);
+
+	if (!HoveredWeapon.ShortDescription.IsEmpty())
+	{
+		AddTooltipTextLine(LineBox, HoveredWeapon.ShortDescription.ToString(), BodyColor, false);
+	}
+
+	AddTooltipTextLine(LineBox, TEXT("------------------------------"), MutedColor, false);
+	AddTooltipTextLine(LineBox, TEXT("교체 시 변화:"), TitleColor, true);
+	AddTooltipTextLine(LineBox, FString::Printf(TEXT("장착 중: %s"), *CurrentWeapon.DisplayName.ToString()), MutedColor, false);
+
+	bool bHasDelta = false;
+	const float AttackDelta = HoveredWeapon.AttackPower - CurrentWeapon.AttackPower;
+	if (!FMath::IsNearlyZero(AttackDelta))
+	{
+		bHasDelta = true;
+		AddTooltipTextLine(
+			LineBox,
+			FString::Printf(TEXT("%+.0f Attack Power"), AttackDelta),
+			AttackDelta > 0.0f ? PositiveColor : NegativeColor,
+			false);
+	}
+
+	const float ElementChargeDelta = HoveredWeapon.ElementChargeMultiplier - CurrentWeapon.ElementChargeMultiplier;
+	if (!FMath::IsNearlyZero(ElementChargeDelta))
+	{
+		bHasDelta = true;
+		AddTooltipTextLine(
+			LineBox,
+			FString::Printf(TEXT("%+.2f Element Charge"), ElementChargeDelta),
+			ElementChargeDelta > 0.0f ? PositiveColor : NegativeColor,
+			false);
+	}
+
+	if (HoveredWeapon.WeaponTypeTag != CurrentWeapon.WeaponTypeTag)
+	{
+		bHasDelta = true;
+		AddTooltipTextLine(
+			LineBox,
+			FString::Printf(
+				TEXT("Type: %s -> %s"),
+				*GetGameplayTagLeaf(CurrentWeapon.WeaponTypeTag),
+				*GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag)),
+			BodyColor,
+			false);
+	}
+
+	if (HoveredWeapon.WeaponAffinityTag != CurrentWeapon.WeaponAffinityTag)
+	{
+		bHasDelta = true;
+		AddTooltipTextLine(
+			LineBox,
+			FString::Printf(
+				TEXT("Element: %s -> %s"),
+				*GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag),
+				*GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)),
+			BodyColor,
+			false);
+	}
+
+	if (!bHasDelta)
+	{
+		AddTooltipTextLine(LineBox, TEXT("No stat changes"), MutedColor, false);
+	}
+
+	return RootBox;
+}
+
+void UInventoryPanelWidget::AddTooltipTextLine(
+	UVerticalBox* LineBox,
+	const FString& Line,
+	const FLinearColor& Color,
+	bool bHeading) const
+{
+	if (!LineBox)
+	{
+		return;
+	}
+
+	UTextBlock* TextLine = WidgetTree ? WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass()) : nullptr;
+	if (!TextLine)
+	{
+		return;
+	}
+
+	FSlateFontInfo FontInfo = TextLine->GetFont();
+	FontInfo.Size = bHeading ? 13 : 11;
+	TextLine->SetFont(FontInfo);
+	TextLine->SetText(FText::FromString(Line));
+	TextLine->SetColorAndOpacity(FSlateColor(Color));
+	TextLine->SetAutoWrapText(true);
+	TextLine->SetWrapTextAt(244.0f);
+	TextLine->SetShadowOffset(FVector2D(1.0f, 1.0f));
+	TextLine->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f));
+
+	if (UVerticalBoxSlot* LineSlot = LineBox->AddChildToVerticalBox(TextLine))
+	{
+		LineSlot->SetPadding(FMargin(0.0f, bHeading ? 2.0f : 0.0f, 0.0f, 0.0f));
+	}
+}
+
+void UInventoryPanelWidget::InvokeTooltipTextFunction(
+	UUserWidget* TooltipWidget,
+	FName FunctionName,
+	const TArray<FString>& Values) const
+{
+	if (!TooltipWidget)
+	{
+		return;
+	}
+
+	UFunction* Function = TooltipWidget->FindFunction(FunctionName);
+	if (!Function || Function->ParmsSize <= 0)
+	{
+		return;
+	}
+
+	TArray<uint8> Params;
+	Params.SetNumZeroed(Function->ParmsSize);
+
+	for (TFieldIterator<FProperty> It(Function); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
+	{
+		if (FProperty* Property = *It)
+		{
+			Property->InitializeValue_InContainer(Params.GetData());
+		}
+	}
+
+	int32 ValueIndex = 0;
+	for (TFieldIterator<FProperty> It(Function); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
+	{
+		FProperty* Property = *It;
+		if (!Property || Property->HasAnyPropertyFlags(CPF_ReturnParm))
+		{
+			continue;
+		}
+
+		const FString& Value = Values.IsValidIndex(ValueIndex) ? Values[ValueIndex] : FString();
+		void* ParamValue = Property->ContainerPtrToValuePtr<void>(Params.GetData());
+
+		if (FStrProperty* StringProperty = CastField<FStrProperty>(Property))
+		{
+			StringProperty->SetPropertyValue(ParamValue, Value);
+			++ValueIndex;
+		}
+		else if (FTextProperty* TextProperty = CastField<FTextProperty>(Property))
+		{
+			TextProperty->SetPropertyValue(ParamValue, FText::FromString(Value));
+			++ValueIndex;
+		}
+	}
+
+	TooltipWidget->ProcessEvent(Function, Params.GetData());
+
+	for (TFieldIterator<FProperty> It(Function); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
+	{
+		if (FProperty* Property = *It)
+		{
+			Property->DestroyValue_InContainer(Params.GetData());
+		}
+	}
+}
+
+FString UInventoryPanelWidget::FormatWeaponTooltipBlock(
+	const FRetrieveWeaponDataRow& WeaponData,
+	const FString& Header) const
+{
+	TArray<FString> Lines;
+	Lines.Add(Header + TEXT(":"));
+	Lines.Add(WeaponData.DisplayName.ToString());
+	Lines.Add(FString::Printf(TEXT("Grade: %s"), *GetGameplayTagLeaf(WeaponData.WeaponGradeTag)));
+	Lines.Add(FString::Printf(TEXT("Type: %s"), *GetGameplayTagLeaf(WeaponData.WeaponTypeTag)));
+	Lines.Add(FString::Printf(TEXT("Element: %s"), *GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
+	Lines.Add(FString::Printf(TEXT("Attack Power: %.0f"), WeaponData.AttackPower));
+	Lines.Add(FString::Printf(TEXT("Element Charge: x%.2f"), WeaponData.ElementChargeMultiplier));
+
+	if (!WeaponData.ShortDescription.IsEmpty())
+	{
+		Lines.Add(WeaponData.ShortDescription.ToString());
+	}
+
+	return FString::Join(Lines, TEXT("\n"));
+}
+
+FString UInventoryPanelWidget::BuildWeaponSwapDeltaText(
+	const FRetrieveWeaponDataRow& CurrentWeapon,
+	const FRetrieveWeaponDataRow& HoveredWeapon) const
+{
+	TArray<FString> Lines;
+
+	const float AttackDelta = HoveredWeapon.AttackPower - CurrentWeapon.AttackPower;
+	if (!FMath::IsNearlyZero(AttackDelta))
+	{
+		Lines.Add(FString::Printf(TEXT("%+.0f Attack Power"), AttackDelta));
+	}
+
+	const float ElementChargeDelta = HoveredWeapon.ElementChargeMultiplier - CurrentWeapon.ElementChargeMultiplier;
+	if (!FMath::IsNearlyZero(ElementChargeDelta))
+	{
+		Lines.Add(FString::Printf(TEXT("%+.2f Element Charge"), ElementChargeDelta));
+	}
+
+	if (HoveredWeapon.WeaponTypeTag != CurrentWeapon.WeaponTypeTag)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("Type: %s -> %s"),
+			*GetGameplayTagLeaf(CurrentWeapon.WeaponTypeTag),
+			*GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag)));
+	}
+
+	if (HoveredWeapon.WeaponAffinityTag != CurrentWeapon.WeaponAffinityTag)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("Element: %s -> %s"),
+			*GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag),
+			*GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)));
+	}
+
+	if (Lines.IsEmpty())
+	{
+		Lines.Add(TEXT("No stat changes"));
+	}
+
+	return FString::Join(Lines, TEXT("\n"));
 }
 
 void UInventoryPanelWidget::RefreshWeaponSkillIcons()
@@ -997,6 +1703,7 @@ FString UInventoryPanelWidget::GetGameplayTagLeaf(FGameplayTag Tag)
 void UInventoryPanelWidget::SetSortMode(EInventorySortMode NewMode)
 {
 	CurrentSortMode = NewMode;
+	MarkInventoryTooltipsDirty();
 	// 목록 갱신 이벤트를 발행하면 BP가 GetCurrentItemsSorted()를 다시 호출해 UI를 재구성한다
 	OnInventoryListChanged.Broadcast();
 }

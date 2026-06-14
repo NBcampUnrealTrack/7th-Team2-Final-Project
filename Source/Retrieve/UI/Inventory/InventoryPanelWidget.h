@@ -15,6 +15,7 @@ class UHorizontalBox;
 class UScrollBox;
 class UTextBlock;
 class UUniformGridPanel;
+class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrieveInventoryWidgetSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FRetrieveInventorySelectionChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag);
@@ -51,6 +52,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Data")
 	TObjectPtr<UDataTable> MaterialItemTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tooltip")
+	TSubclassOf<UUserWidget> ItemDetailTooltipWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tooltip")
+	TSubclassOf<UUserWidget> ItemCompareTooltipWidgetClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
 	FGameplayTag WeaponTabCategoryTag;
@@ -216,8 +223,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool GetItemIconData(FName ItemId, FRetrieveItemIconRow& OutIconData) const;
 
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Tooltip")
+	FText BuildItemTooltipText(FName ItemId, FGameplayTag ItemCategoryTag) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void RefreshWeaponComparisonText();
+
+	/**
+	 * 현재 선택된 아이템의 상태 텍스트를 반환한다.
+	 *   무기:    "장착 중" / "보관 중"
+	 *   소모품:  "퀵슬롯 4" / "퀵슬롯 5" / "없음"
+	 *   재료:    "보유 N개"
+	 * BP에서 Text_DetailState 바인딩 또는 OnSelectedItemChanged 핸들러에서 사용.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	FText GetSelectedItemStateText() const;
 
 	// 인벤토리 내부 탭 전환 (0: 무기, 1: 소모품, 2: 재료)
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
@@ -272,6 +292,9 @@ protected:
 	// 위젯 바인딩 — UMG 설계 시점에 연결, 런타임 상태와 구분
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_SelectedCompare;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_FinalStatDisplay;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_DetailType;
@@ -372,6 +395,7 @@ protected:
 	void BindButtonEvents();
 	void InitOwnerComponents();
 	void InitDefaultTags();
+	void ResolveDefaultTooltipWidgetClasses();
 	void RefreshInventoryView(bool bClearSelection);
 	void ClearSelection();
 	bool IsWeaponCategory(FGameplayTag ItemCategoryTag) const;
@@ -383,7 +407,24 @@ protected:
 	void UpdateQuickSlotActionButtons();
 	UDataTable* ResolveMaterialItemTable() const;
 	void RefreshSelectedMaterialDetails();
+	// Text_DetailState를 현재 선택 아이템 기준으로 즉시 갱신
+	void RefreshSelectedDetailState();
 	void RefreshInventoryGridLayout();
+	void MarkInventoryTooltipsDirty();
+	void ApplyInventorySlotTooltips();
+	void ClearWidgetTooltipRecursive(UWidget* Widget) const;
+	bool ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const;
+	UWidget* CreateInventorySlotTooltip(const FRetrieveItemStack& Item);
+	UWidget* CreateInventoryCompareTooltip(
+		const FRetrieveWeaponDataRow& CurrentWeapon,
+		const FRetrieveWeaponDataRow& HoveredWeapon);
+	void AddTooltipTextLine(class UVerticalBox* LineBox, const FString& Line, const FLinearColor& Color, bool bHeading) const;
+	void InvokeTooltipTextFunction(UUserWidget* TooltipWidget, FName FunctionName, const TArray<FString>& Values) const;
+	FString FormatWeaponTooltipBlock(const FRetrieveWeaponDataRow& WeaponData, const FString& Header) const;
+	FString BuildWeaponSwapDeltaText(const FRetrieveWeaponDataRow& CurrentWeapon, const FRetrieveWeaponDataRow& HoveredWeapon) const;
+	void DisableLegacyTooltipRecursive(UWidget* Widget) const;
+	void SuppressBlueprintManagedTooltip();
+	bool IsWidgetOrDescendantHovered(const UWidget* Widget) const;
 	void RefreshWeaponSkillIcons();
 	void PopulateWeaponSkillIcons(UHorizontalBox* SkillIconBox, const TArray<FWeaponSkillPreview>& SkillPreviews) const;
 	FString BuildWeaponComparisonText() const;
@@ -398,5 +439,11 @@ protected:
 	float GetItemAttackPower(const FRetrieveItemStack& Item) const;
 
 	// 스탯 조회 헬퍼
+	TArray<FName> AppliedTooltipItemIds;
+	TArray<FGameplayTag> AppliedTooltipCategoryTags;
+	TArray<bool> AppliedTooltipCompareFlags;
+	bool bInventoryTooltipsDirty = true;
+	FName AppliedTooltipEquippedWeaponId = NAME_None;
+
 	URetrieveAbilitySystemComponent* GetOwnerASC() const;
 };

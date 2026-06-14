@@ -1,5 +1,6 @@
 #include "Data/RetrieveMapIconDataAsset.h"
 #include "Components/RetrieveMapIconComponent.h"
+#include "World/RetrieveBonfireActor.h"
 #include "EngineUtils.h"
 
 #if WITH_EDITOR
@@ -30,6 +31,18 @@ void URetrieveMapIconDataAsset::RefreshFromLevel()
 		Entry.IconType      = IconComp->IconType;
 		Entry.MapLabel      = IconComp->MapLabel;
 		Entry.bShowLabel    = IconComp->bShowLabelOnWorldMap;
+
+		if (const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(Actor))
+		{
+			Entry.BonfireId = Bonfire->BonfireId;
+			if (Entry.BonfireId.IsNone())
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[MapIconDataAsset] BonfireId is empty: %s"),
+					*Actor->GetName());
+			}
+		}
+
 		Icons.Add(Entry);
 	}
 

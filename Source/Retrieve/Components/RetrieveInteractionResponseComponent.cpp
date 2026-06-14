@@ -1,7 +1,8 @@
-// Retrieve Interaction Response Component — Preset 기반 + AnimMontage 재생
+﻿// Retrieve Interaction Response Component ??Preset 湲곕컲 + AnimMontage ?ъ깮
 #include "Components/RetrieveInteractionResponseComponent.h"
 
 #include "Data/Interaction/RetrieveInteractionPresetAsset.h"
+#include "Data/Interaction/RetrieveInteractionPresetProfileAsset.h"
 #include "Data/Interaction/RetrieveInteractionResultAsset.h"
 #include "Data/Interaction/RetrieveInteractionTypeAsset.h"
 #include "Data/Interaction/RetrieveLootTableAsset.h"
@@ -148,8 +149,8 @@ URetrieveInteractionResponseComponent::URetrieveInteractionResponseComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 
-	// 클라이언트 → Server RPC 라우팅이 필요하므로 컴포넌트 자체 복제 활성화.
-	// owner 액터도 bReplicates = true여야 한다 (액터 BP의 Class Defaults에서 설정).
+	// ?대씪?댁뼵????Server RPC ?쇱슦?낆씠 ?꾩슂?섎?濡?而댄룷?뚰듃 ?먯껜 蹂듭젣 ?쒖꽦??
+	// owner ?≫꽣??bReplicates = true?ъ빞 ?쒕떎 (?≫꽣 BP??Class Defaults?먯꽌 ?ㅼ젙).
 	SetIsReplicatedByDefault(true);
 }
 
@@ -163,18 +164,18 @@ void URetrieveInteractionResponseComponent::BeginPlay()
 	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 유효 값 헬퍼
-// ──────────────────────────────────────────────────────────────────────────────
+// ??????????????????????????????????????????????????????????????????????????????
+// ?좏슚 媛??ы띁
+// ??????????????????????????????????????????????????????????????????????????????
 
 URetrieveInteractionTypeAsset* URetrieveInteractionResponseComponent::GetEffectiveTypeAsset() const
 {
-	// TypeAssetOverride가 있으면 항상 우선
+	// TypeAssetOverride媛 ?덉쑝硫???긽 ?곗꽑
 	if (TypeAssetOverride)
 	{
 		return TypeAssetOverride.Get();
 	}
-	// 없으면 Preset에서 읽기
+	// ?놁쑝硫?Preset?먯꽌 ?쎄린
 	if (Preset)
 	{
 		return Preset->TypeAsset.Get();
@@ -182,9 +183,27 @@ URetrieveInteractionTypeAsset* URetrieveInteractionResponseComponent::GetEffecti
 	return nullptr;
 }
 
+const FRetrieveInteractionPresetData* URetrieveInteractionResponseComponent::GetEffectivePresetData() const
+{
+	if (!PresetProfile || PresetId.IsNone())
+	{
+		return nullptr;
+	}
+
+	for (const FRetrieveInteractionPresetData& PresetData : PresetProfile->Presets)
+	{
+		if (PresetData.PresetId == PresetId)
+		{
+			return &PresetData;
+		}
+	}
+
+	return nullptr;
+}
+
 TArray<URetrieveInteractionResultAsset*> URetrieveInteractionResponseComponent::GetEffectiveResultAssets() const
 {
-	// ResultAssetsOverride가 비어있지 않으면 우선
+	// ResultAssetsOverride媛 鍮꾩뼱?덉? ?딆쑝硫??곗꽑
 	if (ResultAssetsOverride.Num() > 0)
 	{
 		TArray<URetrieveInteractionResultAsset*> Out;
@@ -198,7 +217,21 @@ TArray<URetrieveInteractionResultAsset*> URetrieveInteractionResponseComponent::
 		}
 		return Out;
 	}
-	// 없으면 Preset에서 읽기
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		TArray<URetrieveInteractionResultAsset*> Out;
+		Out.Reserve(PresetData->ResultAssets.Num());
+		for (const TObjectPtr<URetrieveInteractionResultAsset>& Ptr : PresetData->ResultAssets)
+		{
+			if (Ptr)
+			{
+				Out.Add(Ptr.Get());
+			}
+		}
+		return Out;
+	}
+
+	// ?놁쑝硫?Preset?먯꽌 ?쎄린
 	if (Preset)
 	{
 		TArray<URetrieveInteractionResultAsset*> Out;
@@ -215,13 +248,266 @@ TArray<URetrieveInteractionResultAsset*> URetrieveInteractionResponseComponent::
 	return TArray<URetrieveInteractionResultAsset*>{};
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// TypeAsset → Manager_InteractionTarget 적용
-// ──────────────────────────────────────────────────────────────────────────────
+UAnimMontage* URetrieveInteractionResponseComponent::GetEffectiveMontage() const
+{
+	// 1?쒖쐞: ?≫꽣 ?몄뒪?댁뒪蹂?override
+	if (MontageOverride)
+	{
+		return MontageOverride.Get();
+	}
+	if (TypeAssetOverride && TypeAssetOverride->InteractionMontage)
+	{
+		return TypeAssetOverride->InteractionMontage.Get();
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->InteractionMontage.Get();
+	}
+	if (Preset && Preset->InteractionMontage)
+	{
+		return Preset->InteractionMontage.Get();
+	}
+	if (Preset && Preset->TypeAsset && Preset->TypeAsset->InteractionMontage)
+	{
+		return Preset->TypeAsset->InteractionMontage.Get();
+	}
+	return nullptr;
+}
+
+UAnimMontage* URetrieveInteractionResponseComponent::GetEffectiveVisualMeshMontage() const
+{
+	if (VisualMeshMontageOverride)
+	{
+		return VisualMeshMontageOverride.Get();
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->VisualMeshMontage.Get();
+	}
+	return nullptr;
+}
+
+float URetrieveInteractionResponseComponent::GetEffectiveInteractionAnimationDuration() const
+{
+	const float PlayRate = GetEffectiveMontagePlayRate();
+	if (PlayRate <= KINDA_SMALL_NUMBER)
+	{
+		return 0.0f;
+	}
+
+	float MaxDuration = 0.0f;
+
+	if (const UAnimMontage* Montage = GetEffectiveMontage())
+	{
+		MaxDuration = FMath::Max(MaxDuration, Montage->GetPlayLength() / PlayRate);
+	}
+	if (const UAnimMontage* VisualMontage = GetEffectiveVisualMeshMontage())
+	{
+		MaxDuration = FMath::Max(MaxDuration, VisualMontage->GetPlayLength() / PlayRate);
+	}
+
+	return MaxDuration;
+}
+
+FText URetrieveInteractionResponseComponent::GetEffectiveDisplayText() const
+{
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->DisplayText;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->DisplayText;
+	}
+	if (Preset)
+	{
+		if (!Preset->DisplayText.IsEmpty())
+		{
+			return Preset->DisplayText;
+		}
+		if (Preset->TypeAsset)
+		{
+			return Preset->TypeAsset->DisplayText;
+		}
+	}
+	return INVTEXT("Interact");
+}
+
+bool URetrieveInteractionResponseComponent::GetEffectiveHoldInteraction() const
+{
+	if (bOverrideHoldSettings)
+	{
+		return bHoldInteractionOverride;
+	}
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->bHoldInteraction;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->bHoldInteraction;
+	}
+	if (Preset)
+	{
+		if (Preset->bHoldInteraction)
+		{
+			return true;
+		}
+		if (Preset->TypeAsset)
+		{
+			return Preset->TypeAsset->bHoldInteraction;
+		}
+	}
+	return false;
+}
+
+float URetrieveInteractionResponseComponent::GetEffectiveHoldDuration() const
+{
+	if (bOverrideHoldSettings)
+	{
+		return FMath::Max(HoldDurationOverride, 0.05f);
+	}
+	if (TypeAssetOverride)
+	{
+		return FMath::Max(TypeAssetOverride->HoldDuration, 0.05f);
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return FMath::Max(PresetData->HoldDuration, 0.05f);
+	}
+	if (Preset)
+	{
+		if (Preset->bHoldInteraction)
+		{
+			return FMath::Max(Preset->HoldDuration, 0.05f);
+		}
+		if (Preset->TypeAsset)
+		{
+			return FMath::Max(Preset->TypeAsset->HoldDuration, 0.05f);
+		}
+	}
+	return 1.0f;
+}
+
+float URetrieveInteractionResponseComponent::GetEffectiveMontagePlayRate() const
+{
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->MontagePlayRate;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->MontagePlayRate;
+	}
+	if (Preset)
+	{
+		if (!FMath::IsNearlyEqual(Preset->MontagePlayRate, 1.0f))
+		{
+			return Preset->MontagePlayRate;
+		}
+		if (Preset->TypeAsset)
+		{
+			return Preset->TypeAsset->MontagePlayRate;
+		}
+	}
+	return 1.0f;
+}
+
+UTexture2D* URetrieveInteractionResponseComponent::GetEffectivePromptIcon() const
+{
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->PromptIcon.Get();
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->PromptIcon.Get();
+	}
+	if (Preset)
+	{
+		if (Preset->PromptIcon)
+		{
+			return Preset->PromptIcon.Get();
+		}
+		if (Preset->TypeAsset)
+		{
+			return Preset->TypeAsset->PromptIcon.Get();
+		}
+	}
+	return nullptr;
+}
+
+FLinearColor URetrieveInteractionResponseComponent::GetEffectivePromptAccentColor() const
+{
+	if (bOverridePromptAccentColor)
+	{
+		return PromptAccentColorOverride;
+	}
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->PromptAccentColor;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->PromptAccentColor;
+	}
+	if (Preset)
+	{
+		if (Preset->TypeAsset && Preset->PromptAccentColor == FLinearColor(0.78f, 0.63f, 0.13f, 1.0f))
+		{
+			return Preset->TypeAsset->PromptAccentColor;
+		}
+		return Preset->PromptAccentColor;
+	}
+	return FLinearColor(0.78f, 0.63f, 0.13f, 1.0f);
+}
+
+FName URetrieveInteractionResponseComponent::GetEffectiveMgrPropIcon() const
+{
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->MgrProp_Icon;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->MgrProp_Icon;
+	}
+	if (Preset)
+	{
+		return Preset->MgrProp_Icon.IsNone() && Preset->TypeAsset
+			? Preset->TypeAsset->MgrProp_Icon
+			: Preset->MgrProp_Icon;
+	}
+	return TEXT("InteractionIcon");
+}
+
+FName URetrieveInteractionResponseComponent::GetEffectiveMgrPropColor() const
+{
+	if (TypeAssetOverride)
+	{
+		return TypeAssetOverride->MgrProp_Color;
+	}
+	if (const FRetrieveInteractionPresetData* PresetData = GetEffectivePresetData())
+	{
+		return PresetData->MgrProp_Color;
+	}
+	if (Preset)
+	{
+		return Preset->MgrProp_Color.IsNone() && Preset->TypeAsset
+			? Preset->TypeAsset->MgrProp_Color
+			: Preset->MgrProp_Color;
+	}
+	return TEXT("InteractionColor");
+}
+
+
+// ??????????????????????????????????????????????????????????????????????????????
+// TypeAsset ??Manager_InteractionTarget ?곸슜
+// ??????????????????????????????????????????????????????????????????????????????
 
 void URetrieveInteractionResponseComponent::ApplyTypeAssetToManager()
 {
-	if (!GetEffectiveTypeAsset())
+	if (!GetEffectivePresetData() && !Preset && !GetEffectiveTypeAsset() && PromptTextOverride.IsEmpty() && !PromptIconOverride)
 	{
 		return;
 	}
@@ -244,14 +530,13 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManager()
 	}
 
 	UE_LOG(LogTemp, Warning,
-		TEXT("[Retrieve|Interaction] ApplyTypeAssetToManager: %s에서 '%s' 컴포넌트를 찾지 못함"),
+		TEXT("[Retrieve|Interaction] ApplyTypeAssetToManager: %s?먯꽌 '%s' 而댄룷?뚰듃瑜?李얠? 紐삵븿"),
 		*OwnerActor->GetName(), *InteractionManagerComponentName.ToString());
 }
 
 void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UActorComponent* ManagerComp)
 {
-	URetrieveInteractionTypeAsset* TypeAsset = GetEffectiveTypeAsset();
-	if (!TypeAsset || !ManagerComp)
+	if (!ManagerComp)
 	{
 		return;
 	}
@@ -259,9 +544,9 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 	const UClass* ManagerClass = ManagerComp->GetClass();
 	const FString OwnerName = GetOwner() ? GetOwner()->GetName() : TEXT("Unknown");
 	RetrieveInteractionPrompt::FPromptData PromptData;
-	PromptData.Text = TypeAsset->DisplayText;
-	PromptData.Icon = bHideIconForNonItemPrompt ? nullptr : TypeAsset->PromptIcon.Get();
-	PromptData.AccentColor = TypeAsset->PromptAccentColor;
+	PromptData.Text = GetEffectiveDisplayText();
+	PromptData.Icon = bHideIconForNonItemPrompt ? nullptr : GetEffectivePromptIcon();
+	PromptData.AccentColor = GetEffectivePromptAccentColor();
 
 	if (bUseQuickPickupItemPrompt && !QuickPickupItemId.IsNone())
 	{
@@ -271,7 +556,7 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 
 		FFormatNamedArguments Args;
 		Args.Add(TEXT("ItemName"), ItemName);
-		Args.Add(TEXT("ActionText"), TypeAsset->DisplayText);
+		Args.Add(TEXT("ActionText"), GetEffectiveDisplayText());
 		Args.Add(TEXT("Quantity"), FText::AsNumber(QuickPickupQuantity));
 		PromptData.Text = FText::Format(QuickPickupPromptFormat, Args);
 
@@ -286,7 +571,7 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 		}
 		else
 		{
-			PromptData.Icon = TypeAsset->PromptIcon.Get();
+			PromptData.Icon = GetEffectivePromptIcon();
 		}
 	}
 
@@ -300,24 +585,25 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 		PromptData.Icon = PromptIconOverride.Get();
 	}
 
-	// ── 1) HoldSeconds (float) ────────────────────────────────────────────
+	// ?? 1) HoldSeconds (float) ????????????????????????????????????????????
 	if (FFloatProperty* HoldProp = FindFProperty<FFloatProperty>(ManagerClass, FName("HoldSeconds")))
 	{
-		const float Duration = TypeAsset->bHoldInteraction
-			? TypeAsset->HoldDuration
-			: 0.25f;  // Tap: 0.25s 빠른 게이지 피드백
+		const float Duration = GetEffectiveHoldInteraction()
+			? GetEffectiveHoldDuration()
+			: 0.25f;
 		HoldProp->SetPropertyValue_InContainer(ManagerComp, Duration);
 		UE_LOG(LogTemp, Verbose,
-			TEXT("[Retrieve|Interaction] %s: HoldSeconds=%.2f 적용"), *OwnerName, Duration);
+			TEXT("[Retrieve|Interaction] %s: HoldSeconds=%.2f ?곸슜"), *OwnerName, Duration);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] Manager에 'HoldSeconds' float 프로퍼티 없음 — 스킵"));
+			TEXT("[Retrieve|Interaction] Manager??'HoldSeconds' float ?꾨줈?쇳떚 ?놁쓬 ???ㅽ궢"));
 	}
 
-	// ── 2) InteractionType (byte/enum: 0=Tap, 1=Hold, 2=Repeat) ──────────
-	const uint8 TypeValue = TypeAsset->bHoldInteraction ? 1 : 0;
+	// ?? 2) InteractionType (byte/enum: 0=Tap, 1=Hold, 2=Repeat) ??????????
+	const bool bHoldInteraction = GetEffectiveHoldInteraction();
+	const uint8 TypeValue = bHoldInteraction ? 1 : 0;
 	bool bTypeSet = false;
 
 	if (FByteProperty* ByteProp = FindFProperty<FByteProperty>(ManagerClass, FName("InteractionType")))
@@ -335,16 +621,16 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 	if (!bTypeSet)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] Manager에 'InteractionType' 프로퍼티 없음 — 스킵"));
+			TEXT("[Retrieve|Interaction] Manager??'InteractionType' ?꾨줈?쇳떚 ?놁쓬 ???ㅽ궢"));
 	}
 	else
 	{
 		UE_LOG(LogTemp, Verbose,
-			TEXT("[Retrieve|Interaction] %s: InteractionType=%d(%s) 적용"),
-			*OwnerName, TypeValue, TypeAsset->bHoldInteraction ? TEXT("Hold") : TEXT("Tap"));
+			TEXT("[Retrieve|Interaction] %s: InteractionType=%d(%s) ?곸슜"),
+			*OwnerName, TypeValue, bHoldInteraction ? TEXT("Hold") : TEXT("Tap"));
 	}
 
-	// ── 3) InteractionText 맵의 첫 번째 항목 갱신 ───────────────────────
+	// ?? 3) InteractionText 留듭쓽 泥?踰덉㎏ ??ぉ 媛깆떊 ???????????????????????
 	if (FMapProperty* TextMapProp = FindFProperty<FMapProperty>(ManagerClass, FName("InteractionText")))
 	{
 		FTextProperty* ValueTextProp = CastField<FTextProperty>(TextMapProp->ValueProp);
@@ -362,7 +648,7 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 						ValueTextProp->SetPropertyValue(
 							MapHelper.GetValuePtr(Idx), PromptData.Text);
 						UE_LOG(LogTemp, Verbose,
-							TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" 적용"),
+							TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" ?곸슜"),
 							*OwnerName, *PromptData.Text.ToString());
 						break;
 					}
@@ -379,69 +665,71 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 						MapHelper.GetValuePtr(NewIdx), PromptData.Text);
 					MapHelper.Rehash();
 					UE_LOG(LogTemp, Verbose,
-						TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" 새 항목 추가"),
+						TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" ????ぉ 異붽?"),
 						*OwnerName, *PromptData.Text.ToString());
 				}
 				else
 				{
 					UE_LOG(LogTemp, Warning,
-						TEXT("[Retrieve|Interaction] InteractionText 맵이 비어 있고 키 타입이 int32가 아님 — 텍스트 적용 불가. "
-						     "에디터에서 Manager_InteractionTarget의 InteractionText[0]을 수동으로 설정하세요."));
+						TEXT("[Retrieve|Interaction] InteractionText 留듭씠 鍮꾩뼱 ?덇퀬 ????낆씠 int32媛 ?꾨떂 ???띿뒪???곸슜 遺덇?. "
+						     "?먮뵒?곗뿉??Manager_InteractionTarget??InteractionText[0]???섎룞?쇰줈 ?ㅼ젙?섏꽭??"));
 				}
 			}
 		}
 		else
 		{
 			UE_LOG(LogTemp, Warning,
-				TEXT("[Retrieve|Interaction] InteractionText 맵의 값 타입이 FText가 아님 — 스킵"));
+				TEXT("[Retrieve|Interaction] InteractionText 留듭쓽 媛???낆씠 FText媛 ?꾨떂 ???ㅽ궢"));
 		}
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] Manager에 'InteractionText' TMap 프로퍼티 없음 — 스킵"));
+			TEXT("[Retrieve|Interaction] Manager??'InteractionText' TMap ?꾨줈?쇳떚 ?놁쓬 ???ㅽ궢"));
 	}
 
-	// ── 4) 아이콘 텍스처 ──────────────────────────────────────────────────
-	// TypeAsset.PromptIcon → Manager[MgrProp_Icon] (UTexture2D* ObjectProperty)
-	if (!TypeAsset->MgrProp_Icon.IsNone())
+	// ?? 4) ?꾩씠肄??띿뒪泥???????????????????????????????????????????????????
+	// TypeAsset.PromptIcon ??Manager[MgrProp_Icon] (UTexture2D* ObjectProperty)
+	const FName IconPropName = GetEffectiveMgrPropIcon();
+	if (!IconPropName.IsNone())
 	{
 		if (FObjectProperty* IconProp =
-			FindFProperty<FObjectProperty>(ManagerClass, TypeAsset->MgrProp_Icon))
+			FindFProperty<FObjectProperty>(ManagerClass, IconPropName))
 		{
-			// 타입 안전: UTexture2D 혹은 그 부모(UTexture, UObject) 슬롯이면 적용
+			// ????덉쟾: UTexture2D ?뱀? 洹?遺紐?UTexture, UObject) ?щ’?대㈃ ?곸슜
 			if (IconProp->PropertyClass &&
 				UTexture2D::StaticClass()->IsChildOf(IconProp->PropertyClass))
 			{
 				IconProp->SetObjectPropertyValue_InContainer(ManagerComp, PromptData.Icon.Get());
 				UE_LOG(LogTemp, Verbose,
-					TEXT("[Retrieve|Interaction] %s: Icon='%s' 적용"),
+					TEXT("[Retrieve|Interaction] %s: Icon='%s' ?곸슜"),
 					*OwnerName, PromptData.Icon ? *PromptData.Icon->GetName() : TEXT("None"));
 			}
 			else
 			{
 				UE_LOG(LogTemp, Warning,
-					TEXT("[Retrieve|Interaction] '%s' 프로퍼티가 UTexture2D 호환 타입이 아님"),
-					*TypeAsset->MgrProp_Icon.ToString());
+					TEXT("[Retrieve|Interaction] '%s' ?꾨줈?쇳떚媛 UTexture2D ?명솚 ??낆씠 ?꾨떂"),
+					*IconPropName.ToString());
 			}
 		}
 		else
 		{
 			UE_LOG(LogTemp, Verbose,
-				TEXT("[Retrieve|Interaction] Manager에 '%s' 아이콘 프로퍼티 없음 — 스킵 (MgrProp_Icon 이름을 확인하세요)"),
-				*TypeAsset->MgrProp_Icon.ToString());
+				TEXT("[Retrieve|Interaction] Manager??'%s' ?꾩씠肄??꾨줈?쇳떚 ?놁쓬 ???ㅽ궢 (MgrProp_Icon ?대쫫???뺤씤?섏꽭??"),
+				*IconPropName.ToString());
 		}
 	}
 
-	// ── 5) 강조색 ─────────────────────────────────────────────────────────
-	// TypeAsset.PromptAccentColor → Manager[MgrProp_Color]
-	// FLinearColor 와 FColor 둘 다 시도한다 (상용 에셋마다 타입이 다를 수 있음)
-	if (!TypeAsset->MgrProp_Color.IsNone())
+	// ?? 5) 媛뺤“???????????????????????????????????????????????????????????
+	// TypeAsset.PromptAccentColor ??Manager[MgrProp_Color]
+	// FLinearColor ? FColor ?????쒕룄?쒕떎 (?곸슜 ?먯뀑留덈떎 ??낆씠 ?ㅻ? ???덉쓬)
+	const FName ColorPropName = GetEffectiveMgrPropColor();
+	if (!ColorPropName.IsNone())
 	{
 		bool bColorApplied = false;
 
 		if (FStructProperty* ColorProp =
-			FindFProperty<FStructProperty>(ManagerClass, TypeAsset->MgrProp_Color))
+			FindFProperty<FStructProperty>(ManagerClass, ColorPropName))
 		{
 			if (ColorProp->Struct == TBaseStructure<FLinearColor>::Get())
 			{
@@ -460,7 +748,7 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 		if (bColorApplied)
 		{
 			UE_LOG(LogTemp, Verbose,
-				TEXT("[Retrieve|Interaction] %s: AccentColor=(%.2f,%.2f,%.2f) 적용"),
+				TEXT("[Retrieve|Interaction] %s: AccentColor=(%.2f,%.2f,%.2f) ?곸슜"),
 				*OwnerName,
 				PromptData.AccentColor.R,
 				PromptData.AccentColor.G,
@@ -469,55 +757,16 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 		else
 		{
 			UE_LOG(LogTemp, Verbose,
-				TEXT("[Retrieve|Interaction] Manager에 '%s' 색상 프로퍼티 없음 — 스킵 (MgrProp_Color 이름을 확인하세요)"),
-				*TypeAsset->MgrProp_Color.ToString());
+				TEXT("[Retrieve|Interaction] Manager??'%s' ?됱긽 ?꾨줈?쇳떚 ?놁쓬 ???ㅽ궢 (MgrProp_Color ?대쫫???뺤씤?섏꽭??"),
+				*ColorPropName.ToString());
 		}
 	}
 
-	// ── 6) 위젯 클래스 override ───────────────────────────────────────────
-	// TypeAsset.WidgetClassOverride → Manager[MgrProp_WidgetClass]
-	// TSubclassOf<UUserWidget>(ClassProperty) 또는 TSoftClassPtr(SoftClassProperty) 시도
-	if (!TypeAsset->WidgetClassOverride.IsNull() && !TypeAsset->MgrProp_WidgetClass.IsNone())
-	{
-		if (UClass* WidgetClass = TypeAsset->WidgetClassOverride.LoadSynchronous())
-		{
-			bool bClassApplied = false;
-
-			if (FClassProperty* ClassProp =
-				FindFProperty<FClassProperty>(ManagerClass, TypeAsset->MgrProp_WidgetClass))
-			{
-				ClassProp->SetPropertyValue_InContainer(ManagerComp, WidgetClass);
-				bClassApplied = true;
-			}
-			else if (FSoftClassProperty* SoftProp =
-				FindFProperty<FSoftClassProperty>(ManagerClass, TypeAsset->MgrProp_WidgetClass))
-			{
-				// FSoftClassProperty의 내부 값 타입은 FSoftObjectPtr.
-				// UClass*(UObject* 하위)를 FSoftObjectPtr로 명시 변환.
-				SoftProp->SetPropertyValue_InContainer(
-					ManagerComp, FSoftObjectPtr(WidgetClass));
-				bClassApplied = true;
-			}
-
-			if (bClassApplied)
-			{
-				UE_LOG(LogTemp, Verbose,
-					TEXT("[Retrieve|Interaction] %s: WidgetClass='%s' 적용"),
-					*OwnerName, *WidgetClass->GetName());
-			}
-			else
-			{
-				UE_LOG(LogTemp, Verbose,
-					TEXT("[Retrieve|Interaction] Manager에 '%s' 위젯 클래스 프로퍼티 없음 — 스킵 (MgrProp_WidgetClass 이름을 확인하세요)"),
-					*TypeAsset->MgrProp_WidgetClass.ToString());
-			}
-		}
-	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// InteractionManager 자동 바인딩
-// ──────────────────────────────────────────────────────────────────────────────
+// ??????????????????????????????????????????????????????????????????????????????
+// InteractionManager ?먮룞 諛붿씤??
+// ??????????????????????????????????????????????????????????????????????????????
 
 void URetrieveInteractionResponseComponent::TryAutoBindInteractionManager()
 {
@@ -542,26 +791,58 @@ void URetrieveInteractionResponseComponent::TryAutoBindInteractionManager()
 	if (!TargetComp)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] %s에서 컴포넌트 '%s'를 찾지 못해 자동 바인딩 생략. "
-			     "BP Manager_InteractionTarget의 컴포넌트 이름을 확인하거나 InteractionManagerComponentName을 조정하세요."),
+			TEXT("[Retrieve|Interaction] %s?먯꽌 而댄룷?뚰듃 '%s'瑜?李얠? 紐삵빐 ?먮룞 諛붿씤???앸왂. "
+			     "BP Manager_InteractionTarget??而댄룷?뚰듃 ?대쫫???뺤씤?섍굅??InteractionManagerComponentName??議곗젙?섏꽭??"),
 			*OwnerActor->GetName(), *InteractionManagerComponentName.ToString());
 		return;
 	}
 
-	// TypeAsset 설정을 Manager에 적용
-	if (GetEffectiveTypeAsset())
+	// TypeAsset ?ㅼ젙??Manager???곸슜
+	if (GetEffectivePresetData() || Preset || GetEffectiveTypeAsset() || !PromptTextOverride.IsEmpty() || PromptIconOverride)
 	{
 		ApplyTypeAssetToManagerInternal(TargetComp);
 	}
 
-	// OnInteractionEnd Multicast Delegate 바인딩 (reflection)
+	UClass* TargetClass = TargetComp->GetClass();
+
+	// OnInteractionBegin 諛붿씤??(而ㅼ뒪? ?꾨＼?꾪듃 ?꾩젽 ?앹꽦)
+	if (FMulticastDelegateProperty* BeginProp = FindFProperty<FMulticastDelegateProperty>(
+		TargetClass, FName(TEXT("OnInteractionBegin"))))
+	{
+		FScriptDelegate BeginDel;
+		BeginDel.BindUFunction(this, FName(TEXT("HandleInteractionManagerBegin")));
+		BeginProp->AddDelegate(MoveTemp(BeginDel), TargetComp);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Verbose,
+			TEXT("[Retrieve|Interaction] '%s' 而댄룷?뚰듃??OnInteractionBegin ?놁쓬 ??而ㅼ뒪? ?꾨＼?꾪듃 Begin 諛붿씤???ㅽ궢"),
+			*TargetComp->GetName());
+	}
+
+	// OnInteractionUpdated 諛붿씤??(Hold 吏꾪뻾???낅뜲?댄듃)
+	if (FMulticastDelegateProperty* UpdatedProp = FindFProperty<FMulticastDelegateProperty>(
+		TargetClass, FName(TEXT("OnInteractionUpdated"))))
+	{
+		FScriptDelegate UpdatedDel;
+		UpdatedDel.BindUFunction(this, FName(TEXT("HandleInteractionManagerUpdated")));
+		UpdatedProp->AddDelegate(MoveTemp(UpdatedDel), TargetComp);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Verbose,
+			TEXT("[Retrieve|Interaction] '%s' 而댄룷?뚰듃??OnInteractionUpdated ?놁쓬 ??而ㅼ뒪? ?꾨＼?꾪듃 Updated 諛붿씤???ㅽ궢"),
+			*TargetComp->GetName());
+	}
+
+	// OnInteractionEnd Multicast Delegate 諛붿씤??(reflection)
 	FMulticastDelegateProperty* DelegateProp = FindFProperty<FMulticastDelegateProperty>(
-		TargetComp->GetClass(), FName(TEXT("OnInteractionEnd")));
+		TargetClass, FName(TEXT("OnInteractionEnd")));
 
 	if (!DelegateProp)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] '%s' 컴포넌트에 OnInteractionEnd 멀티캐스트 디스패처가 없어 자동 바인딩 실패"),
+			TEXT("[Retrieve|Interaction] '%s' 而댄룷?뚰듃??OnInteractionEnd 硫?곗틦?ㅽ듃 ?붿뒪?⑥쿂媛 ?놁뼱 ?먮룞 諛붿씤???ㅽ뙣"),
 			*TargetComp->GetName());
 		return;
 	}
@@ -572,25 +853,41 @@ void URetrieveInteractionResponseComponent::TryAutoBindInteractionManager()
 
 	URetrieveInteractionTypeAsset* EffType = GetEffectiveTypeAsset();
 	UE_LOG(LogTemp, Log,
-		TEXT("[Retrieve|Interaction] %s: %s.OnInteractionEnd 자동 바인딩 완료 (TypeAsset=%s)"),
+		TEXT("[Retrieve|Interaction] %s: %s ?먮룞 諛붿씤???꾨즺 (Begin/Updated/End, TypeAsset=%s)"),
 		*OwnerActor->GetName(), *TargetComp->GetName(),
 		EffType ? *EffType->GetName() : TEXT("None"));
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 상호작용 처리 흐름
-// ──────────────────────────────────────────────────────────────────────────────
+// ??????????????????????????????????????????????????????????????????????????????
+// ?곹샇?묒슜 泥섎━ ?먮쫫
+// ??????????????????????????????????????????????????????????????????????????????
+
+void URetrieveInteractionResponseComponent::HandleInteractionManagerBegin(APawn* InteractorPawn)
+{
+
+}
+
+void URetrieveInteractionResponseComponent::HandleInteractionManagerUpdated(APawn* InteractorPawn, float Progress)
+{
+
+
+
+
+}
 
 void URetrieveInteractionResponseComponent::HandleInteractionManagerEnd(uint8 Result, APawn* InteractorPawn)
 {
 	UE_LOG(LogTemp, Log,
-		TEXT("[Retrieve|Interaction] OnInteractionEnd 수신: Result=%d, Pawn=%s"),
+		TEXT("[Retrieve|Interaction] OnInteractionEnd ?섏떊: Result=%d, Pawn=%s"),
 		Result, *GetNameSafe(InteractorPawn));
+
+	// 而ㅼ뒪? ?꾨＼?꾪듃 ?④린湲?(?깃났/痍⑥냼/?ㅽ뙣 臾닿?)
+
 
 	if (Result != SuccessResultValue)
 	{
 		UE_LOG(LogTemp, Log,
-			TEXT("[Retrieve|Interaction] Result=%d이 SuccessResultValue=%d와 달라 상호작용 무시"),
+			TEXT("[Retrieve|Interaction] Result=%d??SuccessResultValue=%d? ?щ씪 ?곹샇?묒슜 臾댁떆"),
 			Result, SuccessResultValue);
 		return;
 	}
@@ -598,13 +895,14 @@ void URetrieveInteractionResponseComponent::HandleInteractionManagerEnd(uint8 Re
 	HandleInteractionApplied(InteractorPawn);
 }
 
+
 void URetrieveInteractionResponseComponent::HandleInteractionApplied(AActor* InteractionInstigator)
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor || !InteractionInstigator)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] HandleInteractionApplied 무시: OwnerActor 또는 Instigator가 비어 있음"));
+			TEXT("[Retrieve|Interaction] HandleInteractionApplied 臾댁떆: OwnerActor ?먮뒗 Instigator媛 鍮꾩뼱 ?덉쓬"));
 		return;
 	}
 
@@ -633,22 +931,22 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 
 	int32 AppliedCount = 0;
 
-	// ──────────────────────────────────────────────────────────────────────
-	// 결과 적용 우선순위
+	// ??????????????????????????????????????????????????????????????????????
+	// 寃곌낵 ?곸슜 ?곗꽑?쒖쐞
 	//
-	//  1순위: ResultAssetsOverride / Preset.ResultAssets (기존 DA 기반 방식)
-	//         → 복잡한 고정 보상·Composite·CustomEvent 등 특수 케이스
-	//  2순위: DirectLootTable (드롭 테이블 직접 참조)
-	//         → 상자·몬스터·광맥 등 확률 드롭
-	//  3순위: QuickPickupItemId (인라인 단순 픽업)
-	//         → 바닥 아이템, DA 파일 0개
-	// ──────────────────────────────────────────────────────────────────────
+	//  1?쒖쐞: ResultAssetsOverride / Preset.ResultAssets (湲곗〈 DA 湲곕컲 諛⑹떇)
+	//         ??蹂듭옟??怨좎젙 蹂댁긽쨌Composite쨌CustomEvent ???뱀닔 耳?댁뒪
+	//  2?쒖쐞: DirectLootTable (?쒕∼ ?뚯씠釉?吏곸젒 李몄“)
+	//         ???곸옄쨌紐ъ뒪?걔룰킅留????뺣쪧 ?쒕∼
+	//  3?쒖쐞: QuickPickupItemId (?몃씪???⑥닚 ?쎌뾽)
+	//         ??諛붾떏 ?꾩씠?? DA ?뚯씪 0媛?
+	// ??????????????????????????????????????????????????????????????????????
 
 	const TArray<URetrieveInteractionResultAsset*> EffectiveResults = GetEffectiveResultAssets();
 
 	if (EffectiveResults.Num() > 0)
 	{
-		// ── 1순위: DA ResultAsset 체인 ──────────────────────────────────
+		// ?? 1?쒖쐞: DA ResultAsset 泥댁씤 ??????????????????????????????????
 		for (URetrieveInteractionResultAsset* Result : EffectiveResults)
 		{
 			if (!Result) { continue; }
@@ -658,7 +956,7 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 	}
 	else if (DirectLootTable)
 	{
-		// ── 2순위: LootTable 직접 굴림 ──────────────────────────────────
+		// ?? 2?쒖쐞: LootTable 吏곸젒 援대┝ ??????????????????????????????????
 		UInventoryComponent* Inventory =
 			InteractionInstigator->FindComponentByClass<UInventoryComponent>();
 
@@ -678,7 +976,7 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 				else
 				{
 					UE_LOG(LogTemp, Warning,
-						TEXT("[Retrieve|Interaction] %s: LootTable item AddItem 실패 ItemId=%s Tag=%s Quantity=%d"),
+						TEXT("[Retrieve|Interaction] %s: LootTable item AddItem ?ㅽ뙣 ItemId=%s Tag=%s Quantity=%d"),
 						*OwnerActor->GetName(),
 						*Drop.ItemId.ToString(),
 						*Drop.ItemCategoryTag.ToString(),
@@ -687,19 +985,19 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 			}
 
 			UE_LOG(LogTemp, Log,
-				TEXT("[Retrieve|Interaction] %s: LootTable '%s' → %d종 드롭"),
+				TEXT("[Retrieve|Interaction] %s: LootTable '%s' ??%d醫??쒕∼"),
 				*OwnerActor->GetName(), *DirectLootTable->GetName(), AppliedCount);
 		}
 		else
 		{
 			UE_LOG(LogTemp, Warning,
-				TEXT("[Retrieve|Interaction] %s: DirectLootTable 설정됐지만 Instigator에 InventoryComponent 없음"),
+				TEXT("[Retrieve|Interaction] %s: DirectLootTable ?ㅼ젙?먯?留?Instigator??InventoryComponent ?놁쓬"),
 				*OwnerActor->GetName());
 		}
 	}
 	else if (!QuickPickupItemId.IsNone())
 	{
-		// ── 3순위: 인라인 단순 픽업 ─────────────────────────────────────
+		// ?? 3?쒖쐞: ?몃씪???⑥닚 ?쎌뾽 ?????????????????????????????????????
 		UInventoryComponent* Inventory =
 			InteractionInstigator->FindComponentByClass<UInventoryComponent>();
 
@@ -712,43 +1010,40 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 			{
 				++AppliedCount;
 				UE_LOG(LogTemp, Log,
-					TEXT("[Retrieve|Interaction] %s: QuickPickup '%s' x%d 추가"),
+					TEXT("[Retrieve|Interaction] %s: QuickPickup '%s' x%d 異붽?"),
 					*OwnerActor->GetName(), *QuickPickupItemId.ToString(), QuickPickupQuantity);
 			}
 			else
 			{
 				UE_LOG(LogTemp, Warning,
-					TEXT("[Retrieve|Interaction] %s: QuickPickup '%s' AddItem 실패 (인벤토리 가득 찼거나 잘못된 ItemId)"),
+					TEXT("[Retrieve|Interaction] %s: QuickPickup '%s' AddItem ?ㅽ뙣 (?몃깽?좊━ 媛??李쇨굅???섎せ??ItemId)"),
 					*OwnerActor->GetName(), *QuickPickupItemId.ToString());
 			}
 		}
 		else
 		{
 			UE_LOG(LogTemp, Warning,
-				TEXT("[Retrieve|Interaction] %s: QuickPickupItemId 설정됐지만 Instigator에 InventoryComponent 없음"),
+				TEXT("[Retrieve|Interaction] %s: QuickPickupItemId ?ㅼ젙?먯?留?Instigator??InventoryComponent ?놁쓬"),
 				*OwnerActor->GetName());
 		}
 	}
 	else
 	{
-		// 결과 없음 — OnApplied만 브로드캐스트 (문·레버·대화 등 아이템 없는 상호작용)
+		// 寃곌낵 ?놁쓬 ??OnApplied留?釉뚮줈?쒖틦?ㅽ듃 (臾맞룸젅踰꽷룸??????꾩씠???녿뒗 ?곹샇?묒슜)
 		UE_LOG(LogTemp, Log,
-			TEXT("[Retrieve|Interaction] %s: 결과 설정 없음 — OnApplied 델리게이트만 broadcast (문·레버·대화 전용 상호작용)"),
+			TEXT("[Retrieve|Interaction] %s: 寃곌낵 ?ㅼ젙 ?놁쓬 ??OnApplied ?몃━寃뚯씠?몃쭔 broadcast (臾맞룸젅踰꽷룸????꾩슜 ?곹샇?묒슜)"),
 			*OwnerActor->GetName());
 	}
 
-	// 2) 애니메이션: TypeAsset 몽타주 재생 + BP override 이벤트
+	// 2) ?좊땲硫붿씠?? TypeAsset 紐쏀?二??ъ깮 + BP override ?대깽??
 	TryPlayInteractionAnim(InteractionInstigator);
 
-	// 3) 디버그 메시지
+	// 3) ?붾쾭洹?硫붿떆吏
 	if (bShowDebugMessageOnApply && GEngine)
 	{
-		URetrieveInteractionTypeAsset* TypeAsset = GetEffectiveTypeAsset();
-		const FString TypeName = TypeAsset
-			? TypeAsset->DisplayText.ToString()
-			: TEXT("?");
+		const FString TypeName = GetEffectiveDisplayText().ToString();
 		const FString Msg = FString::Printf(
-			TEXT("[Interaction] %s ← %s | %s | 결과:%d"),
+			TEXT("[Interaction] %s ??%s | %s | 寃곌낵:%d"),
 			*OwnerActor->GetName(),
 			*InteractionInstigator->GetName(),
 			*TypeName,
@@ -756,54 +1051,101 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan, Msg);
 	}
 
-	// 4) BP 후처리 델리게이트
+	// 4) BP ?꾩쿂由??몃━寃뚯씠??
 	OnApplied.Broadcast(InteractionInstigator);
 
-	// 5) 1회성 액터 destroy (SetLifeSpan으로 1 tick 지연)
+	// 5) 1?뚯꽦 ?≫꽣 destroy (SetLifeSpan?쇰줈 1 tick 吏??
 	if (bDestroyOwnerOnApplied)
 	{
 		OwnerActor->SetLifeSpan(0.1f);
 	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 애니메이션
-// ──────────────────────────────────────────────────────────────────────────────
+// ??????????????????????????????????????????????????????????????????????????????
+// ?좊땲硫붿씠??
+// ??????????????????????????????????????????????????????????????????????????????
 
 void URetrieveInteractionResponseComponent::TryPlayInteractionAnim(AActor* InteractionInstigator)
 {
-	// ── 1) BP 액터별 커스텀 처리 ────────────────────────────────────────
+	// ?? 1) ?쒕쾭痢?BP 而ㅼ뒪? 泥섎━ ?????????????????????????????????????????
 	OnPlayInteractionAnim(InteractionInstigator);
 
-	// ── 2) TypeAsset의 AnimMontage를 instigator 캐릭터에 재생 ────────────
-	URetrieveInteractionTypeAsset* TypeAsset = GetEffectiveTypeAsset();
-	if (!TypeAsset || !TypeAsset->InteractionMontage)
+	// ?? 2) ?ъ깮??紐쏀?二?寃곗젙 (MontageOverride ??TypeAsset.Montage) ??????
+	UAnimMontage* MontageToPlay = GetEffectiveMontage();
+	if (!MontageToPlay)
 	{
 		return;
 	}
 
-	ACharacter* Character = Cast<ACharacter>(InteractionInstigator);
+	// ?? 3) PlayRate 寃곗젙 (TypeAsset?먯꽌 ?쎌쓬, MontageOverride ??湲곕낯媛? ?
+	const float PlayRate = GetEffectiveMontagePlayRate();
+
+	// ?? 4) 紐⑤뱺 ?대씪?댁뼵?몄뿉 硫?곗틦?ㅽ듃濡??ъ깮 ???????????????????????????
+	UAnimMontage* VisualMontage = GetEffectiveVisualMeshMontage();
+	Multicast_PlayInteractionAnim(InteractionInstigator, MontageToPlay, PlayRate, VisualMontage);
+}
+
+void URetrieveInteractionResponseComponent::Multicast_PlayInteractionAnim_Implementation(
+	AActor* Instigator, UAnimMontage* Montage, float PlayRate, UAnimMontage* VisualMontage)
+{
+	if (!Instigator)
+	{
+		return;
+	}
+
+	ACharacter* Character = Cast<ACharacter>(Instigator);
 	if (!Character)
 	{
 		UE_LOG(LogTemp, Verbose,
-			TEXT("[Retrieve|Interaction] %s: Instigator(%s)가 ACharacter가 아님 — 몽타주 스킵"),
-			*GetOwner()->GetName(), *InteractionInstigator->GetName());
+			TEXT("[Retrieve|Interaction] %s: Instigator(%s) is not ACharacter - skipping anim"),
+			*GetOwner()->GetName(), *Instigator->GetName());
 		return;
 	}
 
-	USkeletalMeshComponent* Mesh = Character->GetMesh();
-	UAnimInstance* AnimInst = Mesh ? Mesh->GetAnimInstance() : nullptr;
-	if (!AnimInst)
+	// 스켈레톤이 일치하는 SkeletalMeshComponent를 찾아 몽타주를 재생
+	auto PlayOnMatchingSkeleton = [&](UAnimMontage* MontageToPlay)
 	{
+		if (!MontageToPlay)
+		{
+			return;
+		}
+
+		USkeleton* TargetSkeleton = MontageToPlay->GetSkeleton();
+		if (!TargetSkeleton)
+		{
+			return;
+		}
+
+		TArray<USkeletalMeshComponent*> Meshes;
+		Character->GetComponents<USkeletalMeshComponent>(Meshes);
+
+		for (USkeletalMeshComponent* Mesh : Meshes)
+		{
+			if (!Mesh || !Mesh->GetSkeletalMeshAsset())
+			{
+				continue;
+			}
+			if (Mesh->GetSkeletalMeshAsset()->GetSkeleton() != TargetSkeleton)
+			{
+				continue;
+			}
+			UAnimInstance* AnimInst = Mesh->GetAnimInstance();
+			if (!AnimInst)
+			{
+				continue;
+			}
+			AnimInst->Montage_Play(MontageToPlay, PlayRate);
+			UE_LOG(LogTemp, Log,
+				TEXT("[Retrieve|Interaction] %s: Montage '%s' on mesh '%s' (Rate=%.2f)"),
+				*GetOwner()->GetName(), *MontageToPlay->GetName(), *Mesh->GetName(), PlayRate);
+			return;
+		}
+
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] %s: AnimInstance 획득 실패 — 몽타주 스킵"),
-			*GetOwner()->GetName());
-		return;
-	}
+			TEXT("[Retrieve|Interaction] %s: No matching skeleton found for montage '%s'"),
+			*GetOwner()->GetName(), *MontageToPlay->GetName());
+	};
 
-	AnimInst->Montage_Play(TypeAsset->InteractionMontage);
-
-	UE_LOG(LogTemp, Log,
-		TEXT("[Retrieve|Interaction] %s: Montage '%s' 재생"),
-		*GetOwner()->GetName(), *TypeAsset->InteractionMontage->GetName());
+	PlayOnMatchingSkeleton(Montage);
+	PlayOnMatchingSkeleton(VisualMontage);
 }

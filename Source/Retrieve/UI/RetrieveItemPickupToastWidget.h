@@ -5,6 +5,7 @@
 #include "UI/VFX/RetrieveUIVFXWidget.h"
 #include "RetrieveItemPickupToastWidget.generated.h"
 
+class UImage;
 class UTextBlock;
 class UWidget;
 
@@ -43,6 +44,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI VFX|Toast")
 	TObjectPtr<UWidget> ToastVFXTarget;
+
+	// 위젯 트리의 ItemIconImage Image에 자동 바인딩 (없으면 nullptr)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> ItemIconImage;
 
 	// 위젯 트리의 ItemNameText TextBlock에 자동 바인딩 (없으면 nullptr)
 	UPROPERTY(meta = (BindWidgetOptional))

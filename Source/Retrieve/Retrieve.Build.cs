@@ -50,7 +50,8 @@ public class Retrieve : ModuleRules
 				"UnrealEd",
 				"UMGEditor",
 				"ModelViewViewModelBlueprint",
-				"ModelViewViewModelEditor"
+				"ModelViewViewModelEditor",
+				"BlueprintGraph"
 			});
 		}
 
