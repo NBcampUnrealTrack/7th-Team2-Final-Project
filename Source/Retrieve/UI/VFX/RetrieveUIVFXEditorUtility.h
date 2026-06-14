@@ -12,4 +12,16 @@ class RETRIEVE_API URetrieveUIVFXEditorUtility : public UBlueprintFunctionLibrar
 public:
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI VFX|Editor")
 	static bool ConfigureRecommendedUIVFXAssets();
+
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
+	static bool ConfigureEditorWorkGuide0612Assets();
+
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
+	static bool ConfigureCraftUIAssets();
+
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
+	static bool ReplaceBonfireCraftPanelOnly();
+
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
+	static bool FixElementGaugeSkillIconFrames();
 };

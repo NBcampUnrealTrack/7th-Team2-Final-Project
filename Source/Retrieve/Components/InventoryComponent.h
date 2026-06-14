@@ -14,6 +14,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FInventoryChangedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FInventoryItemChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag, int32, Quantity);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEquippedWeaponChangedSignature, FName, WeaponItemId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FConsumableSlotChangedSignature, int32, SlotKey, FName, ItemId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FConsumableSlotUsedSignature, int32, SlotKey);
+// 제작 결과 알림 — bSuccess: 성공 여부, RecipeId: 레시피 ID, OutputItemId: 결과물 아이템 ID
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FCraftCompletedSignature, bool, bSuccess, FName, RecipeId, FName, OutputItemId);
 
 // 아이템 보유 상태만 관리한다. 전투 반영은 WeaponComponent와 GAS에서 처리
 // ItemId는 무기, 소모품, 재료 전체에서 겹치지 않게 사용
@@ -120,6 +123,14 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory")
 	FConsumableSlotChangedSignature OnConsumableSlotChanged;
+
+	/** 퀵슬롯 키를 눌러 소모품 사용을 시도했을 때 브로드캐스트 (슬롯에 아이템이 있을 때만). UI 피드백용 */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory")
+	FConsumableSlotUsedSignature OnConsumableSlotUsed;
+
+	/** 제작 완료(성공/실패 모두) 시 브로드캐스트. CraftPanel이 결과를 표시하는 데 사용 */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Craft")
+	FCraftCompletedSignature OnCraftCompleted;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryItems, Category = "Retrieve|Inventory")

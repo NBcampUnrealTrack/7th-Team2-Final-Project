@@ -2,6 +2,7 @@
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "Components/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
+#include "World/RetrieveBonfireActor.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/Border.h"
@@ -484,6 +485,12 @@ void URetrieveMinimapWidget::DrawIcon(
 		Texture = Row.IconTexture;
 		Color   = Row.IconColor;
 		Size    = Row.IconSize;
+	}
+
+	if (Icon->IconType == ERetrieveMapIconType::Bonfire)
+	{
+		const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(Icon->GetOwner());
+		Color = (Bonfire && Bonfire->IsActivated()) ? BonfireActivatedColor : BonfireInactiveColor;
 	}
 
 	const FVector2D IconSz(Size, Size);

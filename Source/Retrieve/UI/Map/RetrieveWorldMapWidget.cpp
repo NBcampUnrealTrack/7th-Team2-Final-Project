@@ -27,6 +27,29 @@ URetrieveWorldMapWidget::URetrieveWorldMapWidget(const FObjectInitializer& Objec
 {
 }
 
+void URetrieveWorldMapWidget::NativeDestruct()
+{
+	// 월드맵이 닫힐 때(RemoveFromParent) 독립 뷰포트에 추가된 자식 위젯들을 함께 정리한다.
+	// 패널 강제 제거(세션 전환, 다른 패널 열기 등) 시에도 잔여 UI가 남지 않도록 보장.
+	CloseActiveFastTravelDialog();
+
+	if (IsValid(ActiveFastTravelLoadingOverlay))
+	{
+		ActiveFastTravelLoadingOverlay->RemoveFromParent();
+		ActiveFastTravelLoadingOverlay = nullptr;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSubsystem = GameInstance->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSubsystem->OnFastTravelCompleted.RemoveDynamic(this, &ThisClass::HandleFastTravelCompleted);
+		}
+	}
+
+	Super::NativeDestruct();
+}
+
 void URetrieveWorldMapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -335,12 +358,6 @@ int32 URetrieveWorldMapWidget::NativePaint(
 
 	// ── DataAsset 기반 정적 아이콘 (WP 로드 여부 완전 무관) ────────────────────
 	// 화톳불 포함 모든 아이콘 항상 표시. 모닥불 타입은 활성화 여부에 따라 색상 구분.
-	const UGameInstance*          GI_Paint   = GetGameInstance();
-	const URetrieveSaveSubsystem* SaveSub_Paint =
-		GI_Paint ? GI_Paint->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
-	const URetrieveSaveGame* SaveGame_Paint =
-		SaveSub_Paint ? SaveSub_Paint->GetCurrentSaveGame() : nullptr;
-
 	if (MapSub && MapSub->HasValidBounds() && WorldMapIconData)
 	{
 		for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
@@ -361,21 +378,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			// 모닥불 아이콘: 활성화 여부에 따라 색상 구분
 			if (Entry.IconType == ERetrieveMapIconType::Bonfire && IconRegistry)
 			{
-				bool bIsActivated = false;
-
-				// 세이브 데이터에서 이 위치의 모닥불 활성화 여부 확인
-				if (SaveGame_Paint)
-				{
-					const float RadiusSq = FMath::Square(BonfireActivationCheckRadius);
-					for (const TPair<FName, FTransform>& Pair : SaveGame_Paint->ActivatedBonfireTransforms)
-					{
-						if (FVector::DistSquared(Entry.WorldLocation, Pair.Value.GetLocation()) <= RadiusSq)
-						{
-							bIsActivated = true;
-							break;
-						}
-					}
-				}
+				const bool bIsActivated = IsBonfireEntryActivated(Entry);
 
 				const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Entry.IconType);
 				Snap.bOverrideIcon    = true;
@@ -871,18 +874,15 @@ bool URetrieveWorldMapWidget::TryBroadcastBonfireDoubleClick(
 
 	const UGameInstance* GI = GetGameInstance();
 	const URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
-	const URetrieveSaveGame* SaveGame = SaveSub ? SaveSub->GetCurrentSaveGame() : nullptr;
-	if (!SaveGame) { return false; }
+	if (!SaveSub) { return false; }
 
 	UWorld* World = GetWorld();
 	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 	if (!MapSub || !MapSub->HasValidBounds()) { return false; }
 
-	// 드로잉과 동일한 좌표계 사용
 	const FVector2D Center  = CachedPaintCenter;
 	const float     ScaledW = CachedPaintScaledW;
 	const float     ScaledH = CachedPaintScaledH;
-
 	const float HitRadiusSq = FMath::Square(FMath::Max(BonfireIconHitRadius, 48.0f));
 
 	for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
@@ -891,54 +891,91 @@ bool URetrieveWorldMapWidget::TryBroadcastBonfireDoubleClick(
 
 		const FVector2D IconUV     = MapSub->WorldToUV(Entry.WorldLocation);
 		const FVector2D IconScreen = UVToScreen(IconUV, Center, ScaledW, ScaledH);
-
 		if (FVector2D::DistSquared(HitPos, IconScreen) > HitRadiusSq) { continue; }
 
-		// 이 위치가 활성화된 화톳불인지 SaveSubsystem에서 확인 (위치 거리 비교)
-		for (const TPair<FName, FTransform>& Pair : SaveGame->ActivatedBonfireTransforms)
+		if (Entry.BonfireId.IsNone() || !SaveSub->IsBonfireActivated(Entry.BonfireId))
 		{
-			if (FVector::DistSquared(Entry.WorldLocation, Pair.Value.GetLocation()) > FMath::Square(200.f))
-			{
-				continue;
-			}
+			continue;
+		}
 
-			// 활성화된 화톳불 확인 → 빠른 이동 창 오픈
-			bDoubleClickConsumed = true;
-			LastClickedBonfireId = NAME_None;
-			LastBonfireIconClickTime = -1.0;
+		bDoubleClickConsumed = true;
+		LastClickedBonfireId = NAME_None;
+		LastBonfireIconClickTime = -1.0;
 
-			// 이름은 Entry.MapLabel 사용 (액터 언로드 상태이므로)
-			const FText DisplayName = Entry.MapLabel;
-			UE_LOG(LogTemp, Log, TEXT("[WorldMap] 모닥불 더블클릭(언로드) — BonfireId=%s"), *Pair.Key.ToString());
+		const FText DisplayName = Entry.MapLabel;
+		UE_LOG(LogTemp, Log,
+			TEXT("[WorldMap] Bonfire double click (unloaded) - BonfireId=%s"),
+			*Entry.BonfireId.ToString());
 
-			// 빠른 이동 확인 창 직접 오픈
-			APlayerController* PC = GetWorldMapPlayerController();
-			if (!PC || !FastTravelDialogClass) { break; }
+		APlayerController* PC = GetWorldMapPlayerController();
+		if (!PC || !FastTravelDialogClass) { return false; }
 
-			CloseActiveFastTravelDialog();
-			UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, FastTravelDialogClass);
-			if (!Dialog) { break; }
+		CloseActiveFastTravelDialog();
+		UUserWidget* Dialog = CreateWidget<UUserWidget>(PC, FastTravelDialogClass);
+		if (!Dialog) { return false; }
 
-			struct FInitParams { FName BonfireId; FText BonfireDisplayName; };
-			FInitParams Params{ Pair.Key, DisplayName };
-			if (UFunction* Fn = Dialog->FindFunction(TEXT("InitDialog")))
-			{
-				Dialog->ProcessEvent(Fn, &Params);
-			}
-			ActiveFastTravelDialog   = Dialog;
-			ActiveFastTravelBonfireId = Pair.Key;
-			Dialog->AddToViewport(100);
+		struct FInitParams { FName BonfireId; FText BonfireDisplayName; };
+		FInitParams Params{ Entry.BonfireId, DisplayName };
+		if (UFunction* Fn = Dialog->FindFunction(TEXT("InitDialog")))
+		{
+			Dialog->ProcessEvent(Fn, &Params);
+		}
+		ActiveFastTravelDialog   = Dialog;
+		ActiveFastTravelBonfireId = Entry.BonfireId;
+		Dialog->AddToViewport(100);
 
-			if (UButton* Btn = Cast<UButton>(Dialog->GetWidgetFromName(TEXT("Button_Confirm"))))
-			{
-				Btn->OnClicked.Clear();
-				Btn->OnClicked.AddDynamic(this, &ThisClass::HandleFastTravelConfirmClicked);
-			}
-			if (UButton* Btn = Cast<UButton>(Dialog->GetWidgetFromName(TEXT("Button_Cancel"))))
-			{
-				Btn->OnClicked.Clear();
-				Btn->OnClicked.AddDynamic(this, &ThisClass::HandleFastTravelCancelClicked);
-			}
+		if (UButton* Btn = Cast<UButton>(Dialog->GetWidgetFromName(TEXT("Button_Confirm"))))
+		{
+			Btn->OnClicked.Clear();
+			Btn->OnClicked.AddDynamic(this, &ThisClass::HandleFastTravelConfirmClicked);
+		}
+		if (UButton* Btn = Cast<UButton>(Dialog->GetWidgetFromName(TEXT("Button_Cancel"))))
+		{
+			Btn->OnClicked.Clear();
+			Btn->OnClicked.AddDynamic(this, &ThisClass::HandleFastTravelCancelClicked);
+		}
+		return true;
+	}
+
+	return false;
+}
+
+bool URetrieveWorldMapWidget::IsBonfireEntryActivated(const FRetrieveMapIconEntry& Entry) const
+{
+	if (Entry.IconType != ERetrieveMapIconType::Bonfire)
+	{
+		return false;
+	}
+
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (SaveSub && !Entry.BonfireId.IsNone() && SaveSub->IsBonfireActivated(Entry.BonfireId))
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	const float MatchRadiusSq = FMath::Square(FMath::Max(BonfireActivationCheckRadius, 50.0f));
+	for (TActorIterator<ARetrieveBonfireActor> It(World); It; ++It)
+	{
+		const ARetrieveBonfireActor* Bonfire = *It;
+		if (!IsValid(Bonfire) || !Bonfire->IsActivated())
+		{
+			continue;
+		}
+
+		if (!Entry.BonfireId.IsNone() && Bonfire->BonfireId == Entry.BonfireId)
+		{
+			return true;
+		}
+
+		if (FVector::DistSquared(Bonfire->GetActorLocation(), Entry.WorldLocation) <= MatchRadiusSq)
+		{
 			return true;
 		}
 	}

@@ -1,14 +1,18 @@
-﻿#include "World/RetrieveBonfireActor.h"
+﻿                                                                       #include "World/RetrieveBonfireActor.h"
 #include "Components/RetrieveMapIconComponent.h"
 #include "Components/RetrieveInteractionResponseComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Blueprint/UserWidget.h"
 #include "Data/RetrieveMapIconRegistry.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "Player/RetrievePlayerController.h"
 #include "Save/RetrieveSaveSubsystem.h"
+#include "UI/Bonfire/BonfireMenuWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UnrealType.h"
 
@@ -24,7 +28,7 @@ namespace
 ARetrieveBonfireActor::ARetrieveBonfireActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
+	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	SetRootComponent(MeshComponent);
@@ -42,8 +46,26 @@ ARetrieveBonfireActor::ARetrieveBonfireActor()
 	InteractionComponent = CreateDefaultSubobject<URetrieveInteractionResponseComponent>(TEXT("InteractionComponent"));
 	// 화톳불은 1회성 픽업이 아니므로 절대 자기 자신을 파괴하지 않는다.
 	InteractionComponent->bDestroyOwnerOnApplied = false;
-	BonfireMenuClass = TSoftClassPtr<UUserWidget>(
+	BonfireMenuClass = TSoftClassPtr<UBonfireMenuWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Bonfire/WBP_BonfireMenu.WBP_BonfireMenu_C")));
+
+	// 불꽃 VFX — 비활성화 상태에서는 꺼져 있다가 ActivateBonfire() 호출 시 켜진다.
+	FireVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FireVFXComponent"));
+	FireVFXComponent->SetupAttachment(RootComponent);
+	FireVFXComponent->SetAutoActivate(false); // 비활성화 상태로 시작
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FireVFXFinder(
+		TEXT("/Game/External/PolygonDarkFortress/DarkFortress/FX/NS_Fire_01"));
+	if (FireVFXFinder.Succeeded())
+	{
+		FireVFXSystem = FireVFXFinder.Object;
+		FireVFXComponent->SetAsset(FireVFXFinder.Object);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BonfireActor] NS_Fire_01 에셋을 찾지 못함 — 경로 확인 필요"));
+	}
 
 	// 감지/프롬프트 컴포넌트(Manager_InteractionTarget BP)를 "InteractionTarget" 이름으로 생성.
 	// → 기존 상호작용 액터와 동일한 흐름. InteractionComponent가 BeginPlay에서 이 이름으로 자동 바인딩.
@@ -63,6 +85,27 @@ ARetrieveBonfireActor::ARetrieveBonfireActor()
 			TEXT("[BonfireActor] Manager_InteractionTarget BP 클래스를 찾지 못함 — 경로 확인 필요: %s"),
 			InteractionTargetClassPath);
 	}
+}
+
+void ARetrieveBonfireActor::PostLoad()
+{
+	Super::PostLoad();
+
+	ApplyBonfireVisualState();
+}
+
+void ARetrieveBonfireActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	ApplyBonfireVisualState();
+}
+
+void ARetrieveBonfireActor::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	ApplyBonfireVisualState();
 }
 
 void ARetrieveBonfireActor::BeginPlay()
@@ -92,25 +135,72 @@ void ARetrieveBonfireActor::BeginPlay()
 	}
 
 	TryRestoreActivationFromSave();
+	ApplyBonfireVisualState();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateUObject(this, &ARetrieveBonfireActor::HandleDeferredVisualStateSync));
+	}
 }
 
 void ARetrieveBonfireActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!IsValid(ActiveBonfireMenu) || !ActiveBonfireMenu->IsInViewport())
-	{
-		RestoreGameInputAfterMenuClosed();
-	}
+	ApplyBonfireVisualState();
 }
 
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)
 {
 	ActivateBonfire();
-	TryOpenBonfireMenu(InteractionInstigator);
+
+	const float MenuOpenDelay = GetBonfireMenuOpenDelay();
+	if (MenuOpenDelay <= KINDA_SMALL_NUMBER)
+	{
+		TryOpenBonfireMenu(InteractionInstigator);
+		return;
+	}
+
+	PendingMenuInstigator = InteractionInstigator;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(BonfireMenuOpenTimerHandle);
+		World->GetTimerManager().SetTimer(
+			BonfireMenuOpenTimerHandle,
+			this,
+			&ARetrieveBonfireActor::OpenPendingBonfireMenu,
+			MenuOpenDelay,
+			false);
+	}
+	else
+	{
+		TryOpenBonfireMenu(InteractionInstigator);
+	}
 }
 
-bool ARetrieveBonfireActor::TryOpenBonfireMenu(AActor* InteractionInstigator)
+void ARetrieveBonfireActor::OpenPendingBonfireMenu()
+{
+	TryOpenBonfireMenu(PendingMenuInstigator.Get());
+	PendingMenuInstigator.Reset();
+}
+
+float ARetrieveBonfireActor::GetBonfireMenuOpenDelay() const
+{
+	if (InteractionComponent)
+	{
+		const float AnimationDuration =
+			InteractionComponent->GetEffectiveInteractionAnimationDuration();
+		if (AnimationDuration > KINDA_SMALL_NUMBER)
+		{
+			return AnimationDuration;
+		}
+	}
+
+	return FMath::Max(0.0f, BonfireMenuFallbackOpenDelay);
+}
+
+bool ARetrieveBonfireActor::TryOpenBonfireMenu(AActor* InteractionInstigator) const
 {
 	APlayerController* PC = Cast<APlayerController>(InteractionInstigator);
 	if (!PC)
@@ -125,8 +215,10 @@ bool ARetrieveBonfireActor::TryOpenBonfireMenu(AActor* InteractionInstigator)
 		PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 	}
 
+	ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(PC);
 	UClass* MenuClass = BonfireMenuClass.LoadSynchronous();
-	if (!PC || !MenuClass)
+
+	if (!RetrievePC || !MenuClass)
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[BonfireActor] Failed to open bonfire menu - PC=%s MenuClass=%s"),
@@ -135,57 +227,23 @@ bool ARetrieveBonfireActor::TryOpenBonfireMenu(AActor* InteractionInstigator)
 		return false;
 	}
 
-	if (IsValid(ActiveBonfireMenu) && ActiveBonfireMenu->IsInViewport())
-	{
-		return true;
-	}
+	// 커서·입력 모드 관리는 PlayerController의 OpenExclusivePanel에 완전히 위임한다.
+	// 같은 패널이 이미 열려있으면 OpenExclusivePanel이 닫아주므로 별도 처리 불필요.
+	RetrievePC->OpenExclusivePanel(MenuClass, FKey());
 
-	ActiveBonfireMenu = CreateWidget<UUserWidget>(PC, MenuClass);
-	if (!ActiveBonfireMenu)
+	// 패널 생성 후 BonfireId를 주입한다.
+	if (UBonfireMenuWidget* BonfirePanel = Cast<UBonfireMenuWidget>(RetrievePC->GetActivePanel()))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BonfireActor] Failed to create bonfire menu widget"));
-		return false;
+		BonfirePanel->BonfireId = BonfireId;
 	}
-
-	if (FNameProperty* BonfireIdProp =
-		FindFProperty<FNameProperty>(MenuClass, FName(TEXT("BonfireId"))))
-	{
-		BonfireIdProp->SetPropertyValue_InContainer(ActiveBonfireMenu, BonfireId);
-	}
-
-	ActiveBonfireMenu->AddToViewport(100);
-	FInputModeGameAndUI InputMode;
-	InputMode.SetWidgetToFocus(ActiveBonfireMenu->TakeWidget());
-	PC->SetInputMode(InputMode);
-	PC->bShowMouseCursor = true;
-	BonfireMenuPlayerController = PC;
-	SetActorTickEnabled(true);
 
 	UE_LOG(LogTemp, Log,
-		TEXT("[BonfireActor] Bonfire menu opened - BonfireId=%s"),
+		TEXT("[BonfireActor] Bonfire menu opened via PlayerController - BonfireId=%s"),
 		*BonfireId.ToString());
 	return true;
 }
 
-void ARetrieveBonfireActor::RestoreGameInputAfterMenuClosed()
-{
-	if (APlayerController* PC = BonfireMenuPlayerController.Get())
-	{
-		FInputModeGameOnly InputMode;
-		PC->SetInputMode(InputMode);
-		PC->bShowMouseCursor = false;
-
-		UE_LOG(LogTemp, Log,
-			TEXT("[BonfireActor] Game input restored after bonfire menu closed - BonfireId=%s"),
-			*BonfireId.ToString());
-	}
-
-	ActiveBonfireMenu = nullptr;
-	BonfireMenuPlayerController = nullptr;
-	SetActorTickEnabled(false);
-}
-
-void ARetrieveBonfireActor::ConfigurePersistentInteractionTarget()
+void ARetrieveBonfireActor::ConfigurePersistentInteractionTarget() const
 {
 	if (!InteractionTargetComponent)
 	{
@@ -227,7 +285,11 @@ void ARetrieveBonfireActor::ConfigurePersistentInteractionTarget()
 bool ARetrieveBonfireActor::ActivateBonfire()
 {
 	// 이미 활성화 상태 → 첫 활성화 아님 (false). 메뉴는 즉시 열면 됨.
-	if (bIsActivated) { return false; }
+	if (bIsActivated)
+	{
+		ApplyBonfireVisualState();
+		return false;
+	}
 
 	// [멀티플레이 확장 지점]
 	// 화톳불 활성화는 서버에서만 처리해야 상태가 모든 클라이언트에 일관되게 복제됨.
@@ -247,24 +309,7 @@ bool ARetrieveBonfireActor::ActivateBonfire()
 
 	bIsActivated = true;
 
-	// 맵 아이콘 표시
-	if (MapIconComponent)
-	{
-		MapIconComponent->bShowOnMinimap = true;
-	}
-
-	// SaveSubsystem에 활성화 등록
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
-		{
-			const FTransform ArrivalTransform = IsValid(ArrivalPoint)
-				? ArrivalPoint->GetComponentTransform()
-				: GetActorTransform();
-
-			SaveSub->MarkBonfireActivated(BonfireId, ArrivalTransform, DisplayName.ToString());
-		}
-	}
+	ApplyActivatedState(true);
 
 	UE_LOG(LogTemp, Log, TEXT("[BonfireActor] 화톳불 활성화 — BonfireId=%s"), *BonfireId.ToString());
 
@@ -286,14 +331,70 @@ void ARetrieveBonfireActor::TryRestoreActivationFromSave()
 			{
 				// 파일에 이미 활성화 기록 → 시각/상태만 복원 (중복 등록 방지)
 				bIsActivated = true;
-				if (MapIconComponent)
-				{
-					MapIconComponent->bShowOnMinimap = true;
-				}
+				ApplyActivatedState(false);
 				UE_LOG(LogTemp, Log,
 					TEXT("[BonfireActor] 저장 파일에서 활성화 복원 — BonfireId=%s"),
 					*BonfireId.ToString());
 			}
 		}
 	}
+}
+
+void ARetrieveBonfireActor::ApplyActivatedState(bool bRegisterWithSave)
+{
+	ApplyBonfireVisualState();
+
+	if (!bRegisterWithSave)
+	{
+		return;
+	}
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			const FTransform ArrivalTransform = IsValid(ArrivalPoint)
+				? ArrivalPoint->GetComponentTransform()
+				: GetActorTransform();
+
+			SaveSub->MarkBonfireActivated(BonfireId, ArrivalTransform, DisplayName.ToString());
+		}
+	}
+}
+
+void ARetrieveBonfireActor::ApplyBonfireVisualState()
+{
+	if (FireVFXComponent)
+	{
+		if (FireVFXSystem && FireVFXComponent->GetAsset() != FireVFXSystem)
+		{
+			FireVFXComponent->SetAsset(FireVFXSystem);
+		}
+
+		FireVFXComponent->SetAutoActivate(bIsActivated);
+		FireVFXComponent->SetHiddenInGame(!bIsActivated, true);
+		FireVFXComponent->SetVisibility(bIsActivated, true);
+
+		if (FireVFXComponent->IsRegistered())
+		{
+			if (bIsActivated)
+			{
+				FireVFXComponent->Activate(true);
+			}
+			else
+			{
+				FireVFXComponent->DeactivateImmediate();
+			}
+		}
+	}
+
+	if (MapIconComponent)
+	{
+		MapIconComponent->bShowOnMinimap = bIsActivated;
+	}
+}
+
+void ARetrieveBonfireActor::HandleDeferredVisualStateSync()
+{
+	ApplyBonfireVisualState();
 }

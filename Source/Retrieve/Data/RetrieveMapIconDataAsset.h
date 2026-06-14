@@ -24,6 +24,9 @@ struct FRetrieveMapIconEntry
 	FText MapLabel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon")
+	FName BonfireId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon")
 	bool bShowLabel = true;
 };
 

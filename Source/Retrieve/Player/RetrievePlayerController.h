@@ -77,6 +77,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void CloseActivePanel();
 
+	UFUNCTION(BlueprintPure, Category = "Retrieve|UI")
+	URetrieveGamePanelWidget* GetActivePanel() const { return ActivePanel; }
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Map")
 	void ToggleMinimapRotationMode();
 

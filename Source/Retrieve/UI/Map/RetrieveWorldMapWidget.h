@@ -137,7 +137,7 @@ public:
 
 	/** 비활성화 모닥불 아이콘 색상 (빠른 이동 불가) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Bonfire")
-	FLinearColor BonfireInactiveColor = FLinearColor(0.25f, 0.25f, 0.25f, 0.45f);
+	FLinearColor BonfireInactiveColor = FLinearColor(0.5f, 0.5f, 0.5f, 0.8f);
 
 	/** 활성화 여부 판정 시 사용하는 위치 매칭 허용 오차 (언리얼 단위) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Bonfire", meta=(ClampMin="50.0"))
@@ -215,6 +215,7 @@ protected:
 	virtual bool NativeSupportsKeyboardFocus() const override { return true; }
 
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(
 		const FPaintArgs& Args,
@@ -269,6 +270,8 @@ private:
 		const FVector2D& HitPos);
 
 	bool TryOpenFastTravelDialog(const ARetrieveBonfireActor& Bonfire);
+
+	bool IsBonfireEntryActivated(const FRetrieveMapIconEntry& Entry) const;
 
 	UFUNCTION()
 	void HandleFastTravelConfirmClicked();

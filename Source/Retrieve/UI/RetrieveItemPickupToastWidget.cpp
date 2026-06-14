@@ -1,10 +1,12 @@
 #include "UI/RetrieveItemPickupToastWidget.h"
 
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
+#include "Engine/Texture2D.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 void URetrieveItemPickupToastWidget::NativeConstruct()
@@ -33,6 +35,35 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 	const FText DisplayName = LookupItemDisplayName(ItemId, ItemCategoryTag);
 
 	UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DisplayName='%s'"), *DisplayName.ToString());
+
+	if (ItemIconImage)
+	{
+		if (UDataTable* IconDT = LoadObject<UDataTable>(
+			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_ItemIcon.DT_ItemIcon")))
+		{
+			if (const FRetrieveItemIconRow* IconRow =
+				IconDT->FindRow<FRetrieveItemIconRow>(ItemId, TEXT("InitToast::Icon"), false))
+			{
+				if (UTexture2D* Tex = IconRow->IconTexture.LoadSynchronous())
+				{
+					ItemIconImage->SetBrushFromTexture(Tex, true);
+					ItemIconImage->SetVisibility(ESlateVisibility::Visible);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] IconTexture load failed for '%s'"), *ItemId.ToString());
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_ItemIcon row '%s' NOT FOUND"), *ItemId.ToString());
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_ItemIcon load FAILED"));
+		}
+	}
 
 	if (ItemNameText)
 	{

@@ -424,6 +424,9 @@ bool UInventoryComponent::UseConsumableSlot(int32 SlotKey)
 		return false;
 	}
 
+	// 클라이언트 즉시 UI 피드백 — 서버 권한 여부와 무관하게 브로드캐스트
+	OnConsumableSlotUsed.Broadcast(SlotKey);
+
 	if (!HasAuthorityToModify())
 	{
 		ServerUseConsumableSlot(SlotKey);
@@ -502,6 +505,7 @@ bool UInventoryComponent::CraftItem(FName RecipeId)
 	UE_LOG(LogTemp, Log, TEXT("[CraftItem] 제작 성공 RecipeId=%s → %s x%d"),
 		*RecipeId.ToString(), *Recipe->OutputItem.ItemId.ToString(), Recipe->OutputItem.Quantity);
 
+	OnCraftCompleted.Broadcast(true, RecipeId, Recipe->OutputItem.ItemId);
 	return true;
 }
 

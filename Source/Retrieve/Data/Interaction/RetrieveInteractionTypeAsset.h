@@ -74,6 +74,14 @@ public:
 		meta = (DisplayName = "완료 애니메이션 몽타주"))
 	TObjectPtr<UAnimMontage> InteractionMontage;
 
+	/**
+	 * 몽타주 재생 속도. 1.0 = 기본 속도.
+	 * 픽업 같은 짧은 상호작용은 1.2~1.5, 채광처럼 긴 동작은 0.8 등으로 조절.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Animation",
+		meta = (DisplayName = "재생 속도 (PlayRate)", ClampMin = "0.1", ClampMax = "3.0"))
+	float MontagePlayRate = 1.0f;
+
 	// ── 프롬프트 위젯 비주얼 ─────────────────────────────────────────────
 	/**
 	 * 상호작용 종류를 나타내는 아이콘 텍스처.

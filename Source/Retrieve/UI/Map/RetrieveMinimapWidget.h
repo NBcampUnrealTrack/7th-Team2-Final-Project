@@ -71,6 +71,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	FLinearColor PlayerMarkerColor = FLinearColor::White;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Bonfire")
+	FLinearColor BonfireActivatedColor = FLinearColor(1.0f, 0.75f, 0.2f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Bonfire")
+	FLinearColor BonfireInactiveColor = FLinearColor(0.5f, 0.5f, 0.5f, 0.8f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Frame", meta=(ClampMin="0.1", ClampMax="1.0"))
 	float MapCircleRadiusRatio = 0.435f;
 

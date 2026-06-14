@@ -6,10 +6,13 @@
 #include "RetrieveInteractionResponseComponent.generated.h"
 
 class URetrieveInteractionResultAsset;
+class URetrieveInteractionPresetProfileAsset;
 class URetrieveInteractionTypeAsset;
 class URetrieveInteractionPresetAsset;
 class URetrieveLootTableAsset;
+class UAnimMontage;
 class UTexture2D;
+class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FRetrieveOnInteractionAppliedSignature, AActor*, InteractionInstigator);
@@ -59,6 +62,13 @@ public:
 	 *   DA_Preset_LootEnemy   — DA_IT_LootEnemy   + [Loot ResultAssets]
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction")
+	TObjectPtr<URetrieveInteractionPresetProfileAsset> PresetProfile;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction")
+	FName PresetId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Legacy",
+		meta = (DeprecatedProperty, DeprecationMessage = "Use PresetProfile + PresetId."))
 	TObjectPtr<URetrieveInteractionPresetAsset> Preset;
 
 	// ── 액터별 override (비어있으면 Preset 값 사용) ─────────────────────
@@ -69,6 +79,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction",
 		meta = (DisplayName = "TypeAsset Override"))
 	TObjectPtr<URetrieveInteractionTypeAsset> TypeAssetOverride;
+
+	/**
+	 * 이 액터만 다른 몽타주를 쓰고 싶을 때 설정.
+	 * TypeAsset 전체를 복사하지 않고 몽타주만 교체할 때 사용.
+	 * 설정하면 TypeAsset.InteractionMontage를 덮어쓴다.
+	 *
+	 * 우선순위: MontageOverride → TypeAssetOverride.Montage → Preset.TypeAsset.Montage
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction",
+		meta = (DisplayName = "Montage Override"))
+	TObjectPtr<UAnimMontage> MontageOverride;
+
+	/**
+	 * 비주얼 메시(Synty 등 독립 AnimInstance) 전용 몽타주 액터별 override.
+	 * 설정하면 Preset.VisualMeshMontage를 덮어쓴다.
+	 *
+	 * 우선순위: VisualMeshMontageOverride → Preset.VisualMeshMontage
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction",
+		meta = (DisplayName = "Visual Mesh Montage Override"))
+	TObjectPtr<UAnimMontage> VisualMeshMontageOverride;
 
 	/**
 	 * 이 액터만 다른 ResultAssets를 쓰고 싶을 때 설정.
@@ -128,6 +159,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
 		meta = (DisplayName = "프롬프트 아이콘 Override"))
 	TObjectPtr<UTexture2D> PromptIconOverride;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "프롬프트 강조색 Override 사용"))
+	bool bOverridePromptAccentColor = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "프롬프트 강조색 Override", EditCondition = "bOverridePromptAccentColor"))
+	FLinearColor PromptAccentColorOverride = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Hold",
+		meta = (DisplayName = "Hold 설정 Override 사용"))
+	bool bOverrideHoldSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Hold",
+		meta = (DisplayName = "Hold 방식 Override", EditCondition = "bOverrideHoldSettings"))
+	bool bHoldInteractionOverride = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Hold",
+		meta = (DisplayName = "Hold 지속 시간 Override", EditCondition = "bOverrideHoldSettings && bHoldInteractionOverride", ClampMin = "0.05"))
+	float HoldDurationOverride = 1.0f;
 
 	/** 아이템이 아닌 문/들기/채집류 프롬프트에서는 TypeAsset 아이콘을 비우고 텍스트만 보이게 한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
@@ -212,6 +263,24 @@ public:
 	TArray<URetrieveInteractionResultAsset*> GetEffectiveResultAssets() const;
 
 	/**
+	 * 재생할 AnimMontage를 결정해 반환한다.
+	 * 우선순위: MontageOverride → TypeAssetOverride.InteractionMontage → Preset.TypeAsset.InteractionMontage → nullptr
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Interaction")
+	UAnimMontage* GetEffectiveMontage() const;
+
+	/**
+	 * 비주얼 메시용 몽타주를 결정해 반환한다.
+	 * 우선순위: VisualMeshMontageOverride → Preset.VisualMeshMontage → nullptr
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Interaction")
+	UAnimMontage* GetEffectiveVisualMeshMontage() const;
+
+	/** Returns the expected montage play time after applying the configured play rate. Both montages considered — returns the longer duration. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Interaction")
+	float GetEffectiveInteractionAnimationDuration() const;
+
+	/**
 	 * 유효 TypeAsset의 설정을 Manager_InteractionTarget에 즉시 적용한다.
 	 * BeginPlay에서 자동 호출되지만, BP Construction Script에서도 호출 가능.
 	 */
@@ -222,13 +291,27 @@ protected:
 	virtual void BeginPlay() override;
 
 	/**
+	 * Manager_InteractionTarget.OnInteractionBegin 자동 바인딩 핸들러.
+	 * (Pawn* InteractorPawn) — Reflection으로 자동 연결됨.
+	 */
+	UFUNCTION()
+	void HandleInteractionManagerBegin(APawn* InteractorPawn);
+
+	/**
+	 * Manager_InteractionTarget.OnInteractionUpdated 자동 바인딩 핸들러.
+	 * (Pawn* InteractorPawn, float Progress) — Reflection으로 자동 연결됨.
+	 */
+	UFUNCTION()
+	void HandleInteractionManagerUpdated(APawn* InteractorPawn, float Progress);
+
+	/**
 	 * Manager_InteractionTarget.OnInteractionEnd 시그니처에 맞춘 자동 바인딩 핸들러.
 	 * (byte Result, Pawn* InteractorPawn) — Reflection으로 자동 연결됨.
 	 */
 	UFUNCTION()
 	void HandleInteractionManagerEnd(uint8 Result, APawn* InteractorPawn);
 
-	/** owner에서 Manager_InteractionTarget 찾고 TypeAsset 적용 + OnInteractionEnd 바인딩 */
+	/** owner에서 Manager_InteractionTarget 찾고 TypeAsset 적용 + OnInteraction* 바인딩 */
 	void TryAutoBindInteractionManager();
 
 	UFUNCTION(Server, Reliable)
@@ -240,16 +323,34 @@ protected:
 
 	/**
 	 * 애니메이션 dispatch.
-	 * GetEffectiveTypeAsset().InteractionMontage가 있으면 instigator 캐릭터에 직접 재생.
-	 * BP override용 OnPlayInteractionAnim 이벤트도 호출된다.
+	 * GetEffectiveMontage()로 몽타주를 결정한 뒤 Multicast_PlayInteractionAnim으로 전체 클라이언트에 재생.
+	 * BP override용 OnPlayInteractionAnim 이벤트도 서버에서 호출된다.
 	 */
 	virtual void TryPlayInteractionAnim(AActor* InteractionInstigator);
 
-	/** BP가 액터별 애니메이션을 override하고 싶을 때 사용 */
+	/**
+	 * 모든 클라이언트에서 상호작용 몽타주를 재생한다.
+	 * 서버의 TryPlayInteractionAnim에서 호출 — 직접 호출 불필요.
+	 * Montage: 메인 메시(ALS 등), VisualMontage: 비주얼 메시(Synty 등). 각각 스켈레톤 자동 매칭.
+	 */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_PlayInteractionAnim(AActor* Instigator, UAnimMontage* Montage, float PlayRate, UAnimMontage* VisualMontage);
+
+	/** BP가 액터별 애니메이션을 override하고 싶을 때 사용 (서버에서 호출됨) */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Interaction|Animation")
 	void OnPlayInteractionAnim(AActor* InteractionInstigator);
 
 private:
+	const struct FRetrieveInteractionPresetData* GetEffectivePresetData() const;
+	FText GetEffectiveDisplayText() const;
+	bool GetEffectiveHoldInteraction() const;
+	float GetEffectiveHoldDuration() const;
+	float GetEffectiveMontagePlayRate() const;
+	UTexture2D* GetEffectivePromptIcon() const;
+	FLinearColor GetEffectivePromptAccentColor() const;
+	FName GetEffectiveMgrPropIcon() const;
+	FName GetEffectiveMgrPropColor() const;
+
 	/** InteractionTypeAsset 설정을 ManagerComp에 reflection으로 적용하는 내부 구현 */
 	void ApplyTypeAssetToManagerInternal(UActorComponent* ManagerComp);
 };

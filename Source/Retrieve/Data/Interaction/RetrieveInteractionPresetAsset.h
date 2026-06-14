@@ -6,6 +6,9 @@
 
 class URetrieveInteractionTypeAsset;
 class URetrieveInteractionResultAsset;
+class UAnimMontage;
+class UTexture2D;
+class UUserWidget;
 
 /**
  * 상호작용 유형 + 결과를 하나로 묶은 공용 프리셋 DataAsset.
@@ -43,8 +46,44 @@ public:
 	 * 여러 프리셋이 같은 TypeAsset을 공유할 수 있다.
 	 * 예: "아이템 획득" 텍스트를 바꾸면 해당 TypeAsset을 참조하는 모든 프리셋에 반영.
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Legacy",
+		meta = (DeprecatedProperty, DeprecationMessage = "Set prompt, hold, animation, and widget data directly on this preset."))
 	TObjectPtr<URetrieveInteractionTypeAsset> TypeAsset;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Prompt")
+	FText DisplayText = INVTEXT("Interact");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Hold")
+	bool bHoldInteraction = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Hold",
+		meta = (EditCondition = "bHoldInteraction", ClampMin = "0.05"))
+	float HoldDuration = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Animation")
+	TObjectPtr<UAnimMontage> InteractionMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Animation",
+		meta = (ClampMin = "0.1", ClampMax = "3.0"))
+	float MontagePlayRate = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget")
+	TObjectPtr<UTexture2D> PromptIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget")
+	FLinearColor PromptAccentColor = FLinearColor(0.78f, 0.63f, 0.13f, 1.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget")
+	TSoftClassPtr<UUserWidget> WidgetClassOverride;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget|Manager Advanced")
+	FName MgrProp_Icon = TEXT("InteractionIcon");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget|Manager Advanced")
+	FName MgrProp_Color = TEXT("InteractionColor");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Preset|Widget|Manager Advanced")
+	FName MgrProp_WidgetClass = TEXT("InteractionWidget");
 
 	// ── 결과 목록 ──────────────────────────────────────────────────────────
 	/**
