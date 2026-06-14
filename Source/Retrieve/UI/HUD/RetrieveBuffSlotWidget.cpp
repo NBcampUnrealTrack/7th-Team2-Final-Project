@@ -28,6 +28,7 @@ void URetrieveBuffSlotWidget::SetBuff(const FRetrieveUIBuffPayload& Payload)
 	SetBarFillAmount(DurationBar, 1.f);
 
 	UpdateDuration(Payload.Duration);
+	UpdateStack(1);   // 새 슬롯 배정 시 스택 카운트 초기화 (Bar에서 이후 UpdateStack으로 덮어씀)
 	SetToolTipText(BuildTooltipText(Payload));
 	SetRenderOpacity(1.f);
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
@@ -53,6 +54,24 @@ void URetrieveBuffSlotWidget::UpdateDuration(float Remaining)
 	}
 }
 
+void URetrieveBuffSlotWidget::UpdateStack(int32 Count)
+{
+	if (!TXT_StackCount)
+	{
+		return;
+	}
+
+	if (Count >= 2)
+	{
+		TXT_StackCount->SetText(FText::FromString(FString::Printf(TEXT("×%d"), Count)));
+		TXT_StackCount->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+	else
+	{
+		TXT_StackCount->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
 void URetrieveBuffSlotWidget::ClearBuff()
 {
 	bActive = false;
@@ -60,6 +79,7 @@ void URetrieveBuffSlotWidget::ClearBuff()
 	InitialDuration = 0.f;
 	SetBarFillAmount(DurationBar, 1.f);
 	SetToolTipText(FText::GetEmpty());
+	UpdateStack(0);
 	SetVisibility(ESlateVisibility::Collapsed);
 }
 

@@ -42,6 +42,7 @@ private:
 
 	TArray<float> SlotRemaining;
 	TMap<FGameplayTag, int32> ActiveBuffToSlot;
+	TMap<FGameplayTag, int32> ActiveBuffStacks;
 
 	FGameplayMessageListenerHandle ApplyHandle;
 	FGameplayMessageListenerHandle RemoveHandle;

@@ -48,6 +48,8 @@ public class Retrieve : ModuleRules
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
 				"UnrealEd",
+				"AssetTools",
+				"BlueprintGraph",
 				"UMGEditor",
 				"ModelViewViewModelBlueprint",
 				"ModelViewViewModelEditor",

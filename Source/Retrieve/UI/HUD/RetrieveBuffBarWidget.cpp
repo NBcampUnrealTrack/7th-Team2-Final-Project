@@ -89,11 +89,28 @@ void URetrieveBuffBarWidget::InitSlotPool()
 
 void URetrieveBuffBarWidget::OnBuffApply(FGameplayTag /*Channel*/, const FRetrieveUIBuffPayload& Payload)
 {
-	// 동일 BuffId가 이미 활성 → 내용만 갱신
+	// 동일 BuffId가 이미 활성인 경우
 	if (int32* ExistingIdx = ActiveBuffToSlot.Find(Payload.BuffId))
 	{
+		if (Payload.bIsStackable)
+		{
+			int32& Stack = ActiveBuffStacks.FindOrAdd(Payload.BuffId, 1);
+			// MaxStack > 0이면 상한 초과 시 스택을 늘리지 않는다
+			const bool bAtMax = Payload.MaxStack > 0 && Stack >= Payload.MaxStack;
+			if (!bAtMax)
+			{
+				++Stack;
+			}
+			SlotPool[*ExistingIdx]->UpdateStack(Stack);
+		}
+		// 지속시간 리셋 (스택/비스택 공통)
 		SlotPool[*ExistingIdx]->SetBuff(Payload);
 		SlotRemaining[*ExistingIdx] = Payload.Duration;
+		// SetBuff가 스택을 1로 리셋하므로 이미 쌓인 값을 다시 반영
+		if (Payload.bIsStackable)
+		{
+			SlotPool[*ExistingIdx]->UpdateStack(ActiveBuffStacks[Payload.BuffId]);
+		}
 		return;
 	}
 
@@ -101,6 +118,10 @@ void URetrieveBuffBarWidget::OnBuffApply(FGameplayTag /*Channel*/, const FRetrie
 	if (FreeIdx == INDEX_NONE) return;
 
 	ActiveBuffToSlot.Add(Payload.BuffId, FreeIdx);
+	if (Payload.bIsStackable)
+	{
+		ActiveBuffStacks.Add(Payload.BuffId, 1);
+	}
 	SlotPool[FreeIdx]->SetBuff(Payload);
 	SlotRemaining[FreeIdx] = Payload.Duration;
 }
@@ -163,4 +184,5 @@ void URetrieveBuffBarWidget::ClearSlot(int32 SlotIndex)
 	SlotPool[SlotIndex]->ClearBuff();
 	SlotRemaining[SlotIndex] = 0.f;
 	ActiveBuffToSlot.Remove(BuffId);
+	ActiveBuffStacks.Remove(BuffId);
 }

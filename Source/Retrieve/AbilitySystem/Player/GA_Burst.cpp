@@ -122,8 +122,8 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	BurstPayload.ElementPattern = ElementPattern;
 	if (UWorld* World = Avatar->GetWorld())
 	{
-		UGameplayMessageSubsystem::Get(World)
-			.BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Burst, BurstPayload);
+		UGameplayMessageSubsystem& MsgSys = UGameplayMessageSubsystem::Get(World);
+		MsgSys.BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Burst, BurstPayload);
 	}
 
 	Gauge->ClearSlot();

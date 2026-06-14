@@ -1097,6 +1097,20 @@ struct RETRIEVE_API FRetrieveBuffUIRow : public FTableRowBase
 	bool bIsDebuff = false;
 
 	/**
+	 * true이면 같은 BuffId로 Apply가 여러 번 들어올 때 스택을 쌓아 ×N으로 표시한다.
+	 * 흡수 원소 버프처럼 중첩될 수 있는 경우에만 활성화.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI")
+	bool bIsStackable = false;
+
+	/**
+	 * 스택 최대치. 0이면 무제한.
+	 * bIsStackable이 true일 때만 유효하며, 이 값을 초과하는 Apply는 지속시간만 리셋하고 스택을 늘리지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI", meta = (ClampMin = 0, EditCondition = "bIsStackable"))
+	int32 MaxStack = 0;
+
+	/**
 	 * 0이면 GE의 실제 지속시간을 자동으로 읽는다.
 	 * 0 초과이면 이 값을 사용한다 (Instant GE 또는 BroadcastBuffManual 비-GAS 표시용).
 	 */

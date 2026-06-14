@@ -23,6 +23,7 @@ class RETRIEVE_API URetrieveBuffSlotWidget : public UUserWidget
 public:
 	void SetBuff(const FRetrieveUIBuffPayload& Payload);
 	void UpdateDuration(float Remaining);
+	void UpdateStack(int32 Count);
 	void ClearBuff();
 
 	bool IsActive() const { return bActive; }
@@ -38,6 +39,10 @@ private:
 	/** 지속시간 비율을 표시하는 HPBar 위젯 (HUD_FantasyWarrior_HPBar_01_C). 없어도 동작함 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UUserWidget> DurationBar;
+
+	/** 스택 수 표시 (×2, ×3 …). bIsStackable 버프에서만 사용. 없어도 동작함 */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> TXT_StackCount;
 
 	bool bActive = false;
 	FGameplayTag ActiveBuffId;

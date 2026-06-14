@@ -27,6 +27,7 @@
 #include "UI/ViewModels/HUDViewModel.h"
 #include "UI/ViewModels/PlayerStatusViewModel.h"
 #include "Components/ElementGaugeComponent.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
 
@@ -219,6 +220,7 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
 {
 	RemoveActivePanelImmediately();
+	CloseConversation();
 	SwapActiveWidget(NewState);
 	UpdateInputMode(NewState);
 }
@@ -432,11 +434,27 @@ void ARetrievePlayerController::CloseActivePanel()
 	if (!ActivePanel->PlayPanelCloseVFX())
 	{
 		RemoveActivePanelImmediately();
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ActivePanelCloseFallbackTimerHandle,
+			this,
+			&ThisClass::HandleActivePanelCloseFallback,
+			1.0f,
+			false);
 	}
 }
 
 void ARetrievePlayerController::RemoveActivePanelImmediately()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ActivePanelCloseFallbackTimerHandle);
+	}
+
 	if (!ActivePanel)
 	{
 		bActivePanelClosing = false;
@@ -453,6 +471,14 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	FInputModeGameOnly InputMode;
 	SetInputMode(InputMode);
 	bShowMouseCursor = false;
+}
+
+void ARetrievePlayerController::HandleActivePanelCloseFallback()
+{
+	if (bActivePanelClosing)
+	{
+		RemoveActivePanelImmediately();
+	}
 }
 
 void ARetrievePlayerController::ToggleMinimapRotationMode()
@@ -646,6 +672,8 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 		return;
 	}
 
+	RemoveActivePanelImmediately();
+
 	if (!ConversationInstance)
 	{
 		ConversationInstance = CreateWidget<UUserWidget>(this, ConversationWidgetClass);
@@ -672,7 +700,10 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 		}
 	}
 	
-	ConversationInstance->AddToViewport(20);
+	if (!ConversationInstance->IsInViewport())
+	{
+		ConversationInstance->AddToViewport(20);
+	}
 	SetInputModeUIOnlyDuringConversation();
 	EnsureCinematicCloseListener();
 }

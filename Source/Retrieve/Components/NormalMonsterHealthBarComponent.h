@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/WidgetComponent.h"
+#include "GameplayTagContainer.h"
 #include "NormalMonsterHealthBarComponent.generated.h"
 
 class URetrieveHealthComponent;
@@ -16,6 +17,17 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Monster HP Bar")
 	void SetHealthBarEnabled(bool bNewEnabled);
+
+	/**
+	 * 위젯에 표시할 이름과 등급 태그를 설정한다.
+	 * EnemyCharacter BP의 BeginPlay에서 DataRow 읽은 후 호출하거나,
+	 * 컴포넌트 인스턴스의 MonsterDisplayName / MonsterTypeTag를 에디터에서 직접 설정해도 된다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Monster HP Bar")
+	void SetMonsterIdentity(FText InDisplayName, FGameplayTag InTypeTag);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Monster HP Bar")
+	FText GetMonsterDisplayName() const { return MonsterDisplayName; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -51,6 +63,16 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Retrieve|Monster HP Bar")
 	bool bShowOnBeginPlayForDebug = false;
+
+	/** 체력바 위에 표시할 몬스터 이름. 비어 있으면 이름 텍스트 숨김 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Monster HP Bar",
+		meta = (AllowPrivateAccess = "true"))
+	FText MonsterDisplayName;
+
+	/** 일반/엘리트/에픽 등 등급 태그 — 이름 색상 결정에 사용 (Monster.Type.*) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Monster HP Bar",
+		meta = (Categories = "Monster.Type", AllowPrivateAccess = "true"))
+	FGameplayTag MonsterTypeTag;
 
 	UPROPERTY()
 	TObjectPtr<URetrieveHealthComponent> BoundHealthComponent;

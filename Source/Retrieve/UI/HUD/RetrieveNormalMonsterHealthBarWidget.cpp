@@ -1,9 +1,18 @@
 #include "UI/HUD/RetrieveNormalMonsterHealthBarWidget.h"
 
 #include "Components/ProgressBar.h"
+#include "Components/TextBlock.h"
 #include "Blueprint/WidgetTree.h"
+#include "GameplayTagsManager.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
+
+namespace RetrieveMonsterHPBar
+{
+	// FMonsterDataRow.MonsterType 태그 계층
+	const FName TagElite(TEXT("Monster.Type.Elite"));
+	const FName TagEpic(TEXT("Monster.Type.Epic"));
+}
 
 void URetrieveNormalMonsterHealthBarWidget::NativeOnInitialized()
 {
@@ -20,6 +29,10 @@ void URetrieveNormalMonsterHealthBarWidget::NativeOnInitialized()
 		HPBar->SetPercent(HealthPercent);
 		HPBar->SetFillColorAndOpacity(FillColor);
 	}
+
+	// 에픽 전용 프레임은 기본적으로 숨김 — ApplyMonsterTypeColor에서 에픽일 때만 표시
+	if (FRA_Frame)    FRA_Frame->SetVisibility(ESlateVisibility::Collapsed);
+	if (FRA_Vignette) FRA_Vignette->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void URetrieveNormalMonsterHealthBarWidget::SetHealthPercent(float InPercent)
@@ -32,6 +45,68 @@ void URetrieveNormalMonsterHealthBarWidget::SetHealthPercent(float InPercent)
 	}
 
 	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+void URetrieveNormalMonsterHealthBarWidget::SetMonsterInfo(
+	FText InName, FGameplayTag InTypeTag, float InCurrentHP, float InMaxHP)
+{
+	if (Text_MonsterName)
+	{
+		Text_MonsterName->SetText(InName);
+		ApplyMonsterTypeColor(InTypeTag);
+	}
+
+	SetHPValue(InCurrentHP, InMaxHP);
+
+	const float Percent = InMaxHP > 0.f
+		? FMath::Clamp(InCurrentHP / InMaxHP, 0.f, 1.f) : 0.f;
+	SetHealthPercent(Percent);
+}
+
+void URetrieveNormalMonsterHealthBarWidget::SetHPValue(float InCurrentHP, float InMaxHP)
+{
+	if (!Text_HPValue)
+	{
+		return;
+	}
+
+	const int32 CurHP = FMath::CeilToInt(FMath::Max(0.f, InCurrentHP));
+	const int32 MaxHP = FMath::CeilToInt(FMath::Max(0.f, InMaxHP));
+	Text_HPValue->SetText(FText::FromString(
+		FString::Printf(TEXT("%d / %d"), CurHP, MaxHP)));
+}
+
+void URetrieveNormalMonsterHealthBarWidget::ApplyMonsterTypeColor(FGameplayTag InTypeTag)
+{
+	bool bIsEpic = false;
+	FLinearColor NameColor = NormalNameColor;
+
+	if (InTypeTag.IsValid())
+	{
+		const FName TagName = InTypeTag.GetTagName();
+		if (TagName == RetrieveMonsterHPBar::TagEpic)
+		{
+			NameColor = EpicNameColor;
+			bIsEpic = true;
+		}
+		else if (TagName == RetrieveMonsterHPBar::TagElite)
+		{
+			NameColor = EliteNameColor;
+		}
+	}
+
+	if (Text_MonsterName)
+	{
+		Text_MonsterName->SetColorAndOpacity(FSlateColor(NameColor));
+	}
+
+	// 에픽일 때만 프레임 표시 — Text_MonsterName 바인딩 여부와 무관하게 항상 실행
+	const ESlateVisibility FrameVis = bIsEpic
+		? ESlateVisibility::SelfHitTestInvisible
+		: ESlateVisibility::Collapsed;
+
+	if (FRA_Frame)    FRA_Frame->SetVisibility(FrameVis);
+	if (FRA_Vignette) FRA_Vignette->SetVisibility(FrameVis);
 }
 
 int32 URetrieveNormalMonsterHealthBarWidget::NativePaint(

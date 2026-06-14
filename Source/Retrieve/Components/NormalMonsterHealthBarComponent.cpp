@@ -40,12 +40,23 @@ UNormalMonsterHealthBarComponent::UNormalMonsterHealthBarComponent()
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	SetWidgetSpace(EWidgetSpace::Screen);
-	SetDrawSize(FVector2D(120.f, 12.f));
+	SetDrawSize(FVector2D(120.f, 16.f));
 	SetPivot(FVector2D(0.5f, 0.5f));
 	SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetGenerateOverlapEvents(false);
 	SetHiddenInGame(true);
-	SetWidgetClass(URetrieveNormalMonsterHealthBarWidget::StaticClass());
+
+	// WBP Blueprint 클래스를 우선 로드 (Text_MonsterName / Text_HPValue 바인딩 보장)
+	static ConstructorHelpers::FClassFinder<UUserWidget> HealthBarWBP(
+		TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar"));
+	if (HealthBarWBP.Succeeded())
+	{
+		SetWidgetClass(HealthBarWBP.Class);
+	}
+	else
+	{
+		SetWidgetClass(URetrieveNormalMonsterHealthBarWidget::StaticClass());
+	}
 }
 
 void UNormalMonsterHealthBarComponent::BeginPlay()
@@ -171,6 +182,18 @@ void UNormalMonsterHealthBarComponent::BindToHealthComponent()
 
 	LastObservedHealth = BoundHealthComponent->GetHealth();
 	LastObservedMaxHealth = BoundHealthComponent->GetMaxHealth();
+
+	// 이름 / 등급 정보를 위젯에 초기 전달 (MonsterDisplayName이 비어있지 않을 때만)
+	if (!MonsterDisplayName.IsEmpty())
+	{
+		if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
+			Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
+		{
+			HealthBarWidget->SetMonsterInfo(
+				MonsterDisplayName, MonsterTypeTag,
+				LastObservedHealth, LastObservedMaxHealth);
+		}
+	}
 }
 
 void UNormalMonsterHealthBarComponent::UnbindFromHealthComponent()
@@ -232,6 +255,20 @@ void UNormalMonsterHealthBarComponent::HandleDeathStarted(AActor* OwningActor)
 	HideBar();
 }
 
+void UNormalMonsterHealthBarComponent::SetMonsterIdentity(FText InDisplayName, FGameplayTag InTypeTag)
+{
+	MonsterDisplayName = InDisplayName;
+	MonsterTypeTag = InTypeTag;
+
+	if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
+		Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
+	{
+		const float CurrentHP = BoundHealthComponent ? BoundHealthComponent->GetHealth() : 0.f;
+		const float MaxHP = BoundHealthComponent ? BoundHealthComponent->GetMaxHealth() : 0.f;
+		HealthBarWidget->SetMonsterInfo(MonsterDisplayName, MonsterTypeTag, CurrentHP, MaxHP);
+	}
+}
+
 void UNormalMonsterHealthBarComponent::RefreshHealthPercent()
 {
 	if (!BoundHealthComponent)
@@ -239,15 +276,17 @@ void UNormalMonsterHealthBarComponent::RefreshHealthPercent()
 		return;
 	}
 
-	const float MaxHealth = BoundHealthComponent->GetMaxHealth();
-	const float Percent = MaxHealth > 0.f
-		? FMath::Clamp(BoundHealthComponent->GetHealth() / MaxHealth, 0.f, 1.f)
+	const float CurrentHP = BoundHealthComponent->GetHealth();
+	const float MaxHP = BoundHealthComponent->GetMaxHealth();
+	const float Percent = MaxHP > 0.f
+		? FMath::Clamp(CurrentHP / MaxHP, 0.f, 1.f)
 		: 0.f;
 
 	if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
 		Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
 	{
 		HealthBarWidget->SetHealthPercent(Percent);
+		HealthBarWidget->SetHPValue(CurrentHP, MaxHP);
 		return;
 	}
 

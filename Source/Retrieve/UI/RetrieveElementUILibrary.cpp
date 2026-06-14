@@ -40,6 +40,10 @@ bool URetrieveElementUILibrary::GetMatchingBurstCombination(
 		{
 			continue;
 		}
+		if (Row->ElementPattern.Num() != ElementPattern.Num())
+		{
+			continue;
+		}
 
 		// 테이블 패턴의 모든 태그·수량이 현재 패턴과 일치하면 매칭
 		bool bMatch = true;
@@ -75,13 +79,23 @@ bool URetrieveElementUILibrary::GetBuffUIRow(
 
 	const FName RowName = BuffUITag.GetTagName();
 	const FRetrieveBuffUIRow* Row = BuffUITable->FindRow<FRetrieveBuffUIRow>(RowName, TEXT("GetBuffUIRow"));
-	if (!Row)
+	if (Row)
 	{
-		return false;
+		OutRow = *Row;
+		return true;
 	}
 
-	OutRow = *Row;
-	return true;
+	for (auto It = BuffUITable->GetRowMap().CreateConstIterator(); It; ++It)
+	{
+		const FRetrieveBuffUIRow* Candidate = reinterpret_cast<const FRetrieveBuffUIRow*>(It.Value());
+		if (Candidate && Candidate->BuffUITag.MatchesTagExact(BuffUITag))
+		{
+			OutRow = *Candidate;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void URetrieveElementUILibrary::SetImageBrushTexture(UImage* Image, UTexture2D* Texture, bool bMatchSize)

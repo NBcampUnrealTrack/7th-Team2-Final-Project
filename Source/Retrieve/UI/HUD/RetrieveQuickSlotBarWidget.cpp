@@ -4,6 +4,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
 #include "GameFramework/Pawn.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 void URetrieveQuickSlotBarWidget::NativeConstruct()
 {
@@ -31,6 +32,10 @@ void URetrieveQuickSlotBarWidget::NativeConstruct()
 		// 아이템 획득/소모로 수량이 바뀌어도 갱신
 		InventoryComp->OnInventoryChanged.RemoveDynamic(this, &URetrieveQuickSlotBarWidget::RefreshSlots);
 		InventoryComp->OnInventoryChanged.AddDynamic(this, &URetrieveQuickSlotBarWidget::RefreshSlots);
+
+		// 퀵슬롯 키 입력 시 VFX 피드백
+		InventoryComp->OnConsumableSlotUsed.RemoveDynamic(this, &URetrieveQuickSlotBarWidget::HandleSlotUsed);
+		InventoryComp->OnConsumableSlotUsed.AddDynamic(this, &URetrieveQuickSlotBarWidget::HandleSlotUsed);
 	}
 
 	RefreshSlots();
@@ -42,6 +47,7 @@ void URetrieveQuickSlotBarWidget::NativeDestruct()
 	{
 		InventoryComp->OnConsumableSlotChanged.RemoveDynamic(this, &URetrieveQuickSlotBarWidget::HandleConsumableSlotChanged);
 		InventoryComp->OnInventoryChanged.RemoveDynamic(this, &URetrieveQuickSlotBarWidget::RefreshSlots);
+		InventoryComp->OnConsumableSlotUsed.RemoveDynamic(this, &URetrieveQuickSlotBarWidget::HandleSlotUsed);
 	}
 
 	Super::NativeDestruct();
@@ -124,4 +130,22 @@ void URetrieveQuickSlotBarWidget::RefreshSlotEntry(URetrieveQuickSlotEntryWidget
 	const FName ItemId = InventoryComp->GetConsumableSlotItemId(SlotKey);
 	Entry->InitSlot(SlotKey, ItemId, QuickSlotIconTable);
 	Entry->RefreshCount(ItemId.IsNone() ? 0 : InventoryComp->GetItemCount(ItemId));
+}
+
+void URetrieveQuickSlotBarWidget::HandleSlotUsed(int32 SlotKey)
+{
+	URetrieveQuickSlotEntryWidget* Target = nullptr;
+	if (SlotKey == UInventoryComponent::QuickSlotPrimaryKey)
+	{
+		Target = WBP_QuickSlotEntry_4;
+	}
+	else if (SlotKey == UInventoryComponent::QuickSlotSecondaryKey)
+	{
+		Target = WBP_QuickSlotEntry_5;
+	}
+
+	if (Target)
+	{
+		PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Button_Press, Target);
+	}
 }

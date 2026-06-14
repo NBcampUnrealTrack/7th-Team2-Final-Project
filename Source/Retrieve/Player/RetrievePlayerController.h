@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputKeyEventArgs.h"
 #include "InputCoreTypes.h"
+#include "TimerManager.h"
 #include "RetrievePlayerController.generated.h"
 
 class ARetrievePlayerState;
@@ -196,6 +197,7 @@ protected:
 
 	FGameplayMessageListenerHandle SessionListener;
 	FGameplayMessageListenerHandle CinematicCloseHandle;
+	FTimerHandle ActivePanelCloseFallbackTimerHandle;
 
 	UFUNCTION()
 	void HandleActivePanelCloseRequested();
@@ -208,6 +210,7 @@ protected:
 	bool CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const;
 	void CenterActiveWorldMapPanel();
 	void RemoveActivePanelImmediately();
+	void HandleActivePanelCloseFallback();
 	URetrieveMinimapWidget* FindMinimapWidgetInHUD() const;
 	UInventoryComponent* GetPawnInventoryComponent() const;
 	UWeaponComponent* GetPawnWeaponComponent() const;
