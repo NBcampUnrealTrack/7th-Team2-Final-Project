@@ -212,10 +212,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
 
 	// ---- Item
-	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon, "Item.Weapon");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable, "Item.Consumable");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Material, "Item.Material");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Currency, "Item.Currency");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon,    "Item.Weapon");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable,"Item.Consumable");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material,  "Item.Material");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Currency,  "Item.Currency");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Fire, "Item.Consumable.Draught.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Water, "Item.Consumable.Draught.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Wind, "Item.Consumable.Draught.Wind");
@@ -255,8 +255,11 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_PlayerSpotted, "Channel.Enemy.PlayerSpotted");
 	
 	// ---- Message channels: UI Buff
-	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Apply,  "Channel.UI.Buff.Apply");
-	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Remove, "Channel.UI.Buff.Remove");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Apply,   "Channel.UI.Buff.Apply");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Remove,  "Channel.UI.Buff.Remove");
+
+	// ---- Message channels: UI Skill popup
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_SkillActivated, "Channel.UI.SkillActivated");
 
 	// ---- Message channels: Quest
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_GuardianDefeated, "Channel.Quest.GuardianDefeated");

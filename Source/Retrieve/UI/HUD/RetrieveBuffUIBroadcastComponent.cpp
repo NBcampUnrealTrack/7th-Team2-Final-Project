@@ -177,27 +177,32 @@ void URetrieveBuffUIBroadcastComponent::InitBuiltInRows()
 		const TCHAR* Description,
 		const TCHAR* EffectSummary,
 		const FLinearColor& Tint,
-		float DurationOverride)
+		float DurationOverride,
+		bool bIsStackable = false,
+		int32 MaxStack = 0)
 	{
 		FRetrieveBuffUIRow Row;
-		Row.BuffUITag = Tag;
-		Row.DisplayName = FText::FromString(FString(DisplayName));
-		Row.Description = FText::FromString(FString(Description));
-		Row.EffectSummary = FText::FromString(FString(EffectSummary));
-		Row.TintColor = Tint;
+		Row.BuffUITag        = Tag;
+		Row.DisplayName      = FText::FromString(FString(DisplayName));
+		Row.Description      = FText::FromString(FString(Description));
+		Row.EffectSummary    = FText::FromString(FString(EffectSummary));
+		Row.TintColor        = Tint;
 		Row.DurationOverride = DurationOverride;
+		Row.bIsStackable     = bIsStackable;
+		Row.MaxStack         = MaxStack;
 		BuiltInRows.Add(Tag, Row);
 	};
 
-	AddRow(RetrieveGameplayTags::UI_Buff_Item_FireBoost, TEXT("Fire Boost"), TEXT("Increases elemental gauge charge while active."), TEXT("Fire item charge multiplier"), FLinearColor::White, 0.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Item_WaterBoost, TEXT("Water Boost"), TEXT("Increases elemental gauge charge while active."), TEXT("Water item charge multiplier"), FLinearColor::White, 0.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Item_WindBoost, TEXT("Wind Boost"), TEXT("Increases elemental gauge charge while active."), TEXT("Wind item charge multiplier"), FLinearColor::White, 0.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Burst_FireSlash, TEXT("Fire Slash"), TEXT("Burst effect granted by a fire-focused element pattern."), TEXT("Fire burst follow-up window"), FLinearColor::White, 5.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Burst_WaterVortex, TEXT("Water Vortex"), TEXT("Burst effect granted by a water-focused element pattern."), TEXT("Water burst follow-up window"), FLinearColor::White, 5.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Burst_WindSlash, TEXT("Wind Slash"), TEXT("Burst effect granted by a wind-focused element pattern."), TEXT("Wind burst follow-up window"), FLinearColor::White, 5.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Fire, TEXT("Fire Absorb"), TEXT("Fire element absorbed. Fire attribute buff active."), TEXT("Fire absorb buff"), FLinearColor(1.f, 0.35f, 0.05f, 1.f), 0.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Water, TEXT("Water Absorb"), TEXT("Water element absorbed. Water attribute buff active."), TEXT("Water absorb buff"), FLinearColor(0.1f, 0.45f, 1.f, 1.f), 0.f);
-	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Wind, TEXT("Wind Absorb"), TEXT("Wind element absorbed. Wind attribute buff active."), TEXT("Wind absorb buff"), FLinearColor(0.3f, 1.f, 0.35f, 1.f), 0.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Item_FireBoost,    TEXT("Fire Boost"),    TEXT("Increases elemental gauge charge while active."), TEXT("Fire item charge multiplier"),  FLinearColor::White,                   0.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Item_WaterBoost,   TEXT("Water Boost"),   TEXT("Increases elemental gauge charge while active."), TEXT("Water item charge multiplier"), FLinearColor::White,                   0.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Item_WindBoost,    TEXT("Wind Boost"),    TEXT("Increases elemental gauge charge while active."), TEXT("Wind item charge multiplier"),  FLinearColor::White,                   0.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Burst_FireSlash,   TEXT("Fire Slash"),    TEXT("Burst effect granted by a fire-focused element pattern."),  TEXT("Fire burst follow-up window"),  FLinearColor::White, 5.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Burst_WaterVortex, TEXT("Water Vortex"),  TEXT("Burst effect granted by a water-focused element pattern."), TEXT("Water burst follow-up window"), FLinearColor::White, 5.f);
+	AddRow(RetrieveGameplayTags::UI_Buff_Burst_WindSlash,   TEXT("Wind Slash"),    TEXT("Burst effect granted by a wind-focused element pattern."),  TEXT("Wind burst follow-up window"),  FLinearColor::White, 5.f);
+	// 흡수 버프 — 같은 원소를 반복 흡수하면 스택이 쌓인다 (최대 5스택)
+	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Fire,  TEXT("Fire Absorb"),  TEXT("Fire element absorbed. Fire attribute buff active."),  TEXT("Fire absorb buff"),  FLinearColor(1.f,  0.35f, 0.05f, 1.f), 0.f, /*bIsStackable=*/true, /*MaxStack=*/5);
+	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Water, TEXT("Water Absorb"), TEXT("Water element absorbed. Water attribute buff active."), TEXT("Water absorb buff"), FLinearColor(0.1f, 0.45f, 1.f,  1.f), 0.f, /*bIsStackable=*/true, /*MaxStack=*/5);
+	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Wind,  TEXT("Wind Absorb"),  TEXT("Wind element absorbed. Wind attribute buff active."),  TEXT("Wind absorb buff"),  FLinearColor(0.3f, 1.f,  0.35f, 1.f), 0.f, /*bIsStackable=*/true, /*MaxStack=*/5);
 }
 
 void URetrieveBuffUIBroadcastComponent::BroadcastApply(const FRetrieveBuffUIRow& Row, float Duration, TSubclassOf<UGameplayEffect> SourceEffect)
@@ -212,8 +217,10 @@ void URetrieveBuffUIBroadcastComponent::BroadcastApply(const FRetrieveBuffUIRow&
 	Payload.LinkedGameplayEffect = Row.LinkedGameplayEffect ? Row.LinkedGameplayEffect : SourceEffect;
 	Payload.Icon      = Row.Icon.LoadSynchronous();
 	Payload.TintColor = Row.TintColor;
-	Payload.Duration  = Duration;
-	Payload.bIsDebuff = Row.bIsDebuff;
+	Payload.Duration     = Duration;
+	Payload.bIsDebuff    = Row.bIsDebuff;
+	Payload.bIsStackable = Row.bIsStackable;
+	Payload.MaxStack     = Row.MaxStack;
 
 	UGameplayMessageSubsystem::Get(GetWorld())
 		.BroadcastMessage(RetrieveGameplayTags::Channel_UI_Buff_Apply, Payload);

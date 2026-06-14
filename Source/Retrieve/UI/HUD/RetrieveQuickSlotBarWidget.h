@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/VFX/RetrieveUIVFXWidget.h"
 #include "RetrieveQuickSlotBarWidget.generated.h"
 
 class URetrieveQuickSlotEntryWidget;
@@ -10,7 +10,7 @@ class UDataTable;
 
 /** Displays the two combat consumable slots owned by InventoryComponent. */
 UCLASS()
-class RETRIEVE_API URetrieveQuickSlotBarWidget : public UUserWidget
+class RETRIEVE_API URetrieveQuickSlotBarWidget : public URetrieveUIVFXWidget
 {
 	GENERATED_BODY()
 
@@ -29,6 +29,9 @@ protected:
 
 	UFUNCTION()
 	void HandleConsumableSlotChanged(int32 InSlotKey, FName ItemId);
+
+	UFUNCTION()
+	void HandleSlotUsed(int32 SlotKey);
 
 	void ResolveInventoryComponent();
 	void ResolveSlotEntries();

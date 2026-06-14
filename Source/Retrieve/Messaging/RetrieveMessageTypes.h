@@ -141,6 +141,26 @@ struct FRetrieveQuestStepPayload
 	FGameplayTag StepTag;
 };
 
+// ---- UI 스킬 발동 팝업 ---------------------------------------------------
+
+/** Channel.UI.SkillActivated 페이로드.
+ *  GA_Burst가 스킬 조합 매칭 직후 브로드캐스트.
+ *  WBP_BurstSkillPopup이 구독해 화면 중앙에 스킬 이름을 잠깐 표시한다.
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveUISkillActivatedPayload
+{
+	GENERATED_BODY()
+
+	/** FSkillCombination::DisplayName — 화면에 표시할 스킬 이름 */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Skill")
+	FText SkillName;
+
+	/** FSkillCombination::BurstUITag — 버프바 Row 조회 키 (아이콘 재사용 가능) */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Skill")
+	FGameplayTag UITag;
+};
+
 // ---- UI 버프/디버프 바 ---------------------------------------------------
 
 USTRUCT(BlueprintType)
@@ -174,6 +194,14 @@ struct FRetrieveUIBuffPayload
 
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
 	bool bIsDebuff = false;
+
+	/** true이면 BuffBar가 같은 BuffId를 중첩 카운트로 처리한다 */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	bool bIsStackable = false;
+
+	/** 스택 최대치. 0이면 무제한. bIsStackable이 true일 때만 유효. */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	int32 MaxStack = 0;
 };
 
 USTRUCT(BlueprintType)

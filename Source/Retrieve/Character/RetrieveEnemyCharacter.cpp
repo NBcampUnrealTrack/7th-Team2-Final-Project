@@ -202,11 +202,21 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	{
 		HitReactionComponent->Configure(HitReactionProfile);
 	}
-	
+
 	if (DropComponent && !Row->DropRow.IsNone())
 	{
 		// DropComponent::Initialize는 DropTable도 필요
 		DropComponent->Initialize(DropTable, Row->DropRow);
+	}
+
+	// 몬스터 이름·등급을 체력바 위젯에 연동
+	// MonsterDisplayName이 에디터에서 이미 설정된 경우 그 값을 유지하고, 아니면 DataRow 키를 표시
+	if (NormalHealthBarComponent)
+	{
+		const FText DisplayName = NormalHealthBarComponent->GetMonsterDisplayName().IsEmpty()
+			? FText::FromName(MonsterDataRowName)
+			: NormalHealthBarComponent->GetMonsterDisplayName();
+		NormalHealthBarComponent->SetMonsterIdentity(DisplayName, Row->MonsterType);
 	}
 }
 
