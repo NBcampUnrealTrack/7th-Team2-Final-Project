@@ -1,6 +1,7 @@
 #include "Components/RetrieveWaterProviderComponent.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/RetrieveCameraWaterProbeComponent.h"
 #include "Components/SwimDetectionComponent.h"
 
 URetrieveWaterProviderComponent::URetrieveWaterProviderComponent()
@@ -42,6 +43,11 @@ void URetrieveWaterProviderComponent::BeginPlay()
 void URetrieveWaterProviderComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (OtherComp && OtherComp->IsA<URetrieveCameraWaterProbeComponent>())
+	{
+		return;
+	}
+
 	if (USwimDetectionComponent* SwimComp =
 		OtherActor ? OtherActor->FindComponentByClass<USwimDetectionComponent>() : nullptr)
 	{
@@ -52,10 +58,15 @@ void URetrieveWaterProviderComponent::HandleBeginOverlap(UPrimitiveComponent* Ov
 void URetrieveWaterProviderComponent::HandleEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
+	if (OtherComp && OtherComp->IsA<URetrieveCameraWaterProbeComponent>())
+	{
+		return;
+	}
+
 	if (USwimDetectionComponent* SwimComp =
 		OtherActor ? OtherActor->FindComponentByClass<USwimDetectionComponent>() : nullptr)
 	{
-		SwimComp->NotifyExitWaterRegion();
+		SwimComp->NotifyExitWaterRegion(this);
 	}
 }
 
@@ -78,6 +89,11 @@ bool URetrieveWaterProviderComponent::TryGetWaterColumn_Implementation(const FVe
 	// 호수: 영역은 트리거 박스가 전담 → 항상 true + 수면 Z.
 	OutSurfaceZ = GetWaterSurfaceZ_Implementation(Location);
 	return true;
+}
+
+FRetrieveWaterPPMaterials URetrieveWaterProviderComponent::GetWaterPostProcessMaterials_Implementation() const
+{
+	return FRetrieveWaterPPMaterials(); // 호수는 자체 PP 볼륨이 담당 → FX 미적용
 }
 
 FVector URetrieveWaterProviderComponent::GetFlowVelocity_Implementation(const FVector& Location) const

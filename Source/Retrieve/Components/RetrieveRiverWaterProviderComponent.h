@@ -7,6 +7,7 @@
 
 class UBoxComponent;
 class USplineComponent;
+class UPostProcessComponent;
 
 /**
  * 강 스플라인에 얹는 수영 연동 Provider. 같은 액터의 USplineComponent를 샘플.
@@ -25,7 +26,11 @@ public:
 	virtual float GetWaterSurfaceZ_Implementation(const FVector& Location) const override;
 	virtual bool TryGetWaterColumn_Implementation(const FVector& Location, float& OutSurfaceZ) const override;
 	virtual FVector GetFlowVelocity_Implementation(const FVector& Location) const override;
-
+	virtual FRetrieveWaterPPMaterials GetWaterPostProcessMaterials_Implementation() const override;	
+	
+	UPROPERTY(EditAnywhere, Category = "Retrieve|River")
+	int32 BiomeOverride = -1; // -1  강 BP의 River Material Preset 자동, 그 외엔 강제함
+	
 protected:
 	virtual void BeginPlay() override;
 
@@ -53,4 +58,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBoxComponent> WaterBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPostProcessComponent> UnderwaterPP; // 박스 바운드 수중 PP (원형 방식)
+
+	int32 ReadBiomeIndex() const;
 };

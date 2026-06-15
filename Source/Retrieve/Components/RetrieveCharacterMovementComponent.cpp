@@ -57,6 +57,12 @@ bool URetrieveCharacterMovementComponent::CanAttemptJump() const
 		}
 	}
 
+	// 완전 잠수(캡슐 상단 < 수면) 시 점프 차단. Wade(머리 위)는 통과 — 3인칭 자유시점이라 카메라 잠김 무관.
+	if (bWaterFullySubmerged)
+	{
+		return false;
+	}
+
 	return IsJumpAllowed() &&
 		(IsMovingOnGround() || IsFalling());
 }
@@ -64,6 +70,21 @@ bool URetrieveCharacterMovementComponent::CanAttemptJump() const
 void URetrieveCharacterMovementComponent::NotifySwimEntry()
 {
 	bPlunging = (Velocity.Z <= -GetDefault<URetrieveSwimSettings>()->PlungeEntrySpeed);
+}
+
+void URetrieveCharacterMovementComponent::SetWaterState(float InSurfaceZ, float InSubmersion, bool bInColumn, bool bFullySubmerged)
+{
+	WaterSurfaceZ = InSurfaceZ;
+	WaterSubmersion = InSubmersion;
+	bInWaterColumn = bInColumn;
+	bWaterFullySubmerged = bFullySubmerged;
+}
+
+void URetrieveCharacterMovementComponent::ClearWaterState()
+{
+	WaterSubmersion = 0.f;
+	bInWaterColumn = false;
+	bWaterFullySubmerged = false;
 }
 
 void URetrieveCharacterMovementComponent::InitializeComponent()
@@ -178,10 +199,16 @@ float URetrieveCharacterMovementComponent::GetMaxSpeed() const
 
 		// ALS Gait 기반 베이스 속도에 MoveSpeed Attribute 배율 적용
 		// (Attribute 600 = 1.0배, 720 = 1.2배, 300 = 0.5배)
-		const float AlsBase = Super::GetMaxSpeed();
+		float AlsBase = Super::GetMaxSpeed();
 		if (const UCombatAttributeSet* AttrSet = ASC->GetSet<UCombatAttributeSet>())
 		{
-			return AlsBase * (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+			AlsBase *= (AttrSet->GetMoveSpeed() / UCombatAttributeSet::ReferenceMoveSpeed);
+		}
+		// 수중 보행 항력: 잠수 깊을수록 감속(발끝=1.0 → 완전잠수=WadeMinSpeedMultiplier). Wade/Submerged-Walk에 적용.
+		if (bInWaterColumn && WaterSubmersion > 0.f && IsMovingOnGround())
+		{
+			const URetrieveSwimSettings* Swim = GetDefault<URetrieveSwimSettings>();
+			AlsBase *= FMath::Lerp(1.f, Swim->WadeMinSpeedMultiplier, WaterSubmersion);
 		}
 		return AlsBase;
 	}
@@ -238,14 +265,20 @@ void URetrieveCharacterMovementComponent::CalcVelocity(float DeltaTime, float Fr
 		{
 			OwnVz = FMath::Clamp(OwnVz, -Swim->MaxSwimSpeed, Swim->MaxSwimSpeed);
 		}
-		if (OwnVz > 0.f && Depth < Swim->SurfaceSoftBand) // 수면 위 상승 모멘텀 차단
+
+		// 표면 오버슈트 차단: 수면 근처에선 상승 모멘텀을 고유속도 + 피드포워드 "둘 다" 감쇠.
+		// (OwnVz만 깎으면 SurfaceVelZ가 클램프를 새서 허리춤 위로 솟구침 = 표면 걸림)
+		float SurfVzApplied = SurfaceVelZ;
+		if (Depth < Swim->SurfaceSoftBand)
 		{
-			OwnVz *= FMath::Clamp(Depth / Swim->SurfaceSoftBand, 0.f, 1.f);
+			const float Soft = FMath::Clamp(Depth / Swim->SurfaceSoftBand, 0.f, 1.f);
+			if (OwnVz > 0.f)         { OwnVz *= Soft; }
+			if (SurfVzApplied > 0.f) { SurfVzApplied *= Soft; }
 		}
 
-		Velocity.Z = OwnVz + SurfaceVelZ;
+		Velocity.Z = OwnVz + SurfVzApplied;
 		PrevWaterSurfaceZ = WaterSurfaceZ;
-		PrevSurfaceVelZ = SurfaceVelZ;
+		PrevSurfaceVelZ = SurfVzApplied; // 실제 적용된 FF 저장 → 다음 프레임 고유속도 복원 일치(누적방지 유지)
 	}
 
 	if (bPlunging && Velocity.SizeSquared() <= FMath::Square(Swim->MaxSwimSpeed))
