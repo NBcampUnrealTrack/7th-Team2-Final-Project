@@ -22,7 +22,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Defaults")
 	FGameplayTagContainer DefaultCosmeticTags;
 
-	// TODO: MorphTarget 연결 예약, 성별에 따른 모프타겟 조절, 모듈라 파츠 시스템 Default 프리셋 지정
-	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Skeletal Mesh")
-	//FRetrieveModularLayoutSelectionSet ModularMeshRules;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Visual Mesh")
+	FRetrieveVisualLayoutSelectionSet VisualLayoutRules;
+
+	// TODO: MorphTarget 연결 예약, 성별에 따른 모프타겟 조절
 };

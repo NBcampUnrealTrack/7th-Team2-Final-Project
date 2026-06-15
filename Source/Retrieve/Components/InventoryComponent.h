@@ -7,11 +7,13 @@
 #include "InventoryComponent.generated.h"
 
 class URetrieveAbilitySystemComponent;
+class UArmorComponent;
 class UWeaponComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FInventoryChangedSignature);
 // ItemId + CategoryTag + Quantity — 픽업 토스트 등 UI가 카테고리 구분 없이 DataTable을 찾을 수 있도록 Tag 포함
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FInventoryItemChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag, int32, Quantity);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEquippedArmorChangedSignature, FGameplayTag, EquipmentSlotTag, FName, ArmorItemId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEquippedWeaponChangedSignature, FName, WeaponItemId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FConsumableSlotChangedSignature, int32, SlotKey, FName, ItemId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FConsumableSlotUsedSignature, int32, SlotKey);
@@ -60,6 +62,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool RequestUnequipWeapon();
 
+	// Armor UI 진입점: 위젯은 ArmorComponent를 직접 호출하지 말고 이 함수만 호출한다.
+	// 내부에서 보유/상태 검사 후 UArmorComponent::EquipArmor로 위임한다.
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	bool RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+
+	// Armor UI 진입점: 위젯은 ArmorComponent를 직접 호출하지 말고 이 함수만 호출한다.
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	bool RequestUnequipArmor(FGameplayTag EquipmentSlotTag);
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UseConsumableItem(FName ConsumableItemId);
 
@@ -98,6 +109,12 @@ public:
 	FName GetEquippedWeaponId() const { return EquippedWeaponId; }
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	FName GetEquippedArmorId(FGameplayTag EquipmentSlotTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	TArray<FRetrieveEquippedArmorEntry> GetEquippedArmorSlots() const { return EquippedArmorSlots; }
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FName GetConsumableSlotItemId(int32 SlotKey) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
@@ -122,6 +139,9 @@ public:
 	FEquippedWeaponChangedSignature OnEquippedWeaponChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory")
+	FEquippedArmorChangedSignature OnEquippedArmorChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory")
 	FConsumableSlotChangedSignature OnConsumableSlotChanged;
 
 	/** 퀵슬롯 키를 눌러 소모품 사용을 시도했을 때 브로드캐스트 (슬롯에 아이템이 있을 때만). UI 피드백용 */
@@ -142,8 +162,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryItems, Category = "Retrieve|Inventory")
 	TArray<FRetrieveItemStack> MaterialItems;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryItems, Category = "Retrieve|Inventory")
+	TArray<FRetrieveItemStack> ArmorItems;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedWeaponId, Category = "Retrieve|Inventory")
 	FName EquippedWeaponId = NAME_None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedArmorSlots, Category = "Retrieve|Inventory")
+	TArray<FRetrieveEquippedArmorEntry> EquippedArmorSlots;
 
 	// 전투 소모품 슬롯 4, 5번. TMap은 복제 불가라 필드로 직접 관리
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_ConsumableSlots, Category = "Retrieve|Inventory")
@@ -164,6 +190,9 @@ protected:
 	void OnRep_EquippedWeaponId();
 
 	UFUNCTION()
+	void OnRep_EquippedArmorSlots();
+
+	UFUNCTION()
 	void OnRep_ConsumableSlots();
 
 	UFUNCTION()
@@ -174,6 +203,12 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestUnequipWeapon();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestUnequipArmor(FGameplayTag EquipmentSlotTag);
 
 	UFUNCTION(Server, Reliable)
 	void ServerUseConsumableItem(FName ConsumableItemId);
@@ -190,6 +225,7 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerCraftItem(FName RecipeId);
 
+	UArmorComponent* GetArmorComponent() const;
 	UWeaponComponent* GetWeaponComponent() const;
 	URetrieveAbilitySystemComponent* GetRetrieveAbilitySystemComponent() const;
 	const FRetrieveConsumableItemRow* FindConsumableItemRow(FName ConsumableItemId) const;
@@ -206,6 +242,10 @@ protected:
 
 	const FRetrieveItemStack* FindStack(FName ItemId) const;
 	FRetrieveItemStack* FindMutableStack(FName ItemId);
+
+	const FRetrieveEquippedArmorEntry* FindEquippedArmorSlot(FGameplayTag EquipmentSlotTag) const;
+	FRetrieveEquippedArmorEntry* FindMutableEquippedArmorSlot(FGameplayTag EquipmentSlotTag);
+	void RemoveEquippedArmorSlot(FGameplayTag EquipmentSlotTag);
 
 	// SlotKey(4 or 5)에 해당하는 필드 참조를 반환
 	FName& GetMutableSlotField(int32 SlotKey);

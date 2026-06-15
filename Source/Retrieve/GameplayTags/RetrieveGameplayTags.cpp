@@ -1,4 +1,4 @@
-#include "RetrieveGameplayTags.h"
+﻿#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -146,10 +146,57 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_Wind, "Weapon.Affinity.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Affinity_None, "Weapon.Affinity.None");
 
+	// ---- Equipment
+	UE_DEFINE_GAMEPLAY_TAG(Equipment_Slot_Head, "Equipment.Slot.Head");
+	UE_DEFINE_GAMEPLAY_TAG(Equipment_Slot_Chest, "Equipment.Slot.Chest");
+	UE_DEFINE_GAMEPLAY_TAG(Equipment_Slot_Hands, "Equipment.Slot.Hands");
+	UE_DEFINE_GAMEPLAY_TAG(Equipment_Slot_Legs, "Equipment.Slot.Legs");
+	UE_DEFINE_GAMEPLAY_TAG(Equipment_Slot_Feet, "Equipment.Slot.Feet");
+
 	// ---- Cosmetic
 	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Gender_Male, "Cosmetic.Gender.Male");
 	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Gender_Female, "Cosmetic.Gender.Female");
-	
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Head, "Cosmetic.Part.Head");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Torso, "Cosmetic.Part.Torso");
+
+	// ---- Cosmetic Part (granular, Sidekick PartType 단위 — modular spawn slot)
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Hair, "Cosmetic.Part.Hair");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Eyebrow_Left, "Cosmetic.Part.Eyebrow.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Eyebrow_Right, "Cosmetic.Part.Eyebrow.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Eye_Left, "Cosmetic.Part.Eye.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Eye_Right, "Cosmetic.Part.Eye.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Ear_Left, "Cosmetic.Part.Ear.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Ear_Right, "Cosmetic.Part.Ear.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_FacialHair, "Cosmetic.Part.FacialHair");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Arm_Upper_Left, "Cosmetic.Part.Arm.Upper.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Arm_Upper_Right, "Cosmetic.Part.Arm.Upper.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Arm_Lower_Left, "Cosmetic.Part.Arm.Lower.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Arm_Lower_Right, "Cosmetic.Part.Arm.Lower.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Hand_Left, "Cosmetic.Part.Hand.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Hand_Right, "Cosmetic.Part.Hand.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Hips, "Cosmetic.Part.Hips");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Leg_Left, "Cosmetic.Part.Leg.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Leg_Right, "Cosmetic.Part.Leg.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Foot_Left, "Cosmetic.Part.Foot.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Foot_Right, "Cosmetic.Part.Foot.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Head, "Cosmetic.Part.Attachment.Head");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Face, "Cosmetic.Part.Attachment.Face");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Back, "Cosmetic.Part.Attachment.Back");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Hips_Front, "Cosmetic.Part.Attachment.Hips.Front");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Hips_Back, "Cosmetic.Part.Attachment.Hips.Back");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Hips_Left, "Cosmetic.Part.Attachment.Hips.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Hips_Right, "Cosmetic.Part.Attachment.Hips.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Shoulder_Left, "Cosmetic.Part.Attachment.Shoulder.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Shoulder_Right, "Cosmetic.Part.Attachment.Shoulder.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Elbow_Left, "Cosmetic.Part.Attachment.Elbow.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Elbow_Right, "Cosmetic.Part.Attachment.Elbow.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Knee_Left, "Cosmetic.Part.Attachment.Knee.Left");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Attachment_Knee_Right, "Cosmetic.Part.Attachment.Knee.Right");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Nose, "Cosmetic.Part.Nose");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Teeth, "Cosmetic.Part.Teeth");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Tongue, "Cosmetic.Part.Tongue");
+	UE_DEFINE_GAMEPLAY_TAG(Cosmetic_Part_Wrap, "Cosmetic.Part.Wrap");
+
 	// ---- Lock-on
 	UE_DEFINE_GAMEPLAY_TAG(LockOn_Active, "LockOn.Active");
 
@@ -212,10 +259,11 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_UseItem_Slot2, "Input.UseItem.Slot2");
 
 	// ---- Item
-	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon,    "Item.Weapon");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable,"Item.Consumable");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Material,  "Item.Material");
-	UE_DEFINE_GAMEPLAY_TAG(Item_Currency,  "Item.Currency");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Weapon, "Item.Weapon");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Armor, "Item.Armor");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable, "Item.Consumable");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Material, "Item.Material");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Currency, "Item.Currency");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Fire, "Item.Consumable.Draught.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Water, "Item.Consumable.Draught.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Wind, "Item.Consumable.Draught.Wind");
@@ -283,6 +331,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MoveSpeed, "Data.Init.MoveSpeed");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_IncomingDamageMultiplier, "Data.Init.IncomingDamageMultiplier");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Weapon_AttackPower, "Data.Weapon.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Armor_Defense, "Data.Armor.Defense");
 
 	// ---- Gameplay cues: Heavy attack
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Fire, "GameplayCue.HeavyAttack.Fire");

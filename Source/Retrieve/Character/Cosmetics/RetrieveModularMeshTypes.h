@@ -1,121 +1,103 @@
-﻿
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayTagContainer.h"
 #include "Engine/DataAsset.h"
-
+#include "GameplayTagContainer.h"
 #include "RetrieveModularMeshTypes.generated.h"
 
 class USkeletalMesh;
+class URetrieveModularPartSet;
 
 /**
- * 특정 BoneName 파츠에 적용할 SkeletalMesh입니다.
- *
- * 이 시스템은 Actor 파츠/Socket Attach를 다루지 않습니다.
- * 같은 Skeleton을 공유하는 SkeletalMesh 모듈을 교체하고 LeaderPose를 따르게 하는 용도입니다.
- */
-USTRUCT(BlueprintType)
-struct FRetrieveModularPartMesh
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (GetOptions = "GetReferenceBoneNames"))
-	FName BoneName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TObjectPtr<USkeletalMesh> Mesh = nullptr;
-};
-
-/**
- * 기준 스켈레탈 메시의 본 이름과 기본 모듈 메시를 그룹 단위로 정리합니다.
- * 예: HeadMeshes, BodyMeshes, HandsMeshes, FeetMeshes
- */
-USTRUCT(BlueprintType)
-struct FRetrieveModularPartGroup
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName GroupName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (TitleProperty = BoneName))
-	TArray<FRetrieveModularPartMesh> DefaultParts;
-};
-
-/**
- * 모듈식 스켈레탈 메시 캐릭터의 기준 Skeleton/BoneGroup 구조를 정의하는 데이터 에셋입니다.
- * 장비/코스메틱을 모두 제거했을 때 돌아갈 기본 파츠 메시도 함께 가집니다.
+ * 성별/체형처럼 기본 외형 축에 따라 VisualMesh에 적용할 통짜 바디 메시입니다.
+ * 방어구 파츠는 이 메시를 LeaderPose로 따라갑니다.
  */
 UCLASS(BlueprintType)
-class RETRIEVE_API URetrieveModularMeshLayout : public UPrimaryDataAsset
+class RETRIEVE_API URetrieveCharacterVisualLayout : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Modular Mesh")
-	TObjectPtr<USkeletalMesh> ReferenceMesh;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<USkeletalMesh> BaseVisualMesh = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Modular Mesh", meta = (TitleProperty = GroupName))
-	TArray<FRetrieveModularPartGroup> PartGroups;
+	/** VisualMesh 아래에 항상 spawn되는 기본 바디 모듈러 파츠. 방어구는 이 위에 얹히고
+	 *  필요 시 해당 PartSlotTag를 visibility suppression으로 가립니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<URetrieveModularPartSet> DefaultBodyPartSet = nullptr;
+};
 
-	UFUNCTION()
-	TArray<FName> GetReferenceBoneNames() const;
+USTRUCT(BlueprintType)
+struct FRetrieveVisualLayoutSelectionEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TObjectPtr<URetrieveCharacterVisualLayout> Layout = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	FGameplayTagContainer RequiredTags;
+};
+
+USTRUCT(BlueprintType)
+struct FRetrieveVisualLayoutSelectionSet
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (TitleProperty = Layout))
+	TArray<FRetrieveVisualLayoutSelectionEntry> LayoutRules;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TObjectPtr<URetrieveCharacterVisualLayout> DefaultLayout = nullptr;
+
+	URetrieveCharacterVisualLayout* SelectBestLayout(const FGameplayTagContainer& Tags) const;
 };
 
 /**
- * 장비/코스메틱 한 덩어리가 어떤 BoneName 파츠의 Mesh를 교체하는지 정의합니다.
- * 예: 상체 방어구, 하체 방어구, 헤드 프리셋, 기본 바디 세트.
+ * VisualMesh와 같은 Skeleton을 공유하며 LeaderPose로 따라갈 방어구/코스메틱 파츠입니다.
  */
+USTRUCT(BlueprintType)
+struct FRetrieveSkinnedPartMesh
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	FName PartName = NAME_None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (Categories = "Cosmetic.Part"))
+	FGameplayTag PartSlotTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TObjectPtr<USkeletalMesh> Mesh = nullptr;
+};
+
 UCLASS(BlueprintType)
 class RETRIEVE_API URetrieveModularPartSet : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Modular Mesh")
-	TObjectPtr<URetrieveModularMeshLayout> TargetLayout;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Modular Mesh", meta = (TitleProperty = PartName))
+	TArray<FRetrieveSkinnedPartMesh> SkinnedParts;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Modular Mesh")
-	FName TargetGroup;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Modular Mesh", meta = (TitleProperty = BoneName))
-	TArray<FRetrieveModularPartMesh> Parts;
-
-	UFUNCTION()
-	TArray<FName> GetReferenceBoneNames() const;
+	/** 이 세트로 spawn되는 모든 파츠에 적용할 morph 값. 예: { "masculineFeminine": 1.0 }.
+	 *  메시에 해당 morph가 없으면 무시됩니다. 활성 레이아웃의 바디 세트 morph는 방어구 파츠에도 적용됩니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Modular Mesh")
+	TMap<FName, float> MorphTargets;
 };
 
 /**
- * 태그 조건을 만족했을 때 적용할 ModularMeshLayout입니다.
- * 예: Gender.Female → Layout_Female, Gender.Male → Layout_Male
+ * 방어구/장비 하나의 파츠. DT row 안에 인라인으로 들어가며, soft 참조로 장착 시점에 로드합니다.
+ * VisualMesh와 같은 Skeleton을 공유하고 LeaderPose로 따라갑니다.
  */
 USTRUCT(BlueprintType)
-struct FRetrieveModularLayoutSelectionEntry
+struct FRetrieveArmorVisualPart
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	TObjectPtr<URetrieveModularMeshLayout> Layout = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (Categories = "Cosmetic.Part"))
+	FGameplayTag PartSlotTag;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	FGameplayTagContainer RequiredTags;
-};
-
-/**
- * 현재 태그 상태에 맞는 ModularMeshLayout을 선택합니다.
- * LayoutRules는 위에서 아래로 평가됩니다. 더 구체적인 조건을 앞에 배치하세요.
- */
-USTRUCT(BlueprintType)
-struct FRetrieveModularLayoutSelectionSet
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, meta = (TitleProperty = Layout))
-	TArray<FRetrieveModularLayoutSelectionEntry> LayoutRules;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	TObjectPtr<URetrieveModularMeshLayout> DefaultLayout = nullptr;
-
-	URetrieveModularMeshLayout* SelectBestLayout(const FGameplayTagContainer& Tags) const;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<USkeletalMesh> Mesh;
 };

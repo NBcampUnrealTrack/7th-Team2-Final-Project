@@ -13,6 +13,7 @@
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/RetrieveHeroComponent.h"
 #include "Components/WeaponComponent.h"
+#include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -53,20 +54,9 @@ bool UGA_SprintAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 		return false;
 	}
 
-	const FWeaponSprintAttack& SprintData = WeaponComp->GetWeaponDataRef().SprintAttack;
-	if (SprintData.Montage.IsNull())
+	if (WeaponComp->GetWeaponDataRef().AttackComboDefinition.IsNull())
 	{
 		return false;
-	}
-	
-	// RequiredSprintDuration 이상 스프린트를 유지해야 발동 가능
-	if (SprintData.RequiredSprintDuration > 0.f)
-	{
-		const URetrieveHeroComponent* Hero = URetrieveHeroComponent::FindHeroComponent(AvatarActor);
-		if (!Hero || Hero->GetTimeSprintingSeconds() < SprintData.RequiredSprintDuration)
-		{
-			return false;
-		}
 	}
 
 	return IsValid(DamageEffectClass);
@@ -75,6 +65,37 @@ bool UGA_SprintAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
+	AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+	CachedWeaponComponent = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
+	if (!IsValid(CachedWeaponComponent))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
+
+	// 콤보 정의에서 현재 원소의 Sprint variant 해결 (없으면 기본 variant)
+	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	const FWeaponSprintAttack* ResolvedSprint = ComboDefinition ? ComboDefinition->ResolveSprintVariant(ResolveCurrentElementTag()) : nullptr;
+	if (!ResolvedSprint)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+	CachedSprintData = *ResolvedSprint;
+
+	// RequiredSprintDuration 이상 스프린트 유지해야 발동 (커밋 전 검사 → 미달 시 코스트 미소모)
+	if (CachedSprintData.RequiredSprintDuration > 0.f)
+	{
+		const URetrieveHeroComponent* Hero = URetrieveHeroComponent::FindHeroComponent(AvatarActor);
+		if (!Hero || Hero->GetTimeSprintingSeconds() < CachedSprintData.RequiredSprintDuration)
+		{
+			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+			return;
+		}
+	}
 
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
@@ -88,17 +109,7 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
 	}
 
-	AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
-	CachedWeaponComponent = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
-	if (!IsValid(CachedWeaponComponent))
-	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
-	}
-
-	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
-
-	UAnimMontage* Montage = CachedWeaponData.SprintAttack.Montage.LoadSynchronous();
+	UAnimMontage* Montage = CachedSprintData.Montage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -120,7 +131,7 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	}
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, 1.f, CachedWeaponData.SprintAttack.SectionName, true);
+		this, NAME_None, Montage, 1.f, CachedSprintData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -176,7 +187,7 @@ void UGA_SprintAttack::ApplyHitDamage()
 		return;
 	}
 
-	const float DamageMul = CachedWeaponData.SprintAttack.DamageMultiplier;
+	const float DamageMul = CachedSprintData.DamageMultiplier;
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
@@ -249,7 +260,7 @@ void UGA_SprintAttack::ApplyHitDamage()
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
 			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-			if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedWeaponData.SprintAttack.HitReactType); ReactTag.IsValid())
+			if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedSprintData.HitReactType); ReactTag.IsValid())
 			{
 				PerHitSpec.Data->AddDynamicAssetTag(ReactTag);
 			}
@@ -259,7 +270,7 @@ void UGA_SprintAttack::ApplyHitDamage()
 
 			if (!bChargeBonusGranted)
 			{
-				const FGameplayTag BonusTag = CachedWeaponData.SprintAttack.ChargeBonusEventTag;
+				const FGameplayTag BonusTag = CachedSprintData.ChargeBonusEventTag;
 				if (BonusTag.IsValid())
 				{
 					FGameplayEventData BonusEvent;

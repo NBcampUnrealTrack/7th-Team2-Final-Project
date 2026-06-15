@@ -5,8 +5,10 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Player/RetrievePlayerState.h"
 
 URetrieveGameplayAbility::URetrieveGameplayAbility(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -15,6 +17,14 @@ URetrieveGameplayAbility::URetrieveGameplayAbility(const FObjectInitializer& Obj
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
 	ReplicationPolicy = EGameplayAbilityReplicationPolicy::ReplicateNo;
+}
+
+FGameplayTag URetrieveGameplayAbility::ResolveCurrentElementTag() const
+{
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const APawn* AvatarPawn = Cast<APawn>(AvatarActor);
+	const ARetrievePlayerState* RetrievePlayerState = AvatarPawn ? AvatarPawn->GetPlayerState<ARetrievePlayerState>() : nullptr;
+	return RetrievePlayerState ? RetrievePlayerState->GetCurrentElementTag() : FGameplayTag();
 }
 
 void URetrieveGameplayAbility::OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo,

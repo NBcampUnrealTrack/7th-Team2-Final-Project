@@ -48,6 +48,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability|Parry")
 	TSubclassOf<UGameplayEffect> ParriedStaggerEffect;
 
+	// 플레이어 현재 원소 모드 태그(PlayerState 조회). 없으면 EmptyTag.
+	FGameplayTag ResolveCurrentElementTag() const;
+
 private:
 	void TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& AbilitySpec) const;
 

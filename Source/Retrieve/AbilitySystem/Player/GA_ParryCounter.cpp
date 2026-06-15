@@ -10,6 +10,7 @@
 #include "Combat/RetrieveTargetingLibrary.h"
 #include "Components/CombatReactionComponent.h"
 #include "Components/WeaponComponent.h"
+#include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -50,7 +51,12 @@ bool UGA_ParryCounter::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 	{
 		return false;
 	}
-	
+
+	if (WeaponComp->GetWeaponDataRef().AttackComboDefinition.IsNull())
+	{
+		return false;
+	}
+
 	return IsValid(DamageEffectClass);
 }
 
@@ -73,13 +79,23 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	}
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
-	
+
+	// 콤보 정의에서 현재 원소의 ParryCounter variant 해결 (없으면 기본 variant)
+	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	const FParryCounterData* ResolvedParry = ComboDefinition ? ComboDefinition->ResolveParryVariant(ResolveCurrentElementTag()) : nullptr;
+	if (!ResolvedParry)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
+	CachedParryData = *ResolvedParry;
+
 	if (AActor* Target = ResolveCounterTarget())
 	{
 		ApplyCounterToTarget(Target);
 	}
 
-	UAnimMontage* Montage = CachedWeaponData.ParryCounter.CounterMontage.LoadSynchronous();
+	UAnimMontage* Montage = CachedParryData.CounterMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -184,10 +200,10 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 	FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), Ctx);
 	if (Spec.IsValid() && Spec.Data.IsValid())
 	{
-		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CachedWeaponData.ParryCounter.DamageMultiplier);
+		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CachedParryData.DamageMultiplier);
 		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedWeaponData.ParryCounter.HitReactType); ReactTag.IsValid())
+		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedParryData.HitReactType); ReactTag.IsValid())
 		{
 			Spec.Data->AddDynamicAssetTag(ReactTag);
 		}
@@ -198,7 +214,7 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 	ApplyGroggyToTarget(TargetActor, TargetASC);
 
 	UE_LOG(LogRetrieveCombat, Log, TEXT("[ParryCounter] Counter applied to %s (DamageMul=%.2f)"),
-		*GetNameSafe(TargetActor), CachedWeaponData.ParryCounter.DamageMultiplier);
+		*GetNameSafe(TargetActor), CachedParryData.DamageMultiplier);
 }
 
 void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC) const
@@ -218,8 +234,8 @@ void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemCo
 	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
 
 	TSubclassOf<UGameplayEffect> GroggyGE = bIsBoss
-		? CachedWeaponData.ParryCounter.BossGroggyEffect
-		: CachedWeaponData.ParryCounter.NormalGroggyEffect;
+		? CachedParryData.BossGroggyEffect
+		: CachedParryData.NormalGroggyEffect;
 
 	if (!GroggyGE)
 	{
@@ -236,7 +252,7 @@ void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemCo
 		return;
 	}
 
-	const float Duration = CachedWeaponData.ParryCounter.GroggyDuration;
+	const float Duration = CachedParryData.GroggyDuration;
 	if (GroggyDurationTag.IsValid() && Duration > 0.f)
 	{
 		GroggySpec.Data->SetSetByCallerMagnitude(GroggyDurationTag, Duration);

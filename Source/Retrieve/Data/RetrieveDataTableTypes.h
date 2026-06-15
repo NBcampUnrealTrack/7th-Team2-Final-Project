@@ -4,6 +4,7 @@
 #include "Engine/DataTable.h"
 
 #include "GameplayTagContainer.h"
+#include "Character/Cosmetics/RetrieveModularMeshTypes.h"
 #include "Combat/RetrieveCombatTypes.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "RetrieveDataTableTypes.generated.h"
@@ -528,6 +529,18 @@ struct RETRIEVE_API FRetrieveItemStack
 	int32 Quantity = 1;
 };
 
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveEquippedArmorEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Armor", meta = (Categories = "Equipment.Slot"))
+	FGameplayTag EquipmentSlotTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Armor")
+	FName ArmorItemId = NAME_None;
+};
+
 // SaveGame 복원용 인벤토리 스냅샷
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FRetrieveInventorySaveData
@@ -544,7 +557,13 @@ struct RETRIEVE_API FRetrieveInventorySaveData
 	TArray<FRetrieveItemStack> MaterialItems;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TArray<FRetrieveItemStack> ArmorItems;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	FName EquippedWeaponId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TArray<FRetrieveEquippedArmorEntry> EquippedArmorSlots;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	TMap<int32, FName> ConsumableSlotItemIds;
@@ -621,6 +640,9 @@ USTRUCT(BlueprintType)
 struct RETRIEVE_API FWeaponSprintAttack
 {
 	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Tags")
+	FGameplayTag ElementTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Montage")
 	TSoftObjectPtr<UAnimMontage> Montage;
@@ -665,6 +687,9 @@ struct RETRIEVE_API FWeaponJumpAttack
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Tags")
+	FGameplayTag ElementTag;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Montage")
 	TSoftObjectPtr<UAnimMontage> Montage;
 
@@ -697,6 +722,9 @@ struct RETRIEVE_API FParryCounterData
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Tags")
+	FGameplayTag ElementTag;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Motion")
 	TSoftObjectPtr<UAnimMontage> CounterMontage;
 
@@ -804,15 +832,6 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FWeaponSprintAttack SprintAttack;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FWeaponJumpAttack JumpAttack;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FParryCounterData ParryCounter;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;
 
@@ -826,6 +845,43 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	TArray<FWeaponSkillPreview> SkillPreviews;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|UI", meta = (MultiLine = true))
+	FText ShortDescription;
+};
+
+// 방어구 데이터. 복제는 RowName을 사용하고, 외형은 VisualData를 로컬에서 재구성한다.
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveArmorDataRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor")
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor", meta = (Categories = "Item"))
+	FGameplayTag ItemTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor", meta = (Categories = "Equipment.Slot"))
+	FGameplayTag EquipmentSlotTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor")
+	float Defense = 0.0f;
+
+	/** 이 방어구가 장착하는 파츠들 (슬롯태그 → 메시). VisualMesh 아래에 spawn되어 LeaderPose로 따라간다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Visual", meta = (TitleProperty = PartSlotTag))
+	TArray<FRetrieveArmorVisualPart> VisualParts;
+
+	/** 이 방어구가 추가로 가릴 기본 바디 PartSlot. VisualParts가 직접 채우는 슬롯은 자동으로 가려지므로
+	 *  여기에는 다른 슬롯만 적는다. (투구 → Hair / Attachment.Face) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Visual", meta = (Categories = "Cosmetic.Part"))
+	FGameplayTagContainer SuppressedDefaultPartSlots;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Gameplay", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
+	FSoftObjectPath ArmorAbilitySet;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|UI", meta = (MultiLine = true))
 	FText ShortDescription;
 };
 

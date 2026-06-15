@@ -50,6 +50,10 @@ private:
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
 
+	// 발동 시 해결된 ParryCounter variant 값 복사본 (원소별 → 없으면 기본)
+	UPROPERTY(Transient)
+	FParryCounterData CachedParryData;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
 

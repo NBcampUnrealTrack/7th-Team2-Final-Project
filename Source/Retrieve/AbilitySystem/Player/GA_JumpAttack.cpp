@@ -15,6 +15,7 @@
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
 #include "Components/WeaponComponent.h"
+#include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -61,7 +62,7 @@ bool UGA_JumpAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		return false;
 	}
 
-	if (WeaponComp->GetWeaponDataRef().JumpAttack.Montage.IsNull())
+	if (WeaponComp->GetWeaponDataRef().AttackComboDefinition.IsNull())
 	{
 		return false;
 	}
@@ -89,13 +90,23 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
-	UAnimMontage* Montage = CachedWeaponData.JumpAttack.Montage.LoadSynchronous();
+	// 콤보 정의에서 현재 원소의 Jump variant 해결 (없으면 기본 variant)
+	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	const FWeaponJumpAttack* ResolvedJump = ComboDefinition ? ComboDefinition->ResolveJumpVariant(ResolveCurrentElementTag()) : nullptr;
+	if (!ResolvedJump)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+	CachedJumpData = *ResolvedJump;
+
+	UAnimMontage* Montage = CachedJumpData.Montage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	
+
 	ResolveHeightTier();
 
 	ACharacter* Character = Cast<ACharacter>(AvatarActor);
@@ -110,10 +121,10 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	{
 		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
 		{
-			if (CachedWeaponData.JumpAttack.DiveGravityScale > 0.f)
+			if (CachedJumpData.DiveGravityScale > 0.f)
 			{
 				SavedGravityScale = MoveComp->GravityScale;
-				MoveComp->GravityScale = CachedWeaponData.JumpAttack.DiveGravityScale;
+				MoveComp->GravityScale = CachedJumpData.DiveGravityScale;
 				bGravityModified = true;
 			}
 		}
@@ -125,7 +136,7 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		BoundLandedCharacter = Character;
 	}
 
-	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, CachedWeaponData.JumpAttack.SectionName, true);
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, CachedJumpData.SectionName, true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -225,7 +236,7 @@ void UGA_JumpAttack::ApplyLandingAoe()
 
 		if (!bChargeBonusGranted)
 		{
-			const FGameplayTag BonusTag = CachedWeaponData.JumpAttack.ChargeBonusEventTag;
+			const FGameplayTag BonusTag = CachedJumpData.ChargeBonusEventTag;
 			if (BonusTag.IsValid())
 			{
 				FGameplayEventData BonusEvent;
@@ -241,7 +252,7 @@ void UGA_JumpAttack::ApplyLandingAoe()
 
 void UGA_JumpAttack::ResolveHeightTier()
 {
-	const FWeaponJumpAttack& Data = CachedWeaponData.JumpAttack;
+	const FWeaponJumpAttack& Data = CachedJumpData;
 	
 	ResolvedDamageMultiplier = Data.DamageMultiplier;
 	ResolvedHitReactType = Data.HitReactType;

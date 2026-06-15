@@ -11,7 +11,6 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "MotionWarpingComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
@@ -21,7 +20,6 @@
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
-#include "Player/RetrievePlayerState.h"
 
 UGA_Attack::UGA_Attack()
 {
@@ -123,7 +121,7 @@ bool UGA_Attack::ResolveAttackComboVariant()
 
 	const FGameplayTag ElementTag = ResolveCurrentElementTag();
 	CachedElementTag = ElementTag;
-	const FAttackComboVariant* Variant = ComboDefinition->ResolveVariant(ElementTag);
+	const FAttackComboVariant* Variant = ComboDefinition->ResolveComboVariant(ElementTag);
 	if (!Variant)
 	{
 		return false;
@@ -137,14 +135,6 @@ bool UGA_Attack::ResolveAttackComboVariant()
 	
 	CachedComboSteps = Variant->ComboSteps;
 	return !CachedComboSteps.IsEmpty();
-}
-
-FGameplayTag UGA_Attack::ResolveCurrentElementTag() const
-{
-	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	const APawn* AvatarPawn = Cast<APawn>(AvatarActor);
-	const ARetrievePlayerState* RetrievePlayerState = AvatarPawn ? AvatarPawn->GetPlayerState<ARetrievePlayerState>() : nullptr;
-	return RetrievePlayerState ? RetrievePlayerState->GetCurrentElementTag() : FGameplayTag();
 }
 
 void UGA_Attack::StartComboStep(int32 StepIndex)
