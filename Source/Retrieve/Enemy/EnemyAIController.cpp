@@ -2,6 +2,7 @@
 
 #include "Components/StateTreeAIComponent.h"
 #include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISenseConfig_Damage.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "GenericTeamAgentInterface.h"
 
@@ -14,6 +15,7 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 	SetPerceptionComponent(*AIPerceptionComp);
 	
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
+	DamageConfig = CreateDefaultSubobject<UAISenseConfig_Damage>(TEXT("DamageConfig"));
 	
 	SetGenericTeamId(FGenericTeamId(static_cast<uint8>(Team)));
 	
@@ -37,12 +39,13 @@ void AEnemyAIController::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	
-	if (!SightConfig || !AIPerceptionComp)
+	if (!SightConfig || !DamageConfig || !AIPerceptionComp)
 	{
 		return;
 	}
 	
 	InitSightConfig();
+	InitDamageConfig();
 }
 
 void AEnemyAIController::ConfigureStateTree(UStateTree* InStateTree) const
@@ -119,6 +122,14 @@ void AEnemyAIController::InitSightConfig()
 
 	AIPerceptionComp->ConfigureSense(*SightConfig);
 	AIPerceptionComp->SetDominantSense(SightConfig->GetSenseImplementation());
+	AIPerceptionComp->RequestStimuliListenerUpdate();
+}
+
+void AEnemyAIController::InitDamageConfig()
+{
+	DamageConfig->SetMaxAge(5.0f);
+
+	AIPerceptionComp->ConfigureSense(*DamageConfig);
 	AIPerceptionComp->RequestStimuliListenerUpdate();
 }
 

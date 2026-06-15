@@ -8,6 +8,7 @@
 
 class UStateTreeAIComponent;
 class UAIPerceptionComponent;
+class UAISenseConfig_Damage;
 class UAISenseConfig_Sight;
 class UStateTree;
 
@@ -35,6 +36,7 @@ protected:
 
 private:
 	void InitSightConfig();
+	void InitDamageConfig();
 	
 	void TryStartStateTree();
 	
@@ -48,6 +50,9 @@ protected:
 	// SightSense
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")
 	TObjectPtr<UAISenseConfig_Sight> SightConfig;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")
+	TObjectPtr<UAISenseConfig_Damage> DamageConfig;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
 	float SightRadius = 1500.f; // 감지 반경

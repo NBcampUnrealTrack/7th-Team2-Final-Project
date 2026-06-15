@@ -47,11 +47,6 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 		return false;
 	}
 	
-	UE_LOG(LogRetrieveCombat, Display,
-		TEXT("[%s] RequestPatternByPriority Target=%s"),
-		*GetOwner()->GetName(),
-		*GetNameSafe(Target));
-	
 	FName BestPatternRowName = NAME_None;
 	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RequiredPatternType, &BestPatternRowName);
 	if (!BestPattern)
@@ -102,15 +97,6 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 	EventData.Instigator = GetOwner();
 	
 	const int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
-	
-	UE_LOG(LogRetrieveCombat, Display,
-		TEXT("[%s] SpecialAttack Event TriggeredCount=%d Row=%s EventTag=%s Montage=%s Target=%s"),
-		*GetOwner()->GetName(),
-		TriggeredCount,
-		*BestPatternRowName.ToString(),
-		*AbilityEventTag.ToString(),
-		*GetNameSafe(EventData.OptionalObject.Get()),
-		*GetNameSafe(Target));
 	
 	if (TriggeredCount <= 0)
 	{
@@ -401,14 +387,16 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 	FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(
 		DamageEffectClass, 1.f, Context);
 
+	const FMonsterPatternRow* ActivePatternRow = nullptr;
 	if (Spec.IsValid())
 	{
 		if (PatternTable && !ActivePatternRowName.IsNone())
 		{
-			if (const FMonsterPatternRow* ReactRow =
-				PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName, TEXT("OnHitboxOverlap_HitReact")))
+			ActivePatternRow = PatternTable->FindRow<FMonsterPatternRow>(
+				ActivePatternRowName, TEXT("OnHitboxOverlap_HitReact"));
+			if (ActivePatternRow)
 			{
-				if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactRow->HitReactType); ReactTag.IsValid())
+				if (const FGameplayTag ReactTag = HitReactTypeToTag(ActivePatternRow->HitReactType); ReactTag.IsValid())
 				{
 					Spec.Data->AddDynamicAssetTag(ReactTag);
 				}
@@ -417,8 +405,19 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 
 		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 	}
+
+	if (ActivePatternRow && ActivePatternRow->LaunchKnockbackConfig.bUseLaunchKnockback)
+	{
+		if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
+		{
+			const FMonsterLaunchKnockbackConfig& KnockbackConfig = ActivePatternRow->LaunchKnockbackConfig;
+			const FVector Direction = (OtherActor->GetActorLocation() - GetOwner()->GetActorLocation()).GetSafeNormal();
+			const FVector LaunchVelocity = Direction * KnockbackConfig.KnockbackStrength
+				+ FVector(0.f, 0.f, KnockbackConfig.KnockbackUpwardStrength);
+			HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
+		}
+	}
 	
-	UE_LOG(LogDamage, Display, TEXT("[%s] Hit "), *GetName())
 }
 
 const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName) const
