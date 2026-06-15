@@ -152,6 +152,11 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 		return RawDamage;
 	}
 
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Boss_PhaseTransition))
+	{
+		return 0.f;
+	}
+
 	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
 
 	// 1. PARRY
