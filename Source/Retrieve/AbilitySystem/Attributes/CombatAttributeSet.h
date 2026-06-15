@@ -37,6 +37,10 @@ public:
 	FGameplayAttributeData AttackPower;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, AttackPower)
 
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Defense)
+	FGameplayAttributeData Defense;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, Defense)
+
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MoveSpeed)
 	FGameplayAttributeData MoveSpeed;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MoveSpeed)
@@ -66,6 +70,7 @@ private:
 	UFUNCTION() void OnRep_Health(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_AttackPower(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_Defense(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MoveSpeed(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_IncomingDamageMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_GuardDamageReduction(const FGameplayAttributeData& OldValue);

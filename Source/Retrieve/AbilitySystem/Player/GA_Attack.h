@@ -38,8 +38,6 @@ private:
 	AActor* ResolveAttackWarpTarget() const;
 	// 현재 타겟 기준 WarpTarget 등록. 타겟 없으면 RemoveWarpTarget(루트모션 유지)
 	void RegisterAttackWarpTarget();
-
-	FGameplayTag ResolveCurrentElementTag() const;
 	
 	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 

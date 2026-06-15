@@ -12,6 +12,7 @@ class UWeaponComponent;
 class UBorder;
 class UButton;
 class UHorizontalBox;
+class UImage;
 class UScrollBox;
 class UTextBlock;
 class UUniformGridPanel;
@@ -31,6 +32,8 @@ enum class EInventorySortMode : uint8
 	TypeDesc        UMETA(DisplayName = "타입 내림차순"),
 	AttackPowerAsc  UMETA(DisplayName = "공격력 오름차순"),  // 무기 탭 전용
 	AttackPowerDesc UMETA(DisplayName = "공격력 내림차순"), // 무기 탭 전용
+	DefenseAsc      UMETA(DisplayName = "방어력 오름차순"),  // 방어구 탭 전용
+	DefenseDesc     UMETA(DisplayName = "방어력 내림차순"), // 방어구 탭 전용
 };
 
 UCLASS()
@@ -68,6 +71,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
 	FGameplayTag MaterialTabCategoryTag;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Data")
+	TObjectPtr<UDataTable> ArmorDataTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Tabs", meta = (Categories = "Item"))
+	FGameplayTag ArmorTabCategoryTag;
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Events")
 	FRetrieveInventoryWidgetSimpleSignature OnInventoryListChanged;
 
@@ -76,6 +85,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Events")
 	FRetrieveInventoryWidgetSimpleSignature OnEquipmentChanged;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Input", meta = (ClampMin = "0.0"))
+	float SelectedItemActivationGuardSeconds = 0.25f;
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void InitializeInventoryPanel(UInventoryComponent* InInventoryComponent, UWeaponComponent* InWeaponComponent);
@@ -90,10 +102,19 @@ public:
 	bool ActivateSelectedItem();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	bool SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool EquipSelectedWeapon();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UnequipCurrentWeapon();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	bool EquipSelectedArmor();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	bool UnequipSelectedArmor();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UseSelectedConsumable();
@@ -142,6 +163,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
 	ESlateVisibility GetSortAttackPowerButtonVisibility() const;
 
+	/** 방어력순 정렬을 토글한다 (None → DefenseAsc → DefenseDesc → None) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Sort")
+	void CycleSortByDefense();
+
+	/** Button_SortDefense VisibilityDelegate 바인딩용 — 방어구 탭일 때만 Visible */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Sort")
+	ESlateVisibility GetSortDefenseButtonVisibility() const;
+
 	// ── 최종 스탯 조회 ────────────────────────────────────────────────────
 	/** 캐릭터 기본 공격력 (무기 보정 전 Base 값) */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
@@ -154,6 +183,15 @@ public:
 	/** ASC 어트리뷰트 기준 최종 공격력 (Base + 무기 GE 포함 모든 Modifier 적용 후) */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
 	float GetTotalAttackPower() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetCharacterBaseDefense() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetArmorBonusDefense() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetTotalDefense() const;
 
 	/** 인벤토리 스탯 패널용 포맷 텍스트: "기본 ATK: N\n무기 보너스: +M\n최종 ATK: P" */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
@@ -183,6 +221,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool IsWeaponItemEquipped(FName WeaponItemId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool IsArmorItemEquipped(FName ArmorItemId) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool CanEquipSelectedWeapon() const;
@@ -219,6 +260,36 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool GetSelectedMaterialData(FRetrieveMaterialItemRow& OutMaterialData) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool GetSelectedArmorData(FRetrieveArmorDataRow& OutArmorData) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool IsSelectedArmorEquipped() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool CanEquipSelectedArmor() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool CanUnequipSelectedArmor() const;
+
+	/** 탭에 무관하게 현재 선택 아이템을 장착할 수 있으면 true — Button_Equip 가시성 바인딩용 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool CanEquipSelected() const;
+
+	/** 탭에 무관하게 현재 선택/장착 상태를 해제할 수 있으면 true — Button_Unequip 가시성 바인딩용 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool CanUnequipSelected() const;
+
+	/** 프리뷰 슬롯 클릭 시 해당 슬롯의 장착 아이템을 인벤토리에서 선택 상태로 만든다 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	void SelectEquipmentSlot(FGameplayTag EquipmentSlotTag);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	FName GetEquippedArmorIdBySlot(FGameplayTag EquipmentSlotTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	TArray<FRetrieveEquippedArmorEntry> GetAllEquippedArmorSlots() const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool GetItemIconData(FName ItemId, FRetrieveItemIconRow& OutIconData) const;
@@ -281,6 +352,36 @@ protected:
 
 	UFUNCTION()
 	void HandleMaterialTabClicked();
+
+	UFUNCTION()
+	void HandleArmorTabClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	void HandleEquipClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
+	void HandleUnequipClicked();
+
+	UFUNCTION()
+	void HandleEquippedArmorChanged(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+
+	void RefreshSlotButtonTooltips();
+	void RefreshSlotIcons();
+
+	UFUNCTION()
+	void HandleSlotHeadClicked();
+	UFUNCTION()
+	void HandleSlotWeaponClicked();
+	UFUNCTION()
+	void HandleSlotChestClicked();
+	UFUNCTION()
+	void HandleSlotHandsLClicked();
+	UFUNCTION()
+	void HandleSlotHandsRClicked();
+	UFUNCTION()
+	void HandleSlotLegsClicked();
+	UFUNCTION()
+	void HandleSlotFeetClicked();
 
 	// 컴포넌트 참조
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory")
@@ -369,6 +470,63 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_SortAttackPower;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_TabArmor;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Equip;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Unequip;
+
+	/** 방어구 탭일 때만 표시되는 방어력 정렬 버튼 */
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SortDefense;
+
+	// 장착 프리뷰 오버레이 슬롯 버튼
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotHead;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotWeapon;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotChest;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotHands_L;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotHands_R;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotLegs;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SlotFeet;
+
+	// 장착 프리뷰 슬롯 아이콘 이미지
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Head;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Weapon;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Chest;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Hands_L;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Hands_R;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Legs;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SlotIcon_Feet;
+
 	// 런타임 상태
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory", meta = (Categories = "Item"))
 	FGameplayTag CurrentCategoryTag;
@@ -388,6 +546,7 @@ protected:
 
 	// 무기 교체 확인 팝업을 우회할 때만 true. TGuardValue로 사용
 	bool bBypassWeaponSwapConfirm = false;
+	bool bBypassSelectedItemActivationGuard = false;
 	FVector2D LastInventoryGridAreaSize = FVector2D::ZeroVector;
 
 	// 내부 헬퍼
@@ -401,6 +560,10 @@ protected:
 	bool IsWeaponCategory(FGameplayTag ItemCategoryTag) const;
 	bool IsConsumableCategory(FGameplayTag ItemCategoryTag) const;
 	bool IsMaterialCategory(FGameplayTag ItemCategoryTag) const;
+	bool IsArmorCategory(FGameplayTag ItemCategoryTag) const;
+	void RefreshSelectedArmorDetails();
+	void UpdateEquipActionButtons();
+	float GetItemDefensePower(const FRetrieveItemStack& Item) const;
 	bool ShouldConfirmWeaponSwap() const;
 	void ShowWeaponSwapConfirm(bool bShow);
 	void UpdateQuickSlotPanel();
@@ -415,6 +578,7 @@ protected:
 	void ClearWidgetTooltipRecursive(UWidget* Widget) const;
 	bool ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const;
 	UWidget* CreateInventorySlotTooltip(const FRetrieveItemStack& Item);
+	UWidget* BuildEquipmentSlotTooltipWidget(const FRetrieveItemStack& Item) const;
 	UWidget* CreateInventoryCompareTooltip(
 		const FRetrieveWeaponDataRow& CurrentWeapon,
 		const FRetrieveWeaponDataRow& HoveredWeapon);
@@ -430,6 +594,8 @@ protected:
 	FString BuildWeaponComparisonText() const;
 	FString FormatWeaponSummary(const FRetrieveWeaponDataRow& WeaponData) const;
 	FString FormatWeaponSkillList(const FRetrieveWeaponDataRow& WeaponData) const;
+	bool CanProcessSelectedItemActivation();
+	void QueueSelectedWeaponEquipRetry(FName WeaponItemId);
 	static FString GetGameplayTagLeaf(FGameplayTag Tag);
 
 	// 정렬 헬퍼
@@ -444,6 +610,9 @@ protected:
 	TArray<bool> AppliedTooltipCompareFlags;
 	bool bInventoryTooltipsDirty = true;
 	FName AppliedTooltipEquippedWeaponId = NAME_None;
+	double LastSelectedItemActivationTime = -1.0;
+	FName LastActivatedItemId = NAME_None;
+	FGameplayTag LastActivatedItemCategoryTag;
 
 	URetrieveAbilitySystemComponent* GetOwnerASC() const;
 };

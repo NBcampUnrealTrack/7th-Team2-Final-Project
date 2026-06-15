@@ -3,6 +3,7 @@
 #include "MotionWarpingComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Components/ArmorComponent.h"
 #include "Components/CombatReactionComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/RetrieveHealthComponent.h"
@@ -58,6 +59,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	CombatReactionComponent = CreateDefaultSubobject<UCombatReactionComponent>(TEXT("CombatReactionComponent"));
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
+	ArmorComponent = CreateDefaultSubobject<UArmorComponent>(TEXT("ArmorComponent"));
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
@@ -110,6 +112,12 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	if (PawnCosmeticComponent)
 	{
 		PawnCosmeticComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	// 투구 장착 테스트용 코드 (suppression 검증) — cosmetic 초기화 이후에 호출해야 한다.
+	if (HasAuthority() && ArmorComponent)
+	{
+		ArmorComponent->EquipArmor(RetrieveGameplayTags::Equipment_Slot_Head, TEXT("Helmet_Test"));
 	}
 
 	if (ElementGaugeComponent)

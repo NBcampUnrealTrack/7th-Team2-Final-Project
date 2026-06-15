@@ -210,13 +210,18 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	}
 
 	// 몬스터 이름·등급을 체력바 위젯에 연동
-	// MonsterDisplayName이 에디터에서 이미 설정된 경우 그 값을 유지하고, 아니면 DataRow 키를 표시
+	// DisplayName: 에디터 설정값 우선, 없으면 DataRow 키 사용
+	// TypeTag:     에디터에서 컴포넌트에 직접 설정한 값 우선, 없으면 DataTable 값 사용
 	if (NormalHealthBarComponent)
 	{
 		const FText DisplayName = NormalHealthBarComponent->GetMonsterDisplayName().IsEmpty()
 			? FText::FromName(MonsterDataRowName)
 			: NormalHealthBarComponent->GetMonsterDisplayName();
-		NormalHealthBarComponent->SetMonsterIdentity(DisplayName, Row->MonsterType);
+
+		const FGameplayTag EditorTag = NormalHealthBarComponent->GetMonsterTypeTag();
+		const FGameplayTag TypeTag = EditorTag.IsValid() ? EditorTag : Row->MonsterType;
+
+		NormalHealthBarComponent->SetMonsterIdentity(DisplayName, TypeTag);
 	}
 }
 

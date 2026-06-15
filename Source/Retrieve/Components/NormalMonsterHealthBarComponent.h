@@ -29,7 +29,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Monster HP Bar")
 	FText GetMonsterDisplayName() const { return MonsterDisplayName; }
 
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Monster HP Bar")
+	FGameplayTag GetMonsterTypeTag() const { return MonsterTypeTag; }
+
 protected:
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -76,6 +80,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URetrieveHealthComponent> BoundHealthComponent;
+
+	// 생성자의 FClassFinder로 찾은 WBP 클래스 — BeginPlay에서 InitWidget() 전에 강제 적용
+	UPROPERTY()
+	TSubclassOf<UUserWidget> WBPWidgetClass;
 
 	FTimerHandle HideTimerHandle;
 	float LastObservedHealth = -1.f;

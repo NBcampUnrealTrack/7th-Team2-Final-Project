@@ -51,6 +51,7 @@ UNormalMonsterHealthBarComponent::UNormalMonsterHealthBarComponent()
 		TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar"));
 	if (HealthBarWBP.Succeeded())
 	{
+		WBPWidgetClass = HealthBarWBP.Class;
 		SetWidgetClass(HealthBarWBP.Class);
 	}
 	else
@@ -59,9 +60,37 @@ UNormalMonsterHealthBarComponent::UNormalMonsterHealthBarComponent()
 	}
 }
 
+void UNormalMonsterHealthBarComponent::OnRegister()
+{
+	// Blueprint 직렬화 이후 Widget Class가 C++ 기본 클래스로 덮어쓰여진 경우 WBP로 강제 복원.
+	// OnRegister에서 처리해야 InitWidget() 호출 시점과 무관하게 올바른 클래스가 사용됨.
+	if (!GetWidgetClass() || GetWidgetClass() == URetrieveNormalMonsterHealthBarWidget::StaticClass())
+	{
+		UClass* TargetClass = WBPWidgetClass;
+		if (!TargetClass)
+		{
+			// FClassFinder 실패 시 직접 로드 (이미 메모리에 있으면 즉시 반환)
+			TargetClass = LoadClass<UUserWidget>(nullptr,
+				TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar.WBP_NormalMonsterHealthBar_C"));
+		}
+		if (TargetClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MonsterHPBar] %s: Widget Class를 %s로 강제 복원"),
+				*GetNameSafe(GetOwner()), *TargetClass->GetName());
+			SetWidgetClass(TargetClass);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[MonsterHPBar] WBP_NormalMonsterHealthBar 클래스를 찾을 수 없음. 경로 확인 필요."));
+		}
+	}
+
+	Super::OnRegister();
+}
+
 void UNormalMonsterHealthBarComponent::BeginPlay()
 {
-	Super::BeginPlay();
+	Super::BeginPlay();  // UWidgetComponent::BeginPlay() 내부에서 InitWidget() 호출
 
 	if (GetNetMode() == NM_DedicatedServer || !bHealthBarEnabled)
 	{
@@ -183,16 +212,13 @@ void UNormalMonsterHealthBarComponent::BindToHealthComponent()
 	LastObservedHealth = BoundHealthComponent->GetHealth();
 	LastObservedMaxHealth = BoundHealthComponent->GetMaxHealth();
 
-	// 이름 / 등급 정보를 위젯에 초기 전달 (MonsterDisplayName이 비어있지 않을 때만)
-	if (!MonsterDisplayName.IsEmpty())
+	// 이름 / 등급 정보를 위젯에 초기 전달 — DisplayName이 비어있어도 MonsterTypeTag가 설정된 경우 항상 적용
+	if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
+		Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
 	{
-		if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
-			Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
-		{
-			HealthBarWidget->SetMonsterInfo(
-				MonsterDisplayName, MonsterTypeTag,
-				LastObservedHealth, LastObservedMaxHealth);
-		}
+		HealthBarWidget->SetMonsterInfo(
+			MonsterDisplayName, MonsterTypeTag,
+			LastObservedHealth, LastObservedMaxHealth);
 	}
 }
 

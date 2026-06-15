@@ -8,6 +8,7 @@
 
 class USwimDetectionComponent;
 class URetrievePawnCosmeticComponent;
+class UArmorComponent;
 class UCameraComponent;
 class UInventoryComponent;
 class URetrieveHeroComponent;
@@ -34,6 +35,9 @@ public:
 	{
 		return FGenericTeamId(static_cast<uint8>(Team));
 	}
+
+	USkeletalMeshComponent* GetVisualMesh() const { return VisualMesh; }
+
 protected:
 	virtual void InitializeAbilitySystem() override;
 	virtual void UnPossessed() override;
@@ -55,6 +59,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UWeaponComponent> WeaponComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UArmorComponent> ArmorComponent;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementGaugeComponent> ElementGaugeComponent;
@@ -75,7 +82,7 @@ protected:
 	TObjectPtr<USwimDetectionComponent> SwimDetectionComponent;
 
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
-	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Retrieve|Components")
 	TObjectPtr<USkeletalMeshComponent> VisualMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")

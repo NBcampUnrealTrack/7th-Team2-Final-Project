@@ -18,11 +18,27 @@ void URetrieveNormalMonsterHealthBarWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
+	// BindWidgetOptional 실패 시 이름으로 직접 검색.
+	// WidgetTree->RootWidget을 교체하지 않음 — Canvas Panel(FRA_Frame 등)을 파괴하는 것을 방지.
 	if (!HPBar && WidgetTree)
 	{
-		HPBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HPBar"));
-		WidgetTree->RootWidget = HPBar;
+		HPBar = WidgetTree->FindWidget<UProgressBar>(TEXT("HPBar"));
 	}
+	if (!FRA_Frame && WidgetTree)
+	{
+		FRA_Frame = Cast<UUserWidget>(WidgetTree->FindWidget(TEXT("FRA_Frame")));
+	}
+	if (!FRA_Vignette && WidgetTree)
+	{
+		FRA_Vignette = Cast<UUserWidget>(WidgetTree->FindWidget(TEXT("FRA_Vignette")));
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[MonsterHPBar] NativeOnInitialized: HPBar=%s, FRA_Frame=%s, FRA_Vignette=%s, WidgetClass=%s"),
+		HPBar ? TEXT("OK") : TEXT("NULL"),
+		FRA_Frame ? TEXT("OK") : TEXT("NULL"),
+		FRA_Vignette ? TEXT("OK") : TEXT("NULL"),
+		GetClass() ? *GetClass()->GetName() : TEXT("NULL"));
 
 	if (HPBar)
 	{
@@ -53,8 +69,9 @@ void URetrieveNormalMonsterHealthBarWidget::SetMonsterInfo(
 	if (Text_MonsterName)
 	{
 		Text_MonsterName->SetText(InName);
-		ApplyMonsterTypeColor(InTypeTag);
 	}
+	// Text_MonsterName 바인딩 여부와 무관하게 항상 호출 — 프레임 visibility도 여기서 처리됨
+	ApplyMonsterTypeColor(InTypeTag);
 
 	SetHPValue(InCurrentHP, InMaxHP);
 
@@ -104,6 +121,12 @@ void URetrieveNormalMonsterHealthBarWidget::ApplyMonsterTypeColor(FGameplayTag I
 	const ESlateVisibility FrameVis = bIsEpic
 		? ESlateVisibility::SelfHitTestInvisible
 		: ESlateVisibility::Collapsed;
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[MonsterHPBar] ApplyMonsterTypeColor: Tag=%s, bIsEpic=%d, FRA_Frame=%s, FRA_Vignette=%s"),
+		*InTypeTag.ToString(), bIsEpic ? 1 : 0,
+		FRA_Frame ? TEXT("OK") : TEXT("NULL"),
+		FRA_Vignette ? TEXT("OK") : TEXT("NULL"));
 
 	if (FRA_Frame)    FRA_Frame->SetVisibility(FrameVis);
 	if (FRA_Vignette) FRA_Vignette->SetVisibility(FrameVis);

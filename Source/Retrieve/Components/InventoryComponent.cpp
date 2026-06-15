@@ -4,6 +4,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Animation/AnimMontage.h"
+#include "Components/ArmorComponent.h"
 #include "Components/ElementGaugeComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/WeaponComponent.h"
@@ -59,7 +60,9 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION(UInventoryComponent, WeaponItems,              COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableItems,           COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UInventoryComponent, MaterialItems,             COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, ArmorItems,                COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UInventoryComponent, EquippedWeaponId,          COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, EquippedArmorSlots,        COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot4ItemId,     COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot5ItemId,     COND_OwnerOnly);
 	// REPNOTIFY_Always: 같은 아이템을 연속 픽업해도 OnRep가 매번 발동되도록
@@ -90,9 +93,10 @@ bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, in
 		return false;
 	}
 
-	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon)
+		|| ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor))
 	{
-		// 무기는 같은 ItemId 중복 적재 없이 성공 처리
+		// 무기/방어구는 같은 ItemId 중복 적재 없이 성공 처리
 		if (FindStack(ItemId))
 		{
 			return true;
@@ -102,7 +106,7 @@ bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, in
 		NewStack.ItemId = ItemId;
 		NewStack.ItemCategoryTag = ItemCategoryTag;
 		NewStack.Quantity = 1;
-		UE_LOG(LogTemp, Log, TEXT("인벤토리 무기 추가: ItemId=%s Quantity=1"), *ItemId.ToString());
+		UE_LOG(LogTemp, Log, TEXT("인벤토리 장비 추가: ItemId=%s Quantity=1"), *ItemId.ToString());
 		OnItemAdded.Broadcast(ItemId, ItemCategoryTag, 1);
 		OnInventoryChanged.Broadcast();
 		// 클라이언트 토스트 알림 — OnRep_LastAddedItem → OnItemAdded.Broadcast (클라이언트측)
@@ -179,6 +183,27 @@ bool UInventoryComponent::RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag,
 			}
 			EquippedWeaponId = NAME_None;
 			OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
+		}
+
+		// 장착 중인 방어구를 제거하면 ArmorComponent의 공개 장착 상태도 같이 정리
+		if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor) && !HasItem(ItemId))
+		{
+			for (int32 SlotIndex = EquippedArmorSlots.Num() - 1; SlotIndex >= 0; --SlotIndex)
+			{
+				if (EquippedArmorSlots[SlotIndex].ArmorItemId != ItemId)
+				{
+					continue;
+				}
+
+				const FGameplayTag EquipmentSlotTag = EquippedArmorSlots[SlotIndex].EquipmentSlotTag;
+				if (UArmorComponent* ArmorComp = GetArmorComponent())
+				{
+					ArmorComp->UnequipArmor(EquipmentSlotTag);
+				}
+
+				EquippedArmorSlots.RemoveAt(SlotIndex);
+				OnEquippedArmorChanged.Broadcast(EquipmentSlotTag, NAME_None);
+			}
 		}
 
 		// 수량이 0이 된 소모품은 HUD 슬롯에서 제거
@@ -307,6 +332,94 @@ bool UInventoryComponent::RequestUnequipWeapon()
 
 	EquippedWeaponId = NAME_None;
 	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId)
+{
+	UE_LOG(LogTemp, Log, TEXT("[RequestEquipArmor] called — Slot=%s ItemId=%s HasAuthority=%d"),
+		*EquipmentSlotTag.ToString(), *ArmorItemId.ToString(), HasAuthorityToModify() ? 1 : 0);
+
+	if (!HasAuthorityToModify())
+	{
+		if (CanChangeEquipment() && EquipmentSlotTag.IsValid() && HasItem(ArmorItemId))
+		{
+			ServerRequestEquipArmor(EquipmentSlotTag, ArmorItemId);
+			return true;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[RequestEquipArmor] no authority — CanChangeEquip=%d HasItem=%d"),
+			CanChangeEquipment() ? 1 : 0, HasItem(ArmorItemId) ? 1 : 0);
+		return false;
+	}
+
+	if (!CanChangeEquipment() || !EquipmentSlotTag.IsValid() || !HasItem(ArmorItemId))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[RequestEquipArmor] FAIL — CanChangeEquip=%d SlotValid=%d HasItem=%d"),
+			CanChangeEquipment() ? 1 : 0, EquipmentSlotTag.IsValid() ? 1 : 0, HasItem(ArmorItemId) ? 1 : 0);
+		return false;
+	}
+
+	const FRetrieveItemStack* Stack = FindStack(ArmorItemId);
+	if (!Stack || !Stack->ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[RequestEquipArmor] FAIL — Stack not found or CategoryTag mismatch (tag=%s)"),
+			Stack ? *Stack->ItemCategoryTag.ToString() : TEXT("null"));
+		return false;
+	}
+
+	UArmorComponent* ArmorComp = GetArmorComponent();
+	if (!ArmorComp || !ArmorComp->EquipArmor(EquipmentSlotTag, ArmorItemId))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[RequestEquipArmor] FAIL — ArmorComp=%d EquipArmor failed"), ArmorComp ? 1 : 0);
+		return false;
+	}
+
+	if (FRetrieveEquippedArmorEntry* ExistingSlot = FindMutableEquippedArmorSlot(EquipmentSlotTag))
+	{
+		ExistingSlot->ArmorItemId = ArmorItemId;
+	}
+	else
+	{
+		FRetrieveEquippedArmorEntry& NewSlot = EquippedArmorSlots.AddDefaulted_GetRef();
+		NewSlot.EquipmentSlotTag = EquipmentSlotTag;
+		NewSlot.ArmorItemId = ArmorItemId;
+	}
+
+	OnEquippedArmorChanged.Broadcast(EquipmentSlotTag, ArmorItemId);
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::RequestUnequipArmor(FGameplayTag EquipmentSlotTag)
+{
+	if (!HasAuthorityToModify())
+	{
+		if (CanChangeEquipment() && !GetEquippedArmorId(EquipmentSlotTag).IsNone())
+		{
+			ServerRequestUnequipArmor(EquipmentSlotTag);
+			return true;
+		}
+		return false;
+	}
+
+	if (!CanChangeEquipment() || !EquipmentSlotTag.IsValid())
+	{
+		return false;
+	}
+
+	if (GetEquippedArmorId(EquipmentSlotTag).IsNone())
+	{
+		return false;
+	}
+
+	if (UArmorComponent* ArmorComp = GetArmorComponent())
+	{
+		ArmorComp->UnequipArmor(EquipmentSlotTag);
+	}
+
+	RemoveEquippedArmorSlot(EquipmentSlotTag);
+	OnEquippedArmorChanged.Broadcast(EquipmentSlotTag, NAME_None);
 	OnInventoryChanged.Broadcast();
 	return true;
 }
@@ -514,6 +627,12 @@ void UInventoryComponent::ServerCraftItem_Implementation(FName RecipeId)
 	CraftItem(RecipeId);
 }
 
+FName UInventoryComponent::GetEquippedArmorId(FGameplayTag EquipmentSlotTag) const
+{
+	const FRetrieveEquippedArmorEntry* ArmorSlot = FindEquippedArmorSlot(EquipmentSlotTag);
+	return ArmorSlot ? ArmorSlot->ArmorItemId : NAME_None;
+}
+
 FName UInventoryComponent::GetConsumableSlotItemId(int32 SlotKey) const
 {
 	if (!IsValidConsumableSlotKey(SlotKey))
@@ -546,7 +665,9 @@ FRetrieveInventorySaveData UInventoryComponent::MakeInventorySaveData() const
 	SaveData.WeaponItems = WeaponItems;
 	SaveData.ConsumableItems = ConsumableItems;
 	SaveData.MaterialItems = MaterialItems;
+	SaveData.ArmorItems = ArmorItems;
 	SaveData.EquippedWeaponId = EquippedWeaponId;
+	SaveData.EquippedArmorSlots = EquippedArmorSlots;
 	SaveData.ConsumableSlotItemIds.Add(QuickSlotPrimaryKey, ConsumableSlot4ItemId);
 	SaveData.ConsumableSlotItemIds.Add(QuickSlotSecondaryKey, ConsumableSlot5ItemId);
 	return SaveData;
@@ -562,7 +683,9 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 	WeaponItems = SaveData.WeaponItems;
 	ConsumableItems = SaveData.ConsumableItems;
 	MaterialItems = SaveData.MaterialItems;
+	ArmorItems = SaveData.ArmorItems;
 	EquippedWeaponId = SaveData.EquippedWeaponId;
+	EquippedArmorSlots = SaveData.EquippedArmorSlots;
 	ConsumableSlot4ItemId = SaveData.ConsumableSlotItemIds.FindRef(QuickSlotPrimaryKey);
 	ConsumableSlot5ItemId = SaveData.ConsumableSlotItemIds.FindRef(QuickSlotSecondaryKey);
 
@@ -571,6 +694,20 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 	if (!EquippedStack || !EquippedStack->ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
 	{
 		EquippedWeaponId = NAME_None;
+	}
+
+	for (int32 Index = EquippedArmorSlots.Num() - 1; Index >= 0; --Index)
+	{
+		const FRetrieveEquippedArmorEntry& ArmorSlot = EquippedArmorSlots[Index];
+		const FRetrieveItemStack* ArmorStack = ArmorSlot.ArmorItemId.IsNone()
+			? nullptr
+			: FindStack(ArmorSlot.ArmorItemId);
+		if (!ArmorSlot.EquipmentSlotTag.IsValid()
+			|| !ArmorStack
+			|| !ArmorStack->ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor))
+		{
+			EquippedArmorSlots.RemoveAt(Index);
+		}
 	}
 
 	for (const int32 SlotKey : ConsumableSlotKeys)
@@ -599,8 +736,21 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 		}
 	}
 
+	if (UArmorComponent* ArmorComp = GetArmorComponent())
+	{
+		ArmorComp->UnequipAllArmor();
+		for (const FRetrieveEquippedArmorEntry& ArmorSlot : EquippedArmorSlots)
+		{
+			ArmorComp->EquipArmor(ArmorSlot.EquipmentSlotTag, ArmorSlot.ArmorItemId);
+		}
+	}
+
 	OnInventoryChanged.Broadcast();
 	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
+	for (const FRetrieveEquippedArmorEntry& ArmorSlot : EquippedArmorSlots)
+	{
+		OnEquippedArmorChanged.Broadcast(ArmorSlot.EquipmentSlotTag, ArmorSlot.ArmorItemId);
+	}
 	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
 		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
@@ -616,6 +766,15 @@ void UInventoryComponent::OnRep_InventoryItems()
 void UInventoryComponent::OnRep_EquippedWeaponId()
 {
 	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
+	OnInventoryChanged.Broadcast();
+}
+
+void UInventoryComponent::OnRep_EquippedArmorSlots()
+{
+	for (const FRetrieveEquippedArmorEntry& ArmorSlot : EquippedArmorSlots)
+	{
+		OnEquippedArmorChanged.Broadcast(ArmorSlot.EquipmentSlotTag, ArmorSlot.ArmorItemId);
+	}
 	OnInventoryChanged.Broadcast();
 }
 
@@ -651,6 +810,16 @@ void UInventoryComponent::ServerRequestUnequipWeapon_Implementation()
 	RequestUnequipWeapon();
 }
 
+void UInventoryComponent::ServerRequestEquipArmor_Implementation(FGameplayTag EquipmentSlotTag, FName ArmorItemId)
+{
+	RequestEquipArmor(EquipmentSlotTag, ArmorItemId);
+}
+
+void UInventoryComponent::ServerRequestUnequipArmor_Implementation(FGameplayTag EquipmentSlotTag)
+{
+	RequestUnequipArmor(EquipmentSlotTag);
+}
+
 void UInventoryComponent::ServerUseConsumableItem_Implementation(FName ConsumableItemId)
 {
 	UseConsumableItem(ConsumableItemId);
@@ -669,6 +838,12 @@ void UInventoryComponent::ServerUnassignConsumableSlot_Implementation(int32 Slot
 void UInventoryComponent::ServerUseConsumableSlot_Implementation(int32 SlotKey)
 {
 	UseConsumableSlot(SlotKey);
+}
+
+UArmorComponent* UInventoryComponent::GetArmorComponent() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner ? Owner->FindComponentByClass<UArmorComponent>() : nullptr;
 }
 
 UWeaponComponent* UInventoryComponent::GetWeaponComponent() const
@@ -883,6 +1058,7 @@ bool UInventoryComponent::ApplyConsumableEffects(const FRetrieveConsumableItemRo
 const TArray<FRetrieveItemStack>* UInventoryComponent::GetItemsForCategory(FGameplayTag ItemCategoryTag) const
 {
 	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))    { return &WeaponItems; }
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor))     { return &ArmorItems; }
 	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable)){ return &ConsumableItems; }
 	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material))  { return &MaterialItems; }
 	return nullptr;
@@ -896,7 +1072,7 @@ TArray<FRetrieveItemStack>* UInventoryComponent::GetMutableItemsForCategory(FGam
 
 const FRetrieveItemStack* UInventoryComponent::FindStack(FName ItemId) const
 {
-	for (const TArray<FRetrieveItemStack>* Category : { &WeaponItems, &ConsumableItems, &MaterialItems })
+	for (const TArray<FRetrieveItemStack>* Category : { &WeaponItems, &ArmorItems, &ConsumableItems, &MaterialItems })
 	{
 		for (const FRetrieveItemStack& Stack : *Category)
 		{
@@ -913,6 +1089,36 @@ FRetrieveItemStack* UInventoryComponent::FindMutableStack(FName ItemId)
 {
 	return const_cast<FRetrieveItemStack*>(
 		static_cast<const UInventoryComponent*>(this)->FindStack(ItemId));
+}
+
+const FRetrieveEquippedArmorEntry* UInventoryComponent::FindEquippedArmorSlot(FGameplayTag EquipmentSlotTag) const
+{
+	for (const FRetrieveEquippedArmorEntry& ArmorSlot : EquippedArmorSlots)
+	{
+		if (ArmorSlot.EquipmentSlotTag == EquipmentSlotTag)
+		{
+			return &ArmorSlot;
+		}
+	}
+	return nullptr;
+}
+
+FRetrieveEquippedArmorEntry* UInventoryComponent::FindMutableEquippedArmorSlot(FGameplayTag EquipmentSlotTag)
+{
+	return const_cast<FRetrieveEquippedArmorEntry*>(
+		static_cast<const UInventoryComponent*>(this)->FindEquippedArmorSlot(EquipmentSlotTag));
+}
+
+void UInventoryComponent::RemoveEquippedArmorSlot(FGameplayTag EquipmentSlotTag)
+{
+	for (int32 Index = 0; Index < EquippedArmorSlots.Num(); ++Index)
+	{
+		if (EquippedArmorSlots[Index].EquipmentSlotTag == EquipmentSlotTag)
+		{
+			EquippedArmorSlots.RemoveAt(Index);
+			return;
+		}
+	}
 }
 
 FName& UInventoryComponent::GetMutableSlotField(int32 SlotKey)

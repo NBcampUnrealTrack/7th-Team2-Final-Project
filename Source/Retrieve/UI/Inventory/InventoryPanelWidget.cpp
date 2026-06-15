@@ -26,6 +26,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Engine/Texture2D.h"
+#include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
 UInventoryPanelWidget::UInventoryPanelWidget(const FObjectInitializer& ObjectInitializer)
@@ -34,6 +35,7 @@ UInventoryPanelWidget::UInventoryPanelWidget(const FObjectInitializer& ObjectIni
 	WeaponTabCategoryTag = RetrieveGameplayTags::Item_Weapon;
 	ConsumableTabCategoryTag = RetrieveGameplayTags::Item_Consumable;
 	MaterialTabCategoryTag = RetrieveGameplayTags::Item_Material;
+	ArmorTabCategoryTag = RetrieveGameplayTags::Item_Armor;
 	CurrentCategoryTag = WeaponTabCategoryTag;
 }
 
@@ -53,6 +55,7 @@ void UInventoryPanelWidget::NativeConstruct()
 	UpdateQuickSlotPanel();
 	UpdateQuickSlotActionButtons();
 	RefreshInventoryGridLayout();
+	RefreshSlotIcons();
 }
 
 void UInventoryPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -101,6 +104,21 @@ void UInventoryPanelWidget::OpenTab(int32 TabIndex)
 		CurrentCategoryTag = MaterialTabCategoryTag;
 		RefreshInventoryView(true);
 	}
+	else if (TabIndex == 3)
+	{
+		CurrentCategoryTag = ArmorTabCategoryTag;
+		RefreshInventoryView(true);
+	}
+
+	if (Button_SortAttackPower)
+	{
+		Button_SortAttackPower->SetVisibility(GetSortAttackPowerButtonVisibility());
+	}
+	if (Button_SortDefense)
+	{
+		Button_SortDefense->SetVisibility(GetSortDefenseButtonVisibility());
+	}
+
 	PlayUIVFXOnWidget(
 		RetrieveGameplayTags::UI_VFX_Tab_Switch,
 		UniformGrid_ItemList ? Cast<UWidget>(UniformGrid_ItemList.Get()) : GetRootWidget());
@@ -114,11 +132,19 @@ void UInventoryPanelWidget::RefreshInventoryList()
 
 void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTag)
 {
+	UE_LOG(LogTemp, Log, TEXT("[SelectItem] ItemId=%s CategoryTag=%s"), *ItemId.ToString(), *ItemCategoryTag.ToString());
 	if (!ItemId.IsNone()
 		&& SelectedItemId == ItemId
 		&& SelectedItemCategoryTag == ItemCategoryTag)
 	{
-		ActivateSelectedItem();
+		UE_LOG(LogTemp, Log, TEXT("[SelectItem] same item re-clicked — calling ActivateSelectedItem"));
+		const bool bActivated = ActivateSelectedItem();
+		if (IsWeaponCategory(ItemCategoryTag)
+			&& !IsWeaponItemEquipped(ItemId)
+			&& (!bActivated || CanEquipSelectedWeapon()))
+		{
+			QueueSelectedWeaponEquipRetry(ItemId);
+		}
 		return;
 	}
 
@@ -131,6 +157,8 @@ void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTa
 	UpdateQuickSlotActionButtons();
 	OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
 	RefreshSelectedMaterialDetails();
+	RefreshSelectedArmorDetails();
+	UpdateEquipActionButtons();
 }
 
 bool UInventoryPanelWidget::ActivateSelectedItem()
@@ -139,6 +167,16 @@ bool UInventoryPanelWidget::ActivateSelectedItem()
 	{
 		return false;
 	}
+
+	if (!CanProcessSelectedItemActivation())
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[ActivateSelectedItem] duplicate activation ignored: ItemId=%s CategoryTag=%s"),
+			*SelectedItemId.ToString(),
+			*SelectedItemCategoryTag.ToString());
+		return false;
+	}
+
+	TGuardValue<bool> ActivationGuard(bBypassSelectedItemActivationGuard, true);
 
 	if (IsWeaponCategory(SelectedItemCategoryTag))
 	{
@@ -152,11 +190,41 @@ bool UInventoryPanelWidget::ActivateSelectedItem()
 		return UseSelectedConsumable();
 	}
 
+	if (IsArmorCategory(SelectedItemCategoryTag))
+	{
+		return IsSelectedArmorEquipped()
+			? UnequipSelectedArmor()
+			: EquipSelectedArmor();
+	}
+
 	return false;
+}
+
+bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag)
+{
+	if (!ItemId.IsNone()
+		&& SelectedItemId == ItemId
+		&& SelectedItemCategoryTag == ItemCategoryTag)
+	{
+		return ActivateSelectedItem();
+	}
+
+	SelectItem(ItemId, ItemCategoryTag);
+	return ActivateSelectedItem();
 }
 
 bool UInventoryPanelWidget::EquipSelectedWeapon()
 {
+	if (!IsWeaponCategory(SelectedItemCategoryTag))
+	{
+		return ActivateSelectedItem();
+	}
+
+	if (!bBypassSelectedItemActivationGuard && !CanProcessSelectedItemActivation())
+	{
+		return false;
+	}
+
 	if (!CanEquipSelectedWeapon())
 	{
 		return false;
@@ -185,6 +253,16 @@ bool UInventoryPanelWidget::EquipSelectedWeapon()
 
 bool UInventoryPanelWidget::UnequipCurrentWeapon()
 {
+	if (!IsWeaponCategory(SelectedItemCategoryTag))
+	{
+		return ActivateSelectedItem();
+	}
+
+	if (!bBypassSelectedItemActivationGuard && !CanProcessSelectedItemActivation())
+	{
+		return false;
+	}
+
 	if (!CanUnequipCurrentWeapon())
 	{
 		return false;
@@ -203,8 +281,80 @@ bool UInventoryPanelWidget::UnequipCurrentWeapon()
 	return bUnequipped;
 }
 
+bool UInventoryPanelWidget::EquipSelectedArmor()
+{
+	UE_LOG(LogTemp, Log, TEXT("[EquipArmor] called — ItemId=%s Tag=%s"), *SelectedItemId.ToString(), *SelectedItemCategoryTag.ToString());
+	if (!bBypassSelectedItemActivationGuard && !CanProcessSelectedItemActivation())
+	{
+		return false;
+	}
+
+	if (!CanEquipSelectedArmor())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[EquipArmor] CanEquipSelectedArmor returned false, aborting"));
+		return false;
+	}
+
+	FRetrieveArmorDataRow ArmorData;
+	if (!GetSelectedArmorData(ArmorData))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[EquipArmor] GetSelectedArmorData failed — ArmorDataTable row not found for %s"), *SelectedItemId.ToString());
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[EquipArmor] requesting equip — SlotTag=%s ItemId=%s"), *ArmorData.EquipmentSlotTag.ToString(), *SelectedItemId.ToString());
+	const bool bEquipped = InventoryComponent->RequestEquipArmor(ArmorData.EquipmentSlotTag, SelectedItemId);
+	UE_LOG(LogTemp, Log, TEXT("[EquipArmor] RequestEquipArmor result=%d"), bEquipped ? 1 : 0);
+	if (bEquipped)
+	{
+		MarkInventoryTooltipsDirty();
+		RefreshWeaponComparisonText();
+		RefreshSelectedDetailState();
+		RefreshSelectedArmorDetails();
+		OnInventoryListChanged.Broadcast();
+		UpdateEquipActionButtons();
+	}
+	return bEquipped;
+}
+
+bool UInventoryPanelWidget::UnequipSelectedArmor()
+{
+	if (!bBypassSelectedItemActivationGuard && !CanProcessSelectedItemActivation())
+	{
+		return false;
+	}
+
+	if (!CanUnequipSelectedArmor())
+	{
+		return false;
+	}
+
+	FRetrieveArmorDataRow ArmorData;
+	if (!GetSelectedArmorData(ArmorData))
+	{
+		return false;
+	}
+
+	const bool bUnequipped = InventoryComponent->RequestUnequipArmor(ArmorData.EquipmentSlotTag);
+	if (bUnequipped)
+	{
+		MarkInventoryTooltipsDirty();
+		RefreshWeaponComparisonText();
+		RefreshSelectedDetailState();
+		RefreshSelectedArmorDetails();
+		OnInventoryListChanged.Broadcast();
+		UpdateEquipActionButtons();
+	}
+	return bUnequipped;
+}
+
 bool UInventoryPanelWidget::UseSelectedConsumable()
 {
+	if (!bBypassSelectedItemActivationGuard && !CanProcessSelectedItemActivation())
+	{
+		return false;
+	}
+
 	if (!CanUseSelectedConsumable())
 	{
 		return false;
@@ -312,6 +462,15 @@ bool UInventoryPanelWidget::IsWeaponItemEquipped(FName WeaponItemId) const
 	return InventoryComponent
 		&& !WeaponItemId.IsNone()
 		&& InventoryComponent->GetEquippedWeaponId() == WeaponItemId;
+}
+
+bool UInventoryPanelWidget::IsArmorItemEquipped(FName ArmorItemId) const
+{
+	if (!InventoryComponent || ArmorItemId.IsNone() || !ArmorDataTable) return false;
+	const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+		ArmorItemId, TEXT("UInventoryPanelWidget::IsArmorItemEquipped"));
+	if (!Row) return false;
+	return InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) == ArmorItemId;
 }
 
 bool UInventoryPanelWidget::CanEquipSelectedWeapon() const
@@ -452,6 +611,100 @@ bool UInventoryPanelWidget::GetSelectedMaterialData(FRetrieveMaterialItemRow& Ou
 	return false;
 }
 
+bool UInventoryPanelWidget::GetSelectedArmorData(FRetrieveArmorDataRow& OutArmorData) const
+{
+	if (!ArmorDataTable || SelectedItemId.IsNone() || !IsArmorCategory(SelectedItemCategoryTag))
+	{
+		return false;
+	}
+
+	if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+		SelectedItemId, TEXT("UInventoryPanelWidget::GetSelectedArmorData")))
+	{
+		OutArmorData = *Row;
+		return true;
+	}
+	return false;
+}
+
+bool UInventoryPanelWidget::IsSelectedArmorEquipped() const
+{
+	if (!InventoryComponent || SelectedItemId.IsNone() || !IsArmorCategory(SelectedItemCategoryTag))
+	{
+		return false;
+	}
+
+	if (!ArmorDataTable)
+	{
+		return false;
+	}
+
+	const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+		SelectedItemId, TEXT("UInventoryPanelWidget::IsSelectedArmorEquipped"));
+	if (!Row)
+	{
+		return false;
+	}
+
+	return InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) == SelectedItemId;
+}
+
+bool UInventoryPanelWidget::CanEquipSelectedArmor() const
+{
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: InventoryComponent null"));
+		return false;
+	}
+	if (!ArmorDataTable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: ArmorDataTable null"));
+		return false;
+	}
+	if (!IsArmorCategory(SelectedItemCategoryTag))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: not armor category (tag=%s)"), *SelectedItemCategoryTag.ToString());
+		return false;
+	}
+	if (SelectedItemId.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: SelectedItemId is None"));
+		return false;
+	}
+	if (!InventoryComponent->CanChangeEquipment())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: CanChangeEquipment() false"));
+		return false;
+	}
+	if (IsSelectedArmorEquipped())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquipArmor] FAIL: already equipped (ItemId=%s)"), *SelectedItemId.ToString());
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[CanEquipArmor] OK: can equip %s"), *SelectedItemId.ToString());
+	return true;
+}
+
+bool UInventoryPanelWidget::CanUnequipSelectedArmor() const
+{
+	return InventoryComponent
+		&& ArmorDataTable
+		&& IsArmorCategory(SelectedItemCategoryTag)
+		&& !SelectedItemId.IsNone()
+		&& InventoryComponent->CanChangeEquipment()
+		&& IsSelectedArmorEquipped();
+}
+
+FName UInventoryPanelWidget::GetEquippedArmorIdBySlot(FGameplayTag EquipmentSlotTag) const
+{
+	return InventoryComponent ? InventoryComponent->GetEquippedArmorId(EquipmentSlotTag) : NAME_None;
+}
+
+TArray<FRetrieveEquippedArmorEntry> UInventoryPanelWidget::GetAllEquippedArmorSlots() const
+{
+	return InventoryComponent ? InventoryComponent->GetEquippedArmorSlots() : TArray<FRetrieveEquippedArmorEntry>();
+}
+
 UDataTable* UInventoryPanelWidget::ResolveMaterialItemTable() const
 {
 	return MaterialItemTable
@@ -480,7 +733,10 @@ void UInventoryPanelWidget::RefreshSelectedMaterialDetails()
 	{
 		Text_DetailType->SetText(FText::FromString(TEXT("Material")));
 	}
-	// Text_DetailState는 RefreshSelectedDetailState()에서 "보유 N개" 형식으로 통일 처리
+	if (Text_DetailState)
+	{
+		Text_DetailState->SetText(FText::FromString(FString::Printf(TEXT("Owned: %d"), Quantity)));
+	}
 	if (Text_DetailName)
 	{
 		Text_DetailName->SetText(DisplayName);
@@ -580,6 +836,19 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 			}
 		}
 	}
+	else if (IsArmorCategory(ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
+		{
+			ContextLines.Add(FString::Printf(TEXT("방어력: +%.0f"), Row->Defense));
+			ContextLines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag)));
+
+			const FName EquippedId = InventoryComponent
+				? InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) : NAME_None;
+			ContextLines.Add(EquippedId == ItemId ? TEXT("장착 중") : TEXT("보관 중"));
+		}
+	}
 
 	if (ContextLines.IsEmpty())
 	{
@@ -619,12 +888,15 @@ void UInventoryPanelWidget::HandleEquippedWeaponChanged(FName WeaponItemId)
 	MarkInventoryTooltipsDirty();
 	RefreshWeaponComparisonText();
 	RefreshSelectedDetailState();
+	UpdateEquipActionButtons();
 	OnEquipmentChanged.Broadcast();
 	OnInventoryListChanged.Broadcast();
 	if (IsWeaponCategory(SelectedItemCategoryTag))
 	{
 		OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
 	}
+	RefreshSlotIcons();
+	RefreshSlotButtonTooltips();
 }
 
 FText UInventoryPanelWidget::GetSelectedItemStateText() const
@@ -659,6 +931,20 @@ FText UInventoryPanelWidget::GetSelectedItemStateText() const
 	{
 		const int32 Count = InventoryComponent->GetItemCount(SelectedItemId);
 		return FText::Format(INVTEXT("보유 {0}개"), Count);
+	}
+
+	if (IsArmorCategory(SelectedItemCategoryTag))
+	{
+		if (IsSelectedArmorEquipped())
+		{
+			FRetrieveArmorDataRow ArmorData;
+			if (GetSelectedArmorData(ArmorData))
+			{
+				return FText::Format(INVTEXT("장착 중 ({0})"), ArmorData.DisplayName);
+			}
+			return INVTEXT("장착 중");
+		}
+		return INVTEXT("보관 중");
 	}
 
 	return FText::GetEmpty();
@@ -721,6 +1007,50 @@ void UInventoryPanelWidget::HandleMaterialTabClicked()
 	OpenTab(2);
 }
 
+void UInventoryPanelWidget::HandleArmorTabClicked()
+{
+	OpenTab(3);
+}
+
+void UInventoryPanelWidget::HandleEquipClicked()
+{
+	if (IsWeaponCategory(SelectedItemCategoryTag))
+	{
+		// 무기 교체 확인 팝업이 필요하면 EquipSelectedWeapon 내부에서 처리
+		EquipSelectedWeapon();
+	}
+	else if (IsArmorCategory(SelectedItemCategoryTag))
+	{
+		EquipSelectedArmor();
+	}
+}
+
+void UInventoryPanelWidget::HandleUnequipClicked()
+{
+	if (IsWeaponCategory(SelectedItemCategoryTag))
+	{
+		UnequipCurrentWeapon();
+	}
+	else if (IsArmorCategory(SelectedItemCategoryTag))
+	{
+		UnequipSelectedArmor();
+	}
+}
+
+void UInventoryPanelWidget::HandleEquippedArmorChanged(FGameplayTag EquipmentSlotTag, FName ArmorItemId)
+{
+	MarkInventoryTooltipsDirty();
+	RefreshWeaponComparisonText();
+	RefreshSelectedDetailState();
+	UpdateEquipActionButtons();
+	OnInventoryListChanged.Broadcast();
+	if (IsArmorCategory(SelectedItemCategoryTag))
+	{
+		RefreshSelectedArmorDetails();
+	}
+	RefreshSlotIcons();
+	RefreshSlotButtonTooltips();
+}
 
 void UInventoryPanelWidget::BindInventoryEvents()
 {
@@ -736,6 +1066,8 @@ void UInventoryPanelWidget::BindInventoryEvents()
 		InventoryComponent->OnConsumableSlotChanged.RemoveDynamic(this, &ThisClass::HandleConsumableSlotChanged);
 		InventoryComponent->OnConsumableSlotChanged.AddDynamic(this, &ThisClass::HandleConsumableSlotChanged);
 
+		InventoryComponent->OnEquippedArmorChanged.RemoveDynamic(this, &ThisClass::HandleEquippedArmorChanged);
+		InventoryComponent->OnEquippedArmorChanged.AddDynamic(this, &ThisClass::HandleEquippedArmorChanged);
 	}
 }
 
@@ -745,6 +1077,21 @@ void UInventoryPanelWidget::BindButtonEvents()
 	{
 		Button_TabMaterial->OnClicked.RemoveDynamic(this, &ThisClass::HandleMaterialTabClicked);
 		Button_TabMaterial->OnClicked.AddDynamic(this, &ThisClass::HandleMaterialTabClicked);
+	}
+	if (Button_TabArmor)
+	{
+		Button_TabArmor->OnClicked.RemoveDynamic(this, &ThisClass::HandleArmorTabClicked);
+		Button_TabArmor->OnClicked.AddDynamic(this, &ThisClass::HandleArmorTabClicked);
+	}
+	if (Button_Equip)
+	{
+		Button_Equip->OnClicked.RemoveDynamic(this, &ThisClass::HandleEquipClicked);
+		Button_Equip->OnClicked.AddDynamic(this, &ThisClass::HandleEquipClicked);
+	}
+	if (Button_Unequip)
+	{
+		Button_Unequip->OnClicked.RemoveDynamic(this, &ThisClass::HandleUnequipClicked);
+		Button_Unequip->OnClicked.AddDynamic(this, &ThisClass::HandleUnequipClicked);
 	}
 
 	// BindWidgetOptional이므로 BP에서 위젯을 배치하지 않았을 수 있음
@@ -783,6 +1130,45 @@ void UInventoryPanelWidget::BindButtonEvents()
 		Button_CancelQuickSlotAssign->OnClicked.RemoveDynamic(this, &ThisClass::HandleCancelQuickSlotAssignClicked);
 		Button_CancelQuickSlotAssign->OnClicked.AddDynamic(this, &ThisClass::HandleCancelQuickSlotAssignClicked);
 	}
+
+	// 장착 프리뷰 슬롯 버튼
+	if (Button_SlotHead)
+	{
+		Button_SlotHead->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotHeadClicked);
+		Button_SlotHead->OnClicked.AddDynamic(this, &ThisClass::HandleSlotHeadClicked);
+	}
+	if (Button_SlotWeapon)
+	{
+		Button_SlotWeapon->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotWeaponClicked);
+		Button_SlotWeapon->OnClicked.AddDynamic(this, &ThisClass::HandleSlotWeaponClicked);
+	}
+	if (Button_SlotChest)
+	{
+		Button_SlotChest->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotChestClicked);
+		Button_SlotChest->OnClicked.AddDynamic(this, &ThisClass::HandleSlotChestClicked);
+	}
+	if (Button_SlotHands_L)
+	{
+		Button_SlotHands_L->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotHandsLClicked);
+		Button_SlotHands_L->OnClicked.AddDynamic(this, &ThisClass::HandleSlotHandsLClicked);
+	}
+	if (Button_SlotHands_R)
+	{
+		Button_SlotHands_R->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotHandsRClicked);
+		Button_SlotHands_R->OnClicked.AddDynamic(this, &ThisClass::HandleSlotHandsRClicked);
+	}
+	if (Button_SlotLegs)
+	{
+		Button_SlotLegs->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotLegsClicked);
+		Button_SlotLegs->OnClicked.AddDynamic(this, &ThisClass::HandleSlotLegsClicked);
+	}
+	if (Button_SlotFeet)
+	{
+		Button_SlotFeet->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotFeetClicked);
+		Button_SlotFeet->OnClicked.AddDynamic(this, &ThisClass::HandleSlotFeetClicked);
+	}
+
+	RefreshSlotButtonTooltips();
 }
 
 
@@ -823,11 +1209,16 @@ void UInventoryPanelWidget::InitDefaultTags()
 	{
 		MaterialTabCategoryTag = RetrieveGameplayTags::Item_Material;
 	}
+	if (!ArmorTabCategoryTag.IsValid())
+	{
+		ArmorTabCategoryTag = RetrieveGameplayTags::Item_Armor;
+	}
 	if (!CurrentCategoryTag.IsValid())
 	{
-		if (ActiveTabIndex == 1) { CurrentCategoryTag = ConsumableTabCategoryTag; }
+		if (ActiveTabIndex == 1)      { CurrentCategoryTag = ConsumableTabCategoryTag; }
 		else if (ActiveTabIndex == 2) { CurrentCategoryTag = MaterialTabCategoryTag; }
-		else { CurrentCategoryTag = WeaponTabCategoryTag; }
+		else if (ActiveTabIndex == 3) { CurrentCategoryTag = ArmorTabCategoryTag; }
+		else                          { CurrentCategoryTag = WeaponTabCategoryTag; }
 	}
 }
 
@@ -869,6 +1260,7 @@ void UInventoryPanelWidget::ClearSelection()
 	HideQuickSlotAssignDialog();
 	RefreshWeaponComparisonText();
 	UpdateQuickSlotActionButtons();
+	UpdateEquipActionButtons();
 	OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
 }
 
@@ -887,6 +1279,99 @@ bool UInventoryPanelWidget::IsMaterialCategory(FGameplayTag ItemCategoryTag) con
 	return ItemCategoryTag.IsValid() && ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material);
 }
 
+bool UInventoryPanelWidget::IsArmorCategory(FGameplayTag ItemCategoryTag) const
+{
+	return ItemCategoryTag.IsValid() && ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor);
+}
+
+bool UInventoryPanelWidget::CanEquipSelected() const
+{
+	if (IsWeaponCategory(SelectedItemCategoryTag)) return CanEquipSelectedWeapon();
+	if (IsArmorCategory(SelectedItemCategoryTag))  return CanEquipSelectedArmor();
+	return false;
+}
+
+bool UInventoryPanelWidget::CanUnequipSelected() const
+{
+	if (IsWeaponCategory(SelectedItemCategoryTag)) return CanUnequipCurrentWeapon();
+	if (IsArmorCategory(SelectedItemCategoryTag))  return CanUnequipSelectedArmor();
+	return false;
+}
+
+void UInventoryPanelWidget::SelectEquipmentSlot(FGameplayTag EquipmentSlotTag)
+{
+	if (!InventoryComponent || !EquipmentSlotTag.IsValid())
+	{
+		return;
+	}
+
+	// 무기 슬롯 (Equipment.Slot 태그가 없고 WeaponTag와 구분) — 무기는 별도 처리
+	// 방어구 슬롯: 해당 슬롯에 장착된 아이템을 목록에서 선택
+	const FName EquippedArmorId = InventoryComponent->GetEquippedArmorId(EquipmentSlotTag);
+	if (!EquippedArmorId.IsNone())
+	{
+		// 방어구 탭으로 전환 후 해당 아이템 선택
+		if (!IsArmorCategory(CurrentCategoryTag))
+		{
+			OpenTab(3);
+		}
+		SelectItem(EquippedArmorId, ArmorTabCategoryTag);
+		return;
+	}
+
+	// 슬롯이 비어있으면 탭만 전환
+	if (!IsArmorCategory(CurrentCategoryTag))
+	{
+		OpenTab(3);
+	}
+}
+
+void UInventoryPanelWidget::RefreshSelectedArmorDetails()
+{
+	FRetrieveArmorDataRow Armor;
+	if (!GetSelectedArmorData(Armor))
+	{
+		return;
+	}
+
+	if (Text_DetailType)
+	{
+		Text_DetailType->SetText(FText::FromString(GetGameplayTagLeaf(Armor.EquipmentSlotTag)));
+	}
+	if (Text_DetailState)
+	{
+		Text_DetailState->SetText(GetSelectedItemStateText());
+	}
+	if (Text_DetailName)
+	{
+		Text_DetailName->SetText(Armor.DisplayName);
+	}
+	if (Text_DetailMainStat)
+	{
+		Text_DetailMainStat->SetText(FText::FromString(FString::Printf(TEXT("방어력: +%.0f"), Armor.Defense)));
+	}
+	if (Text_DetailDescription)
+	{
+		Text_DetailDescription->SetText(Armor.ShortDescription);
+	}
+}
+
+void UInventoryPanelWidget::UpdateEquipActionButtons()
+{
+	const bool bCanEquip   = CanEquipSelected();
+	const bool bCanUnequip = CanUnequipSelected();
+
+	if (Button_Equip)
+	{
+		Button_Equip->SetVisibility(bCanEquip ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		Button_Equip->SetIsEnabled(bCanEquip);
+	}
+	if (Button_Unequip)
+	{
+		Button_Unequip->SetVisibility(bCanUnequip ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		Button_Unequip->SetIsEnabled(bCanUnequip);
+	}
+}
 
 bool UInventoryPanelWidget::ShouldConfirmWeaponSwap() const
 {
@@ -1361,6 +1846,49 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 	return RootBox;
 }
 
+UWidget* UInventoryPanelWidget::BuildEquipmentSlotTooltipWidget(const FRetrieveItemStack& Item) const
+{
+	if (Item.ItemId.IsNone() || !WidgetTree)
+	{
+		return nullptr;
+	}
+
+	USizeBox* RootBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	UVerticalBox* LineBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	if (!RootBox || !Background || !LineBox)
+	{
+		return nullptr;
+	}
+
+	RootBox->SetWidthOverride(260.0f);
+	RootBox->SetContent(Background);
+	Background->SetPadding(FMargin(8.0f, 7.0f));
+	Background->SetBrushColor(FLinearColor(0.015f, 0.018f, 0.03f, 0.92f));
+	Background->SetContent(LineBox);
+
+	const FLinearColor TitleColor(1.0f, 0.86f, 0.38f, 1.0f);
+	const FLinearColor BodyColor(0.92f, 0.92f, 0.86f, 1.0f);
+	const FLinearColor MutedColor(0.68f, 0.68f, 0.64f, 1.0f);
+
+	AddTooltipTextLine(LineBox, GetItemDisplayName(Item), TitleColor, true);
+
+	const FString TooltipBody = BuildItemTooltipText(Item.ItemId, Item.ItemCategoryTag).ToString();
+	if (!TooltipBody.IsEmpty())
+	{
+		TArray<FString> Lines;
+		TooltipBody.ParseIntoArrayLines(Lines, false);
+		for (const FString& Line : Lines)
+		{
+			if (Line.IsEmpty()) continue;
+			const bool bIsSeparator = Line.StartsWith(TEXT("──"));
+			AddTooltipTextLine(LineBox, Line, bIsSeparator ? MutedColor : BodyColor, false);
+		}
+	}
+
+	return RootBox;
+}
+
 void UInventoryPanelWidget::AddTooltipTextLine(
 	UVerticalBox* LineBox,
 	const FString& Line,
@@ -1680,6 +2208,56 @@ FString UInventoryPanelWidget::FormatWeaponSkillList(const FRetrieveWeaponDataRo
 		: FString::Join(SkillLines, TEXT("\n"));
 }
 
+bool UInventoryPanelWidget::CanProcessSelectedItemActivation()
+{
+	const double CurrentTime = FPlatformTime::Seconds();
+	const bool bSameActivation =
+		LastActivatedItemId == SelectedItemId &&
+		LastActivatedItemCategoryTag == SelectedItemCategoryTag;
+
+	if (bSameActivation
+		&& LastSelectedItemActivationTime >= 0.0
+		&& CurrentTime - LastSelectedItemActivationTime < SelectedItemActivationGuardSeconds)
+	{
+		return false;
+	}
+
+	LastSelectedItemActivationTime = CurrentTime;
+	LastActivatedItemId = SelectedItemId;
+	LastActivatedItemCategoryTag = SelectedItemCategoryTag;
+	return true;
+}
+
+void UInventoryPanelWidget::QueueSelectedWeaponEquipRetry(FName WeaponItemId)
+{
+	if (WeaponItemId.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this, WeaponItemId]()
+	{
+		if (!InventoryComponent
+			|| SelectedItemId != WeaponItemId
+			|| !IsWeaponCategory(SelectedItemCategoryTag)
+			|| IsWeaponItemEquipped(WeaponItemId)
+			|| !CanEquipSelectedWeapon())
+		{
+			return;
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[InventoryPanel] Retrying weapon equip after slot double-click: %s"), *WeaponItemId.ToString());
+		TGuardValue<bool> ActivationGuard(bBypassSelectedItemActivationGuard, true);
+		EquipSelectedWeapon();
+	}));
+}
+
 FString UInventoryPanelWidget::GetGameplayTagLeaf(FGameplayTag Tag)
 {
 	if (!Tag.IsValid())
@@ -1774,6 +2352,32 @@ ESlateVisibility UInventoryPanelWidget::GetSortAttackPowerButtonVisibility() con
 	return IsWeaponCategory(CurrentCategoryTag) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 }
 
+void UInventoryPanelWidget::CycleSortByDefense()
+{
+	if (!IsArmorCategory(CurrentCategoryTag))
+	{
+		return;
+	}
+
+	if (CurrentSortMode == EInventorySortMode::DefenseAsc)
+	{
+		SetSortMode(EInventorySortMode::DefenseDesc);
+	}
+	else if (CurrentSortMode == EInventorySortMode::DefenseDesc)
+	{
+		SetSortMode(EInventorySortMode::None);
+	}
+	else
+	{
+		SetSortMode(EInventorySortMode::DefenseAsc);
+	}
+}
+
+ESlateVisibility UInventoryPanelWidget::GetSortDefenseButtonVisibility() const
+{
+	return IsArmorCategory(CurrentCategoryTag) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+}
+
 void UInventoryPanelWidget::SortItemStacks(TArray<FRetrieveItemStack>& Items) const
 {
 	if (CurrentSortMode == EInventorySortMode::None || Items.Num() < 2)
@@ -1802,6 +2406,12 @@ void UInventoryPanelWidget::SortItemStacks(TArray<FRetrieveItemStack>& Items) co
 
 		case EInventorySortMode::AttackPowerDesc:
 			return GetItemAttackPower(A) > GetItemAttackPower(B);
+
+		case EInventorySortMode::DefenseAsc:
+			return GetItemDefensePower(A) < GetItemDefensePower(B);
+
+		case EInventorySortMode::DefenseDesc:
+			return GetItemDefensePower(A) > GetItemDefensePower(B);
 
 		default:
 			return false;
@@ -1838,19 +2448,35 @@ FString UInventoryPanelWidget::GetItemDisplayName(const FRetrieveItemStack& Item
 			}
 		}
 	}
+	else if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return Row->DisplayName.ToString();
+		}
+	}
 	// 테이블 미등록 시 ItemId 문자열로 폴백
 	return Item.ItemId.ToString();
 }
 
 FString UInventoryPanelWidget::GetItemTypeName(const FRetrieveItemStack& Item) const
 {
-	// 무기는 WeaponTypeTag(검/쌍검/스태프 등), 그 외는 카테고리 태그 말단 사용
+	// 무기는 WeaponTypeTag(검/쌍검/스태프 등), 방어구는 EquipmentSlotTag 말단, 그 외는 카테고리 태그 말단
 	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
 	{
 		if (const FRetrieveWeaponDataRow* Row = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
 			Item.ItemId, TEXT("")))
 		{
 			return GetGameplayTagLeaf(Row->WeaponTypeTag);
+		}
+	}
+	if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return GetGameplayTagLeaf(Row->EquipmentSlotTag);
 		}
 	}
 	return GetGameplayTagLeaf(Item.ItemCategoryTag);
@@ -1864,6 +2490,19 @@ float UInventoryPanelWidget::GetItemAttackPower(const FRetrieveItemStack& Item) 
 			Item.ItemId, TEXT("")))
 		{
 			return Row->AttackPower;
+		}
+	}
+	return 0.0f;
+}
+
+float UInventoryPanelWidget::GetItemDefensePower(const FRetrieveItemStack& Item) const
+{
+	if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId, TEXT("")))
+		{
+			return Row->Defense;
 		}
 	}
 	return 0.0f;
@@ -1913,11 +2552,64 @@ float UInventoryPanelWidget::GetTotalAttackPower() const
 	return ASC->GetNumericAttribute(UCombatAttributeSet::GetAttackPowerAttribute());
 }
 
+float UInventoryPanelWidget::GetCharacterBaseDefense() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	return ASC ? ASC->GetNumericAttributeBase(UCombatAttributeSet::GetDefenseAttribute()) : 0.0f;
+}
+
+float UInventoryPanelWidget::GetArmorBonusDefense() const
+{
+	if (!InventoryComponent || !ArmorDataTable)
+	{
+		return 0.0f;
+	}
+
+	float TotalDefense = 0.0f;
+	for (const FRetrieveEquippedArmorEntry& ArmorSlot : InventoryComponent->GetEquippedArmorSlots())
+	{
+		if (ArmorSlot.ArmorItemId.IsNone())
+		{
+			continue;
+		}
+
+		const FRetrieveArmorDataRow* ArmorData = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			ArmorSlot.ArmorItemId,
+			TEXT("UInventoryPanelWidget::GetArmorBonusDefense"));
+		if (ArmorData)
+		{
+			TotalDefense += ArmorData->Defense;
+		}
+	}
+
+	return TotalDefense;
+}
+
+float UInventoryPanelWidget::GetTotalDefense() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	const float AttributeDefense = ASC
+		? ASC->GetNumericAttribute(UCombatAttributeSet::GetDefenseAttribute())
+		: 0.0f;
+	const float DataTableDefense = GetCharacterBaseDefense() + GetArmorBonusDefense();
+	return FMath::Max(AttributeDefense, DataTableDefense);
+}
+
 FText UInventoryPanelWidget::GetFinalStatDisplayText() const
 {
 	const float BaseATK   = GetCharacterBaseAttackPower();
 	const float WeaponATK = GetWeaponBonusAttackPower();
 	const float TotalATK  = GetTotalAttackPower();
+	const float BaseDEF   = GetCharacterBaseDefense();
+	const float ArmorDEF  = GetArmorBonusDefense();
+	const float TotalDEF  = GetTotalDefense();
+
+	if (const UWorld* World = GetWorld(); World || !World)
+	{
+		return FText::FromString(FString::Printf(
+		TEXT("Base ATK: %.0f\nWeapon ATK: +%.0f\nTotal ATK: %.0f\n기본 방어력: %.0f\n방어구 방어력: +%.0f\n최종 방어력: %.0f"),
+		BaseATK, WeaponATK, TotalATK, BaseDEF, ArmorDEF, TotalDEF));
+	}
 
 	const FString DisplayStr = FString::Printf(
 		TEXT("기본 ATK: %.0f\n무기 보너스: +%.0f\n최종 ATK: %.0f"),
@@ -1941,6 +2633,12 @@ FText UInventoryPanelWidget::GetFullStatDisplayText() const
 	Lines.Add(FString::Printf(TEXT("기본 공격력: %.0f"), GetCharacterBaseAttackPower()));
 	Lines.Add(FString::Printf(TEXT("무기 공격력: +%.0f"), GetWeaponBonusAttackPower()));
 	Lines.Add(FString::Printf(TEXT("최종 공격력: %.0f"), GetTotalAttackPower()));
+
+	// 방어력 (ArmorComponent가 GE로 CombatAttributeSet::Defense를 가산)
+	const float Defense = GetTotalDefense();
+	Lines.Add(FString::Printf(TEXT("기본 방어력: %.0f"), GetCharacterBaseDefense()));
+	Lines.Add(FString::Printf(TEXT("방어구 방어력: +%.0f"), GetArmorBonusDefense()));
+	Lines.Add(FString::Printf(TEXT("최종 방어력: %.0f"), Defense));
 
 	// DT_CharacterStats 추가 컬럼 자동 표시
 	// MaxHealth, AttackPower는 위에서 이미 처리했으므로 건너뜀
@@ -1988,4 +2686,166 @@ FText UInventoryPanelWidget::GetFullStatDisplayText() const
 	}
 
 	return FText::FromString(FString::Join(Lines, TEXT("\n")));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 장착 프리뷰 슬롯 버튼 툴팁 갱신
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UInventoryPanelWidget::RefreshSlotButtonTooltips()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	auto SetArmorSlotTooltip = [this](UButton* Button, FGameplayTag SlotTag)
+	{
+		if (!Button)
+		{
+			return;
+		}
+		const FName ArmorId = InventoryComponent->GetEquippedArmorId(SlotTag);
+		if (ArmorId.IsNone())
+		{
+			Button->SetToolTip(nullptr);
+			Button->SetToolTipText(FText::GetEmpty());
+		}
+		else
+		{
+			FRetrieveItemStack ItemStack;
+			ItemStack.ItemId = ArmorId;
+			ItemStack.ItemCategoryTag = RetrieveGameplayTags::Item_Armor;
+			ItemStack.Quantity = 1;
+			Button->SetToolTip(BuildEquipmentSlotTooltipWidget(ItemStack));
+		}
+	};
+
+	SetArmorSlotTooltip(Button_SlotHead,    RetrieveGameplayTags::Equipment_Slot_Head);
+	SetArmorSlotTooltip(Button_SlotChest,   RetrieveGameplayTags::Equipment_Slot_Chest);
+	SetArmorSlotTooltip(Button_SlotHands_L, RetrieveGameplayTags::Equipment_Slot_Hands);
+	SetArmorSlotTooltip(Button_SlotHands_R, RetrieveGameplayTags::Equipment_Slot_Hands);
+	SetArmorSlotTooltip(Button_SlotLegs,    RetrieveGameplayTags::Equipment_Slot_Legs);
+	SetArmorSlotTooltip(Button_SlotFeet,    RetrieveGameplayTags::Equipment_Slot_Feet);
+
+	// 무기 슬롯
+	if (Button_SlotWeapon)
+	{
+		const FName WeaponId = InventoryComponent->GetEquippedWeaponId();
+		if (WeaponId.IsNone())
+		{
+			Button_SlotWeapon->SetToolTip(nullptr);
+			Button_SlotWeapon->SetToolTipText(FText::GetEmpty());
+		}
+		else
+		{
+			FRetrieveItemStack ItemStack;
+			ItemStack.ItemId = WeaponId;
+			ItemStack.ItemCategoryTag = RetrieveGameplayTags::Item_Weapon;
+			ItemStack.Quantity = 1;
+			Button_SlotWeapon->SetToolTip(BuildEquipmentSlotTooltipWidget(ItemStack));
+		}
+	}
+}
+
+void UInventoryPanelWidget::HandleSlotHeadClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Head);
+}
+
+void UInventoryPanelWidget::HandleSlotWeaponClicked()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+	const FName WeaponId = InventoryComponent->GetEquippedWeaponId();
+	if (!WeaponId.IsNone())
+	{
+		OpenTab(0);
+		SelectItem(WeaponId, RetrieveGameplayTags::Item_Weapon);
+	}
+	else
+	{
+		OpenTab(0);
+	}
+}
+
+void UInventoryPanelWidget::HandleSlotChestClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Chest);
+}
+
+void UInventoryPanelWidget::HandleSlotHandsLClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Hands);
+}
+
+void UInventoryPanelWidget::HandleSlotHandsRClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Hands);
+}
+
+void UInventoryPanelWidget::HandleSlotLegsClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Legs);
+}
+
+void UInventoryPanelWidget::HandleSlotFeetClicked()
+{
+	SelectEquipmentSlot(RetrieveGameplayTags::Equipment_Slot_Feet);
+}
+
+void UInventoryPanelWidget::RefreshSlotIcons()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	auto SetArmorSlotIcon = [this](UImage* IconImage, FGameplayTag SlotTag)
+	{
+		if (!IconImage)
+		{
+			return;
+		}
+		const FName ArmorId = InventoryComponent->GetEquippedArmorId(SlotTag);
+		FRetrieveItemIconRow IconData;
+		if (!ArmorId.IsNone() && GetItemIconData(ArmorId, IconData))
+		{
+			if (UTexture2D* Texture = IconData.IconTexture.LoadSynchronous())
+			{
+				IconImage->SetBrushFromTexture(Texture);
+				IconImage->SetColorAndOpacity(FLinearColor::White);
+				return;
+			}
+		}
+		IconImage->SetBrush(FSlateBrush());
+		IconImage->SetColorAndOpacity(FLinearColor::Transparent);
+	};
+
+	SetArmorSlotIcon(Image_SlotIcon_Head,    RetrieveGameplayTags::Equipment_Slot_Head);
+	SetArmorSlotIcon(Image_SlotIcon_Chest,   RetrieveGameplayTags::Equipment_Slot_Chest);
+	SetArmorSlotIcon(Image_SlotIcon_Hands_L, RetrieveGameplayTags::Equipment_Slot_Hands);
+	SetArmorSlotIcon(Image_SlotIcon_Hands_R, RetrieveGameplayTags::Equipment_Slot_Hands);
+	SetArmorSlotIcon(Image_SlotIcon_Legs,    RetrieveGameplayTags::Equipment_Slot_Legs);
+	SetArmorSlotIcon(Image_SlotIcon_Feet,    RetrieveGameplayTags::Equipment_Slot_Feet);
+
+	// 무기 슬롯
+	if (Image_SlotIcon_Weapon)
+	{
+		const FName WeaponId = InventoryComponent->GetEquippedWeaponId();
+		FRetrieveItemIconRow IconData;
+		if (!WeaponId.IsNone() && GetItemIconData(WeaponId, IconData))
+		{
+			if (UTexture2D* Texture = IconData.IconTexture.LoadSynchronous())
+			{
+				Image_SlotIcon_Weapon->SetBrushFromTexture(Texture);
+				Image_SlotIcon_Weapon->SetColorAndOpacity(FLinearColor::White);
+				return;
+			}
+		}
+		Image_SlotIcon_Weapon->SetBrush(FSlateBrush());
+		Image_SlotIcon_Weapon->SetColorAndOpacity(FLinearColor::Transparent);
+	}
 }
