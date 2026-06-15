@@ -10,6 +10,7 @@
 #include "Components/ElementGaugeComponent.h"
 #include "Components/ElementUnlockComponent.h"
 #include "Components/PlayerBurstComponent.h"
+#include "Components/RetrieveCameraWaterProbeComponent.h"
 #include "Components/RetrievePawnCosmeticComponent.h"
 #include "Components/RetrievePawnExtensionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -76,6 +77,9 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 
 	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
 	ThirdPersonCamera->SetupAttachment(CameraSpringArm, USpringArmComponent::SocketName);
+
+	CameraWaterProbe = CreateDefaultSubobject<URetrieveCameraWaterProbeComponent>(TEXT("CameraWaterProbe"));
+	CameraWaterProbe->SetupAttachment(ThirdPersonCamera);
 }
 
 void ASovereignCharacter::InitializeAbilitySystem()

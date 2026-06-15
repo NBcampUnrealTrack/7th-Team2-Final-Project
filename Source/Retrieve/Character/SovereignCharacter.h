@@ -20,6 +20,7 @@ class UPlayerBurstComponent;
 class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
 class UMotionWarpingComponent;
+class URetrieveCameraWaterProbeComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
@@ -72,7 +73,7 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<USwimDetectionComponent> SwimDetectionComponent;
-	
+
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<USkeletalMeshComponent> VisualMesh;
@@ -82,6 +83,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
 	TObjectPtr<UCameraComponent> ThirdPersonCamera;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Camera")
+	TObjectPtr<URetrieveCameraWaterProbeComponent> CameraWaterProbe;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
 	ERetrieveTeam Team = ERetrieveTeam::Player;

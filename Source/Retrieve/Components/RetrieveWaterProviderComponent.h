@@ -27,6 +27,7 @@ public:
 	virtual float GetWaterSurfaceZ_Implementation(const FVector& Location) const override;
 	virtual bool TryGetWaterColumn_Implementation(const FVector& Location, float& OutSurfaceZ) const override;
 	virtual FVector GetFlowVelocity_Implementation(const FVector& Location) const override;
+	virtual FRetrieveWaterPPMaterials GetWaterPostProcessMaterials_Implementation() const override; // 호수=자체 PP 볼륨 → null
 
 protected:
 	virtual void BeginPlay() override;

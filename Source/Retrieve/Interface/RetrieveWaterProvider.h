@@ -5,6 +5,20 @@
 #include "UObject/Interface.h"
 #include "RetrieveWaterProvider.generated.h"
 
+class UMaterialInterface;
+
+/** 수역이 제공하는 카메라 PP 머티리얼 세트. (Fog는 PP 아님 → 별도 메시) */
+USTRUCT(BlueprintType)
+struct FRetrieveWaterPPMaterials
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly) 
+	TObjectPtr<UMaterialInterface> Underwater = nullptr;
+	
+	UPROPERTY(BlueprintReadOnly) 
+	TObjectPtr<UMaterialInterface> Waterline = nullptr;
+};
+
 UINTERFACE(BlueprintType)
 class RETRIEVE_API URetrieveWaterProvider : public UInterface
 {
@@ -31,4 +45,8 @@ public:
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Retrieve|Water")
 	FVector GetFlowVelocity(const FVector& Location) const;
+	
+	/** 이 수역의 수중 PP 머티리얼. null이면 카메라 FX 미적용(예: 호수는 자체 볼륨). */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Retrieve|Water")
+	FRetrieveWaterPPMaterials GetWaterPostProcessMaterials() const;
 };
