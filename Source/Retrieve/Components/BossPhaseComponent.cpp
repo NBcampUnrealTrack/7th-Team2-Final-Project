@@ -101,10 +101,37 @@ void UBossPhaseComponent::TransitionToNextPhase()
 	FGameplayEventData EventData;
 	EventData.EventTag   = RetrieveGameplayTags::GameplayEvent_Boss_PhaseTransition;
 	EventData.Instigator = Boss;
+	EventData.EventMagnitude = CurrentPhase;
+	EventData.OptionalObject = ResolvePhaseTransitionMontage();
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		Boss, RetrieveGameplayTags::GameplayEvent_Boss_PhaseTransition, EventData);
 
 	UE_LOG(LogTemp, Log,
 		TEXT("[%s] BossPhaseComponent: Phase %d 전환 → DataRow '%s'"),
 		*Boss->GetName(), CurrentPhase, *NewDataRow.ToString());
+}
+
+UAnimMontage* UBossPhaseComponent::ResolvePhaseTransitionMontage() const
+{
+	if (!BossStatsTable || BossStatsRowName.IsNone())
+	{
+		return nullptr;
+	}
+
+	const FBossStatsRow* Row = BossStatsTable->FindRow<FBossStatsRow>(
+		BossStatsRowName, TEXT("UBossPhaseComponent::ResolvePhaseTransitionMontage"));
+	if (!Row)
+	{
+		return nullptr;
+	}
+
+	for (const FBossPhaseTransitionMontageEntry& Entry : Row->PhaseTransitionMontages)
+	{
+		if (Entry.TargetPhase == CurrentPhase)
+		{
+			return Entry.Montage.LoadSynchronous();
+		}
+	}
+
+	return nullptr;
 }

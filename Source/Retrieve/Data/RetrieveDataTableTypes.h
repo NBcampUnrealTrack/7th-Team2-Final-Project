@@ -292,6 +292,18 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FBossPhaseTransitionMontageEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase", meta=(ClampMin="2", ClampMax="3"))
+	int32 TargetPhase = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase")
+	TSoftObjectPtr<UAnimMontage> Montage;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FBossStatsRow : public FTableRowBase
 {
     GENERATED_BODY()
@@ -311,6 +323,9 @@ struct RETRIEVE_API FBossStatsRow : public FTableRowBase
 	/** 3페이즈 진입 HP 비율. 없으면 0 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase", meta=(ClampMin="0.0", ClampMax="1.0"))
     float Phase3HPThreshold = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Phase")
+	TArray<FBossPhaseTransitionMontageEntry> PhaseTransitionMontages;
 
 	/** 처치 시 해방할 원소 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Drop")

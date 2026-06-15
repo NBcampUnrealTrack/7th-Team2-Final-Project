@@ -5,6 +5,7 @@
 #include "BossPhaseComponent.generated.h"
 
 class UDataTable;
+class UAnimMontage;
 
 /**
  * 보스 HP 임계값을 감시하고 페이즈 전환을 처리합니다.
@@ -42,6 +43,7 @@ private:
 	void OnHealthChanged(float NewHealth);
 
 	void TransitionToNextPhase();
+	UAnimMontage* ResolvePhaseTransitionMontage() const;
 
 	UPROPERTY()
 	TObjectPtr<UDataTable> BossStatsTable;
