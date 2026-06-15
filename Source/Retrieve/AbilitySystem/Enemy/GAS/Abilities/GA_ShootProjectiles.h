@@ -32,7 +32,9 @@ private:
 	void ScheduleProjectiles(bool bHasMontage);
 	void SpawnProjectile();
 	void FinishAbility();
-	bool ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig) const;
+	bool ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
+		ERetrieveHitReactType* OutHitReactType = nullptr,
+		FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig = nullptr) const;
 	const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
 	
 
@@ -70,4 +72,6 @@ private:
 	float ActiveProjectileSpeed = 1200.f;
 	
 	FMonsterProjectilePatternConfig ActiveProjectileConfig;
+	ERetrieveHitReactType ActiveHitReactType = ERetrieveHitReactType::Flinch;
+	FMonsterLaunchKnockbackConfig ActiveLaunchKnockbackConfig;
 };

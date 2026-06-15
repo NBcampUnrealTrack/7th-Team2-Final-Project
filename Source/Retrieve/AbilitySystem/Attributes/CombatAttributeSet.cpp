@@ -6,6 +6,7 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "Net/UnrealNetwork.h"
+#include "Perception/AISense_Damage.h"
 
 UCombatAttributeSet::UCombatAttributeSet()
 {
@@ -210,6 +211,14 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 
 	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
 	if (IsValid(TargetActor) == false) return;
+
+	UAISense_Damage::ReportDamageEvent(
+		TargetActor,
+		TargetActor,
+		AttackerActor,
+		DamageDone,
+		AttackerActor->GetActorLocation(),
+		TargetActor->GetActorLocation());
 
 	// 공격자 GE에 붙여둔 태그로 강도 판정
 	FGameplayTagContainer SourceTags;

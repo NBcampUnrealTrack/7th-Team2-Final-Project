@@ -4,6 +4,8 @@
 #include "StateTreeExecutionContext.h"
 #include "AIController.h"
 #include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISense.h"
+#include "Perception/AISense_Damage.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -29,6 +31,31 @@ namespace
 		if (URetrieveHealthComponent* HealthComp = Actor->GetComponentByClass<URetrieveHealthComponent>())
 		{
 			return HealthComp->IsDeadOrDying();
+		}
+
+		return false;
+	}
+
+	bool WasDamageSensed(UAIPerceptionComponent* PerceptionComp, AActor* Actor)
+	{
+		if (!PerceptionComp || !IsValid(Actor))
+		{
+			return false;
+		}
+
+		FActorPerceptionBlueprintInfo PerceptionInfo;
+		if (!PerceptionComp->GetActorsPerception(Actor, PerceptionInfo))
+		{
+			return false;
+		}
+
+		const FAISenseID DamageSenseID = UAISense::GetSenseID<UAISense_Damage>();
+		for (const FAIStimulus& Stimulus : PerceptionInfo.LastSensedStimuli)
+		{
+			if (Stimulus.Type == DamageSenseID && Stimulus.WasSuccessfullySensed())
+			{
+				return true;
+			}
 		}
 
 		return false;
@@ -267,7 +294,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			continue;
 		}
 
-		if (bApplyFov)   // 이미 추적 중이면 시야 무시하고 계속 추적
+		const bool bDamageSensed = WasDamageSensed(PerceptionComp, Actor);
+		if (bApplyFov && !bDamageSensed)   // 이미 추적 중이면 시야 무시하고 계속 추적
 		{
 			FVector ToTarget = Actor->GetActorLocation() - PawnLocation;
 			FVector Forward  = Pawn->GetActorForwardVector();
@@ -399,14 +427,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				&& bSpecialAttackRetryCooldownReady
 				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
 					InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
-			UE_LOG(LogRetrieveCombat, Warning,
-				TEXT("[EnemyTargetEvaluator] SpecialCheck Target=%s CanToken=%d PatternActive=%d SpecialLock=%d SpecialRetryCooldownReady=%d Distance=%.1f"),
-				*GetNameSafe(InstanceData.TargetPlayer),
-				bCanRequestToken,
-				bPatternActive,
-				bSpecialAttackEvaluationLocked,
-				bSpecialAttackRetryCooldownReady,
-				InstanceData.DistanceToTarget);
 			
 			InstanceData.bAttackable =
 				bCanRequestToken

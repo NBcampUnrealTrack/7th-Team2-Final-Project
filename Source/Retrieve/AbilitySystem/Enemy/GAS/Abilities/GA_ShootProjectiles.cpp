@@ -104,6 +104,8 @@ void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
 
 	CachedTargetActor = nullptr;
 	ActiveProjectileSpeed = FallbackProjectileSpeed ;
+	ActiveHitReactType = ERetrieveHitReactType::Flinch;
+	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -118,8 +120,10 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 
 	ActiveProjectileConfig = FMonsterProjectilePatternConfig();
 	ActiveProjectileConfig.ProjectileSpeed = FallbackProjectileSpeed ;
+	ActiveHitReactType = ERetrieveHitReactType::Flinch;
+	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
 
-	ResolveProjectilePattern(ActiveProjectileConfig);
+	ResolveProjectilePattern(ActiveProjectileConfig, &ActiveHitReactType, &ActiveLaunchKnockbackConfig);
 
 	TArray<float> FireDelays = ActiveProjectileConfig.ProjectileFireDelays;
 	if (FireDelays.IsEmpty())
@@ -209,6 +213,11 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	if (Projectile)
 	{
 		Projectile->Launch(Direction, ActiveProjectileConfig.ProjectileSpeed);
+		Projectile->SetHitReactType(ActiveHitReactType);
+		Projectile->SetLaunchKnockbackConfig(ActiveLaunchKnockbackConfig);
+		Projectile->SetProjectileLifetime(ActiveProjectileConfig.ProjectileLifetime);
+		Projectile->SetGravityScale(ActiveProjectileConfig.bUseGravity
+			? ActiveProjectileConfig.ProjectileGravityScale : 0.f);
 		
 		if (ActiveProjectileConfig.bUseHoming)
 		{
@@ -217,11 +226,6 @@ void UGA_ShootProjectiles::SpawnProjectile()
 				ActiveProjectileConfig.HomingStartDelay,
 				ActiveProjectileConfig.HomingDuration,
 				ActiveProjectileConfig.HomingStrength);
-			
-			Projectile->SetProjectileLifetime(ActiveProjectileConfig.ProjectileLifetime);
-			
-			Projectile->SetGravityScale(ActiveProjectileConfig.bUseGravity
-				? ActiveProjectileConfig.ProjectileGravityScale : 0.f);
 		}
 	}
 }
@@ -234,7 +238,9 @@ void UGA_ShootProjectiles::FinishAbility()
 	}
 }
 
-bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig) const
+bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
+	ERetrieveHitReactType* OutHitReactType,
+	FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig) const
 {
 	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	const UEnemyCombatComponent* CombatComponent =
@@ -262,6 +268,14 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 	}
 
 	OutConfig = Row->ProjectileConfig;
+	if (OutHitReactType)
+	{
+		*OutHitReactType = Row->HitReactType;
+	}
+	if (OutLaunchKnockbackConfig)
+	{
+		*OutLaunchKnockbackConfig = Row->LaunchKnockbackConfig;
+	}
 
 	if (OutConfig.ProjectileSpeed <= 0.f)
 	{
@@ -291,7 +305,6 @@ void UGA_ShootProjectiles::OnMontageCompleted()
 
 void UGA_ShootProjectiles::OnMontageInterrupted()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[GA_ShootProjectiles] Montage Interrupted"));
 	if (IsActive())
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);

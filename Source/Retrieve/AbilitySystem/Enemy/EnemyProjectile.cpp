@@ -6,6 +6,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "TimerManager.h"
 
 AEnemyProjectile::AEnemyProjectile()
@@ -28,6 +30,10 @@ AEnemyProjectile::AEnemyProjectile()
 	MeshComp->SetupAttachment(CollisionSphere);
 	MeshComp->SetRelativeScale3D(FVector(0.3f));
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	FlightVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FlightVFXComponent"));
+	FlightVFXComponent->SetupAttachment(CollisionSphere);
+	FlightVFXComponent->SetAutoActivate(true);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = CollisionSphere;
@@ -101,6 +107,16 @@ void AEnemyProjectile::SetGravityScale(float GravityScale)
 	ProjectileMovement->ProjectileGravityScale = GravityScale;
 }
 
+void AEnemyProjectile::SetHitReactType(ERetrieveHitReactType InHitReactType)
+{
+	HitReactType = InHitReactType;
+}
+
+void AEnemyProjectile::SetLaunchKnockbackConfig(const FMonsterLaunchKnockbackConfig& InLaunchKnockbackConfig)
+{
+	LaunchKnockbackConfig = InLaunchKnockbackConfig;
+}
+
 void AEnemyProjectile::BeginPlay()
 {
 	Super::BeginPlay();
@@ -158,23 +174,46 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 			const FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, 1.f, Context);
 			if (Spec.IsValid())
 			{
+				if (const FGameplayTag ReactTag = HitReactTypeToTag(HitReactType); ReactTag.IsValid())
+				{
+					Spec.Data->AddDynamicAssetTag(ReactTag);
+				}
+
 				SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 			}
 		}
 	}
 
-	if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
+	if (HasAuthority() && LaunchKnockbackConfig.bUseLaunchKnockback)
 	{
-		const FVector Direction = (OtherActor->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-		const FVector LaunchVelocity = Direction * KnockbackStrength + FVector(0.f, 0.f, KnockbackUpwardStrength);
-		HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
+		if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
+		{
+			const FVector Direction = (OtherActor->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+			const FVector LaunchVelocity = Direction * LaunchKnockbackConfig.KnockbackStrength
+				+ FVector(0.f, 0.f, LaunchKnockbackConfig.KnockbackUpwardStrength);
+			HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
+		}
 	}
 
+	const FVector ImpactLocation = SweepResult.bBlockingHit
+		? FVector(SweepResult.ImpactPoint)
+		: GetActorLocation();
+	const FRotator ImpactRotation = SweepResult.bBlockingHit
+		? SweepResult.ImpactNormal.Rotation()
+		: GetActorRotation();
+	PlayImpactVFX(ImpactLocation, ImpactRotation);
 	Destroy();
 }
 
 void AEnemyProjectile::OnProjectileStopped(const FHitResult& ImpactResult)
 {
+	const FVector ImpactLocation = ImpactResult.bBlockingHit
+		? FVector(ImpactResult.ImpactPoint)
+		: GetActorLocation();
+	const FRotator ImpactRotation = ImpactResult.bBlockingHit
+		? ImpactResult.ImpactNormal.Rotation()
+		: GetActorRotation();
+	PlayImpactVFX(ImpactLocation, ImpactRotation);
 	Destroy();
 }
 
@@ -194,6 +233,20 @@ bool AEnemyProjectile::IsIgnoredActor(const AActor* OtherActor) const
 	}
 
 	return false;
+}
+
+void AEnemyProjectile::PlayImpactVFX(const FVector& Location, const FRotator& Rotation)
+{
+	if (!ImpactVFX)
+	{
+		return;
+	}
+
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		this,
+		ImpactVFX,
+		Location,
+		Rotation);
 }
 
 void AEnemyProjectile::StartHoming(float Strength)

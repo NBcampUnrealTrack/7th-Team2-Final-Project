@@ -110,6 +110,21 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FMonsterLaunchKnockbackConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback")
+	bool bUseLaunchKnockback = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
+	float KnockbackStrength = 800.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
+	float KnockbackUpwardStrength = 400.f;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 {
     GENERATED_BODY()
@@ -157,6 +172,9 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 적중 시 피격자 반응 강도 (방어판정/데미지와 독립) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|HitReact")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback")
+	FMonsterLaunchKnockbackConfig LaunchKnockbackConfig;
 
 	/** 카운터 관련 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
