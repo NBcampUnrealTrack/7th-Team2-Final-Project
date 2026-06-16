@@ -2,7 +2,7 @@
 
 #include "LumenFollowComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/RetrieveDialogueComponent.h"
+#include "Components/World/RetrieveDialogueComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)

@@ -1,6 +1,6 @@
 #include "UI/Bonfire/BonfireMenuWidget.h"
 
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Components/VerticalBoxSlot.h"
 #include "GameFramework/Pawn.h"
 #include "UI/Craft/CraftPanelWidget.h"

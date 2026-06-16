@@ -5,10 +5,10 @@
 #include "TimerManager.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "Components/RetrieveHealthComponent.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/SphereComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
-#include "Components/BossHPBarComponent.h"
+#include "Components/Enemy/BossHPBarComponent.h"
 
 ASpawnerBase::ASpawnerBase()
 {

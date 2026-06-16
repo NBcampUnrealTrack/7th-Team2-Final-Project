@@ -1,6 +1,6 @@
 #include "UI/HUD/RetrieveElementGaugeWidget.h"
 
-#include "Components/ElementGaugeComponent.h"
+#include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Engine/DataTable.h"

@@ -1,7 +1,7 @@
 #include "AbilitySystem/Player/GA_HeavyAttack_Wind.h"
 
 #include "GameFramework/Character.h"
-#include "Components/RetrieveHeroComponent.h"
+#include "Components/Player/RetrieveHeroComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_HeavyAttack_Wind::UGA_HeavyAttack_Wind()

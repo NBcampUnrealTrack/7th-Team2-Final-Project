@@ -1,8 +1,8 @@
 #include "AbilitySystem/Player/GA_Blink.h"
 
 #include "Components/CapsuleComponent.h"
-#include "Components/RetrieveHeroComponent.h"
-#include "Components/WeaponComponent.h"
+#include "Components/Player/RetrieveHeroComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"

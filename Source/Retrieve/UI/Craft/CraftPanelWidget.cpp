@@ -3,7 +3,7 @@
 #include "UI/Craft/CraftMaterialRowWidget.h"
 #include "UI/Craft/CraftRecipeEntryWidget.h"
 #include "UI/RetrieveItemDescriptionHelper.h"
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 
 #include "Components/Button.h"

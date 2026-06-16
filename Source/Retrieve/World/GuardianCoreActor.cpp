@@ -1,6 +1,6 @@
 #include "World/GuardianCoreActor.h"
 
-#include "Components/RetrieveInteractionResponseComponent.h"
+#include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Quest/QuestBranchComponent.h"
 

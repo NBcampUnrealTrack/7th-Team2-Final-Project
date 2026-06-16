@@ -4,7 +4,7 @@
 #include "RetrieveArenaBlockActor.h"
 
 #include "Components/StaticMeshComponent.h"
-#include "GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 ARetrieveArenaBlockActor::ARetrieveArenaBlockActor()

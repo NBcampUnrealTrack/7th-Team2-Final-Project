@@ -1,6 +1,6 @@
 #include "UI/RetrieveToastManagerWidget.h"
 
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"

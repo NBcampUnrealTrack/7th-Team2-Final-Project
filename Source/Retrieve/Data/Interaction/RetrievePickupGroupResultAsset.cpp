@@ -1,6 +1,6 @@
 #include "Data/Interaction/RetrievePickupGroupResultAsset.h"
 
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "GameFramework/Actor.h"
 
 void URetrievePickupGroupResultAsset::ApplyResult_Implementation(

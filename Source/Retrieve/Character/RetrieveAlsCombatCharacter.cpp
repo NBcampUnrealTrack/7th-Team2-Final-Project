@@ -1,8 +1,8 @@
 
 #include "RetrieveAlsCombatCharacter.h"
 
-#include "Components/RetrieveHealthComponent.h"
-#include "Components/RetrievePawnExtensionComponent.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
+#include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 ARetrieveAlsCombatCharacter::ARetrieveAlsCombatCharacter(const FObjectInitializer& ObjectInitializer)

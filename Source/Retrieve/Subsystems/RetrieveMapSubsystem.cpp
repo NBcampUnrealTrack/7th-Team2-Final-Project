@@ -1,5 +1,5 @@
 #include "Subsystems/RetrieveMapSubsystem.h"
-#include "Components/RetrieveMapIconComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"

@@ -3,7 +3,7 @@
 
 #include "GA_LockOn.h"
 
-#include "Components/CombatReactionComponent.h"
+#include "Components/Combat/CombatReactionComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_LockOn::UGA_LockOn()

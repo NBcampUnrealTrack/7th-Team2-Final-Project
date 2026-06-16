@@ -1,6 +1,6 @@
 #include "UI/HUD/RetrieveQuickSlotBarWidget.h"
 #include "UI/HUD/RetrieveQuickSlotEntryWidget.h"
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
 #include "GameFramework/Pawn.h"
