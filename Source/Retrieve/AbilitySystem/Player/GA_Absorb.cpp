@@ -1,7 +1,7 @@
 #include "AbilitySystem/Player/GA_Absorb.h"
 
 #include "AbilitySystemComponent.h"
-#include "Components/ElementGaugeComponent.h"
+#include "Components/Element/ElementGaugeComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"

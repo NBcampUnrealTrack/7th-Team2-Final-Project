@@ -1,5 +1,5 @@
 #include "Data/RetrieveMapIconDataAsset.h"
-#include "Components/RetrieveMapIconComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
 #include "World/RetrieveBonfireActor.h"
 #include "EngineUtils.h"
 

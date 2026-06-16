@@ -1,6 +1,6 @@
 #include "Animation/AnimNotifyState_EnemyMovementLock.h"
 
-#include "Components/EnemyCombatComponent.h"
+#include "Components/Enemy/EnemyCombatComponent.h"
 
 FString UAnimNotifyState_EnemyMovementLock::GetNotifyName_Implementation() const
 {

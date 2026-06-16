@@ -1,6 +1,6 @@
 ﻿#include "UI/VFX/RetrieveItemAddedVFXWidget.h"
 
-#include "Components/InventoryComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 

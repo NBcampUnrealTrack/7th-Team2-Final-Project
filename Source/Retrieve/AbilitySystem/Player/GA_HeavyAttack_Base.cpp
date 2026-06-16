@@ -3,8 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
-#include "Components/ElementGaugeComponent.h"
-#include "Components/WeaponComponent.h"
+#include "Components/Element/ElementGaugeComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_HeavyAttack_Base::UGA_HeavyAttack_Base()

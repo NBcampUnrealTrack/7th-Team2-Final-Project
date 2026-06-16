@@ -1,7 +1,7 @@
 #include "UI/ViewModels/ElementGaugeViewModel.h"
 
 #include "AbilitySystemComponent.h"
-#include "Components/ElementGaugeComponent.h"
+#include "Components/Element/ElementGaugeComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "UI/RetrieveElementUILibrary.h"
 

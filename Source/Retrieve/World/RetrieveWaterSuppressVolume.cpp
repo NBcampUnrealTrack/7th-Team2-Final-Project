@@ -1,7 +1,7 @@
 #include "World/RetrieveWaterSuppressVolume.h"
 
 #include "Components/BoxComponent.h"
-#include "Components/SwimDetectionComponent.h"
+#include "Components/Water/SwimDetectionComponent.h"
 
 ARetrieveWaterSuppressVolume::ARetrieveWaterSuppressVolume()
 {

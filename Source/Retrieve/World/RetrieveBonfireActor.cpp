@@ -1,6 +1,6 @@
 ﻿                                                                       #include "World/RetrieveBonfireActor.h"
-#include "Components/RetrieveMapIconComponent.h"
-#include "Components/RetrieveInteractionResponseComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
+#include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"

@@ -2,7 +2,7 @@
 
 #include "StateTreeLinker.h"
 #include "StateTreeExecutionContext.h"
-#include "Components/EnemyCombatComponent.h"
+#include "Components/Enemy/EnemyCombatComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
 #include "AIController.h"
 #include "Navigation/PathFollowingComponent.h"

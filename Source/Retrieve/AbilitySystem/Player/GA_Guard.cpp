@@ -5,7 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
-#include "Components/WeaponComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 

@@ -2,7 +2,7 @@
 
 #if WITH_EDITOR
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "Components/RetrieveInteractionResponseComponent.h"
+#include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Data/Interaction/RetrieveInteractionPresetAsset.h"
 #include "Data/Interaction/RetrieveInteractionPresetProfileAsset.h"
 #include "Data/Interaction/RetrieveInteractionTypeAsset.h"

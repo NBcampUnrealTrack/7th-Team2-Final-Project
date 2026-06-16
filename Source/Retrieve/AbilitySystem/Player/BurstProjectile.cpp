@@ -3,7 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Components/SphereComponent.h"
-#include "Components/PlayerBurstComponent.h"
+#include "Components/Player/PlayerBurstComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Logging/RetrieveLogChannels.h"
 

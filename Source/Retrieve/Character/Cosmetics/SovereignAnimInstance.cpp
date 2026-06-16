@@ -2,7 +2,7 @@
 #include "SovereignAnimInstance.h"
 
 #include "AbilitySystemGlobals.h"
-#include "Components/RetrieveCharacterMovementComponent.h"
+#include "Components/Pawn/RetrieveCharacterMovementComponent.h"
 #include "GameFramework/Character.h"
 
 #if WITH_EDITOR

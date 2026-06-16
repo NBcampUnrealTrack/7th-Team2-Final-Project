@@ -3,7 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
-#include "Components/WeaponComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Engine/World.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "TimerManager.h"

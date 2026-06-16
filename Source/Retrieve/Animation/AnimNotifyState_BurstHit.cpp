@@ -1,6 +1,6 @@
 #include "Animation/AnimNotifyState_BurstHit.h"
 
-#include "Components/PlayerBurstComponent.h"
+#include "Components/Player/PlayerBurstComponent.h"
 #include "Logging/RetrieveLogChannels.h"
 
 FString UAnimNotifyState_BurstHit::GetNotifyName_Implementation() const

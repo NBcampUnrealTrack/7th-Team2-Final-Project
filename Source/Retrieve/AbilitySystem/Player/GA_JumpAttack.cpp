@@ -14,7 +14,7 @@
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
-#include "Components/WeaponComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"

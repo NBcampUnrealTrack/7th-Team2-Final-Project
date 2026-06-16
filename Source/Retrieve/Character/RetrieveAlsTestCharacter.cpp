@@ -2,8 +2,8 @@
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
-#include "Components/RetrieveHeroComponent.h"
-#include "Components/RetrievePawnExtensionComponent.h"
+#include "Components/Player/RetrieveHeroComponent.h"
+#include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Input/RetrieveInputComponent.h"

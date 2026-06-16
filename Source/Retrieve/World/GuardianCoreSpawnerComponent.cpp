@@ -2,7 +2,7 @@
 
 #include "Character/RetrieveBossCharacter.h"
 #include "Core/RetrieveGameState.h"
-#include "GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Quest/QuestBranchComponent.h"
 #include "World/GuardianCoreActor.h"

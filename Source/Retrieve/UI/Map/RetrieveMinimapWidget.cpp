@@ -1,6 +1,6 @@
 ﻿#include "UI/Map/RetrieveMinimapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
-#include "Components/RetrieveMapIconComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 #include "World/RetrieveBonfireActor.h"
 

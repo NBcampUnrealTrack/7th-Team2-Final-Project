@@ -1,6 +1,6 @@
 #include "UI/ViewModels/BossStatusViewModel.h"
 
-#include "Components/RetrieveHealthComponent.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
 
 FText UBossStatusViewModel::GetHealthText() const
 {

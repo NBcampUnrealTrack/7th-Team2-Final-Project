@@ -1,8 +1,8 @@
 #include "Character/RetrieveCharacter.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
-#include "Components/RetrieveHeroComponent.h"
-#include "Components/RetrievePawnExtensionComponent.h"
+#include "Components/Player/RetrieveHeroComponent.h"
+#include "Components/Pawn/RetrievePawnExtensionComponent.h"
 
 ARetrieveCharacter::ARetrieveCharacter(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {

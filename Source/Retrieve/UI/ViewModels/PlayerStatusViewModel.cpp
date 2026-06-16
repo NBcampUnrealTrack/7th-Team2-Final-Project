@@ -1,6 +1,6 @@
 #include "UI/ViewModels/PlayerStatusViewModel.h"
 
-#include "Components/RetrieveHealthComponent.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
 
 void UPlayerStatusViewModel::BindToHealth(URetrieveHealthComponent* InHealth)
 {
