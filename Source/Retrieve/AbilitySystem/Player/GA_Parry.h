@@ -1,21 +1,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilitySystem/RetrieveGameplayAbility.h"
-#include "GA_Dash.generated.h"
+#include "AbilitySystem/Player/GA_ParryBase.h"
+#include "GA_Parry.generated.h"
 
 class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
-/**
- * 
- */
+
+/** 기본 패링 — 전 무기 공통 방어(R). 타이밍 패리(홀드 아님), 자동 종료. 방패(SwordShield)는 GA_Guard가 대신. */
 UCLASS()
-class RETRIEVE_API UGA_Dash : public URetrieveGameplayAbility
+class RETRIEVE_API UGA_Parry : public UGA_ParryBase
 {
 	GENERATED_BODY()
-	
+
 public:
-	UGA_Dash();
+	UGA_Parry();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
@@ -24,18 +23,17 @@ protected:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 private:
-	FVector ResolveDashDirection(const FGameplayAbilityActorInfo* ActorInfo) const;
-
-	UFUNCTION() void HandleMontageFinished();
+	UFUNCTION() void HandleParryEnd();
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Dash")
-	TSoftObjectPtr<UAnimMontage> DashMontage;
-
-	/** Dash 몽타주 기본 재생 속도. 1.0=ALS 원본. 최종 PlayRate = Base × (MoveSpeed / ReferenceMoveSpeed). */
-	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.1"))
-	float BaseDashPlayRate = 1.35f;
+	UPROPERTY(EditDefaultsOnly, Category = "Parry")
+	TSoftObjectPtr<UAnimMontage> ParryMontage;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry", meta = (ClampMin = "0.05"))
+	float ParryActiveDuration = 0.5f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+
+	FTimerHandle EndTimerHandle;
 };

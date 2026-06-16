@@ -24,6 +24,7 @@ UGA_SprintAttack::UGA_SprintAttack()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_SprintAttack);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 
 	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Player_Sprinting);

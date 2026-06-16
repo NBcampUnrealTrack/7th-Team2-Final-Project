@@ -21,6 +21,7 @@ class UStaticMesh;
 class UTexture2D;
 class UNiagaraSystem;
 class USoundBase;
+class AStaffProjectile;
 
 // FGenericTeamId(uint8)에 매핑되는 게임 정의 팀 식별자.
 // 엔진은 NoTeam(255)만 예약하고 팀 의미는 게임이 정의하도록 둠 → 여기서 정의한다.
@@ -759,6 +760,41 @@ struct RETRIEVE_API FParryCounterData
 	float GroggyDuration = 3.f;
 };
 
+// 스태프(배틀메이지) 강공격(왼손 투사체) 데이터
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponStaffAttack
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	TSubclassOf<AStaffProjectile> ProjectileClass;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile", meta = (ClampMin = "0.0"))
+	float ProjectileSpeed = 1800.f;
+
+	// 발사 시점(초). 비면 즉시 1발, 여러 개면 연사(몽타주 길이 내)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	TArray<float> FireDelays;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.2f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	FName SpawnSocketName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	FVector SpawnOffset = FVector(60.f, -35.f, 50.f);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	FGameplayTag ChargeBonusEventTag;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Element")
+	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> ElementStatusEffects;
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FRetrieveWeaponAttachmentData
 {
@@ -846,6 +882,18 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FWeaponSprintAttack SprintAttack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FWeaponJumpAttack JumpAttack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FParryCounterData ParryCounter;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	FWeaponStaffAttack StaffAttack;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;
