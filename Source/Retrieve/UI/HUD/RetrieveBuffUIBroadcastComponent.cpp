@@ -140,7 +140,8 @@ void URetrieveBuffUIBroadcastComponent::OnGERemoved(const FActiveGameplayEffect&
 void URetrieveBuffUIBroadcastComponent::BroadcastBuffManual(
 	FGameplayTag BuffUITag,
 	float DurationOverride,
-	TSubclassOf<UGameplayEffect> SourceEffect)
+	TSubclassOf<UGameplayEffect> SourceEffect,
+	int32 StackCount)
 {
 	if (!BuffUITag.IsValid()) return;
 
@@ -151,7 +152,7 @@ void URetrieveBuffUIBroadcastComponent::BroadcastBuffManual(
 		? DurationOverride
 		: Row->DurationOverride;
 
-	BroadcastApply(*Row, Duration, SourceEffect);
+	BroadcastApply(*Row, Duration, SourceEffect, StackCount);
 }
 
 void URetrieveBuffUIBroadcastComponent::BroadcastBuffRemove(FGameplayTag BuffUITag)
@@ -205,7 +206,7 @@ void URetrieveBuffUIBroadcastComponent::InitBuiltInRows()
 	AddRow(RetrieveGameplayTags::UI_Buff_Absorb_Wind,  TEXT("Wind Absorb"),  TEXT("Wind element absorbed. Wind attribute buff active."),  TEXT("Wind absorb buff"),  FLinearColor(0.3f, 1.f,  0.35f, 1.f), 0.f, /*bIsStackable=*/true, /*MaxStack=*/5);
 }
 
-void URetrieveBuffUIBroadcastComponent::BroadcastApply(const FRetrieveBuffUIRow& Row, float Duration, TSubclassOf<UGameplayEffect> SourceEffect)
+void URetrieveBuffUIBroadcastComponent::BroadcastApply(const FRetrieveBuffUIRow& Row, float Duration, TSubclassOf<UGameplayEffect> SourceEffect, int32 StackCount)
 {
 	if (!GetWorld()) return;
 
@@ -221,6 +222,7 @@ void URetrieveBuffUIBroadcastComponent::BroadcastApply(const FRetrieveBuffUIRow&
 	Payload.bIsDebuff    = Row.bIsDebuff;
 	Payload.bIsStackable = Row.bIsStackable;
 	Payload.MaxStack     = Row.MaxStack;
+	Payload.StackCount   = StackCount;
 
 	UGameplayMessageSubsystem::Get(GetWorld())
 		.BroadcastMessage(RetrieveGameplayTags::Channel_UI_Buff_Apply, Payload);

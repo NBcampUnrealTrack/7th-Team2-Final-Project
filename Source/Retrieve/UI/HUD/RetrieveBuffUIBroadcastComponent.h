@@ -42,7 +42,8 @@ public:
 	void BroadcastBuffManual(
 		FGameplayTag BuffUITag,
 		float DurationOverride = 0.f,
-		TSubclassOf<UGameplayEffect> SourceEffect = nullptr);
+		TSubclassOf<UGameplayEffect> SourceEffect = nullptr,
+		int32 StackCount = 0);
 
 	/** 수동으로 버프를 제거한다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI|Buff")
@@ -80,6 +81,6 @@ private:
 	void OnGERemoved(const FActiveGameplayEffect& ActiveGE);
 
 	void InitBuiltInRows();
-	void BroadcastApply(const FRetrieveBuffUIRow& Row, float Duration, TSubclassOf<UGameplayEffect> SourceEffect = nullptr);
+	void BroadcastApply(const FRetrieveBuffUIRow& Row, float Duration, TSubclassOf<UGameplayEffect> SourceEffect = nullptr, int32 StackCount = 0);
 	const FRetrieveBuffUIRow* FindRow(FGameplayTag BuffUITag) const;
 };

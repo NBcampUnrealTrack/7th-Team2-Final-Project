@@ -13,6 +13,7 @@ class UStateTree;
 class UCameraShakeBase;
 class UAnimInstance;
 class UAnimMontage;
+class UAnimSequenceBase;
 class UGameplayEffect;
 class URetrieveAbilitySet;
 class UAttackComboDefinition;
@@ -159,9 +160,21 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     int32 Priority = 0;
 	
-	/** 재생할 애니메이션 몽타주 */
+	/** 재생할 애니메이션 몽타주. 없으면 AttackSequence를 동적 몽타주로 재생한다. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	TSoftObjectPtr<UAnimMontage> AttackMontage;
+
+	/** AttackMontage가 없을 때 동적 몽타주로 재생할 AnimSequence */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
+	TSoftObjectPtr<UAnimSequenceBase> AttackSequence;
+
+	/** 히트박스 활성화 시작 시간 (초). 0이면 즉시 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(ClampMin="0.0"))
+	float HitboxWindowStartTime = 0.f;
+
+	/** 히트박스 활성화 지속 시간 (초). 0이면 히트박스 타이머 없음 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(ClampMin="0.0"))
+	float HitboxWindowDuration = 0.f;
 
 	/** 투사체 패턴 설정. 투사체를 사용하지 않는 패턴은 기본값을 사용한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
