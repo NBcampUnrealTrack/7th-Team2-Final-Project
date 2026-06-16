@@ -35,7 +35,8 @@ private:
 	void UnbindLanded();
 	void ApplyLandingAoe();
 	void ResolveHeightTier();
-
+	void RestoreGravityScale();	
+	
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
@@ -72,7 +73,8 @@ private:
 	
 	float SavedGravityScale = 1.f;
 	bool bGravityModified = false;
-
+	bool bLandingHandled = false;
+	
 	// LandedDelegate 구독 해제용
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ACharacter> BoundLandedCharacter;

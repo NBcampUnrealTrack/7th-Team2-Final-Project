@@ -88,7 +88,8 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-
+	
+	bLandingHandled = false;
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
 	// 콤보 정의에서 현재 원소의 Jump variant 해결 (없으면 기본 variant)
@@ -314,6 +315,21 @@ void UGA_JumpAttack::ResolveHeightTier()
 	}
 }
 
+void UGA_JumpAttack::RestoreGravityScale()
+{
+	if (bGravityModified)
+	{
+		if (const ACharacter* Char = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			if (UCharacterMovementComponent* MoveComp = Char->GetCharacterMovement())
+			{
+				MoveComp->GravityScale = SavedGravityScale;
+			}
+		}
+		bGravityModified = false;
+	}
+}
+
 void UGA_JumpAttack::HandleMontageCompleted()
 {
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
@@ -331,11 +347,25 @@ void UGA_JumpAttack::HandleMontageCancelled()
 
 void UGA_JumpAttack::HandleLanded(const FHitResult& Hit)
 {
+	if (bLandingHandled)
+	{
+		return;
+	}
+	bLandingHandled = true;
+	
+	UnbindLanded();
 	ApplyLandingAoe();
-
+	RestoreGravityScale();
+	
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->CurrentMontageStop(0.1f);
+		if (!CachedJumpData.LandingSectionName.IsNone())
+		{
+			ASC->CurrentMontageJumpToSection(CachedJumpData.LandingSectionName);
+			return;
+		}
+		
+		ASC->CurrentMontageStop(0.1f); // Landing Section 없을 시 Fallback(Montage Stop)
 	}
 
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
@@ -377,6 +407,7 @@ void UGA_JumpAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	HitActors.Reset();
 	bChargeBonusGranted = false;
+	bLandingHandled = false;
 	CachedWeaponComponent = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -386,5 +417,8 @@ void UGA_JumpAttack::CancelAbility(const FGameplayAbilitySpecHandle Handle, cons
 {
 	StopRuntimeTasks();
 	UnbindLanded();
+	RestoreGravityScale();
+	bLandingHandled = false;
+	
 	Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
 }
