@@ -1444,25 +1444,26 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 	const float AvailableWidth = FMath::Max(GridAreaSize.X - ScrollbarAllowance, 1.0f);
 	const float SlotSize = FMath::Max(FMath::FloorToFloat(AvailableWidth / static_cast<float>(GridColumnCount)), 1.0f);
 	const bool bGridAreaChanged = !GridAreaSize.Equals(LastInventoryGridAreaSize, 0.5f);
-	if (bGridAreaChanged)
-	{
-		UniformGrid_ItemList->SetMinDesiredSlotWidth(SlotSize);
-		UniformGrid_ItemList->SetMinDesiredSlotHeight(SlotSize);
-		LastInventoryGridAreaSize = GridAreaSize;
 
-		const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
-		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
-		{
-			UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
-			if (UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Child ? Child->Slot : nullptr))
-			{
-				GridSlot->SetHorizontalAlignment(HAlign_Fill);
-				GridSlot->SetVerticalAlignment(VAlign_Fill);
-			}
-		}
-	}
+	LastInventoryGridAreaSize = GridAreaSize;
 
 	const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
+
+	// 슬롯 정사각 크기 + Fill 정렬을 매 갱신마다 적용한다.
+	// 영역 변화 시 한 번만 적용하면, 슬롯이 그 뒤에 채워지거나 콘텐츠 크기가
+	// 늦게 확정될 때 셀이 늘어난 채로 굳는다(탭 전환으로 슬롯을 재생성해야만
+	// 정상화되던 원인). 매 틱 강제하면 콘텐츠 확정 즉시 정사각으로 맞춰진다.
+	UniformGrid_ItemList->SetMinDesiredSlotWidth(SlotSize);
+	UniformGrid_ItemList->SetMinDesiredSlotHeight(SlotSize);
+	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+	{
+		UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
+		if (UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Child ? Child->Slot : nullptr))
+		{
+			GridSlot->SetHorizontalAlignment(HAlign_Fill);
+			GridSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
 	const FName EquippedWeaponId = InventoryComponent ? InventoryComponent->GetEquippedWeaponId() : NAME_None;
 	const bool bTooltipCacheSizeChanged =
 		AppliedTooltipItemIds.Num() != ChildCount

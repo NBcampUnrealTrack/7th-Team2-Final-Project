@@ -341,29 +341,8 @@ void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(FGameplayTag PreviousL
 {
 	Super::NotifyLocomotionActionChanged(PreviousLocomotionAction);
 
-	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
-	if (!ASC)
-	{
-		return;
-	}
-
-	// ALS LocomotionAction ↔ GAS State 태그 미러링.
-	// 진입 시 부여 / 이탈 시 제거. 다른 시스템(콤보/AI 등)이 ASC에서 상태 확인 가능.
-	auto SyncTag = [&](const FGameplayTag& AlsTag, const FGameplayTag& GasTag)
-	{
-		const bool bNowOn = (LocomotionAction == AlsTag);
-		const bool bWasOn = (PreviousLocomotionAction == AlsTag);
-		if (bNowOn && !bWasOn)
-		{
-			ASC->AddLooseGameplayTag(GasTag);
-		}
-		else if (!bNowOn && bWasOn)
-		{
-			ASC->RemoveLooseGameplayTag(GasTag);
-		}
-	};
-
-	SyncTag(AlsLocomotionActionTags::Rolling, RetrieveGameplayTags::State_Player_Dodging);
+	// State.Player.Dodging은 GA_Dash의 ActivationOwnedTags로만 관리한다.
+	// (ALS Rolling 미러링은 어빌리티 종료 경로와 윈도우가 어긋나 피격 시 태그가 잔존하는 문제가 있어 제거)
 }
 
 void ARetrieveAlsCharacter::RefreshSwimmingRotation(float DeltaTime)
