@@ -42,6 +42,8 @@ public:
 	void ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn = false);
 	void DeactivateEnemy();
 
+	void SetAerialMode(bool bAerial);
+
 	// ABP Property Access 바인딩 전용
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
 	bool IsDeadForAnim()    const { return bCachedIsDead; }

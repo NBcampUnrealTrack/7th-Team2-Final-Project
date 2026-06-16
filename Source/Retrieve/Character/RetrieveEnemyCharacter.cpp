@@ -348,6 +348,26 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 
 }
 
+void ARetrieveEnemyCharacter::SetAerialMode(bool bAerial)
+{
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp)
+	{
+		return;
+	}
+
+	if (bAerial)
+	{
+		MoveComp->SetMovementMode(MOVE_Flying);
+		MoveComp->GravityScale = 0.f;
+	}
+	else
+	{
+		MoveComp->GravityScale = DefaultGravityScale;
+		MoveComp->SetMovementMode(MOVE_Falling);
+	}
+}
+
 void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
 	if (UBossHPBarComponent* BossHPBar = FindComponentByClass<UBossHPBarComponent>())
