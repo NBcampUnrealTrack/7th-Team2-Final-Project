@@ -103,8 +103,11 @@ void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		}
 	}
 
+	// bAllowInterruptAfterBlendOut=true: 블렌드아웃 중 hit react 등 다른 몽타주가 끼어들어도
+	// OnInterrupted가 발동되어 EndAbility까지 도달하도록 보장(미설정 시 콜백 누락 → 종료 안 됨).
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, FinalPlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
+		this, NAME_None, Montage, FinalPlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true,
+		1.f, 0.f, /*bAllowInterruptAfterBlendOut=*/true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -142,17 +145,17 @@ FVector UGA_Dash::ResolveDashDirection(const FGameplayAbilityActorInfo* ActorInf
 
 void UGA_Dash::HandleMontageFinished()
 {
-	// 안전망: NotifyState End가 정상 호출됐어도 멱등이라 무해. 중도 끊김 케이스 보험.
-	if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
-	{
-		Als->EndRollLockout();
-	}
-
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/false);
 }
 
 void UGA_Dash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	// 모든 종료 경로(완주/인터럽트/외부 캔슬)에서 ALS Rolling 락아웃 해제. SetLocomotionAction(Empty)는 멱등.
+	if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Als->EndRollLockout();
+	}
+
 	if (MontageTask)
 	{
 		MontageTask->EndTask();
