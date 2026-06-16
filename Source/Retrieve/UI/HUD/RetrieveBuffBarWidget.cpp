@@ -95,11 +95,19 @@ void URetrieveBuffBarWidget::OnBuffApply(FGameplayTag /*Channel*/, const FRetrie
 		if (Payload.bIsStackable)
 		{
 			int32& Stack = ActiveBuffStacks.FindOrAdd(Payload.BuffId, 1);
-			// MaxStack > 0이면 상한 초과 시 스택을 늘리지 않는다
-			const bool bAtMax = Payload.MaxStack > 0 && Stack >= Payload.MaxStack;
-			if (!bAtMax)
+			if (Payload.StackCount > 0)
 			{
-				++Stack;
+				// GE가 보고한 실제 스택 수를 그대로 사용한다 (단일 진실 원천 — StackLimitCount cap 자동 반영).
+				Stack = Payload.StackCount;
+			}
+			else
+			{
+				// 스택 정보가 없는 발행(버스트 등) → 기존처럼 Apply 횟수로 카운트하되 MaxStack에서 멈춘다.
+				const bool bAtMax = Payload.MaxStack > 0 && Stack >= Payload.MaxStack;
+				if (!bAtMax)
+				{
+					++Stack;
+				}
 			}
 			SlotPool[*ExistingIdx]->UpdateStack(Stack);
 		}
@@ -120,10 +128,16 @@ void URetrieveBuffBarWidget::OnBuffApply(FGameplayTag /*Channel*/, const FRetrie
 	ActiveBuffToSlot.Add(Payload.BuffId, FreeIdx);
 	if (Payload.bIsStackable)
 	{
-		ActiveBuffStacks.Add(Payload.BuffId, 1);
+		// 첫 슬롯 배정도 StackCount가 있으면 그 값으로 시작한다.
+		ActiveBuffStacks.Add(Payload.BuffId, Payload.StackCount > 0 ? Payload.StackCount : 1);
 	}
 	SlotPool[FreeIdx]->SetBuff(Payload);
 	SlotRemaining[FreeIdx] = Payload.Duration;
+	// SetBuff가 스택을 1로 표시하므로 시작 스택이 2 이상이면 다시 반영
+	if (Payload.bIsStackable)
+	{
+		SlotPool[FreeIdx]->UpdateStack(ActiveBuffStacks[Payload.BuffId]);
+	}
 }
 
 void URetrieveBuffBarWidget::OnBuffRemove(FGameplayTag /*Channel*/, const FRetrieveUIBuffRemovePayload& Payload)

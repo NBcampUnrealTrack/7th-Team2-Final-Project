@@ -202,6 +202,10 @@ struct FRetrieveUIBuffPayload
 	/** 스택 최대치. 0이면 무제한. bIsStackable이 true일 때만 유효. */
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
 	int32 MaxStack = 0;
+
+	/** GE가 보고한 실제 스택 수. 0이면 정보 없음 → BuffBar가 Apply 횟수로 카운트(기존 동작 유지). */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Buff")
+	int32 StackCount = 0;
 };
 
 USTRUCT(BlueprintType)

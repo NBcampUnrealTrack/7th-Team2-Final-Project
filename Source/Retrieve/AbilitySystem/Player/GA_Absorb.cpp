@@ -117,7 +117,8 @@ void UGA_Absorb::ActivateAbility(
 	const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(EffectClass, GetAbilityLevel(), Context);
 	if (SpecHandle.IsValid())
 	{
-		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
+		const FActiveGameplayEffectHandle AppliedHandle =
+			ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 
 		const FGameplayTag BuffUITag = ResolveAbsorbBuffUITag(ConsumedElement, ElementToAbsorbBuffUITag);
 		if (BuffUITag.IsValid())
@@ -126,7 +127,9 @@ void UGA_Absorb::ActivateAbility(
 				Avatar->FindComponentByClass<URetrieveBuffUIBroadcastComponent>())
 			{
 				const float GEDuration = SpecHandle.Data->GetDuration();
-				BuffUI->BroadcastBuffManual(BuffUITag, GEDuration > 0.f ? GEDuration : 0.f, EffectClass);
+				// GE가 보고한 실제 스택 수를 UI에 그대로 전달 → StackLimitCount cap이 그대로 반영된다.
+				const int32 StackCount = ASC->GetCurrentStackCount(AppliedHandle);
+				BuffUI->BroadcastBuffManual(BuffUITag, GEDuration > 0.f ? GEDuration : 0.f, EffectClass, StackCount);
 			}
 		}
 	}
