@@ -6,7 +6,7 @@
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
-#include "AbilitySystem/Player/GA_Guard.h"
+#include "AbilitySystem/Player/GA_ParryBase.h"
 #include "Combat/RetrieveTargetingLibrary.h"
 #include "Components/CombatReactionComponent.h"
 #include "Components/WeaponComponent.h"
@@ -21,6 +21,7 @@ UGA_ParryCounter::UGA_ParryCounter()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_ParryCounter);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 
 	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Player_CanCounter);
@@ -124,23 +125,23 @@ AActor* UGA_ParryCounter::ResolveCounterTarget() const
 		return nullptr;
 	}
 
-	// 1) GA_Guard가 캐싱한 패리 대상
+	// 1) 패리 대상(가드/기본 패리 공통) — Ability.Player.Parry 태그로 조회
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (IsValid(ASC))
 	{
-		TArray<FGameplayAbilitySpec*> GuardSpecs;
-		FGameplayTagContainer GuardFilter;
-		GuardFilter.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
-		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(GuardFilter, GuardSpecs, false);
+		TArray<FGameplayAbilitySpec*> ParrySpecs;
+		FGameplayTagContainer ParryFilter;
+		ParryFilter.AddTag(RetrieveGameplayTags::Ability_Player_Parry);
+		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(ParryFilter, ParrySpecs, false);
 
-		for (const FGameplayAbilitySpec* Spec : GuardSpecs)
+		for (const FGameplayAbilitySpec* Spec : ParrySpecs)
 		{
 			if (!Spec) continue;
 			for (UGameplayAbility* Instance : Spec->GetAbilityInstances())
 			{
-				if (UGA_Guard* Guard = Cast<UGA_Guard>(Instance))
+				if (UGA_ParryBase* Parry = Cast<UGA_ParryBase>(Instance))
 				{
-					if (AActor* ParriedActor = Guard->GetLastParriedAttacker())
+					if (AActor* ParriedActor = Parry->GetLastParriedAttacker())
 					{
 						return ParriedActor;
 					}

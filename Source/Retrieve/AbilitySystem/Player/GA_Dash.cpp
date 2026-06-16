@@ -6,6 +6,7 @@
 #include "Animation/AnimMontage.h"
 #include "Character/RetrieveAlsCharacter.h"
 #include "Components/RetrieveHeroComponent.h"
+#include "Components/WeaponComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -33,11 +34,26 @@ UGA_Dash::UGA_Dash()
 	// 재대시 명시적 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 
-	// 공격/방어는 즉시 취소하고 발동
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_SprintAttack);
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_JumpAttack);
+	// 공격(family)/가드 즉시 취소하고 발동
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+}
+
+bool UGA_Dash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	
+	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
+	if (WeaponComp && WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

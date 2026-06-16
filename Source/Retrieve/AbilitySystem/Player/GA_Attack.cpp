@@ -28,6 +28,7 @@ UGA_Attack::UGA_Attack()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 
 	// 공중/점프 중 공격 불가

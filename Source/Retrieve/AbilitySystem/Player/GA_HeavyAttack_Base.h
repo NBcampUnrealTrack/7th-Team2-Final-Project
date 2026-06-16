@@ -9,11 +9,7 @@ class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
 
 /**
- * 우클릭 강공격(원소 게이지 1칸 소모)의 추상 베이스
- *
- * 모드 분기는 자식의 ActivationRequiredTags(Element.Fire/Water/Wind)로 라우팅
- *  - 3개 자식 모두 동일 우클릭 InputTag로 부여 → ASC가 셋 다 활성 시도
- *  - 현재 원소 모드와 일치하는 하나만 ActivationRequiredTags를 통과 → 자동 분기
+ * 강공격(원소 게이지 1칸 소모)의 추상 베이스
  */
 UCLASS(Abstract)
 class RETRIEVE_API UGA_HeavyAttack_Base : public URetrieveGameplayAbility
@@ -22,6 +18,8 @@ class RETRIEVE_API UGA_HeavyAttack_Base : public URetrieveGameplayAbility
 
 public:
 	UGA_HeavyAttack_Base();
+
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
@@ -34,6 +32,9 @@ protected:
 	void ExecuteOwnerCue(const FGameplayTag& CueTag) const;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack")
+	bool bActivateForStaff = false;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack")
 	TSoftObjectPtr<UAnimMontage> HeavyMontage;
 	

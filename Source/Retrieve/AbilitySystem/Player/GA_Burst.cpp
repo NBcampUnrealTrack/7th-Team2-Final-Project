@@ -35,12 +35,12 @@ UGA_Burst::UGA_Burst()
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Bursting);
 
-	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
 
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 }
 

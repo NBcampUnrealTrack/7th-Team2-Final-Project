@@ -26,6 +26,7 @@ UGA_JumpAttack::UGA_JumpAttack()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_JumpAttack);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 
 	// 공중 전용 어빌리티

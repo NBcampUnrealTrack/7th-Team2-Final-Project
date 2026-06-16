@@ -22,9 +22,11 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Fire, "Ability.Player.HeavyAttack.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Water, "Ability.Player.HeavyAttack.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Wind, "Ability.Player.HeavyAttack.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Staff, "Ability.Player.HeavyAttack.Staff");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Guard, "Ability.Player.Guard");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Parry, "Ability.Player.Parry");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Dash, "Ability.Player.Dash");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Blink, "Ability.Player.Blink");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Jump, "Ability.Player.Jump");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_JumpAttack, "Ability.Player.JumpAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Burst, "Ability.Player.Burst");
@@ -38,6 +40,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_RecallLumen, "Ability.Player.RecallLumen");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SprintAttack, "Ability.Player.SprintAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_ParryCounter, "Ability.Player.ParryCounter");
+
+	// ---- Ability families
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Type_Attack, "Ability.Type.Attack");
 
 	// ---- Enemy / Boss abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
@@ -343,6 +348,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Fire, "GameplayCue.Sigil.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Wind, "GameplayCue.Sigil.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Sigil_Water, "GameplayCue.Sigil.Water");
+
+	// ---- Gameplay cues: Staff
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Cast, "GameplayCue.Staff.Cast");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Impact, "GameplayCue.Staff.Impact");
 
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");

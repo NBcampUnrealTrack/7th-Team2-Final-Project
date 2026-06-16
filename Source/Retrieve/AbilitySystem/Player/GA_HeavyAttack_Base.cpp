@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
 #include "Components/ElementGaugeComponent.h"
+#include "Components/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_HeavyAttack_Base::UGA_HeavyAttack_Base()
@@ -27,13 +28,26 @@ UGA_HeavyAttack_Base::UGA_HeavyAttack_Base()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_UsingHeavyAttack);
 
-	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 
-	// 시전 중 다른 액션 차단 (공격/가드/대시/버스트 모두 발동 불가)
-	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
+	// 시전 중 공격/가드/대시/버스트 차단
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
+}
+
+bool UGA_HeavyAttack_Base::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	
+	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
+	const bool bIsStaff = WeaponComp && WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff;
+	return bIsStaff == bActivateForStaff;
 }
 
 void UGA_HeavyAttack_Base::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
