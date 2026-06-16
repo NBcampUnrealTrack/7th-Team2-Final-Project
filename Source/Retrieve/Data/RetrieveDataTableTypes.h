@@ -727,6 +727,9 @@ struct RETRIEVE_API FWeaponJumpAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	FName SectionName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	FName LandingSectionName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
