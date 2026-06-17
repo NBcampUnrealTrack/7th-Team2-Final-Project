@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilitySystem/RetrieveGameplayAbility.h"
+#include "AbilitySystem/Enemy/GAS/GA_EnemyPatternAbilityBase.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GA_ShootProjectiles.generated.h"
 
@@ -10,7 +10,7 @@ class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
 
 UCLASS(Blueprintable, BlueprintType)
-class RETRIEVE_API UGA_ShootProjectiles : public URetrieveGameplayAbility
+class RETRIEVE_API UGA_ShootProjectiles : public UGA_EnemyPatternAbilityBase
 {
 	GENERATED_BODY()
 
@@ -28,6 +28,10 @@ public:
 		bool bReplicateEndAbility,
 	bool bWasCancelled) override;
 
+protected:
+	virtual void OnMontageCompleted() override;
+	virtual void OnMontageInterrupted() override;
+	
 private:
 	void ScheduleProjectiles(bool bHasMontage);
 	void SpawnProjectile();
@@ -36,13 +40,6 @@ private:
 		ERetrieveHitReactType* OutHitReactType = nullptr,
 		FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig = nullptr) const;
 	const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
-	
-
-	UFUNCTION()
-	void OnMontageCompleted();
-
-	UFUNCTION()
-	void OnMontageInterrupted();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")

@@ -67,6 +67,7 @@ public:
 	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
 	
 	const FMonsterDataRow* GetMonsterDataRow() const;
+	void RefreshMoveSpeedFromAttribute();
 	
 	virtual FGenericTeamId GetGenericTeamId() const override
 	{

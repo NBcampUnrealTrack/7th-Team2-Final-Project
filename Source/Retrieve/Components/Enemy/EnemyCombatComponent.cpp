@@ -9,6 +9,7 @@
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
 #include "Combat/RetrieveCombatTypes.h"
@@ -17,6 +18,7 @@
 #include "Logging/RetrieveLogChannels.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Character/RetrieveEnemyCharacter.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
@@ -81,6 +83,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 	}
 
 	ActivePatternRowName = BestPatternRowName;
+	SetFocusTarget(Target);
 	
 	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 	{
@@ -105,6 +108,7 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 		*GetOwner()->GetName(),
 		*BestPatternRowName.ToString());
 		ActivePatternRowName = NAME_None;
+		ClearFocusTarget();
 		if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 		{
 			PatternCounter->CloseCounterWindow();
@@ -146,6 +150,7 @@ void UEnemyCombatComponent::StopCurrentPattern()
 
 	DeactivateHitbox();
 	ActivePatternRowName = NAME_None;
+	ClearFocusTarget();
 }
 
 bool UEnemyCombatComponent::IsPatternActive() const
@@ -242,15 +247,95 @@ void UEnemyCombatComponent::SetMovementLockedByAttack(bool bLocked)
 
 	if (bLocked)
 	{
-		MovementLockOriginalMaxWalkSpeed = MoveComp->MaxWalkSpeed;
 		MoveComp->StopMovementImmediately();
+	}
+
+	if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(OwnerCharacter))
+	{
+		EnemyCharacter->RefreshMoveSpeedFromAttribute();
+	}
+	else if (bLocked)
+	{
 		MoveComp->MaxWalkSpeed = 0.f;
 	}
-	else if (MovementLockOriginalMaxWalkSpeed >= 0.f)
+}
+
+void UEnemyCombatComponent::SetFocusTarget(AActor* Target)
+{
+	FocusTarget = Target;
+}
+
+AActor* UEnemyCombatComponent::GetFocusTarget() const
+{
+	return FocusTarget.Get();
+}
+
+void UEnemyCombatComponent::ClearFocusTarget()
+{
+	FocusTarget.Reset();
+}
+
+void UEnemyCombatComponent::FaceFocusTarget(float DeltaTime, float InterpSpeed, bool bYawOnly)
+{
+	FaceActor(GetFocusTarget(), DeltaTime, InterpSpeed, bYawOnly);
+}
+
+void UEnemyCombatComponent::FaceActor(AActor* Target, float DeltaTime, float InterpSpeed, bool bYawOnly)
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !IsValid(Target) || DeltaTime <= 0.f)
 	{
-		MoveComp->MaxWalkSpeed = MovementLockOriginalMaxWalkSpeed;
-		MovementLockOriginalMaxWalkSpeed = -1.f;
+		return;
 	}
+
+	const FVector OwnerLocation = OwnerActor->GetActorLocation();
+	const FVector TargetLocation = Target->GetActorLocation();
+	FVector Direction = TargetLocation - OwnerLocation;
+	if (bYawOnly)
+	{
+		Direction.Z = 0.f;
+	}
+
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator TargetRotation = Direction.Rotation();
+	const FRotator CurrentRotation = OwnerActor->GetActorRotation();
+	const float SafeInterpSpeed = FMath::Max(0.f, InterpSpeed);
+	FRotator NewRotation = SafeInterpSpeed > 0.f
+		? FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, SafeInterpSpeed)
+		: TargetRotation;
+
+	if (bYawOnly)
+	{
+		NewRotation.Pitch = CurrentRotation.Pitch;
+		NewRotation.Roll = CurrentRotation.Roll;
+	}
+
+	OwnerActor->SetActorRotation(NewRotation);
+}
+
+float UEnemyCombatComponent::GetAttackSpeedMultiplier() const
+{
+	URetrieveAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		return 1.f;
+	}
+
+	return FMath::Max(0.1f, ASC->GetNumericAttribute(UCombatAttributeSet::GetAttackSpeedMultiplierAttribute()));
+}
+
+float UEnemyCombatComponent::GetAttackMontagePlayRate(float BasePlayRate) const
+{
+	return FMath::Max(0.01f, BasePlayRate) * GetAttackSpeedMultiplier();
+}
+
+float UEnemyCombatComponent::GetAttackDelay(float BaseDelay, float MinDelay) const
+{
+	return FMath::Max(MinDelay, FMath::Max(0.f, BaseDelay) / GetAttackSpeedMultiplier());
 }
 
 void UEnemyCombatComponent::ActivateHitbox()
@@ -294,6 +379,30 @@ void UEnemyCombatComponent::ActivateHitbox()
 	
 	ActiveHitboxComp->SetSphereRadius(Row->HitboxRadius);
 	ActiveHitboxComp->SetRelativeLocation(Row->HitboxOffset);
+	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+}
+
+void UEnemyCombatComponent::ActivateHitbox(FName InBoneName, FVector InOffset, float InRadius)
+{
+	if (!ActiveHitboxComp)
+	{
+		return;
+	}
+	HitActors.Empty();
+	
+	if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
+	{
+		if (!ActiveHitboxComp->AttachToComponent(
+			OwnerChar->GetMesh(),
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			InBoneName))
+		{
+			UE_LOG(LogSkeletalMesh, Error, TEXT("[%s] HitBox attachment failed"), *GetName());
+		}
+	}
+	
+	ActiveHitboxComp->SetSphereRadius(InRadius);
+	ActiveHitboxComp->SetRelativeLocation(InOffset);
 	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 }
 

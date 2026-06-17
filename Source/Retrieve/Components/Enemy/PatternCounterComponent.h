@@ -41,6 +41,8 @@ private:
 
 	void OnAbilitySystemInitialized();
 	void HandleCounterWindowEvent(const FGameplayEventData* Payload); 
+	void HandleHitEvent(const FGameplayEventData* Payload);
+	FGameplayTag ResolveElementTagFromInstigator(AActor* Instigator) const;
 	
 private:
 	bool bWindowOpen = false;
@@ -58,4 +60,6 @@ private:
 	float GroggyCooldown = 10.f;
 	
 	FDelegateHandle CounterWindowEventHandle;  
+	FDelegateHandle HitNormalEventHandle;
+	FDelegateHandle HitHeavyEventHandle;
 };

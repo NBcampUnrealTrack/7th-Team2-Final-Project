@@ -142,14 +142,30 @@ void ARetrieveEnemyCharacter::BeginPlay()
 	}
 }
 
-void ARetrieveEnemyCharacter::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
+void ARetrieveEnemyCharacter::OnMoveSpeedChanged(const FOnAttributeChangeData& /*Data*/)
+{
+	RefreshMoveSpeedFromAttribute();
+}
+
+void ARetrieveEnemyCharacter::RefreshMoveSpeedFromAttribute()
 {
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
-		const float Ratio = Data.NewValue / UCombatAttributeSet::ReferenceMoveSpeed;
+		if (EnemyCombatComponent && EnemyCombatComponent->IsMovementLockedByAttack())
+		{
+			MoveComp->MaxWalkSpeed = 0.f;
+			return;
+		}
+
+		float CurrentMoveSpeed = UCombatAttributeSet::ReferenceMoveSpeed;
+		if (OwnedASC)
+		{
+			CurrentMoveSpeed = OwnedASC->GetNumericAttribute(UCombatAttributeSet::GetMoveSpeedAttribute());
+		}
+
+		const float Ratio = CurrentMoveSpeed / UCombatAttributeSet::ReferenceMoveSpeed;
 		MoveComp->MaxWalkSpeed = BaseMaxWalkSpeed * Ratio;
 	}
-
 }
 
 void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
