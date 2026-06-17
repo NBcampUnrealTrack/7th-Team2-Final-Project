@@ -65,7 +65,7 @@ void UGA_ShootProjectiles::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	if (bHasMontage)
 	{
 		MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, const_cast<UAnimMontage*>(Montage), 1.f, NAME_None, true);
+			this, NAME_None, const_cast<UAnimMontage*>(Montage), GetAttackMontagePlayRate(1.f), NAME_None, true);
 		
 		if (MontageTask)
 		{
@@ -124,6 +124,8 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
 
 	ResolveProjectilePattern(ActiveProjectileConfig, &ActiveHitReactType, &ActiveLaunchKnockbackConfig);
+	
+	const UEnemyCombatComponent* Combat = GetEnemyCombatComponent();
 
 	TArray<float> FireDelays = ActiveProjectileConfig.ProjectileFireDelays;
 	if (FireDelays.IsEmpty())
@@ -134,7 +136,7 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 	float LastFireDelay = 0.f;
 	for (const float FireDelay : FireDelays)
 	{
-		const float ClampedDelay = FMath::Max(0.f, FireDelay);
+		const float ClampedDelay = Combat ? Combat->GetAttackDelay(FireDelay) : FMath::Max(0.f, FireDelay);
 		LastFireDelay = FMath::Max(LastFireDelay, ClampedDelay);
 
 		if (ClampedDelay <= 0.f)
@@ -242,9 +244,7 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 	ERetrieveHitReactType* OutHitReactType,
 	FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig) const
 {
-	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	const UEnemyCombatComponent* CombatComponent =
-		AvatarActor ? AvatarActor->FindComponentByClass<UEnemyCombatComponent>() : nullptr;
+	const UEnemyCombatComponent* CombatComponent = GetEnemyCombatComponent();
 
 	if (!CombatComponent)
 	{
@@ -259,8 +259,7 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 		return false;
 	}
 	
-	const FMonsterPatternRow* Row =
-		PatternTable->FindRow<FMonsterPatternRow>(RowName, TEXT("UGA_ShootProjectiles"));
+	const FMonsterPatternRow* Row = GetActivePatternRow();
 
 	if (!Row)
 	{

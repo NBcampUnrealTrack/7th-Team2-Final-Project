@@ -46,6 +46,21 @@ public:
 	
 	void SetMovementLockedByAttack(bool bLocked);
 	bool IsMovementLockedByAttack() const { return bMovementLockedByAttack; }
+
+	void SetFocusTarget(AActor* Target);
+	AActor* GetFocusTarget() const;
+	void ClearFocusTarget();
+	void FaceFocusTarget(float DeltaTime, float InterpSpeed = 10.f, bool bYawOnly = true);
+	void FaceActor(AActor* Target, float DeltaTime, float InterpSpeed = 10.f, bool bYawOnly = true);
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Combat|AttackSpeed")
+	float GetAttackSpeedMultiplier() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Combat|AttackSpeed")
+	float GetAttackMontagePlayRate(float BasePlayRate = 1.f) const;
+	
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Combat|AttackSpeed")
+	float GetAttackDelay(float BaseDelay, float MinDelay = 0.f) const;
 	
 	FName GetActivePatternRowName() const { return ActivePatternRowName; }
 
@@ -53,6 +68,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Components|Pattern")
 	void ActivateHitbox();
+	
+	void ActivateHitbox(FName InBoneName, FVector InOffset, float InRadius);
 	
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Components|Pattern")
 	void DeactivateHitbox();
@@ -72,6 +89,7 @@ private:
 	void LockSpecialAttackEvaluation(float Duration);
 	URetrieveAbilitySystemComponent* GetASC() const;
 
+private:
 	UPROPERTY()
 	TObjectPtr<UDataTable> PatternTable;
 
@@ -91,9 +109,11 @@ private:
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+
+	UPROPERTY()
+	TWeakObjectPtr<AActor> FocusTarget;
 	
 	bool bMovementLockedByAttack = false;
-	float MovementLockOriginalMaxWalkSpeed = -1.f;
 
 	float SpecialAttackEvaluationLockUntilTime = 0.f;
 

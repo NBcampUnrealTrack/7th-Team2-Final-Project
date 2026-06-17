@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "GenericTeamAgentInterface.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "TimerManager.h"
@@ -160,7 +161,7 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 		return;
 	}
 
-	if (HasAuthority() && DamageEffectClass)
+	if (HasAuthority() && DamageEffectClass && ShouldApplyDamageTo(OtherActor))
 	{
 		AActor* SourceActor = GetOwner() ? GetOwner() : GetInstigator();
 		IAbilitySystemInterface* SourceInterface = Cast<IAbilitySystemInterface>(SourceActor);
@@ -233,6 +234,17 @@ bool AEnemyProjectile::IsIgnoredActor(const AActor* OtherActor) const
 	}
 
 	return false;
+}
+
+bool AEnemyProjectile::ShouldApplyDamageTo(const AActor* OtherActor) const
+{
+	const AActor* SourceActor = GetOwner() ? GetOwner() : GetInstigator();
+	if (!SourceActor || !OtherActor)
+	{
+		return false;
+	}
+
+	return FGenericTeamId::GetAttitude(SourceActor, OtherActor) == ETeamAttitude::Hostile;
 }
 
 void AEnemyProjectile::PlayImpactVFX(const FVector& Location, const FRotator& Rotation)

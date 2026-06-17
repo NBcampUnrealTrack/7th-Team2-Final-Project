@@ -53,6 +53,7 @@ protected:
 	
 private:
 	bool IsIgnoredActor(const AActor* OtherActor) const;
+	bool ShouldApplyDamageTo(const AActor* OtherActor) const;
 	void PlayImpactVFX(const FVector& Location, const FRotator& Rotation);
 	void StartHoming(float Strength);
 	void StopHoming();
