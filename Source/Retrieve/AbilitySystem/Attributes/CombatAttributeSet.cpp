@@ -5,6 +5,7 @@
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Perception/AISense_Damage.h"
 
@@ -84,6 +85,18 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 
 		if (FinalDamage > 0.f)
 		{
+			// Health는 IncomingDamage 메타 어트리뷰트→SetHealth로 갱신되므로, SetHealth가 트리거하는
+			// HandleHealthChanged엔 GEModData가 없다. → 사망 처리(OnDeathStarted) 전에 EffectContext의
+			// instigator/causer를 HealthComponent에 직접 넘겨 "마지막 공격자"를 확정.
+			const FGameplayEffectContextHandle& DamageContext = Data.EffectSpec.GetEffectContext();
+			if (AActor* DamagedActor = Data.Target.GetAvatarActor())
+			{
+				if (URetrieveHealthComponent* HealthComp = DamagedActor->FindComponentByClass<URetrieveHealthComponent>())
+				{
+					HealthComp->NotifyDamageContext(DamageContext.GetInstigator(), DamageContext.GetEffectCauser());
+				}
+			}
+
 			const float NewHealth = FMath::Clamp(GetHealth() - FinalDamage, 0.f, GetMaxHealth());
 			SetHealth(NewHealth);
 			BroadcastHitEvent(Data, FinalDamage);

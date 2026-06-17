@@ -1,4 +1,4 @@
-﻿#include "Character/RetrieveEnemyCharacter.h"
+#include "Character/RetrieveEnemyCharacter.h"
 
 #include "Abilities/GameplayAbilityTypes.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -203,10 +203,10 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 		HitReactionComponent->Configure(HitReactionProfile);
 	}
 
-	if (DropComponent && !Row->DropRow.IsNone())
+	if (DropComponent && Row->DropRows.Num() > 0)
 	{
 		// DropComponent::Initialize는 DropTable도 필요
-		DropComponent->Initialize(DropTable, Row->DropRow);
+		DropComponent->Initialize(DropTable, Row->DropRows);
 	}
 
 	// 몬스터 이름·등급을 체력바 위젯에 연동
