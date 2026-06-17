@@ -60,12 +60,17 @@ struct RETRIEVE_API FEnemyDropRow : public FTableRowBase
 {
 	GENERATED_BODY()
 
+	/** 인벤토리에 지급할 아이템 ID. 무기/소모품/재료 DataTable의 RowName(==ItemId)과 일치시킨다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop")
-	FGameplayTag ItemTag;
-	
+	FName ItemId;
+
+	/** 아이템 분류 태그. Item.Weapon / Item.Consumable / Item.Material 등. 인벤토리 카테고리 분기에 사용. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop", meta=(Categories="Item"))
+	FGameplayTag ItemCategoryTag;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float DropChance = 1.f;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop", meta=(ClampMin="1"))
 	int32 Quantity = 1;
 };
@@ -300,9 +305,9 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;
 	
-	/** DT_EnemyDrop의 Row 키. 비어있으면 드랍 없음. */
+	/** DT_EnemyDrop의 Row 키 목록. 각 행을 DropChance로 독립 굴림해 드랍한다. 비어있으면 드랍 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop")
-	FName DropRow;
+	TArray<FName> DropRows;
 };
 
 USTRUCT(BlueprintType)
