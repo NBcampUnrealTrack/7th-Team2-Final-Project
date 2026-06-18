@@ -432,18 +432,16 @@ void UGA_Attack::ApplyStepDamage()
 			if (!PerHitSpec.IsValid() || !PerHitSpec.Data.IsValid()) continue;
 
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
-
-			// Attack.Type (방어 처리 결정)
-			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
-
-			// HitReact.Type (피격 반응 결정)
+			
 			const ERetrieveHitReactType ReactType = CachedComboSteps.IsValidIndex(CurrentComboIndex)
 				? CachedComboSteps[CurrentComboIndex].HitReactType
 				: ERetrieveHitReactType::Flinch;
-			if (const FGameplayTag ReactTag = HitReactTypeToTag(ReactType); ReactTag.IsValid())
-			{
-				PerHitSpec.Data->AddDynamicAssetTag(ReactTag);
-			}
+			AddCombatTagsToDamageSpec(
+				*PerHitSpec.Data.Get(),
+				ResolveCurrentElementTag(),
+				RetrieveGameplayTags::Attack_Type_Normal,
+				FGameplayTag(),
+				HitReactTypeToTag(ReactType));
 
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActorsThisStep.Add(TargetActor);

@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Combat/RetrieveCombatTypes.h"
 
 UGA_HeavyAttack_Fire::UGA_HeavyAttack_Fire()
 {
@@ -96,8 +97,12 @@ void UGA_HeavyAttack_Fire::ApplyRadialDamage()
 		}
 
 		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMultiplier);
-		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
-		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
+		
+		AddCombatTagsToDamageSpec(
+			*Spec.Data.Get(),
+			RetrieveGameplayTags::Element_Fire,
+			RetrieveGameplayTags::Attack_Type_Heavy,
+			RetrieveGameplayTags::Attack_Property_GuardBreak);
 		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
 
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);

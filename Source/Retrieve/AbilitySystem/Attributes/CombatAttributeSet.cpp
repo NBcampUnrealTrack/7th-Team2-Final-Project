@@ -290,10 +290,13 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	EventData.Instigator = AttackerActor;
 	EventData.Target = TargetActor;
 	EventData.EventMagnitude = DamageDone;
-
+	
 	for (const FGameplayTag& Tag : SourceTags)
 	{
-		if (Tag.MatchesTag(RetrieveGameplayTags::HitReact_Type))
+		if (Tag.MatchesTag(RetrieveGameplayTags::HitReact_Type) ||
+			Tag.MatchesTag(RetrieveGameplayTags::Element) ||
+			Tag.MatchesTag(RetrieveGameplayTags::Attack_Type) ||
+			Tag.MatchesTag(RetrieveGameplayTags::Attack_Property))
 		{
 			EventData.TargetTags.AddTag(Tag);
 		}

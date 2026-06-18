@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "GameplayEffectTypes.h"
+#include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "RetrieveCombatTypes.generated.h"
 
@@ -32,6 +33,39 @@ inline FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
 	case ERetrieveHitReactType::Knockdown: return RetrieveGameplayTags::HitReact_Type_Knockdown;
 	case ERetrieveHitReactType::Flinch:    return RetrieveGameplayTags::HitReact_Type_Flinch;
 	default:                               return FGameplayTag();
+	}
+}
+
+/**
+ * 데미지 GE Spec에 전투 판정 태그를 일괄 주입하는 단일 진입점.
+ *
+ *  - ElementTag        : Element.*      (현재 원소. None/Invalid → 미주입)
+ *  - AttackTypeTag     : Attack.Type.*  (방어 처리 + 파훼 ActionTag 판정)
+ *  - AttackPropertyTag : Attack.Property.* (GuardBreak 등. 없으면 EmptyTag)
+ *  - HitReactTag       : HitReact.Type.*   (피격 반응. 없으면 EmptyTag)
+ */
+inline void AddCombatTagsToDamageSpec(
+	FGameplayEffectSpec& Spec,
+	const FGameplayTag& ElementTag,
+	const FGameplayTag& AttackTypeTag,
+	const FGameplayTag& AttackPropertyTag = FGameplayTag(),
+	const FGameplayTag& HitReactTag = FGameplayTag())
+{
+	if (ElementTag.IsValid() && ElementTag != RetrieveGameplayTags::Element_None)
+	{
+		Spec.AddDynamicAssetTag(ElementTag);
+	}
+	if (AttackTypeTag.IsValid())
+	{
+		Spec.AddDynamicAssetTag(AttackTypeTag);
+	}
+	if (AttackPropertyTag.IsValid())
+	{
+		Spec.AddDynamicAssetTag(AttackPropertyTag);
+	}
+	if (HitReactTag.IsValid())
+	{
+		Spec.AddDynamicAssetTag(HitReactTag);
 	}
 }
 

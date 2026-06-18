@@ -259,12 +259,13 @@ void UGA_SprintAttack::ApplyHitDamage()
 			if (!PerHitSpec.IsValid() || !PerHitSpec.Data.IsValid()) continue;
 
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
-			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
-
-			if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedSprintData.HitReactType); ReactTag.IsValid())
-			{
-				PerHitSpec.Data->AddDynamicAssetTag(ReactTag);
-			}
+			
+			AddCombatTagsToDamageSpec(
+				*PerHitSpec.Data.Get(),
+				ResolveCurrentElementTag(),
+				RetrieveGameplayTags::Attack_Type_Normal,
+				FGameplayTag(),
+				HitReactTypeToTag(CachedSprintData.HitReactType));
 
 			SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 			HitActors.Add(TargetActor);

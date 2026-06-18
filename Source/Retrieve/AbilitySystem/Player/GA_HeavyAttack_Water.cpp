@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Combat/RetrieveCombatTypes.h"
 
 UGA_HeavyAttack_Water::UGA_HeavyAttack_Water()
 {
@@ -94,8 +95,12 @@ void UGA_HeavyAttack_Water::ApplyAoEColdDamage()
 		if (DamageSpec.IsValid() && DamageSpec.Data.IsValid())
 		{
 			DamageSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMultiplier);
-			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
-			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
+			
+			AddCombatTagsToDamageSpec(
+				*DamageSpec.Data.Get(),
+				RetrieveGameplayTags::Element_Water,
+				RetrieveGameplayTags::Attack_Type_Heavy,
+				RetrieveGameplayTags::Attack_Property_GuardBreak);
 			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
 
 			SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);

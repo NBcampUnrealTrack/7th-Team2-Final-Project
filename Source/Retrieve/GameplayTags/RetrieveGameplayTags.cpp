@@ -116,6 +116,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_Full, "State.Gauge.Full");
 	
 	// ---- Attack type
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type, "Attack.Type");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Normal, "Attack.Type.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Heavy, "Attack.Type.Heavy");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
@@ -123,6 +124,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Parryable, "Attack.Type.Parryable");
 
 	// ---- Attack property
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Property, "Attack.Property");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
 
 	// ---- Hit react type
@@ -132,6 +134,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type_Knockdown, "HitReact.Type.Knockdown");
 
 	// ---- Elements
+	UE_DEFINE_GAMEPLAY_TAG(Element, "Element");
 	UE_DEFINE_GAMEPLAY_TAG(Element_Fire, "Element.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Element_Water, "Element.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Element_Wind, "Element.Wind");
