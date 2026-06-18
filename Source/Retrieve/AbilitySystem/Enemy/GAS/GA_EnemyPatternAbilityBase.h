@@ -19,7 +19,10 @@ protected:
 	UEnemyCombatComponent* GetEnemyCombatComponent() const;
 	const FMonsterPatternRow* GetActivePatternRow() const;
 
+	UFUNCTION(BlueprintPure)
 	float GetAttackSpeedMultiplier() const;
+	
+	UFUNCTION(BlueprintPure)
 	float GetAttackMontagePlayRate(float BasePlayRate = 1.f) const;
 
 	UFUNCTION()
