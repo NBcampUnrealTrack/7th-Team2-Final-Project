@@ -3,6 +3,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
@@ -116,9 +117,10 @@ void AStaffProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 	{
 		if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
 		{
-			const FVector Direction = (OtherActor->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-			const FVector LaunchVelocity = Direction * KnockbackStrength + FVector(0.f, 0.f, KnockbackUpwardStrength);
-			HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
+			FRetrieveKnockbackParams KnockbackParams;
+			KnockbackParams.Strength = KnockbackStrength;
+			KnockbackParams.UpwardStrength = KnockbackUpwardStrength;
+			URetrieveKnockbackLibrary::ApplyKnockbackFromSource(HitCharacter, GetActorLocation(), KnockbackParams);
 		}
 	}
 

@@ -6,6 +6,8 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
+#include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 #include "Perception/AISense_Damage.h"
 
@@ -241,6 +243,24 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 
 	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
 	if (IsValid(TargetActor) == false) return;
+
+	// 데미지 GE가 SetByCaller로 넉백 강도를 실었으면 공격자→피격자 방향으로 자동 넉백.
+	// FinalDamage>0 경로(PostGameplayEffectExecute)에서만 호출되므로 가드/패리/무적 시엔 자동 스킵된다.
+	const float KbStrength = Data.EffectSpec.GetSetByCallerMagnitude(
+		RetrieveGameplayTags::Data_Knockback_Strength, /*bWarnIfNotFound=*/false, /*DefaultIfNotFound=*/0.f);
+	if (KbStrength > 0.f)
+	{
+		if (ACharacter* TargetCharacter = Cast<ACharacter>(TargetActor))
+		{
+			const float KbUp = Data.EffectSpec.GetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Knockback_UpwardStrength, false, 0.f);
+			FRetrieveKnockbackParams Params;
+			Params.Strength = KbStrength;
+			Params.UpwardStrength = KbUp;
+			URetrieveKnockbackLibrary::ApplyKnockbackFromSource(
+				TargetCharacter, AttackerActor->GetActorLocation(), Params);
+		}
+	}
 
 	UAISense_Damage::ReportDamageEvent(
 		TargetActor,

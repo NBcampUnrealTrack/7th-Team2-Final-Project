@@ -14,7 +14,7 @@ ABurstProjectile::ABurstProjectile()
 	// 콜리전 (루트)
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComp"));
 	CollisionComp->InitSphereRadius(20.f);
-	CollisionComp->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	CollisionComp->SetCollisionProfileName(TEXT("BurstProjectileOverlapAllDynamic"));
 	CollisionComp->SetGenerateOverlapEvents(true);
 	RootComponent = CollisionComp;
 

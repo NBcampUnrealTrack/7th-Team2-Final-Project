@@ -65,7 +65,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
-	// TODO(하민): 넉백(임시). 넉백 GA/GE 단일화 시 교체.
+	// 넉백 강도. 적중 시 URetrieveKnockbackLibrary::ApplyKnockbackFromSource로 적용.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackStrength = 0.f;
 

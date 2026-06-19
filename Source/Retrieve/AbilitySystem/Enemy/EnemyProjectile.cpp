@@ -4,6 +4,7 @@
 #include "AbilitySystemInterface.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GenericTeamAgentInterface.h"
@@ -189,10 +190,10 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 	{
 		if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
 		{
-			const FVector Direction = (OtherActor->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-			const FVector LaunchVelocity = Direction * LaunchKnockbackConfig.KnockbackStrength
-				+ FVector(0.f, 0.f, LaunchKnockbackConfig.KnockbackUpwardStrength);
-			HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
+			FRetrieveKnockbackParams KnockbackParams;
+			KnockbackParams.Strength = LaunchKnockbackConfig.KnockbackStrength;
+			KnockbackParams.UpwardStrength = LaunchKnockbackConfig.KnockbackUpwardStrength;
+			URetrieveKnockbackLibrary::ApplyKnockbackFromSource(HitCharacter, GetActorLocation(), KnockbackParams);
 		}
 	}
 

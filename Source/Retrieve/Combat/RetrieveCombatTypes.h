@@ -96,3 +96,33 @@ struct FRetrieveParryMessage
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Combat|Parry")
 	FGameplayEffectContextHandle Context;
 };
+
+/**
+ * 넉백 파라미터. URetrieveKnockbackLibrary의 모든 함수에 공통으로 전달한다.
+ * 방향은 라이브러리 함수가 상황별로 계산하므로 여기엔 강도/플래그만 담는다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveKnockbackParams
+{
+	GENERATED_BODY()
+
+	// 수평 밀치기 강도(cm/s)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
+	float Strength = 800.f;
+
+	// 상향(Z) 강도(cm/s)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
+	float UpwardStrength = 400.f;
+
+	// [방사형 전용] 중심에서 멀수록 강도를 감쇠한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback|Radial")
+	bool bScaleByDistance = false;
+
+	// [방사형 전용] 반경 가장자리에서의 최소 강도 비율(0~1). bScaleByDistance일 때만 적용.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback|Radial", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float EdgeStrengthRatio = 0.3f;
+
+	// 넉백 지속 시간(초). Root Motion으로 미는 시간. 이동 거리 ≈ Strength × Duration. (자기발사 LaunchSelf엔 미적용)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.01"))
+	float Duration = 0.25f;
+};

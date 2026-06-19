@@ -509,22 +509,18 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 				{
 					Spec.Data->AddDynamicAssetTag(ReactTag);
 				}
+
+				// 넉백 강도를 GE에 실어 보내면 BroadcastHitEvent가 공격자(적)→피격자로 자동 적용한다.
+				const FMonsterLaunchKnockbackConfig& KbCfg = ActivePatternRow->LaunchKnockbackConfig;
+				if (KbCfg.bUseLaunchKnockback)
+				{
+					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KbCfg.KnockbackStrength);
+					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KbCfg.KnockbackUpwardStrength);
+				}
 			}
 		}
 
 		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-	}
-
-	if (ActivePatternRow && ActivePatternRow->LaunchKnockbackConfig.bUseLaunchKnockback)
-	{
-		if (ACharacter* HitCharacter = Cast<ACharacter>(OtherActor))
-		{
-			const FMonsterLaunchKnockbackConfig& KnockbackConfig = ActivePatternRow->LaunchKnockbackConfig;
-			const FVector Direction = (OtherActor->GetActorLocation() - GetOwner()->GetActorLocation()).GetSafeNormal();
-			const FVector LaunchVelocity = Direction * KnockbackConfig.KnockbackStrength
-				+ FVector(0.f, 0.f, KnockbackConfig.KnockbackUpwardStrength);
-			HitCharacter->LaunchCharacter(LaunchVelocity, true, true);
-		}
 	}
 	
 }

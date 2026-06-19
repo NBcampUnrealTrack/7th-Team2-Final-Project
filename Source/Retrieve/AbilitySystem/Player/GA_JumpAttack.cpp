@@ -14,6 +14,7 @@
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -209,6 +210,8 @@ void UGA_JumpAttack::ApplyLandingAoe()
 
 	const float DamageMul = ResolvedDamageMultiplier;
 
+	TArray<ACharacter*> KnockbackTargets;
+
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
 		AActor* TargetActor = Overlap.GetActor();
@@ -237,6 +240,11 @@ void UGA_JumpAttack::ApplyLandingAoe()
 		SourceASC->ApplyGameplayEffectSpecToTarget(*PerHitSpec.Data.Get(), TargetASC);
 		HitActors.Add(TargetActor);
 
+		if (ACharacter* HitCharacter = Cast<ACharacter>(TargetActor))
+		{
+			KnockbackTargets.Add(HitCharacter);
+		}
+
 		if (!bChargeBonusGranted)
 		{
 			const FGameplayTag BonusTag = CachedJumpData.ChargeBonusEventTag;
@@ -250,6 +258,11 @@ void UGA_JumpAttack::ApplyLandingAoe()
 				bChargeBonusGranted = true;
 			}
 		}
+	}
+
+	if (CachedJumpData.bUseLandingKnockback)
+	{
+		URetrieveKnockbackLibrary::ApplyRadialKnockbackToTargets(Center, Radius, KnockbackTargets, CachedJumpData.LandingKnockback);
 	}
 }
 
