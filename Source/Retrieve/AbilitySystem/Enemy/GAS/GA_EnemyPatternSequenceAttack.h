@@ -7,7 +7,6 @@
 
 class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
-class UAnimSequenceBase;
 class UEnemyCombatComponent;
 
 UCLASS(Blueprintable, BlueprintType)

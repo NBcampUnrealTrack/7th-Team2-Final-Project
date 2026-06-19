@@ -25,6 +25,18 @@ struct FStateTreeTask_EnemyPatternAttackInstanceData
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float AttackStartGraceTime = 0.6f;
 
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
+	float SpecialFailureRecoveryLockDuration = 4.f;
+
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0", ClampMax = "180.0"))
+	float FacingAcceptanceAngle = 8.f;
+
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
+	float FacingInterpSpeed = 8.f;
+
+	UPROPERTY(EditAnywhere, Category = "Config")
+	bool bUseGroundTurnAnimation = true;
+
 	float ElapsedTime = 0.f;
 	float TimeSinceAttackRequested = 0.f;
 

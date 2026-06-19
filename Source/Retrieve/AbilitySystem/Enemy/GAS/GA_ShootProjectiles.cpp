@@ -2,6 +2,9 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "AbilitySystem/Enemy/EnemyProjectile.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimSequenceBase.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -9,6 +12,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "TimerManager.h"
 
@@ -28,7 +32,9 @@ UGA_ShootProjectiles::UGA_ShootProjectiles(const FObjectInitializer& ObjectIniti
 	{
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack,
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileRapid,
+		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileRain,
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileHoming,
+		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileSpread,
 	};
 
 	for (const FGameplayTag& TriggerTag : TriggerTags)
@@ -59,9 +65,15 @@ void UGA_ShootProjectiles::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	CachedTargetActor = TriggerEventData ? const_cast<AActor*>(TriggerEventData->Target.Get()) : nullptr;
 
-	const UAnimMontage* Montage = ResolveMontage(TriggerEventData);
+	OnSpecialAttackActivated();
+
+	UAnimMontage* Montage = const_cast<UAnimMontage*>(ResolveMontage(TriggerEventData));
+	if (!Montage)
+	{
+		Montage = ResolveFallbackSequenceMontage();
+	}
 	const bool bHasMontage = Montage != nullptr;
-	
+
 	if (bHasMontage)
 	{
 		MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -102,10 +114,18 @@ void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		MontageTask = nullptr;
 	}
 
+	OnSpecialAttackEnded();
+
 	CachedTargetActor = nullptr;
 	ActiveProjectileSpeed = FallbackProjectileSpeed ;
 	ActiveHitReactType = ERetrieveHitReactType::Flinch;
 	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
+	ActiveEffectTag = FGameplayTag();
+	ActiveStatusEffectClass = nullptr;
+	ActiveProjectileClass = nullptr;
+	ActivePatternRowName = NAME_None;
+	ActiveProjectileSpawnIndex = 0;
+	ActiveProjectileCount = 0;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -122,16 +142,39 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 	ActiveProjectileConfig.ProjectileSpeed = FallbackProjectileSpeed ;
 	ActiveHitReactType = ERetrieveHitReactType::Flinch;
 	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
+	ActiveEffectTag = FGameplayTag();
+	ActiveStatusEffectClass = nullptr;
+	ActiveProjectileClass = nullptr;
+	ActivePatternRowName = NAME_None;
 
-	ResolveProjectilePattern(ActiveProjectileConfig, &ActiveHitReactType, &ActiveLaunchKnockbackConfig);
-	
 	const UEnemyCombatComponent* Combat = GetEnemyCombatComponent();
+	if (Combat)
+	{
+		ActivePatternRowName = Combat->GetActivePatternRowName();
+	}
+
+	const bool bResolvedPattern = ResolveProjectilePattern(
+		ActiveProjectileConfig,
+		&ActiveHitReactType,
+		&ActiveLaunchKnockbackConfig,
+		&ActiveEffectTag,
+		&ActiveStatusEffectClass,
+		&ActiveProjectileClass);
+	if (!bResolvedPattern)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] Failed to resolve active projectile pattern. Owner=%s Row=%s"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()),
+			*ActivePatternRowName.ToString());
+	}
 
 	TArray<float> FireDelays = ActiveProjectileConfig.ProjectileFireDelays;
 	if (FireDelays.IsEmpty())
 	{
 		FireDelays.Add(FallbackProjectileSpawnDelay);
 	}
+	ActiveProjectileSpawnIndex = 0;
+	ActiveProjectileCount = FireDelays.Num();
 
 	float LastFireDelay = 0.f;
 	for (const float FireDelay : FireDelays)
@@ -167,9 +210,16 @@ void UGA_ShootProjectiles::SpawnProjectile()
 		return;
 	}
 
-	if (!ProjectileClass)
+	const TSubclassOf<AEnemyProjectile> ResolvedProjectileClass = ResolveProjectileClass();
+	if (!ResolvedProjectileClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA_ShootProjectiles] Spawn skipped: ProjectileClass is null"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] Spawn skipped: ProjectileClass is null. Owner=%s Row=%s Pattern=%s ActiveClass=%s FallbackClass=%s"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()),
+			*ActivePatternRowName.ToString(),
+			*StaticEnum<EProjectileSpawnPattern>()->GetNameStringByValue(static_cast<int64>(ActiveProjectileConfig.SpawnPattern)),
+			*GetNameSafe(ActiveProjectileClass),
+			*GetNameSafe(ProjectileClass));
 		return;
 	}
 
@@ -179,9 +229,15 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	{
 		return;
 	}
+	const int32 ProjectileIndex = ActiveProjectileSpawnIndex++;
+
+	OnBeforeProjectileSpawn();
 
 	FVector SpawnLocation = AvatarActor->GetActorLocation() + AvatarActor->GetActorRotation().RotateVector(SpawnOffset);
-	FRotator SpawnRotation = AvatarActor->GetActorRotation();
+	FVector Direction = AvatarActor->GetActorForwardVector();
+	bool bSpawnRadialVolley = false;
+	int32 RadialVolleyCount = 1;
+	float RadialVolleyYawOffset = 0.f;
 
 	if (USkeletalMeshComponent* Mesh = AvatarActor->FindComponentByClass<USkeletalMeshComponent>())
 	{
@@ -191,18 +247,57 @@ void UGA_ShootProjectiles::SpawnProjectile()
 		}
 	}
 
-	FVector Direction = AvatarActor->GetActorForwardVector();
-	if (CachedTargetActor)
+	switch (ActiveProjectileConfig.SpawnPattern)
 	{
-		FVector AimLocation = CachedTargetActor->GetActorLocation();
-
-		if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(CachedTargetActor->GetRootComponent()))
+	case EProjectileSpawnPattern::RainFromAbove:
+		if (CachedTargetActor)
 		{
-			AimLocation = RootPrimitive->Bounds.Origin;
+			const FVector TargetLocation = CachedTargetActor->GetActorLocation();
+			const FVector2D RandomOffset = FMath::RandPointInCircle(ActiveProjectileConfig.RainSpawnRadius);
+			SpawnLocation = TargetLocation + FVector(RandomOffset.X, RandomOffset.Y, ActiveProjectileConfig.RainSpawnHeight);
+			Direction = FVector(0.f, 0.f, -1.f);
 		}
+		break;
 
-		Direction = (AimLocation - SpawnLocation).GetSafeNormal();
-		SpawnRotation = Direction.Rotation();
+	case EProjectileSpawnPattern::GroundPillar:
+		if (CachedTargetActor)
+		{
+			const FVector TargetLocation = CachedTargetActor->GetActorLocation();
+			const FVector2D RandomOffset = FMath::RandPointInCircle(ActiveProjectileConfig.RainSpawnRadius);
+			SpawnLocation = TargetLocation + FVector(
+				RandomOffset.X,
+				RandomOffset.Y,
+				-FMath::Max(0.f, ActiveProjectileConfig.GroundPillarSpawnDepth));
+			Direction = FVector(0.f, 0.f, 1.f);
+		}
+		break;
+
+	case EProjectileSpawnPattern::RadialSpread:
+		{
+			bSpawnRadialVolley = true;
+			RadialVolleyCount = FMath::Max(1, ActiveProjectileConfig.RadialProjectileCount);
+			RadialVolleyYawOffset = (ProjectileIndex % 2) * (360.f / static_cast<float>(RadialVolleyCount * 2));
+			if (SpawnSocketName.IsNone())
+			{
+				SpawnLocation = AvatarActor->GetActorLocation() + FVector(0.f, 0.f, SpawnOffset.Z);
+			}
+		}
+		break;
+
+	case EProjectileSpawnPattern::Aimed:
+	default:
+		if (CachedTargetActor)
+		{
+			FVector AimLocation = CachedTargetActor->GetActorLocation();
+
+			if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(CachedTargetActor->GetRootComponent()))
+			{
+				AimLocation = RootPrimitive->Bounds.Origin;
+			}
+
+			Direction = (AimLocation - SpawnLocation).GetSafeNormal();
+		}
+		break;
 	}
 
 	FActorSpawnParameters SpawnParams;
@@ -210,13 +305,26 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	SpawnParams.Instigator = Cast<APawn>(AvatarActor);
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	AEnemyProjectile* Projectile = World->SpawnActor<AEnemyProjectile>(
-		ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
-	if (Projectile)
+	auto SpawnOneProjectile = [&](const FVector& LaunchDirection, const float LaunchSpeed, const int32 SpawnIndex, const int32 SpawnCount)
 	{
-		Projectile->Launch(Direction, ActiveProjectileConfig.ProjectileSpeed);
+		const FRotator LaunchRotation = LaunchDirection.Rotation();
+		AEnemyProjectile* Projectile = World->SpawnActor<AEnemyProjectile>(
+			ResolvedProjectileClass, SpawnLocation, LaunchRotation, SpawnParams);
+		if (!Projectile)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[GA_ShootProjectiles] SpawnActor failed. Owner=%s Class=%s Location=%s"),
+				*GetNameSafe(AvatarActor),
+				*GetNameSafe(ResolvedProjectileClass),
+				*SpawnLocation.ToCompactString());
+			return;
+		}
+
+		Projectile->Launch(LaunchDirection, LaunchSpeed);
 		Projectile->SetHitReactType(ActiveHitReactType);
+		Projectile->SetEffectTag(ActiveEffectTag);
 		Projectile->SetLaunchKnockbackConfig(ActiveLaunchKnockbackConfig);
+		Projectile->SetStatusEffectClass(ActiveStatusEffectClass);
 		Projectile->SetProjectileLifetime(ActiveProjectileConfig.ProjectileLifetime);
 		Projectile->SetGravityScale(ActiveProjectileConfig.bUseGravity
 			? ActiveProjectileConfig.ProjectileGravityScale : 0.f);
@@ -229,7 +337,56 @@ void UGA_ShootProjectiles::SpawnProjectile()
 				ActiveProjectileConfig.HomingDuration,
 				ActiveProjectileConfig.HomingStrength);
 		}
+
+		OnProjectileSpawned(Projectile, AvatarActor);
+
+		UE_LOG(LogTemp, Display,
+			TEXT("[GA_ShootProjectiles] Spawned projectile. Owner=%s Row=%s Class=%s Location=%s Direction=%s Speed=%.1f Index=%d/%d"),
+			*GetNameSafe(AvatarActor),
+			*ActivePatternRowName.ToString(),
+			*GetNameSafe(ResolvedProjectileClass),
+			*SpawnLocation.ToCompactString(),
+			*LaunchDirection.ToCompactString(),
+			LaunchSpeed,
+			SpawnIndex + 1,
+			SpawnCount);
+	};
+
+	if (bSpawnRadialVolley)
+	{
+		for (int32 VolleyIndex = 0; VolleyIndex < RadialVolleyCount; ++VolleyIndex)
+		{
+			const float VolleyAlpha = RadialVolleyCount > 1
+				? static_cast<float>(VolleyIndex) / static_cast<float>(RadialVolleyCount - 1)
+				: 0.5f;
+			const float Yaw = RadialVolleyYawOffset
+				+ (360.f / static_cast<float>(RadialVolleyCount)) * static_cast<float>(VolleyIndex);
+			const float Pitch = FMath::Lerp(
+				ActiveProjectileConfig.SpreadPitchMin,
+				ActiveProjectileConfig.SpreadPitchMax,
+				VolleyAlpha);
+			const FVector VolleyDirection = FRotator(Pitch, Yaw, 0.f).Vector();
+			const float LaunchSpeed = ActiveProjectileConfig.ProjectileSpeed * FMath::Lerp(
+				ActiveProjectileConfig.SpreadSpeedMultiplierMin,
+				ActiveProjectileConfig.SpreadSpeedMultiplierMax,
+				VolleyAlpha);
+			SpawnOneProjectile(VolleyDirection, LaunchSpeed, VolleyIndex, RadialVolleyCount);
+		}
 	}
+	else
+	{
+		SpawnOneProjectile(Direction, ActiveProjectileConfig.ProjectileSpeed, ProjectileIndex, ActiveProjectileCount);
+	}
+}
+
+TSubclassOf<AEnemyProjectile> UGA_ShootProjectiles::ResolveProjectileClass() const
+{
+	if (ActiveProjectileClass)
+	{
+		return ActiveProjectileClass;
+	}
+
+	return ProjectileClass;
 }
 
 void UGA_ShootProjectiles::FinishAbility()
@@ -242,7 +399,10 @@ void UGA_ShootProjectiles::FinishAbility()
 
 bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
 	ERetrieveHitReactType* OutHitReactType,
-	FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig) const
+	FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig,
+	FGameplayTag* OutEffectTag,
+	TSubclassOf<UGameplayEffect>* OutStatusEffectClass,
+	TSubclassOf<AEnemyProjectile>* OutProjectileClass) const
 {
 	const UEnemyCombatComponent* CombatComponent = GetEnemyCombatComponent();
 
@@ -275,6 +435,18 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 	{
 		*OutLaunchKnockbackConfig = Row->LaunchKnockbackConfig;
 	}
+	if (OutEffectTag)
+	{
+		*OutEffectTag = Row->EffectTag;
+	}
+	if (OutStatusEffectClass)
+	{
+		*OutStatusEffectClass = Row->StatusEffectClass;
+	}
+	if (OutProjectileClass)
+	{
+		*OutProjectileClass = Row->ProjectileClass;
+	}
 
 	if (OutConfig.ProjectileSpeed <= 0.f)
 	{
@@ -286,15 +458,40 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 
 const UAnimMontage* UGA_ShootProjectiles::ResolveMontage(const FGameplayEventData* TriggerEventData) const
 {
-	if (TriggerEventData)
+	if (!TriggerEventData)
 	{
-		if (const UAnimMontage* EventMontage = Cast<UAnimMontage>(TriggerEventData->OptionalObject.Get()))
-		{
-			return EventMontage;
-		}
+		return nullptr;
 	}
 
-	return nullptr;
+	const UObject* EventAnimation = TriggerEventData->OptionalObject.Get();
+	if (const UAnimMontage* EventMontage = Cast<UAnimMontage>(EventAnimation))
+	{
+		return EventMontage;
+	}
+
+	const UAnimSequenceBase* EventSequence = Cast<UAnimSequenceBase>(EventAnimation);
+	if (!EventSequence)
+	{
+		return nullptr;
+	}
+
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const USkeletalMeshComponent* Mesh = AvatarActor
+		? AvatarActor->FindComponentByClass<USkeletalMeshComponent>()
+		: nullptr;
+	const UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
+	{
+		return nullptr;
+	}
+
+	return UAnimMontage::CreateSlotAnimationAsDynamicMontage(
+		const_cast<UAnimSequenceBase*>(EventSequence),
+		TEXT("DefaultSlot"),
+		0.1f,
+		0.15f,
+		1.f,
+		1);
 }
 
 void UGA_ShootProjectiles::OnMontageCompleted()

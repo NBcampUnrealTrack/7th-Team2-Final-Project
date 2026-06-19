@@ -101,6 +101,31 @@ T* ConstructNamed(UWidgetTree* Tree, FName Name)
 	return Widget;
 }
 
+template <typename T>
+T* FindOrConstructNamed(UWidgetTree* Tree, FName Name)
+{
+	if (!Tree)
+	{
+		return nullptr;
+	}
+
+	if (UWidget* Existing = Tree->FindWidget(Name))
+	{
+		Existing->bIsVariable = true;
+		return Cast<T>(Existing);
+	}
+
+	return ConstructNamed<T>(Tree, Name);
+}
+
+void AddChildIfNeeded(UPanelWidget* Parent, UWidget* Child)
+{
+	if (Parent && Child && !Child->Slot)
+	{
+		Parent->AddChild(Child);
+	}
+}
+
 void SetFontSize(UTextBlock* TextBlock, int32 Size)
 {
 	if (!TextBlock)
@@ -142,21 +167,33 @@ void EnsureWidgetVariableGuids(UWidgetBlueprint* BP)
 			continue;
 		}
 
-		SeenNames.Add(Widget->GetFName());
-		Widget->bIsVariable = true;
-		if (!BP->WidgetVariableNameToGuidMap.Contains(Widget->GetFName()))
+		const FName WidgetName = Widget->GetFName();
+		if (WidgetName.ToString().StartsWith(TEXT("Retired_")))
 		{
-			BP->WidgetVariableNameToGuidMap.Add(Widget->GetFName(), FGuid::NewGuid());
+			Widget->bIsVariable = false;
+			continue;
+		}
+
+		SeenNames.Add(WidgetName);
+		Widget->bIsVariable = true;
+		if (!BP->WidgetVariableNameToGuidMap.Contains(WidgetName))
+		{
+			BP->WidgetVariableNameToGuidMap.Add(WidgetName, FGuid::NewGuid());
 		}
 	}
 
 	for (auto It = BP->WidgetVariableNameToGuidMap.CreateIterator(); It; ++It)
 	{
-		if (!SeenNames.Contains(It.Key()))
+		if (It.Key().ToString().StartsWith(TEXT("Retired_")) || !SeenNames.Contains(It.Key()))
 		{
 			It.RemoveCurrent();
 		}
 	}
+
+	BP->NewVariables.RemoveAll([](const FBPVariableDescription& Variable)
+	{
+		return Variable.VarName.ToString().StartsWith(TEXT("Retired_"));
+	});
 }
 
 void ResetWidgetTree(UWidgetBlueprint* BP)
@@ -173,6 +210,11 @@ void ResetWidgetTree(UWidgetBlueprint* BP)
 		if (Widget)
 		{
 			BP->WidgetTree->RemoveWidget(Widget);
+			const FString RetiredName = FString::Printf(
+				TEXT("Retired_%s_%s"),
+				*Widget->GetName(),
+				*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+			Widget->Rename(*RetiredName, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
 		}
 	}
 
@@ -487,6 +529,117 @@ void AddTextToNormalMonsterHealthBar()
 			SetCanvasSlot(HP, FAnchors(1.0f, 0.5f), FVector2D(-4.0f, 0.0f), FVector2D(100.0f, 18.0f), FVector2D(1.0f, 0.5f), 2);
 		}
 	}
+
+	CompileAndDirty(BP);
+}
+
+void ConfigureMonsterHealthBarLayoutAsset()
+{
+	UWidgetBlueprint* BP = CreateWidgetBlueprintIfMissing(
+		TEXT("/Game/Retrieve/UI"),
+		TEXT("WBP_MonsterHealthBar"),
+		URetrieveNormalMonsterHealthBarWidget::StaticClass());
+	if (!BP || !BP->WidgetTree)
+	{
+		return;
+	}
+
+	UTexture2D* EpicFrameTexture = LoadObject<UTexture2D>(
+		nullptr,
+		TEXT("/Game/External/UIFantasyWarriorHUD/Textures/FantasyWarrior/T_FantasyWarrior_Bar_Horizontal08.T_FantasyWarrior_Bar_Horizontal08"));
+
+	BP->Modify();
+	ResetWidgetTree(BP);
+
+	UCanvasPanel* Root = FindOrConstructNamed<UCanvasPanel>(BP->WidgetTree, TEXT("Root"));
+	if (!Root)
+	{
+		Root = ConstructNamed<UCanvasPanel>(BP->WidgetTree, TEXT("MonsterHealthBarRoot"));
+	}
+	BP->WidgetTree->RootWidget = Root;
+
+	UBorder* Backplate = FindOrConstructNamed<UBorder>(BP->WidgetTree, TEXT("MonsterHP_BG_Backplate"));
+	Backplate->SetBrushColor(FLinearColor(0.015f, 0.012f, 0.01f, 0.84f));
+	AddChildIfNeeded(Root, Backplate);
+	SetCanvasSlot(Backplate, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, 2.0f), FVector2D(252.0f, 42.0f), FVector2D(0.5f, 0.5f), 0);
+
+	UWidget* Vignette = BP->WidgetTree->FindWidget(TEXT("FRA_Vignette"));
+	if (!Vignette)
+	{
+		Vignette = ConstructNamed<UBorder>(BP->WidgetTree, TEXT("FRA_Vignette"));
+		if (UBorder* VignetteBorder = Cast<UBorder>(Vignette))
+		{
+			VignetteBorder->SetBrushColor(FLinearColor(0.45f, 0.25f, 0.02f, 0.28f));
+		}
+	}
+	if (Vignette)
+	{
+		Vignette->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	AddChildIfNeeded(Root, Vignette);
+	SetCanvasSlot(Vignette, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, 2.0f), FVector2D(264.0f, 52.0f), FVector2D(0.5f, 0.5f), 1);
+
+	UImage* Frame = FindOrConstructNamed<UImage>(BP->WidgetTree, TEXT("FRA_Frame"));
+	if (Frame)
+	{
+		if (EpicFrameTexture)
+		{
+			Frame->SetBrushFromTexture(EpicFrameTexture, true);
+		}
+		Frame->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+		Frame->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	AddChildIfNeeded(Root, Frame);
+	SetCanvasSlot(Frame, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, 2.0f), FVector2D(284.0f, 58.0f), FVector2D(0.5f, 0.5f), 6);
+
+	UBorder* HPTrack = FindOrConstructNamed<UBorder>(BP->WidgetTree, TEXT("MonsterHP_BG_HPTrack"));
+	HPTrack->SetBrushColor(FLinearColor(0.055f, 0.018f, 0.018f, 0.96f));
+	AddChildIfNeeded(Root, HPTrack);
+	SetCanvasSlot(HPTrack, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, -1.0f), FVector2D(236.0f, 16.0f), FVector2D(0.5f, 0.5f), 3);
+
+	UProgressBar* HPBar = FindOrConstructNamed<UProgressBar>(BP->WidgetTree, TEXT("HPBar"));
+	if (!HPBar)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Retrieve|MonsterHealthBar] HPBar exists but is not a ProgressBar."));
+		return;
+	}
+	HPBar->SetPercent(1.0f);
+	HPBar->SetFillColorAndOpacity(FLinearColor(0.84f, 0.04f, 0.035f, 0.98f));
+	AddChildIfNeeded(Root, HPBar);
+	SetCanvasSlot(HPBar, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, -1.0f), FVector2D(228.0f, 10.0f), FVector2D(0.5f, 0.5f), 4);
+
+	UBorder* GroggyTrack = FindOrConstructNamed<UBorder>(BP->WidgetTree, TEXT("MonsterHP_BG_GroggyTrack"));
+	GroggyTrack->SetBrushColor(FLinearColor(0.08f, 0.055f, 0.012f, 0.98f));
+	AddChildIfNeeded(Root, GroggyTrack);
+	SetCanvasSlot(GroggyTrack, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, 13.0f), FVector2D(236.0f, 9.0f), FVector2D(0.5f, 0.5f), 3);
+
+	UProgressBar* GroggyProgressBar = FindOrConstructNamed<UProgressBar>(BP->WidgetTree, TEXT("GroggyProgressBar"));
+	if (!GroggyProgressBar)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Retrieve|MonsterHealthBar] GroggyProgressBar exists but is not a ProgressBar."));
+		return;
+	}
+	GroggyProgressBar->SetPercent(0.0f);
+	GroggyProgressBar->SetFillColorAndOpacity(FLinearColor(1.0f, 0.72f, 0.08f, 0.98f));
+	GroggyProgressBar->SetVisibility(ESlateVisibility::Hidden);
+	AddChildIfNeeded(Root, GroggyProgressBar);
+	SetCanvasSlot(GroggyProgressBar, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, 13.0f), FVector2D(228.0f, 5.0f), FVector2D(0.5f, 0.5f), 4);
+
+	UTextBlock* Name = FindOrConstructNamed<UTextBlock>(BP->WidgetTree, TEXT("Text_MonsterName"));
+	Name->SetJustification(ETextJustify::Center);
+	Name->SetText(FText::FromString(TEXT("Monster")));
+	SetFontSize(Name, 13);
+	Name->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.93f, 0.78f, 1.0f)));
+	AddChildIfNeeded(Root, Name);
+	SetCanvasSlot(Name, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(0.0f, -21.0f), FVector2D(220.0f, 18.0f), FVector2D(0.5f, 0.5f), 5);
+
+	UTextBlock* HPValue = FindOrConstructNamed<UTextBlock>(BP->WidgetTree, TEXT("Text_HPValue"));
+	HPValue->SetJustification(ETextJustify::Right);
+	HPValue->SetText(FText::FromString(TEXT("0 / 0")));
+	SetFontSize(HPValue, 11);
+	HPValue->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.93f, 0.86f, 0.96f)));
+	AddChildIfNeeded(Root, HPValue);
+	SetCanvasSlot(HPValue, FAnchors(0.5f, 0.5f, 0.5f, 0.5f), FVector2D(104.0f, -1.0f), FVector2D(96.0f, 14.0f), FVector2D(1.0f, 0.5f), 5);
 
 	CompileAndDirty(BP);
 }
@@ -1070,6 +1223,18 @@ bool URetrieveUIVFXEditorUtility::FixElementGaugeSkillIconFrames()
 	return true;
 #else
 	UE_LOG(LogTemp, Warning, TEXT("[Retrieve|ElementGauge] Editor-only icon frame configuration is unavailable in non-editor builds."));
+	return false;
+#endif
+}
+
+bool URetrieveUIVFXEditorUtility::ConfigureMonsterHealthBarLayout()
+{
+#if WITH_EDITOR
+	ConfigureMonsterHealthBarLayoutAsset();
+	UE_LOG(LogTemp, Log, TEXT("[Retrieve|MonsterHealthBar] WBP_MonsterHealthBar layout configured."));
+	return true;
+#else
+	UE_LOG(LogTemp, Warning, TEXT("[Retrieve|MonsterHealthBar] Editor-only monster health bar configuration is unavailable in non-editor builds."));
 	return false;
 #endif
 }

@@ -23,6 +23,7 @@ class UTexture2D;
 class UNiagaraSystem;
 class USoundBase;
 class AStaffProjectile;
+class AEnemyProjectile;
 
 // FGenericTeamId(uint8)에 매핑되는 게임 정의 팀 식별자.
 // 엔진은 NoTeam(255)만 예약하고 팀 의미는 게임이 정의하도록 둠 → 여기서 정의한다.
@@ -75,10 +76,30 @@ struct RETRIEVE_API FEnemyDropRow : public FTableRowBase
 	int32 Quantity = 1;
 };
 
+/**
+ * 투사체 스폰 방식. 새 패턴은 이 enum 값만 골라서 MonsterPattern row로 추가할 수 있다.
+ * Aimed: 타겟을 직접 조준 발사 (기본, 일반/보스 호환)
+ * RainFromAbove: 타겟 머리 위에서 아래로 떨어지는 비 패턴
+ * RadialSpread: 몬스터 위치에서 360도 무작위 방향으로 확산 발사
+ * GroundPillar: 타겟 발밑에서 위로 솟아오르는 기둥 패턴 (물기둥 등)
+ */
+UENUM(BlueprintType)
+enum class EProjectileSpawnPattern : uint8
+{
+	Aimed			UMETA(DisplayName="Aimed"),
+	RainFromAbove	UMETA(DisplayName="Rain From Above"),
+	RadialSpread	UMETA(DisplayName="Radial Spread"),
+	GroundPillar	UMETA(DisplayName="Ground Pillar"),
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FMonsterProjectilePatternConfig
 {
 	GENERATED_BODY()
+
+	/** 투사체 스폰 방식. 기본 Aimed는 기존 동작과 동일. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	EProjectileSpawnPattern SpawnPattern = EProjectileSpawnPattern::Aimed;
 
 	/** 각 투사체 발사 시점. 비어 있으면 투사체 패턴 설정을 사용하지 않는다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
@@ -115,6 +136,50 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 	/** 중력 강도 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
 	float ProjectileGravityScale = 0.f;
+
+	// ---- RainFromAbove 파라미터 ----
+	/** 타겟 기준 낙하 시작 높이 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Rain", meta=(ClampMin="0.0"))
+	float RainSpawnHeight = 850.f;
+
+	/** 타겟 주변 수평 무작위 반경 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Rain", meta=(ClampMin="0.0"))
+	float RainSpawnRadius = 260.f;
+
+	// ---- GroundPillar 파라미터 ----
+	/** 타겟 기준 기둥 스폰 깊이. 양수 값만 입력하고 런타임에서 아래 방향으로 적용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|GroundPillar", meta=(ClampMin="0.0"))
+	float GroundPillarSpawnDepth = 80.f;
+
+	// ---- RadialSpread 파라미터 ----
+	/** 한 번의 확산 스폰에서 생성할 투사체 수 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread", meta=(ClampMin="1"))
+	int32 RadialProjectileCount = 8;
+
+	/** 확산 발사 시 피치 최소각(deg) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread")
+	float SpreadPitchMin = -15.f;
+
+	/** 확산 발사 시 피치 최대각(deg) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread")
+	float SpreadPitchMax = 20.f;
+
+	/** 확산 첫 투사체 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread", meta=(ClampMin="0.0"))
+	float SpreadSpeedMultiplierMin = 0.9f;
+
+	/** 확산 마지막 투사체 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread", meta=(ClampMin="0.0"))
+	float SpreadSpeedMultiplierMax = 1.2f;
+
+	// ---- 반사(패링 카운터) 설정 — 에픽 투사체에서만 사용 ----
+	/** 플레이어 패링 시 카운터 타겟으로 반사되는 투사체인지 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Reflection")
+	bool bReflectable = false;
+
+	/** 반사 시 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Reflection", meta=(ClampMin="0.1"))
+	float ReflectedSpeedMultiplier = 1.2f;
 };
 
 USTRUCT(BlueprintType)
@@ -184,10 +249,18 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 투사체 패턴 설정. 투사체를 사용하지 않는 패턴은 기본값을 사용한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
 	FMonsterProjectilePatternConfig ProjectileConfig;
+
+	/** 이 패턴에서 사용할 투사체 클래스. 비어 있으면 GA의 기본 ProjectileClass를 사용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
+	TSubclassOf<AEnemyProjectile> ProjectileClass;
 	
 	/** 피격 시 적용할 효과 태그 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
     FGameplayTag EffectTag;
+
+	/** 투사체 적중 또는 범위 충돌 시 적용할 상태이상 GE. 비어 있으면 상태이상을 적용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Status")
+	TSubclassOf<UGameplayEffect> StatusEffectClass;
 
 	/** 적중 시 피격자 반응 강도 (방어판정/데미지와 독립) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|HitReact")
@@ -308,7 +381,11 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** 순찰 여부 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;
-	
+
+	/** 에픽 몬스터 공중 페이즈 사용 여부 (비행 가능 몬스터만 true) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Monster|Epic")
+	bool bHasAerialPhase = false;
+
 	/** DT_EnemyDrop의 Row 키 목록. 각 행을 DropChance로 독립 굴림해 드랍한다. 비어있으면 드랍 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop")
 	TArray<FName> DropRows;

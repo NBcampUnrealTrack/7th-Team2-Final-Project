@@ -6,6 +6,7 @@
 #include "NormalMonsterHealthBarComponent.generated.h"
 
 class URetrieveHealthComponent;
+class UEpicMonsterGroggyComponent;
 
 UCLASS(ClassGroup = (Retrieve), meta = (BlueprintSpawnableComponent))
 class RETRIEVE_API UNormalMonsterHealthBarComponent : public UWidgetComponent
@@ -47,8 +48,13 @@ protected:
 	UFUNCTION()
 	void HandleDeathStarted(AActor* OwningActor);
 
+	UFUNCTION()
+	void HandleGroggyGaugeUpdated(float Ratio, bool bIsGroggyActive);
+
 private:
 	void BindToHealthComponent();
+	void BindToGroggyComponent();
+	void UnbindFromGroggyComponent();
 	void UnbindFromHealthComponent();
 	void RefreshHealthPercent();
 	void ShowForDuration();
@@ -80,6 +86,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URetrieveHealthComponent> BoundHealthComponent;
+
+	UPROPERTY()
+	TObjectPtr<UEpicMonsterGroggyComponent> BoundGroggyComponent;
 
 	// 생성자의 FClassFinder로 찾은 WBP 클래스 — BeginPlay에서 InitWidget() 전에 강제 적용
 	UPROPERTY()

@@ -10,6 +10,7 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 	: Super(ObjectInitializer)
 {
 	StateTreeAIComp = CreateDefaultSubobject<UStateTreeAIComponent>(TEXT("StateTreeAIComponent"));
+	StateTreeAIComp->SetStartLogicAutomatically(false);
 
 	AIPerceptionComp = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("AIPerceptionComponent"));
 	SetPerceptionComponent(*AIPerceptionComp);
@@ -27,7 +28,7 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 	Super::OnPossess(InPawn);
 	
 	GetWorld()->GetTimerManager().SetTimerForNextTick(
-			this, &AEnemyAIController::TryStartStateTree);
+			this, &AEnemyAIController::RestartStateTree);
 }
 
 void AEnemyAIController::OnUnPossess()
@@ -48,13 +49,14 @@ void AEnemyAIController::PostInitializeComponents()
 	InitDamageConfig();
 }
 
-void AEnemyAIController::ConfigureStateTree(UStateTree* InStateTree) const
+void AEnemyAIController::ConfigureStateTree(UStateTree* InStateTree)
 {
 	if (StateTreeAIComp && InStateTree)
 	{
-        StateTreeAIComp->SetStartLogicAutomatically(false);
-		StateTreeAIComp->SetStateTree(InStateTree);
-        StateTreeAIComp->StartLogic();   
+		DefaultStateTree = InStateTree;
+		StateTreeAIComp->SetStartLogicAutomatically(false);
+		StateTreeAIComp->SetStateTree(DefaultStateTree);
+		StateTreeAIComp->StartLogic();
 	}
 }
 
@@ -109,6 +111,16 @@ void AEnemyAIController::Reactivate()
 	TryStartStateTree();
 }
 
+void AEnemyAIController::RestartStateTree()
+{
+	if (StateTreeAIComp && StateTreeAIComp->IsRunning())
+	{
+		StateTreeAIComp->StopLogic("RestartOnPossess");
+	}
+
+	TryStartStateTree();
+}
+
 void AEnemyAIController::InitSightConfig()
 {
 	SightConfig->SightRadius = SightRadius;
@@ -137,6 +149,11 @@ void AEnemyAIController::TryStartStateTree()
 {
 	if (StateTreeAIComp && !StateTreeAIComp->IsRunning())
 	{
+		StateTreeAIComp->SetStartLogicAutomatically(false);
+		if (DefaultStateTree)
+		{
+			StateTreeAIComp->SetStateTree(DefaultStateTree);
+		}
 		StateTreeAIComp->StartLogic();
 	}
 }

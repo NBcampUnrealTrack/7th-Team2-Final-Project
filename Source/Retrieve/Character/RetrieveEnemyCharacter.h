@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/RetrieveCombatCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayTagContainer.h"
 #include "GenericTeamAgentInterface.h"
@@ -16,6 +17,7 @@ class UNormalMonsterHealthBarComponent;
 class USphereComponent;
 class UHitReactionComponent;
 class URetrieveHitReactionProfile;
+class UAnimMontage;
 
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDataRow;
@@ -44,6 +46,9 @@ public:
 
 	void SetAerialMode(bool bAerial);
 
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Enemy")
+	void AlertFromDamageInstigator(AActor* DamageInstigator);
+
 	// ABP Property Access 바인딩 전용
 	UFUNCTION(BlueprintPure, Category="Retrieve|Enemy|Animation", meta=(BlueprintThreadSafe))
 	bool IsDeadForAnim()    const { return bCachedIsDead; }
@@ -67,6 +72,14 @@ public:
 	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
 	
 	const FMonsterDataRow* GetMonsterDataRow() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Enemy|Epic")
+	bool HasAerialPhase() const;
+
+	virtual bool UsesForwardLocomotion() const { return false; }
+	virtual void UpdateGroundTurnAnimation(float SignedYawDelta) {}
+	virtual void StopGroundTurnAnimation() { StopLocomotionMontages(); }
+
 	void RefreshMoveSpeedFromAttribute();
 	
 	virtual FGenericTeamId GetGenericTeamId() const override
@@ -81,7 +94,13 @@ protected:
 	virtual void InitializeAbilitySystem() override;
 	
 	virtual void InitializeComponents();
-	
+
+	/** 적별 이동/회전 설정 훅. 에픽 등 파생 클래스가 override 하여 자신만의 이동 설정을 적용한다. */
+	virtual void ConfigureEnemyMovement() {}
+
+	/** 로코모션용 동적 몽타주(예: 그라운드 턴) 정지 훅. 공중 진입·비활성화 시 호출된다. */
+	virtual void StopLocomotionMontages() {}
+
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
 	void OnDeadTagChanged(const FGameplayTag Tag, int32 Count);
@@ -95,7 +114,7 @@ protected:
 	
 private:
 	void OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
-	
+
 public:
 	UPROPERTY()
 	TObjectPtr<AActor> AlertedTarget;
@@ -160,14 +179,14 @@ protected:
 	float EngageStaggerMaxDelay = 1.2f;
 	
 	bool bRespawnable = false;
-	
-private:
-	// Ragdoll 복구용
+
+	// Ragdoll 복구용. 파생 클래스(에픽)가 메시 오프셋 조정 후 갱신할 수 있도록 protected.
 	FTransform InitialMeshRelativeTransform;
-	
+
+private:
 	float BaseMaxWalkSpeed = 0.f;
 	float DefaultGravityScale = 1.0f;
-	EMovementMode DefaultMovementMode;
+	EMovementMode DefaultMovementMode = MOVE_Walking;
 	
 	bool bCachedIsDead      = false;
 	bool bCachedIsChasing   = false;

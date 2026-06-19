@@ -46,7 +46,7 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	FVector SpawnedLocation = FVector::ZeroVector;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Output")
 	FGameplayTagContainer OwnedTags;
 	
@@ -66,7 +66,10 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bPatrolable = false;
-	
+
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bHasAerialPhase = false;
+
 	UPROPERTY(EditAnywhere, Category = "Output")
 	float PatrolRange = 1200.0f;
 	

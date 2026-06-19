@@ -24,4 +24,7 @@ public:
 
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
 	static bool FixElementGaugeSkillIconFrames();
+
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|UI|Editor")
+	static bool ConfigureMonsterHealthBarLayout();
 };

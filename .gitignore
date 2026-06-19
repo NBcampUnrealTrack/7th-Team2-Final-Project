@@ -92,6 +92,9 @@ Plugins/Monolith/
 .env
 .env.local
 
+# Commandlets (로컬 전용 에셋 설정 도구 - uasset 적용 후 git 추적 불필요)
+Source/**/Commandlets/
+
 # MCP 자동 생성 문서 (개인용)
 AGENTS.md
 기획서.md

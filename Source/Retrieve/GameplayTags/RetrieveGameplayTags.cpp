@@ -257,6 +257,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileRapid, "GameplayEvent.Enemy.SpecialAttack.ProjectileRapid");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileRain, "GameplayEvent.Enemy.SpecialAttack.ProjectileRain");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileHoming, "GameplayEvent.Enemy.SpecialAttack.ProjectileHoming");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_ProjectileSpread, "GameplayEvent.Enemy.SpecialAttack.ProjectileSpread");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_Acceleration, "GameplayEvent.Enemy.SpecialAttack.Acceleration");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_DashAttack, "GameplayEvent.Enemy.SpecialAttack.DashAttack");
 	

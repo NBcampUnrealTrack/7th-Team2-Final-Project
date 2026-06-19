@@ -43,6 +43,7 @@ public:
 	bool IsSpecialAttackEvaluationLocked() const;
 	bool IsSpecialAttackRetryCooldownReady() const;
 	void StartSpecialAttackRetryCooldown();
+	void SuppressSpecialAttackEvaluation(float Duration);
 	
 	void SetMovementLockedByAttack(bool bLocked);
 	bool IsMovementLockedByAttack() const { return bMovementLockedByAttack; }
@@ -81,6 +82,7 @@ private:
 	void OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 						 UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
 						 bool bFromSweep, const FHitResult& SweepResult);
+	bool ApplyHitToActor(AActor* OtherActor, const FHitResult& SweepResult);
 	
 	const FMonsterPatternRow* FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType
 		, FName* OutRowName = nullptr) const;
@@ -88,6 +90,10 @@ private:
 	void StartCooldown(FName RowName, float Duration);
 	void LockSpecialAttackEvaluation(float Duration);
 	URetrieveAbilitySystemComponent* GetASC() const;
+	bool TryStartSequencePattern(const FMonsterPatternRow& PatternRow, FName PatternRowName, AActor* Target);
+	void FinishSequencePattern();
+	void SetSequenceAttackTag(bool bEnable);
+	void FaceTarget(AActor* Target) const;
 
 private:
 	UPROPERTY()
@@ -99,6 +105,12 @@ private:
 	TArray<FName> PatternSlots;
 
 	TMap<FName, float> CooldownExpiry;
+
+	bool bSequencePatternActive = false;
+	bool bSequenceAttackTagApplied = false;
+	FTimerHandle SequenceHitboxStartTimerHandle;
+	FTimerHandle SequenceHitboxEndTimerHandle;
+	FTimerHandle SequenceFinishTimerHandle;
 
 	
 	UPROPERTY()

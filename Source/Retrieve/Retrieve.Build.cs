@@ -53,7 +53,10 @@ public class Retrieve : ModuleRules
 				"UMGEditor",
 				"ModelViewViewModelBlueprint",
 				"ModelViewViewModelEditor",
-				"BlueprintGraph"
+				"BlueprintGraph",
+				"AnimGraph",
+				"PropertyBindingUtils",
+				"StateTreeEditorModule"
 			});
 		}
 

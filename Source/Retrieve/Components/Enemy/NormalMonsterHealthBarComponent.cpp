@@ -4,6 +4,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/ProgressBar.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
+#include "Components/Enemy/EpicMonsterGroggyComponent.h"
 #include "TimerManager.h"
 #include "UI/HUD/RetrieveNormalMonsterHealthBarWidget.h"
 
@@ -40,7 +41,7 @@ UNormalMonsterHealthBarComponent::UNormalMonsterHealthBarComponent()
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	SetWidgetSpace(EWidgetSpace::Screen);
-	SetDrawSize(FVector2D(120.f, 16.f));
+	SetDrawSize(FVector2D(260.f, 56.f));
 	SetPivot(FVector2D(0.5f, 0.5f));
 	SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetGenerateOverlapEvents(false);
@@ -48,7 +49,7 @@ UNormalMonsterHealthBarComponent::UNormalMonsterHealthBarComponent()
 
 	// WBP Blueprint 클래스를 우선 로드 (Text_MonsterName / Text_HPValue 바인딩 보장)
 	static ConstructorHelpers::FClassFinder<UUserWidget> HealthBarWBP(
-		TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar"));
+		TEXT("/Game/Retrieve/UI/WBP_MonsterHealthBar"));
 	if (HealthBarWBP.Succeeded())
 	{
 		WBPWidgetClass = HealthBarWBP.Class;
@@ -71,7 +72,12 @@ void UNormalMonsterHealthBarComponent::OnRegister()
 		{
 			// FClassFinder 실패 시 직접 로드 (이미 메모리에 있으면 즉시 반환)
 			TargetClass = LoadClass<UUserWidget>(nullptr,
-				TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar.WBP_NormalMonsterHealthBar_C"));
+				TEXT("/Game/Retrieve/UI/WBP_MonsterHealthBar.WBP_MonsterHealthBar_C"));
+			if (!TargetClass)
+			{
+				TargetClass = LoadClass<UUserWidget>(nullptr,
+					TEXT("/Game/Retrieve/UI/WBP_NormalMonsterHealthBar.WBP_NormalMonsterHealthBar_C"));
+			}
 		}
 		if (TargetClass)
 		{
@@ -100,8 +106,9 @@ void UNormalMonsterHealthBarComponent::BeginPlay()
 	}
 
 	BindToHealthComponent();
+	BindToGroggyComponent();
 	RefreshHealthPercent();
-	SetComponentTickEnabled(BoundHealthComponent != nullptr);
+	SetComponentTickEnabled(true);
 
 	if (bShowOnBeginPlayForDebug)
 	{
@@ -121,6 +128,7 @@ void UNormalMonsterHealthBarComponent::EndPlay(const EEndPlayReason::Type EndPla
 	}
 
 	UnbindFromHealthComponent();
+	UnbindFromGroggyComponent();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -131,8 +139,16 @@ void UNormalMonsterHealthBarComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bHealthBarEnabled || !BoundHealthComponent)
+	if (!bHealthBarEnabled)
 	{
+		return;
+	}
+
+	if (!BoundHealthComponent)
+	{
+		BindToHealthComponent();
+		BindToGroggyComponent();
+		RefreshHealthPercent();
 		return;
 	}
 
@@ -175,12 +191,15 @@ void UNormalMonsterHealthBarComponent::SetHealthBarEnabled(bool bNewEnabled)
 	{
 		HideBar();
 		UnbindFromHealthComponent();
+		UnbindFromGroggyComponent();
+		SetComponentTickEnabled(false);
 	}
 	else if (HasBegunPlay())
 	{
 		BindToHealthComponent();
+		BindToGroggyComponent();
 		RefreshHealthPercent();
-		SetComponentTickEnabled(BoundHealthComponent != nullptr);
+		SetComponentTickEnabled(true);
 	}
 }
 
@@ -234,7 +253,77 @@ void UNormalMonsterHealthBarComponent::UnbindFromHealthComponent()
 
 	LastObservedHealth = -1.f;
 	LastObservedMaxHealth = -1.f;
-	SetComponentTickEnabled(false);
+}
+
+void UNormalMonsterHealthBarComponent::BindToGroggyComponent()
+{
+	if (BoundGroggyComponent)
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	UEpicMonsterGroggyComponent* GroggyComp = Owner->FindComponentByClass<UEpicMonsterGroggyComponent>();
+	if (!GroggyComp)
+	{
+		return;
+	}
+
+	GroggyComp->OnGroggyGaugeUpdated.AddDynamic(this, &ThisClass::HandleGroggyGaugeUpdated);
+	BoundGroggyComponent = GroggyComp;
+}
+
+void UNormalMonsterHealthBarComponent::UnbindFromGroggyComponent()
+{
+	if (!BoundGroggyComponent)
+	{
+		return;
+	}
+
+	BoundGroggyComponent->OnGroggyGaugeUpdated.RemoveDynamic(this, &ThisClass::HandleGroggyGaugeUpdated);
+	BoundGroggyComponent = nullptr;
+}
+
+void UNormalMonsterHealthBarComponent::HandleGroggyGaugeUpdated(float Ratio, bool bIsGroggyActive)
+{
+	if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
+		Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
+	{
+		HealthBarWidget->UpdateGroggyGauge(Ratio, bIsGroggyActive);
+	}
+
+	if (bIsGroggyActive || Ratio > 0.01f)
+	{
+		SetBarVisible(true);
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(HideTimerHandle);
+			if (!bIsGroggyActive)
+			{
+				World->GetTimerManager().SetTimer(
+					HideTimerHandle,
+					this,
+					&ThisClass::HideBar,
+					VisibleDurationAfterDamage,
+					false);
+			}
+		}
+		return;
+	}
+
+	if (!BoundHealthComponent || !ShouldShowForHealth(BoundHealthComponent->GetHealth(), BoundHealthComponent->GetMaxHealth()))
+	{
+		HideBar();
+	}
+	else
+	{
+		ShowForDuration();
+	}
 }
 
 void UNormalMonsterHealthBarComponent::HandleHealthChanged(float NewHealth)
@@ -297,6 +386,11 @@ void UNormalMonsterHealthBarComponent::SetMonsterIdentity(FText InDisplayName, F
 
 void UNormalMonsterHealthBarComponent::RefreshHealthPercent()
 {
+	if (!BoundHealthComponent)
+	{
+		BindToHealthComponent();
+	}
+
 	if (!BoundHealthComponent)
 	{
 		return;

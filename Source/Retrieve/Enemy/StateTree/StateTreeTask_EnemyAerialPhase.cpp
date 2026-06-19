@@ -1,20 +1,19 @@
 #include "Enemy/StateTree/StateTreeTask_EnemyAerialPhase.h"
 
-#include "StateTreeLinker.h"
-#include "StateTreeExecutionContext.h"
-#include "Character/RetrieveEnemyCharacter.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
+#include "Character/RetrieveEnemyCharacter.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameFramework/PawnMovementComponent.h"
+#include "StateTreeExecutionContext.h"
+#include "StateTreeLinker.h"
 
 namespace
 {
-UAnimInstance* GetEnemyAnimInstance(const ARetrieveEnemyCharacter* Enemy)
+UAnimInstance* GetAerialPhaseEnemyAnimInstance(const ARetrieveEnemyCharacter* Enemy)
 {
 	if (!IsValid(Enemy))
 	{
@@ -36,7 +35,7 @@ UAnimMontage* PlayAerialAnimation(
 	const float PlayRate,
 	const int32 LoopCount)
 {
-	UAnimInstance* AnimInstance = GetEnemyAnimInstance(Enemy);
+	UAnimInstance* AnimInstance = GetAerialPhaseEnemyAnimInstance(Enemy);
 	UAnimSequenceBase* LoadedAnimation = ResolveAerialAnimation(Animation);
 	if (!AnimInstance || !LoadedAnimation)
 	{
@@ -54,9 +53,31 @@ UAnimMontage* PlayAerialAnimation(
 
 bool IsAerialAnimationPlaying(const ARetrieveEnemyCharacter* Enemy, const TSoftObjectPtr<UAnimSequenceBase>& Animation)
 {
-	UAnimInstance* AnimInstance = GetEnemyAnimInstance(Enemy);
+	UAnimInstance* AnimInstance = GetAerialPhaseEnemyAnimInstance(Enemy);
 	UAnimSequenceBase* LoadedAnimation = ResolveAerialAnimation(Animation);
 	return AnimInstance && LoadedAnimation && AnimInstance->IsPlayingSlotAnimation(LoadedAnimation, TEXT("DefaultSlot"));
+}
+
+float ResolveGroundZ(const APawn& Pawn, const float FallbackZ)
+{
+	UWorld* World = Pawn.GetWorld();
+	if (!World)
+	{
+		return FallbackZ;
+	}
+
+	const FVector ActorLocation = Pawn.GetActorLocation();
+	const FVector TraceStart = ActorLocation + FVector(0.f, 0.f, 150.f);
+	const FVector TraceEnd = ActorLocation - FVector(0.f, 0.f, 5000.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(FName(TEXT("EnemyAerialPhaseGroundTrace")), false, &Pawn);
+	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+	{
+		return Hit.ImpactPoint.Z;
+	}
+
+	return FallbackZ;
 }
 }
 
@@ -67,27 +88,23 @@ bool FStateTreeTask_EnemyAerialPhase::Link(FStateTreeLinker& Linker)
 }
 
 EStateTreeRunStatus FStateTreeTask_EnemyAerialPhase::EnterState(
-	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+	FStateTreeExecutionContext& Context,
+	const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& ID = Context.GetInstanceData(*this);
-
-	ID.bReachedHoverHeight = false;
-	ID.ElapsedHoverTime    = 0.f;
-	ID.TotalElapsedTime    = 0.f;
+	ID.ElapsedTime = 0.f;
+	ID.HoverLocation = FVector::ZeroVector;
 	ID.bPlayedFlightMontage = false;
 	ID.bPlayedHoverMontage = false;
-	ID.bRequestedSpecialPattern = false;
-	ID.bLandingStarted = false;
-	ID.LandingElapsedTime = 0.f;
-	ID.TimeSinceSpecialAttackRequest = ID.SpecialAttackRetryInterval;
+	ID.CachedEnemy = nullptr;
 
-	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
-	if (!Pawn)
+	if (!ID.bHasAerialPhase || !IsValid(ID.TargetPlayer))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
 
-	if (!IsValid(ID.TargetPlayer))
+	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
+	if (!Pawn)
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -97,10 +114,15 @@ EStateTreeRunStatus FStateTreeTask_EnemyAerialPhase::EnterState(
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	ID.CachedCombatComponent = Pawn->FindComponentByClass<UEnemyCombatComponent>();
 
-	// 현재 Z를 지면 기준으로 저장 (상승 후 돌아올 높이 계산에 사용)
-	ID.GroundZ = Pawn->GetActorLocation().Z;
+	ID.GroundZ = ResolveGroundZ(*Pawn, Pawn->GetActorLocation().Z - ID.HoverHeight);
+	const FVector TargetLocation = ID.TargetPlayer->GetActorLocation();
+	ID.HoverLocation = FVector(TargetLocation.X, TargetLocation.Y, ID.GroundZ + ID.HoverHeight);
+
+	if (UEnemyCombatComponent* CombatComponent = Pawn->FindComponentByClass<UEnemyCombatComponent>())
+	{
+		CombatComponent->SuppressSpecialAttackEvaluation(ID.ReentryLockDuration);
+	}
 
 	ID.CachedEnemy->SetAerialMode(true);
 	PlayAerialAnimation(ID.CachedEnemy.Get(), ID.TakeOffAnimation, ID.MontagePlayRate, 1);
@@ -109,10 +131,11 @@ EStateTreeRunStatus FStateTreeTask_EnemyAerialPhase::EnterState(
 }
 
 EStateTreeRunStatus FStateTreeTask_EnemyAerialPhase::Tick(
-	FStateTreeExecutionContext& Context, const float DeltaTime) const
+	FStateTreeExecutionContext& Context,
+	const float DeltaTime) const
 {
 	FInstanceDataType& ID = Context.GetInstanceData(*this);
-	ID.TotalElapsedTime += DeltaTime;
+	ID.ElapsedTime += DeltaTime;
 
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn || !ID.CachedEnemy.IsValid())
@@ -121,129 +144,67 @@ EStateTreeRunStatus FStateTreeTask_EnemyAerialPhase::Tick(
 	}
 
 	const FVector CurrentLoc = Pawn->GetActorLocation();
-
-	if (ID.bLandingStarted)
-	{
-		ID.LandingElapsedTime += DeltaTime;
-
-		if (const UCharacterMovementComponent* MoveComp = ID.CachedEnemy->GetCharacterMovement())
-		{
-			if (MoveComp->MovementMode == MOVE_Walking || MoveComp->MovementMode == MOVE_NavWalking)
-			{
-				return EStateTreeRunStatus::Succeeded;
-			}
-		}
-
-		if (ID.LandingElapsedTime >= ID.LandingTimeout)
-		{
-			return EStateTreeRunStatus::Succeeded;
-		}
-
-		return EStateTreeRunStatus::Running;
-	}
-
-	// 목표 호버 위치: 플레이어 XY + (지면Z + HoverHeight)
-	FVector HoverTarget = CurrentLoc;
 	if (IsValid(ID.TargetPlayer))
 	{
 		const FVector PlayerLoc = ID.TargetPlayer->GetActorLocation();
-		HoverTarget = FVector(PlayerLoc.X, PlayerLoc.Y, ID.GroundZ + ID.HoverHeight);
-
-		// 플레이어를 향해 회전 (XY 평면만)
 		const FVector FaceDir = (PlayerLoc - CurrentLoc).GetSafeNormal2D();
 		if (!FaceDir.IsNearlyZero())
 		{
 			Pawn->SetActorRotation(FaceDir.Rotation());
 		}
 	}
-	else
+
+	if (ID.HoverLocation.IsNearlyZero())
 	{
-		HoverTarget = FVector(CurrentLoc.X, CurrentLoc.Y, ID.GroundZ + ID.HoverHeight);
+		ID.HoverLocation = FVector(CurrentLoc.X, CurrentLoc.Y, ID.GroundZ + ID.HoverHeight);
 	}
 
-	// 호버 목표로 이동 입력
-	const FVector Delta = HoverTarget - CurrentLoc;
+	const FVector Delta = ID.HoverLocation - CurrentLoc;
+	if (Delta.Size() <= ID.PositionTolerance && !ID.bPlayedHoverMontage)
+	{
+		PlayAerialAnimation(ID.CachedEnemy.Get(), ID.HoverAnimation, ID.MontagePlayRate, 999);
+		ID.bPlayedHoverMontage = true;
+	}
+
+	if (ID.ElapsedTime >= ID.AttackDelay)
+	{
+		if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent())
+		{
+			MoveComp->StopMovementImmediately();
+		}
+		return EStateTreeRunStatus::Succeeded;
+	}
+
 	if (Delta.Size() > ID.PositionTolerance)
 	{
 		Pawn->AddMovementInput(Delta.GetSafeNormal(), 1.f);
-		if (!ID.bPlayedFlightMontage && !IsAerialAnimationPlaying(ID.CachedEnemy.Get(), ID.TakeOffAnimation))
-		{
-			PlayAerialAnimation(ID.CachedEnemy.Get(), ID.FlightAnimation, ID.MontagePlayRate, 999);
-			ID.bPlayedFlightMontage = true;
-		}
 	}
-	else
+	if (!ID.bPlayedFlightMontage && !IsAerialAnimationPlaying(ID.CachedEnemy.Get(), ID.TakeOffAnimation))
 	{
-		// 목표 위치 도달 → 호버 시간 카운트 시작
-		ID.bReachedHoverHeight = true;
-		if (!ID.bPlayedHoverMontage)
-		{
-			PlayAerialAnimation(ID.CachedEnemy.Get(), ID.HoverAnimation, ID.MontagePlayRate, 999);
-			ID.bPlayedHoverMontage = true;
-		}
-		if (!ID.bRequestedSpecialPattern && ID.CachedCombatComponent.IsValid())
-		{
-			ID.TimeSinceSpecialAttackRequest += DeltaTime;
-			if (ID.TimeSinceSpecialAttackRequest >= ID.SpecialAttackRetryInterval)
-			{
-				ID.TimeSinceSpecialAttackRequest = 0.f;
-				ID.bRequestedSpecialPattern = ID.CachedCombatComponent->RequestPatternByPriority(
-					ID.TargetPlayer,
-					RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
-			}
-		}
+		PlayAerialAnimation(ID.CachedEnemy.Get(), ID.FlightAnimation, ID.MontagePlayRate, 999);
+		ID.bPlayedFlightMontage = true;
 	}
 
-	// 호버 도달 후 경과 시간 누적
-	if (ID.bReachedHoverHeight)
+	if (ID.ElapsedTime >= ID.MaxPhaseDuration)
 	{
-		ID.ElapsedHoverTime += DeltaTime;
-		if (ID.ElapsedHoverTime >= ID.HoverDuration)
+		if (UPawnMovementComponent* MoveComp = Pawn->GetMovementComponent())
 		{
-			PlayAerialAnimation(ID.CachedEnemy.Get(), ID.LandingAnimation, ID.MontagePlayRate, 1);
-			ID.CachedEnemy->SetAerialMode(false);
-			ID.bLandingStarted = true;
-			ID.LandingElapsedTime = 0.f;
-			return EStateTreeRunStatus::Running;
+			MoveComp->StopMovementImmediately();
 		}
-	}
-
-	// 안전 타임아웃: 상승 포함 전체 시간이 HoverDuration + 10초 초과 시 강제 종료
-	if (ID.TotalElapsedTime >= ID.HoverDuration + 10.f)
-	{
-		return EStateTreeRunStatus::Failed;
+		return EStateTreeRunStatus::Succeeded;
 	}
 
 	return EStateTreeRunStatus::Running;
 }
 
 void FStateTreeTask_EnemyAerialPhase::ExitState(
-	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+	FStateTreeExecutionContext& Context,
+	const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& ID = Context.GetInstanceData(*this);
-
-	if (ID.CachedEnemy.IsValid() && !ID.bLandingStarted)
-	{
-		// MOVE_Falling으로 복귀 → 착지 시 자동으로 MOVE_Walking 전환
-		PlayAerialAnimation(ID.CachedEnemy.Get(), ID.LandingAnimation, ID.MontagePlayRate, 1);
-		ID.CachedEnemy->SetAerialMode(false);
-	}
-
-	// 특수 공격 성공/실패 여부와 무관하게 쿨타임 재시작 → 지상 Chase/Attack 복귀 보장
-	if (ID.CachedCombatComponent.IsValid())
-	{
-		ID.CachedCombatComponent->StartSpecialAttackRetryCooldown();
-	}
-
-	ID.bReachedHoverHeight = false;
-	ID.ElapsedHoverTime    = 0.f;
-	ID.TotalElapsedTime    = 0.f;
+	ID.ElapsedTime = 0.f;
+	ID.HoverLocation = FVector::ZeroVector;
 	ID.bPlayedFlightMontage = false;
 	ID.bPlayedHoverMontage = false;
-	ID.bRequestedSpecialPattern = false;
-	ID.bLandingStarted = false;
-	ID.LandingElapsedTime = 0.f;
-	ID.TimeSinceSpecialAttackRequest = 0.f;
-	ID.CachedEnemy         = nullptr;
-	ID.CachedCombatComponent = nullptr;
+	ID.CachedEnemy = nullptr;
 }

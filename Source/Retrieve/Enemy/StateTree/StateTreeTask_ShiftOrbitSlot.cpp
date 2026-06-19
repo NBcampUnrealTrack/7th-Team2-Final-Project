@@ -6,6 +6,16 @@
 #include "Enemy/EncirclementSubsystem.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AIController.h"
+#include "Character/RetrieveEnemyCharacter.h"
+
+namespace
+{
+	bool ShouldUseShiftOrbitForwardLocomotion(const APawn* Pawn)
+	{
+		const ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
+		return EnemyCharacter && EnemyCharacter->UsesForwardLocomotion();
+	}
+}
 
 bool FStateTreeTask_ShiftOrbitSlot::Link(FStateTreeLinker& Linker)
 {
@@ -41,15 +51,22 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::EnterState(
 	InstanceData.bOriginalControllerRot = CharacterMovement->bUseControllerDesiredRotation;
 	InstanceData.bOriginalUseControllerRotationYaw = Pawn->bUseControllerRotationYaw;
 
-	Pawn->bUseControllerRotationYaw = true;
-	CharacterMovement->bOrientRotationToMovement = false;
-	CharacterMovement->bUseControllerDesiredRotation = true;
-	
-	
+	const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
+	Pawn->bUseControllerRotationYaw = !bUseForwardLocomotion;
+	CharacterMovement->bOrientRotationToMovement = bUseForwardLocomotion;
+	CharacterMovement->bUseControllerDesiredRotation = !bUseForwardLocomotion;
+
 	AAIController* AIC = Pawn->GetController<AAIController>();
-	if (IsValid(AIC) && IsValid(InstanceData.TargetActor))
+	if (IsValid(AIC))
 	{
-		AIC->SetFocus(InstanceData.TargetActor, EAIFocusPriority::Gameplay);
+		if (bUseForwardLocomotion)
+		{
+			AIC->ClearFocus(EAIFocusPriority::Gameplay);
+		}
+		else if (IsValid(InstanceData.TargetActor))
+		{
+			AIC->SetFocus(InstanceData.TargetActor, EAIFocusPriority::Gameplay);
+		}
 	}
 	
 	return EStateTreeRunStatus::Running;
@@ -73,9 +90,14 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 		return EStateTreeRunStatus::Failed;
 	}
 
+	const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
 	if (AAIController* AIC = Pawn->GetController<AAIController>())
 	{
-		if (IsValid(InstanceData.TargetActor))
+		if (bUseForwardLocomotion)
+		{
+			AIC->ClearFocus(EAIFocusPriority::Gameplay);
+		}
+		else if (IsValid(InstanceData.TargetActor))
 		{
 			AIC->SetFocus(InstanceData.TargetActor, EAIFocusPriority::Gameplay);
 		}
@@ -98,10 +120,20 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 	
 	if (CurrentSlot == INDEX_NONE)
 	{
-		UE_LOG(LogStateTree, Error, TEXT("[%s] CurrentSlot not found"), *Pawn->GetName());
-		return EStateTreeRunStatus::Running;
+		const int32 RequestedSlot = EncSubsystem->RequestSlot(InstanceData.TargetActor, Pawn);
+		if (RequestedSlot == INDEX_NONE)
+		{
+			UE_LOG(LogStateTree, Warning, TEXT("[%s] CurrentSlot not found and slot request failed"), *Pawn->GetName());
+			return EStateTreeRunStatus::Running;
+		}
 	}
 	
+	const int32 ActiveSlot = EncSubsystem->GetCurrentSlot(InstanceData.TargetActor, Pawn);
+	if (ActiveSlot == INDEX_NONE)
+	{
+		return EStateTreeRunStatus::Running;
+	}
+
 	const int32 NumSlots = EncSubsystem->GetNumSlots();
 	const int32 Direction = InstanceData.StrafeDirection >= 0 ? 1 : -1;
 	const int32 MaxSteps = FMath::Clamp(
@@ -111,7 +143,7 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 
 	for (int32 Step = 1; Step <= MaxSteps; ++Step)
 	{
-		const int32 NewSlot = (CurrentSlot + Direction * Step + NumSlots) % NumSlots;
+		const int32 NewSlot = (ActiveSlot + Direction * Step + NumSlots) % NumSlots;
 
 		if (EncSubsystem->ShiftSlotExplicit(InstanceData.TargetActor, Pawn, NewSlot) != INDEX_NONE)
 		{

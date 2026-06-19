@@ -24,13 +24,17 @@ void URetrieveNormalMonsterHealthBarWidget::NativeOnInitialized()
 	{
 		HPBar = WidgetTree->FindWidget<UProgressBar>(TEXT("HPBar"));
 	}
+	if (!GroggyProgressBar && WidgetTree)
+	{
+		GroggyProgressBar = WidgetTree->FindWidget<UProgressBar>(TEXT("GroggyProgressBar"));
+	}
 	if (!FRA_Frame && WidgetTree)
 	{
-		FRA_Frame = Cast<UUserWidget>(WidgetTree->FindWidget(TEXT("FRA_Frame")));
+		FRA_Frame = WidgetTree->FindWidget(TEXT("FRA_Frame"));
 	}
 	if (!FRA_Vignette && WidgetTree)
 	{
-		FRA_Vignette = Cast<UUserWidget>(WidgetTree->FindWidget(TEXT("FRA_Vignette")));
+		FRA_Vignette = WidgetTree->FindWidget(TEXT("FRA_Vignette"));
 	}
 
 	UE_LOG(LogTemp, Warning,
@@ -44,6 +48,12 @@ void URetrieveNormalMonsterHealthBarWidget::NativeOnInitialized()
 	{
 		HPBar->SetPercent(HealthPercent);
 		HPBar->SetFillColorAndOpacity(FillColor);
+	}
+	if (GroggyProgressBar)
+	{
+		GroggyProgressBar->SetPercent(0.f);
+		GroggyProgressBar->SetFillColorAndOpacity(FLinearColor(1.f, 0.72f, 0.08f, 0.95f));
+		GroggyProgressBar->SetVisibility(ESlateVisibility::Hidden);
 	}
 
 	// 에픽 전용 프레임은 기본적으로 숨김 — ApplyMonsterTypeColor에서 에픽일 때만 표시
@@ -91,6 +101,30 @@ void URetrieveNormalMonsterHealthBarWidget::SetHPValue(float InCurrentHP, float 
 	const int32 MaxHP = FMath::CeilToInt(FMath::Max(0.f, InMaxHP));
 	Text_HPValue->SetText(FText::FromString(
 		FString::Printf(TEXT("%d / %d"), CurHP, MaxHP)));
+}
+
+void URetrieveNormalMonsterHealthBarWidget::UpdateGroggyGauge_Implementation(float Ratio, bool bIsGroggyActive)
+{
+	if (!GroggyProgressBar)
+	{
+		return;
+	}
+
+	constexpr float HideThreshold = 0.01f;
+	const float ClampedRatio = FMath::Clamp(Ratio, 0.f, 1.f);
+	GroggyProgressBar->SetPercent(ClampedRatio);
+
+	if (bIsGroggyActive)
+	{
+		GroggyProgressBar->SetFillColorAndOpacity(FLinearColor(1.f, 0.95f, 0.35f, 1.f));
+		GroggyProgressBar->SetVisibility(ESlateVisibility::Visible);
+		return;
+	}
+
+	GroggyProgressBar->SetFillColorAndOpacity(FLinearColor(1.f, 0.72f, 0.08f, 0.95f));
+	GroggyProgressBar->SetVisibility(ClampedRatio > HideThreshold
+		? ESlateVisibility::Visible
+		: ESlateVisibility::Hidden);
 }
 
 void URetrieveNormalMonsterHealthBarWidget::ApplyMonsterTypeColor(FGameplayTag InTypeTag)

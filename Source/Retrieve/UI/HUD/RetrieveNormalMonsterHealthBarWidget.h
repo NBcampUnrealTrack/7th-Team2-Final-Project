@@ -7,6 +7,7 @@
 
 class UProgressBar;
 class UTextBlock;
+class UWidget;
 
 UCLASS()
 class RETRIEVE_API URetrieveNormalMonsterHealthBarWidget : public UUserWidget
@@ -38,6 +39,14 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|UI")
 	void PlayHideAnimation();
 
+	/**
+	 * 에픽 몬스터 그로기 게이지 갱신.
+	 * @param Ratio          0.0~1.0. 강공격 누적 비율 or 그로기 잔여 시간 비율.
+	 * @param bIsGroggyActive true = 그로기 진행 중 (흰색 소모 애니), false = 게이지 충전 중 (노란색).
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Retrieve|UI")
+	void UpdateGroggyGauge(float Ratio, bool bIsGroggyActive);
+
 protected:
 	virtual void NativeOnInitialized() override;
 
@@ -53,6 +62,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> HPBar;
 
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> GroggyProgressBar;
+
 	/** 몬스터 이름 TextBlock. WBP에서 이름을 "Text_MonsterName"으로 만들면 자동 바인딩 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_MonsterName;
@@ -63,11 +75,11 @@ protected:
 
 	/** 에픽 몬스터 전용 장식 프레임. 에픽 타입일 때만 표시 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UUserWidget> FRA_Frame;
+	TObjectPtr<UWidget> FRA_Frame;
 
 	/** 에픽 몬스터 전용 비네트 이펙트. 에픽 타입일 때만 표시 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UUserWidget> FRA_Vignette;
+	TObjectPtr<UWidget> FRA_Vignette;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|UI")
 	FLinearColor BackgroundColor = FLinearColor(0.03f, 0.02f, 0.02f, 0.75f);
