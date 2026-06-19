@@ -1,4 +1,4 @@
-#include "Character/LumenFollowComponent.h"
+#include "Lumen/LumenFollowComponent.h"
 
 #include "AIController.h"
 #include "AbilitySystemComponent.h"
@@ -15,11 +15,11 @@
 #include "Net/UnrealNetwork.h"
 #include "Player/RetrievePlayerController.h"
 #include "TimerManager.h"
+#include "EnvironmentQuery/EnvQueryManager.h"
 
 ULumenFollowComponent::ULumenFollowComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.TickInterval = 0.1f;
+	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 }
 
@@ -65,9 +65,7 @@ void ULumenFollowComponent::BeginPlay()
 
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
-		BindCombatTagWatcher();
-		World->GetTimerManager().SetTimer(IdleTimerHandle, this,
-		                                  &ULumenFollowComponent::TickIdle, 1.0f, true);
+		World->GetTimerManager().SetTimer(IdleTimerHandle, this, &ULumenFollowComponent::TickIdle, 1.0f, true);
 	}
 }
 
@@ -87,12 +85,6 @@ void ULumenFollowComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		World->GetTimerManager().ClearTimer(IdleTimerHandle);
 	}
 
-	if (BoundCombatASC.IsValid() && CombatTagHandle.IsValid())
-	{
-		BoundCombatASC->UnregisterGameplayTagEvent(CombatTagHandle, RetrieveGameplayTags::State_Player_Combat,
-		                                           EGameplayTagEventType::NewOrRemoved);
-	}
-
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -108,167 +100,41 @@ APawn* ULumenFollowComponent::ResolveHostPawn() const
 	return nullptr;
 }
 
-FVector ULumenFollowComponent::ComputeFollowOffset(const APawn* Host) const
+FVector ULumenFollowComponent::ComputeBehindLeftOffset(const AActor* Host, float InOffsetBack, float InOffsetLeft)
 {
-	const FVector Forward = Host->GetActorForwardVector();
-	const FVector Right = Host->GetActorRightVector();
-	return Forward * -OffsetBack + Right * -OffsetLeft;
-}
-
-FVector ULumenFollowComponent::ComputeRetreatPosition(const APawn* Host) const
-{
-	// TODO: EQS
-	return Host->GetActorLocation() - Host->GetActorForwardVector() * RetreatRadius;
-}
-
-void ULumenFollowComponent::RequestMoveTo(const FVector& Target)
-{
-	APawn* LumenPawn = Cast<APawn>(GetOwner());
-	if (!LumenPawn)
-	{
-		return;
-	}
-	if (AAIController* AIController = Cast<AAIController>(LumenPawn->GetController()))
-	{
-		AIController->MoveToLocation(Target, 50.f, true,
-		                             true, true,
-		                             false, nullptr, true);
-	}
-}
-
-void ULumenFollowComponent::StopMove()
-{
-	APawn* LumenPawn = Cast<APawn>(GetOwner());
-	if (!LumenPawn)
-	{
-		return;
-	}
-	if (AAIController* AIController = Cast<AAIController>(LumenPawn->GetController()))
-	{
-		AIController->StopMovement();
-	}
-}
-
-void ULumenFollowComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-                                          FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (!GetOwner() || !GetOwner()->HasAuthority())
-	{
-		return;
-	}
-
-	APawn* Host = ResolveHostPawn();
 	if (!Host)
 	{
-		return;
+		return FVector::ZeroVector;
 	}
-
-	AActor* LumenActor = GetOwner();
-	const float DistanceToHost = FVector::Distance(Host->GetActorLocation(), LumenActor->GetActorLocation());
-
-	// 멈춰 있을 때만 호스트를 바라봄
-	auto FaceHost = [&]()
-	{
-		const float Yaw = (Host->GetActorLocation() - LumenActor->GetActorLocation()).Rotation().Yaw;
-		LumenActor->SetActorRotation(FRotator(0.f, Yaw, 0.f));
-	};
-
-	if (Mode == EFollowMode::Wait)
-	{
-		StopMove();
-		FaceHost();
-		return;
-	}
-
-	FVector DesiredTarget;
-	if (Mode == EFollowMode::Follow)
-	{
-		if (TeleportDistance > 0.f && DistanceToHost > TeleportDistance)
-		{
-			const FVector Target = Host->GetActorLocation() + ComputeFollowOffset(Host);
-			LumenActor->SetActorLocation(Target, false);
-			LastIssuedTarget = Target;
-			FaceHost();
-			return;
-		}
-		if (DistanceToHost < FollowDistance)
-		{
-			StopMove();
-			FaceHost();
-			return;
-		}
-		DesiredTarget = Host->GetActorLocation() + ComputeFollowOffset(Host);
-	}
-	else
-	{
-		DesiredTarget = ComputeRetreatPosition(Host);
-	}
-
-	const float TargetDrift = FVector::Dist(DesiredTarget, LastIssuedTarget);
-	if (TargetDrift > MoveTargetRefreshThreshold)
-	{
-		RequestMoveTo(DesiredTarget);
-		LastIssuedTarget = DesiredTarget;
-	}
+	const FVector Forward = Host->GetActorForwardVector();
+	const FVector Right = Host->GetActorRightVector();
+	return Forward * -InOffsetBack + Right * -InOffsetLeft;
 }
 
-void ULumenFollowComponent::BindCombatTagWatcher()
+// ---- State Tree write-through --------------------------------------------------------------------
+
+void ULumenFollowComponent::SetModeFromStateTree(EFollowMode NewMode)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
-
-	APawn* Host = ResolveHostPawn();
-	UAbilitySystemComponent* ASC = nullptr;
-	if (const IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Host))
-	{
-		ASC = ASI->GetAbilitySystemComponent();
-	}
-
-	if (!Host || !ASC)
-	{
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().SetTimerForNextTick(this, &ULumenFollowComponent::BindCombatTagWatcher);
-		}
-		return;
-	}
-
-	CombatTagHandle = ASC->RegisterGameplayTagEvent(
-		                     RetrieveGameplayTags::State_Player_Combat, EGameplayTagEventType::NewOrRemoved)
-	                     .AddUObject(this, &ULumenFollowComponent::OnCombatTagChanged);
-	BoundCombatASC = ASC;
-}
-
-void ULumenFollowComponent::OnCombatTagChanged(const FGameplayTag /*Tag*/, int32 Count)
-{
-	if (!GetOwner() || !GetOwner()->HasAuthority())
+	if (Mode == NewMode)
 	{
 		return;
 	}
-
-	if (Count > 0)
-	{
-		PreCombatMode = Mode;
-		Mode = EFollowMode::RetreatCombat;
-	}
-	else
-	{
-		Mode = (PreCombatMode == EFollowMode::Wait) ? EFollowMode::Wait : EFollowMode::Follow;
-	}
+	Mode = NewMode;
 	OnRep_Mode();
 }
 
+// ---- Command ------------------------------------------------------------------------------------
+
 void ULumenFollowComponent::HandleToggleWaitBroadcast(const FRetrieveLumenCommandPayload& /*Payload*/)
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority())
+	if (GetOwner() && GetOwner()->HasAuthority())
 	{
-		return;
+		ApplyToggleWait();
 	}
-	ApplyToggleWait();
 }
 
 void ULumenFollowComponent::ApplyToggleWait()
@@ -277,36 +143,28 @@ void ULumenFollowComponent::ApplyToggleWait()
 	{
 		return;
 	}
-
-	if (Mode == EFollowMode::RetreatCombat)
-	{
-		PreCombatMode = (PreCombatMode == EFollowMode::Wait) ? EFollowMode::Follow : EFollowMode::Wait;
-		return;
-	}
-
-	Mode = (Mode == EFollowMode::Wait) ? EFollowMode::Follow : EFollowMode::Wait;
-	OnRep_Mode();
+	bWaitRequested = !bWaitRequested;
 }
 
 void ULumenFollowComponent::HandleRecallBroadcast(const FRetrieveLumenCommandPayload& /*Payload*/)
 {
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
-		if (Mode == EFollowMode::RetreatCombat)
-		{
-			PreCombatMode = EFollowMode::Follow;
-		}
-		else
-		{
-			Mode = EFollowMode::Follow;
-			OnRep_Mode();
-		}
+		// 소환은 Wait을 해제하여 ST가 Follow로 복귀하도록 함
+		bWaitRequested = false;
 
-		if (APawn* Host = ResolveHostPawn())
+		// 웅크리는 동안 전투에 끌어들이지 않음. ST가 전투 종료 시 Follow를 복원함.
+		if (Mode != EFollowMode::RetreatCombat)
 		{
-			const FVector Target = Host->GetActorLocation() + ComputeFollowOffset(Host);
-			GetOwner()->SetActorLocation(Target, false);
-			LastIssuedTarget = Target;
+			if (APawn* Host = ResolveHostPawn())
+			{
+				const FVector Target = Host->GetActorLocation()
+					+ ComputeBehindLeftOffset(Host, OffsetBack, OffsetLeft);
+				GetOwner()->SetActorLocation(Target, false);
+
+				const float Yaw = (Host->GetActorLocation() - Target).Rotation().Yaw;
+				GetOwner()->SetActorRotation(FRotator(0.f, Yaw, 0.f));
+			}
 		}
 	}
 	else
@@ -317,6 +175,8 @@ void ULumenFollowComponent::HandleRecallBroadcast(const FRetrieveLumenCommandPay
 		}
 	}
 }
+
+// ---- Idle Action ----------------------------------------------------------------------------
 
 void ULumenFollowComponent::TickIdle()
 {
@@ -340,7 +200,8 @@ void ULumenFollowComponent::TickIdle()
 	}
 
 	const float DistanceToHost = FVector::Distance(Host->GetActorLocation(), GetOwner()->GetActorLocation());
-	const bool bCanPlayIdle = (Mode == EFollowMode::Wait) || (Mode == EFollowMode::Follow && DistanceToHost <= FollowDistance + 25.f);
+	const bool bCanPlayIdle = (Mode == EFollowMode::Wait) || (Mode == EFollowMode::Follow && DistanceToHost <=
+		FollowDistance + 25.f);
 	if (!bCanPlayIdle)
 	{
 		return;
@@ -411,6 +272,30 @@ void ULumenFollowComponent::OnRep_Mode()
 	{
 		FRetrieveLumenModePayload Message;
 		Message.Mode = Mode;
-		UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Lumen_Mode_Changed, Message);
+		UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Lumen_Mode_Changed,
+		                                                       Message);
+	}
+}
+
+
+// ---- EQS 안전지대 ----------------------------------------------------------------------------
+
+void ULumenFollowComponent::RequestSafeSpotQuery()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !SafeSpotQuery)
+	{
+		return;
+	}
+	bSafeSpotValid = false;
+	FEnvQueryRequest Request(SafeSpotQuery, GetOwner());
+	Request.Execute(EEnvQueryRunMode::SingleResult, this, &ULumenFollowComponent::OnSafeSpotQueryFinished);
+}
+
+void ULumenFollowComponent::OnSafeSpotQueryFinished(TSharedPtr<FEnvQueryResult> Result)
+{
+	if (Result.IsValid() && Result->IsSuccessful() && Result->Items.Num() > 0)
+	{
+		SafeSpot = Result->GetItemAsLocation(0);
+		bSafeSpotValid = true;
 	}
 }

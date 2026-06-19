@@ -155,6 +155,9 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Monster")
 	TObjectPtr<UDataTable> DropTable;
+
+	UPROPERTY(EditAnywhere, Category = "Retrieve|AI", meta = (ClampMin = "0.0"))
+	float EngageStaggerMaxDelay = 1.2f;
 	
 	bool bRespawnable = false;
 	
@@ -173,4 +176,6 @@ private:
 	bool bCachedIsHit       = false;
 	bool bCachedIsStaggered    = false;
 	bool bCachedIsGroggy    = false;
+	
+	FTimerHandle AlertStaggerTimer;
 };

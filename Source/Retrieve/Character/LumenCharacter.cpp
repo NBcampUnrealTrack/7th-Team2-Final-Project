@@ -1,6 +1,6 @@
 #include "Character/LumenCharacter.h"
 
-#include "LumenFollowComponent.h"
+#include "../Lumen/LumenFollowComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"

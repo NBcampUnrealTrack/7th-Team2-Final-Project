@@ -167,6 +167,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			{
 				if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 				{
+					EncSubsystem->GetOrUpdateRingAnchor(InstanceData.TargetPlayer);
 					int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
 					if (SlotIndex == INDEX_NONE)
 					{
@@ -176,27 +177,32 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					if (SlotIndex != INDEX_NONE)
 					{
 						const bool bHadToken = InstanceData.bHasToken;
-						const bool bHasTokenForLocation =
-							EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+						const bool bHasTokenForLocation = EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+						// 토큰을 받을 수 있는(곧 공격할) 적도 안쪽으로 접근해야 사거리에 들어가 공격을 시작할 수 있음
+						const bool bCanRequest = EncSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn);
 						InstanceData.bHasToken = bHasTokenForLocation;
-						const bool bUseOuterRadius = !bHasTokenForLocation;
-					
+						const bool bUseOuterRadius = !(bHasTokenForLocation || bCanRequest);
+
 						FVector RawTargetLocation = EncSubsystem->GetSlotLocation(InstanceData.TargetPlayer, SlotIndex,
-								bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise,
-								InstanceData.OrbitInnerRadius, InstanceData.OrbitOuterRadius);
-					
-						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation)
+							bUseOuterRadius, InstanceData.StrafeMinNoise, InstanceData.StrafeMaxNoise,
+							InstanceData.OrbitInnerRadius, InstanceData.OrbitOuterRadius,
+							InstanceData.StrafeOffRange * 0.9f); // 대기자는 Strafe 범위 내에 머무름
+
+						const float JumpSq = FVector::DistSquared(InstanceData.ChaseLocation, RawTargetLocation);
+						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation || JumpSq > FMath::Square(120.f)) 
 						{
 							InstanceData.ChaseLocation = RawTargetLocation;
 						}
 						else
 						{
-							InstanceData.ChaseLocation = FMath::VInterpTo(InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
+							InstanceData.ChaseLocation = FMath::VInterpTo(
+								InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
 						}
 					}
 					else
 					{
-						InstanceData.ChaseLocation = InstanceData.TargetLocation;
+						InstanceData.ChaseLocation = EncSubsystem->GetOverflowStandoffLocation(
+							InstanceData.TargetPlayer, Pawn, InstanceData.StrafeOffRange);
 					}
 				}
 				else
@@ -269,25 +275,26 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	}
 
 	InstanceData.bWasOutOfChaseRange = bNewOutOfChaseRange;
-	InstanceData.bOutOfChaseRange    = bNewOutOfChaseRange;
-	
+	InstanceData.bOutOfChaseRange = bNewOutOfChaseRange;
+
 	TArray<AActor*> PerceivedActors;
 	PerceptionComp->GetKnownPerceivedActors(nullptr, PerceivedActors);
-	
-	AActor* NearestTarget  = nullptr;
-	float NearestDistSq  = MAX_FLT;
+
+	AActor* BestTarget = nullptr;
+	float BestScore = MAX_FLT;
+	float CurrentScore = MAX_FLT;
 	const FVector PawnLocation = Pawn->GetActorLocation();
 	const bool bApplyFov = (InstanceData.TargetPlayer == nullptr);
-	
+
+	UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
+
 	for (AActor* Actor : PerceivedActors)
 	{
 		if (!Actor || IsDeadOrDyingActor(Actor))
 		{
 			continue;
 		}
-		const AAIController* OwnerController =
-			Cast<AAIController>(Pawn->GetController());
-		
+		const AAIController* OwnerController = Cast<AAIController>(Pawn->GetController());
 		if (!OwnerController ||
 			OwnerController->GetTeamAttitudeTowards(*Actor) != ETeamAttitude::Hostile)
 		{
@@ -295,75 +302,79 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		}
 
 		const bool bDamageSensed = WasDamageSensed(PerceptionComp, Actor);
-		if (bApplyFov && !bDamageSensed)   // 이미 추적 중이면 시야 무시하고 계속 추적
+		if (bApplyFov && !bDamageSensed)
 		{
 			FVector ToTarget = Actor->GetActorLocation() - PawnLocation;
-			FVector Forward  = Pawn->GetActorForwardVector();
+			FVector Forward = Pawn->GetActorForwardVector();
 			ToTarget.Z = 0.f;
-			Forward.Z = 0;
-			
+			Forward.Z = 0.f;
 			if (!ToTarget.IsNearlyZero() && !Forward.IsNearlyZero())
 			{
 				const float CosHalfFov = FMath::Cos(FMath::DegreesToRadians(HorizontalHalfFOV));
 				ToTarget.Normalize();
-				
 				if (FVector::DotProduct(Forward, ToTarget) < CosHalfFov)
 				{
-					continue;   // 수평 시야 밖 → 무시 (획득 시에만)
+					continue;
 				}
 			}
 		}
-		
+
 		UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(Pawn->GetWorld());
-		FNavLocation ProjectedLoc;
-		if (NavSys && IsValid(Actor))
+		if (NavSys)
 		{
-			const bool bOnNavMesh = NavSys && NavSys->ProjectPointToNavigation(
-			Actor->GetActorLocation(), ProjectedLoc, FVector(100.f, 100.f, 250.f));
-			if (!bOnNavMesh)
+			FNavLocation ProjectedLoc;
+			if (!NavSys->ProjectPointToNavigation(Actor->GetActorLocation(), ProjectedLoc,
+			                                      FVector(100.f, 100.f, 250.f)))
 			{
 				continue;
 			}
 		}
-		
+
 		const float DistSq = FVector::DistSquared(PawnLocation, Actor->GetActorLocation());
-		if (DistSq < NearestDistSq)
+		const int32 Committed = EncirclementSubsystem ? EncirclementSubsystem->GetCommittedCount(Actor) : 0;
+		const float Score = DistSq * (1.f + AggroCrowdWeight * Committed);
+
+		if (Actor == InstanceData.TargetPlayer)
 		{
-			NearestDistSq = DistSq;
-			NearestTarget = Actor;
+			CurrentScore = Score;
+		}
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			BestTarget = Actor;
 		}
 	}
-		
-	if (NearestTarget)
+
+	AActor* ChosenTarget = BestTarget;
+	if (IsValid(InstanceData.TargetPlayer) && CurrentScore < MAX_FLT)
 	{
-		if (InstanceData.TargetPlayer != NearestTarget)
+		if (BestTarget != InstanceData.TargetPlayer && BestScore > CurrentScore * TargetSwitchHysteresis)
+		{
+			ChosenTarget = InstanceData.TargetPlayer; // 충분히 개선되지 않음 → 유지
+		}
+	}
+
+	if (ChosenTarget)
+	{
+		if (InstanceData.TargetPlayer != ChosenTarget)
 		{
 			const bool bHadTarget = InstanceData.TargetPlayer != nullptr;
-			
-			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			if (EncirclementSubsystem && InstanceData.TargetPlayer)
 			{
-				if (InstanceData.TargetPlayer)
-				{
-					EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
-					EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
-				}
+				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 			}
-			
-			InstanceData.TargetPlayer = NearestTarget;
-			
+			InstanceData.TargetPlayer = ChosenTarget;
+
 			if (!bHadTarget)
 			{
 				FEnemyPlayerSpottedPayload Payload;
-				Payload.SpottedActor = NearestTarget;
-				Payload.SpottedLocation = NearestTarget->GetActorLocation();
+				Payload.SpottedActor = ChosenTarget;
+				Payload.SpottedLocation = ChosenTarget->GetActorLocation();
 				Payload.InstigatorLocation = Pawn->GetActorLocation();
 				Payload.InstigatorEnemy = Pawn;
-
-				UWorld* World = Pawn->GetWorld();
-				UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(World);
-				MsgSubsys.BroadcastMessage(
-					RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
-					Payload);
+				UGameplayMessageSubsystem::Get(Pawn->GetWorld()).BroadcastMessage(
+					RetrieveGameplayTags::Channel_Enemy_PlayerSpotted, Payload);
 			}
 		}
 		InstanceData.TimeSinceLastSeen = 0.f;
@@ -371,16 +382,14 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	}
 	else if (InstanceData.TargetPlayer)
 	{
-		// 타깃이 인지 범위를 벗어난 상태 — 유예 시간 누적
 		InstanceData.TimeSinceLastSeen += TickInterval;
 		if (InstanceData.TimeSinceLastSeen >= TargetLostDelay)
 		{
-			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+			if (EncirclementSubsystem)
 			{
 				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
 				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 			}
-			
 			InstanceData.TargetPlayer = nullptr;
 			InstanceData.DistanceToTarget = 0.f;
 			InstanceData.bTargetLost = true;
@@ -395,10 +404,9 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				if (!IsDeadOrDyingActor(Alerted))
 				{
 					InstanceData.TargetPlayer = Alerted;
-					InstanceData.bTargetLost  = false;
+					InstanceData.bTargetLost = false;
 				}
-				
-				EnemyChar->AlertedTarget  = nullptr;
+				EnemyChar->AlertedTarget = nullptr;
 			}
 		}
 	}

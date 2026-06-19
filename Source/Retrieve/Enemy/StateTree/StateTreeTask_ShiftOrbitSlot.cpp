@@ -65,7 +65,7 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 		return EStateTreeRunStatus::Running;
 	}
 	
-	InstanceData.ElapsedTime = 0.f;
+	InstanceData.ElapsedTime = -FMath::FRandRange(0.f, InstanceData.StrafeIntervalJitter);
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
@@ -84,6 +84,12 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 	UEncirclementSubsystem* EncSubsystem =
 		Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 	if (!EncSubsystem || !IsValid(InstanceData.TargetActor))
+	{
+		return EStateTreeRunStatus::Running;
+	}
+	
+	// 소수가 교전 중일 때(1:1 가디언 등)는 자리 재배치가 불필요 → 서클링 생략하고 SetFocus로 바라보며 대기.
+	if (EncSubsystem->GetCommittedCount(InstanceData.TargetActor) < InstanceData.MinOccupantsToCircle)
 	{
 		return EStateTreeRunStatus::Running;
 	}
