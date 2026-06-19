@@ -1,4 +1,4 @@
-#include "Character/RetrieveEnemyCharacter.h"
+﻿#include "Character/RetrieveEnemyCharacter.h"
 
 #include "Abilities/GameplayAbilityTypes.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -8,6 +8,9 @@
 #include "Enemy/EnemyAIController.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AIController.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/Pawn.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Inventory/DropComponent.h"
@@ -103,12 +106,76 @@ void ARetrieveEnemyCharacter::SetRespawnable(bool NewRespawnable)
 	bRespawnable = NewRespawnable;
 }
 
+void ARetrieveEnemyCharacter::AlertFromDamageInstigator(AActor* DamageInstigator)
+{
+	if (!HasAuthority() || !IsValid(DamageInstigator) || DamageInstigator == this)
+	{
+		return;
+	}
+
+	AActor* AlertTarget = DamageInstigator;
+	if (AController* ControllerInstigator = Cast<AController>(AlertTarget))
+	{
+		AlertTarget = ControllerInstigator->GetPawn();
+	}
+	else if (APawn* PawnInstigator = Cast<APawn>(AlertTarget))
+	{
+		if (AController* PawnController = PawnInstigator->GetController())
+		{
+			AlertTarget = PawnController->GetPawn();
+		}
+	}
+	else if (APawn* OwnerInstigator = Cast<APawn>(AlertTarget->GetOwner()))
+	{
+		AlertTarget = OwnerInstigator;
+	}
+	else if (APawn* ActorInstigator = AlertTarget->GetInstigator())
+	{
+		AlertTarget = ActorInstigator;
+	}
+
+	if (!IsValid(AlertTarget) || AlertTarget == this)
+	{
+		return;
+	}
+
+	if (const URetrieveHealthComponent* Health = GetHealthComponent())
+	{
+		if (Health->IsDeadOrDying())
+		{
+			return;
+		}
+	}
+
+	if (const AAIController* AIController = Cast<AAIController>(GetController()))
+	{
+		if (AIController->GetTeamAttitudeTowards(*AlertTarget) != ETeamAttitude::Hostile)
+		{
+			return;
+		}
+	}
+
+	AlertedTarget = AlertTarget;
+
+	FEnemyPlayerSpottedPayload Payload;
+	Payload.SpottedActor = AlertTarget;
+	Payload.SpottedLocation = AlertTarget->GetActorLocation();
+	Payload.InstigatorLocation = GetActorLocation();
+	Payload.InstigatorEnemy = this;
+
+	UGameplayMessageSubsystem::Get(this).BroadcastMessage(
+		RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
+		Payload);
+}
+
 const FMonsterDataRow* ARetrieveEnemyCharacter::GetMonsterDataRow() const
 {
-	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(
-	   MonsterDataRowName, TEXT("ARetrieveEnemyCharacter::InitializeComponents"));
-	
-	return Row;
+	if (!MonsterDataTable || MonsterDataRowName.IsNone())
+	{
+		return nullptr;
+	}
+	return MonsterDataTable->FindRow<FMonsterDataRow>(
+		MonsterDataRowName, TEXT("ARetrieveEnemyCharacter::GetMonsterDataRow"));
 }
 
 void ARetrieveEnemyCharacter::BeginPlay()
@@ -131,8 +198,16 @@ void ARetrieveEnemyCharacter::BeginPlay()
 	if (UCharacterMovementComponent* MoveComp = Cast<UCharacterMovementComponent>(GetMovementComponent()))
 	{
 		DefaultGravityScale = MoveComp->GravityScale;
-		DefaultMovementMode = MoveComp->MovementMode;
+		DefaultMovementMode = (MoveComp->MovementMode == MOVE_Falling || MoveComp->MovementMode == MOVE_Flying || MoveComp->MovementMode == MOVE_None)
+			? MOVE_Walking
+			: MoveComp->MovementMode.GetValue();
 		BaseMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+
+		if (HasAerialPhase() && MoveComp->MovementMode == MOVE_Falling)
+		{
+			MoveComp->StopMovementImmediately();
+			MoveComp->SetMovementMode(DefaultMovementMode);
+		}
 	}
 	
 	if (OwnedASC)
@@ -175,7 +250,7 @@ void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(this);
 		MsgSubsys.UnregisterListener(GroupAlertHandle);
 	}
-	
+
 	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
 	
 	Super::EndPlay(EndPlayReason);
@@ -210,6 +285,9 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	{
 		OwnedASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Immune_Knockback);
 	}
+
+
+	ConfigureEnemyMovement();
 
 	if (EnemyCombatComponent)
 	{
@@ -382,18 +460,38 @@ void ARetrieveEnemyCharacter::SetAerialMode(bool bAerial)
 
 	if (bAerial)
 	{
+		StopLocomotionMontages();
 		MoveComp->SetMovementMode(MOVE_Flying);
 		MoveComp->GravityScale = 0.f;
 	}
 	else
 	{
+		MoveComp->StopMovementImmediately();
 		MoveComp->GravityScale = DefaultGravityScale;
-		MoveComp->SetMovementMode(MOVE_Falling);
+		if (MoveComp->MovementMode == MOVE_Flying)
+		{
+			MoveComp->SetMovementMode(MOVE_Falling);
+			return;
+		}
+
+		const EMovementMode RestoreMode =
+			(DefaultMovementMode == MOVE_Flying || DefaultMovementMode == MOVE_None)
+			? MOVE_Walking
+			: DefaultMovementMode;
+		MoveComp->SetMovementMode(RestoreMode);
 	}
+}
+
+bool ARetrieveEnemyCharacter::HasAerialPhase() const
+{
+	const FMonsterDataRow* Row = GetMonsterDataRow();
+	return Row && Row->bHasAerialPhase;
 }
 
 void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
+	StopLocomotionMontages();
+
 	if (UBossHPBarComponent* BossHPBar = FindComponentByClass<UBossHPBarComponent>())
 	{
 		BossHPBar->Hide();

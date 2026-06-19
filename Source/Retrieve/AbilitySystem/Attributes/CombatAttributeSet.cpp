@@ -10,6 +10,8 @@
 #include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 #include "Perception/AISense_Damage.h"
+#include "Character/RetrieveEnemyCharacter.h"
+#include "Components/ActorComponent.h"
 
 UCombatAttributeSet::UCombatAttributeSet()
 {
@@ -238,7 +240,26 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
 {
-	AActor* AttackerActor = Data.EffectSpec.GetEffectContext().GetInstigator();
+	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
+	AActor* AttackerActor = Context.GetInstigator();
+	if (!IsValid(AttackerActor))
+	{
+		AttackerActor = Context.GetEffectCauser();
+	}
+	if (!IsValid(AttackerActor))
+	{
+		if (const UObject* SourceObject = Context.GetSourceObject())
+		{
+			if (const AActor* SourceActor = Cast<AActor>(SourceObject))
+			{
+				AttackerActor = const_cast<AActor*>(SourceActor);
+			}
+			else if (const UActorComponent* SourceComponent = Cast<UActorComponent>(SourceObject))
+			{
+				AttackerActor = SourceComponent->GetOwner();
+			}
+		}
+	}
 	if (IsValid(AttackerActor) == false) return;
 
 	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();

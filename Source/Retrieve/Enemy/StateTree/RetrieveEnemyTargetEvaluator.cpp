@@ -1,4 +1,4 @@
-#include "Enemy/StateTree/RetrieveEnemyTargetEvaluator.h"
+﻿#include "Enemy/StateTree/RetrieveEnemyTargetEvaluator.h"
 
 #include "StateTreeLinker.h"
 #include "StateTreeExecutionContext.h"
@@ -17,6 +17,7 @@
 #include "Enemy/EncirclementSubsystem.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
 
 namespace
@@ -59,6 +60,14 @@ namespace
 		}
 
 		return false;
+	}
+
+	bool ContainsActor(const TArray<AActor*>& Actors, const AActor* Actor)
+	{
+		return Actor && Actors.ContainsByPredicate([Actor](const AActor* Candidate)
+		{
+			return Candidate == Actor;
+		});
 	}
 }
 
@@ -110,6 +119,7 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.bPatrolable = Row->bPatrolable;
 			InstanceData.PatrolRange = Row->PatrolRange;
 			InstanceData.MoveAcceptableRadius = Row->MoveAcceptableRadius;
+			InstanceData.bHasAerialPhase = Row->bHasAerialPhase;
 		}
 	}
 }
@@ -165,7 +175,12 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			
 			if (!bFreezeChaseLocation)
 			{
-				if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+				const float DirectChaseRange = FMath::Max(InstanceData.AttackableRange + 35.f, 0.f);
+				if (InstanceData.DistanceToTarget > DirectChaseRange)
+				{
+					InstanceData.ChaseLocation = InstanceData.TargetLocation;
+				}
+				else if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 				{
 					EncSubsystem->GetOrUpdateRingAnchor(InstanceData.TargetPlayer);
 					int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
@@ -189,7 +204,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 							InstanceData.StrafeOffRange * 0.9f); // 대기자는 Strafe 범위 내에 머무름
 
 						const float JumpSq = FVector::DistSquared(InstanceData.ChaseLocation, RawTargetLocation);
-						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation || JumpSq > FMath::Square(120.f)) 
+						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation || JumpSq > FMath::Square(120.f))
 						{
 							InstanceData.ChaseLocation = RawTargetLocation;
 						}
@@ -279,11 +294,24 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	TArray<AActor*> PerceivedActors;
 	PerceptionComp->GetKnownPerceivedActors(nullptr, PerceivedActors);
+	
+	const FVector PawnLocation = Pawn->GetActorLocation();
+
+	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(Pawn, 0))
+	{
+		const float PlayerDistSq = FVector::DistSquared(PawnLocation, PlayerPawn->GetActorLocation());
+		const float InitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
+		if (PlayerDistSq <= FMath::Square(InitialAcquireRange)
+			&& AIController->LineOfSightTo(PlayerPawn)
+			&& !ContainsActor(PerceivedActors, PlayerPawn))
+		{
+			PerceivedActors.Add(PlayerPawn);
+		}
+	}
 
 	AActor* BestTarget = nullptr;
 	float BestScore = MAX_FLT;
 	float CurrentScore = MAX_FLT;
-	const FVector PawnLocation = Pawn->GetActorLocation();
 	const bool bApplyFov = (InstanceData.TargetPlayer == nullptr);
 
 	UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
@@ -429,7 +457,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			const bool bSpecialAttackRetryCooldownReady =
 				InstanceData.CachedCombatComponent->IsSpecialAttackRetryCooldownReady();
 
-			InstanceData.bSpecialAttackable = bCanRequestToken
+			InstanceData.bSpecialAttackable = bHasValidTarget
 				&& !bPatternActive
 				&& !bSpecialAttackEvaluationLocked
 				&& bSpecialAttackRetryCooldownReady

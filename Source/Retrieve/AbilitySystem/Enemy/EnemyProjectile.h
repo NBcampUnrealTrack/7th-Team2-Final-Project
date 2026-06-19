@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "EnemyProjectile.generated.h"
 
+class UAbilitySystemComponent;
 class UGameplayEffect;
 class UNiagaraComponent;
 class UNiagaraSystem;
@@ -37,12 +38,18 @@ public:
 	void SetHitReactType(ERetrieveHitReactType InHitReactType);
 
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetEffectTag(FGameplayTag InEffectTag);
+
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void SetLaunchKnockbackConfig(const FMonsterLaunchKnockbackConfig& InLaunchKnockbackConfig);
-	
+
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetStatusEffectClass(TSubclassOf<UGameplayEffect> InStatusEffectClass);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	
+
 	UFUNCTION()
 	void OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
@@ -50,14 +57,23 @@ protected:
 
 	UFUNCTION()
 	void OnProjectileStopped(const FHitResult& ImpactResult);
-	
-private:
-	bool IsIgnoredActor(const AActor* OtherActor) const;
+
+	virtual bool HandleReflectedOverlap(AActor* OtherActor, const FHitResult& SweepResult) { return false; }
+	virtual bool TryReflectOnHit(AActor* OtherActor, UAbilitySystemComponent* OtherASC) { return false; }
+	virtual bool IsIgnoredActor(const AActor* OtherActor) const;
+
+	bool IsPlayerTarget(const AActor* OtherActor) const;
 	bool ShouldApplyDamageTo(const AActor* OtherActor) const;
 	void PlayImpactVFX(const FVector& Location, const FRotator& Rotation);
-	void StartHoming(float Strength);
+	void ApplyLaunchKnockback(AActor* OtherActor, const FVector& Origin);
+	void ApplyLaunchKnockbackInRadius(const FVector& Origin);
+	void ApplyStatusEffect(AActor* OtherActor);
+	void ApplyStatusEffectInRadius(const FVector& Origin);
 	void StopHoming();
-	
+
+private:
+	void StartHoming(float Strength);
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyProjectile", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -72,7 +88,13 @@ protected:
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
+	TObjectPtr<UNiagaraSystem> FlightVFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
 	TObjectPtr<UNiagaraSystem> ImpactVFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
+	bool bForceImpactVFXWorldUpRotation = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
@@ -80,8 +102,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Knockback")
 	FMonsterLaunchKnockbackConfig LaunchKnockbackConfig;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Knockback", meta=(ClampMin="0.0"))
+	float LaunchKnockbackRadius = 180.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Status")
+	TSubclassOf<UGameplayEffect> StatusEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Status", meta=(ClampMin="0.0"))
+	float StatusEffectRadius = 180.f;
+
 	UPROPERTY(Transient)
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+
+	UPROPERTY(Transient)
+	FGameplayTag EffectTag;
 	
 private:
 	UPROPERTY(Transient)

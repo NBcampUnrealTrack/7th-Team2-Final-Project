@@ -6,8 +6,10 @@
 #include "GA_ShootProjectiles.generated.h"
 
 class AEnemyProjectile;
+class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
+class UGameplayEffect;
 
 UCLASS(Blueprintable, BlueprintType)
 class RETRIEVE_API UGA_ShootProjectiles : public UGA_EnemyPatternAbilityBase
@@ -26,22 +28,34 @@ public:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility,
-	bool bWasCancelled) override;
+		bool bWasCancelled) override;
 
 protected:
+	virtual UAnimMontage* ResolveFallbackSequenceMontage() const { return nullptr; }
+	virtual void OnSpecialAttackActivated() {}
+	virtual void OnSpecialAttackEnded() {}
+	virtual void OnBeforeProjectileSpawn() {}
+	virtual void OnProjectileSpawned(AEnemyProjectile* Projectile, AActor* AvatarActor) {}
+
+	AActor* GetCachedTargetActor() const { return CachedTargetActor; }
+	const FMonsterProjectilePatternConfig& GetActiveProjectileConfig() const { return ActiveProjectileConfig; }
+
 	virtual void OnMontageCompleted() override;
+
 	virtual void OnMontageInterrupted() override;
-	
-private:
+
 	void ScheduleProjectiles(bool bHasMontage);
 	void SpawnProjectile();
 	void FinishAbility();
+	TSubclassOf<AEnemyProjectile> ResolveProjectileClass() const;
 	bool ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
 		ERetrieveHitReactType* OutHitReactType = nullptr,
-		FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig = nullptr) const;
+		FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig = nullptr,
+		FGameplayTag* OutEffectTag = nullptr,
+		TSubclassOf<UGameplayEffect>* OutStatusEffectClass = nullptr,
+		TSubclassOf<AEnemyProjectile>* OutProjectileClass = nullptr) const;
 	const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
-	
-protected:
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")
 	TSubclassOf<AEnemyProjectile> ProjectileClass;
 
@@ -49,7 +63,7 @@ protected:
 	float FallbackProjectileSpawnDelay = 0.6f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles", meta=(ClampMin="0.0"))
-	float FallbackProjectileSpeed  = 1200.f;
+	float FallbackProjectileSpeed = 1200.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")
 	FName SpawnSocketName = NAME_None;
@@ -67,8 +81,14 @@ private:
 	TArray<FTimerHandle> SpawnTimerHandles;
 	FTimerHandle FinishTimerHandle;
 	float ActiveProjectileSpeed = 1200.f;
-	
+	int32 ActiveProjectileSpawnIndex = 0;
+	int32 ActiveProjectileCount = 0;
+
 	FMonsterProjectilePatternConfig ActiveProjectileConfig;
 	ERetrieveHitReactType ActiveHitReactType = ERetrieveHitReactType::Flinch;
 	FMonsterLaunchKnockbackConfig ActiveLaunchKnockbackConfig;
+	FGameplayTag ActiveEffectTag;
+	TSubclassOf<UGameplayEffect> ActiveStatusEffectClass;
+	TSubclassOf<AEnemyProjectile> ActiveProjectileClass;
+	FName ActivePatternRowName = NAME_None;
 };

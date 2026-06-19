@@ -1,14 +1,17 @@
-#include "Components/Enemy/EnemyCombatComponent.h"
+﻿#include "Components/Enemy/EnemyCombatComponent.h"
 
 #include "Abilities/GameplayAbilityTypes.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "AIController.h"
 #include "Components/SphereComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimSequenceBase.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
@@ -16,7 +19,6 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
 
@@ -24,11 +26,12 @@ void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<
 {
 	PatternTable = InPatternTable;
 	PatternSlots = InPatternSlots;
+
 }
 
 bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTag RequiredPatternType)
 {
-	if (!Target)
+	if (!IsValid(Target))
 	{
 		return false;
 	}
@@ -53,10 +56,20 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 	const FMonsterPatternRow* BestPattern = FindBestPattern(Target, RequiredPatternType, &BestPatternRowName);
 	if (!BestPattern)
 	{
-		UE_LOG(LogRetrieveCombat, Warning,
-			TEXT("[%s] No SpecialAttack pattern found. Target=%s"),
-			*GetOwner()->GetName(),
-			*GetNameSafe(Target));
+		if (bIsSpecialAttack)
+		{
+			UE_LOG(LogRetrieveCombat, Verbose,
+				TEXT("[%s] No SpecialAttack pattern currently available. Target=%s"),
+				*GetOwner()->GetName(),
+				*GetNameSafe(Target));
+		}
+		else
+		{
+			UE_LOG(LogRetrieveCombat, Warning,
+				TEXT("[%s] No attack pattern found. Target=%s"),
+				*GetOwner()->GetName(),
+				*GetNameSafe(Target));
+		}
 		
 		return false;
 	}
@@ -90,23 +103,61 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 		PatternCounter->SetActivePatternRow(ActivePatternRowName, PatternTable.Get());
 	}
 
+	if (!bIsSpecialAttack && BestPattern->AttackMontage.IsNull())
+	{
+		if (!TryStartSequencePattern(*BestPattern, BestPatternRowName, Target))
+		{
+			ActivePatternRowName = NAME_None;
+			if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+			{
+				PatternCounter->CloseCounterWindow();
+			}
+			return false;
+		}
+
+		StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
+		return true;
+	}
+
+	UObject* EventAnimation = BestPattern->AttackMontage.LoadSynchronous();
+	if (!EventAnimation)
+	{
+		EventAnimation = BestPattern->AttackSequence.LoadSynchronous();
+	}
+
 	FGameplayEventData EventData;
-	EventData.OptionalObject = BestPattern->AttackMontage.LoadSynchronous();
+	EventData.OptionalObject = EventAnimation;
 	
 	const FGameplayTag AbilityEventTag = BestPattern->AbilityEventTag.IsValid()
 	? BestPattern->AbilityEventTag : DefaultEventTag;
 	EventData.EventTag = AbilityEventTag;
 	EventData.Target = Target;
 	EventData.Instigator = GetOwner();
+	FaceTarget(Target);
 	
-	const int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
+	int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
+	if (TriggeredCount <= 0 && bIsSpecialAttack && AbilityEventTag != DefaultEventTag)
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] SpecialAttack event did not trigger ability with row tag. Row=%s Event=%s. Trying default event %s."),
+			*GetOwner()->GetName(),
+			*BestPatternRowName.ToString(),
+			*AbilityEventTag.ToString(),
+			*DefaultEventTag.ToString());
+		EventData.EventTag = DefaultEventTag;
+		TriggeredCount = ASC->HandleGameplayEvent(DefaultEventTag, &EventData);
+	}
 	
 	if (TriggeredCount <= 0)
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
-		TEXT("[%s] SpecialAttack event did not trigger ability. Row=%s"),
+		TEXT("[%s] %s event did not trigger ability. Row=%s Event=%s OptionalObject=%s PatternType=%s"),
 		*GetOwner()->GetName(),
-		*BestPatternRowName.ToString());
+		bIsSpecialAttack ? TEXT("SpecialAttack") : TEXT("Attack"),
+		*BestPatternRowName.ToString(),
+		*EventData.EventTag.ToString(),
+		*GetNameSafe(EventAnimation),
+		*BestPattern->PatternType.ToString());
 		ActivePatternRowName = NAME_None;
 		ClearFocusTarget();
 		if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
@@ -128,6 +179,11 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 
 bool UEnemyCombatComponent::HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const
 {
+	if (!IsValid(Target))
+	{
+		return false;
+	}
+
 	return FindBestPattern(Target, PatternType) != nullptr;
 }
 
@@ -149,12 +205,18 @@ void UEnemyCombatComponent::StopCurrentPattern()
 	}
 
 	DeactivateHitbox();
+	FinishSequencePattern();
 	ActivePatternRowName = NAME_None;
 	ClearFocusTarget();
 }
 
 bool UEnemyCombatComponent::IsPatternActive() const
 {
+	if (bSequencePatternActive)
+	{
+		return true;
+	}
+
 	URetrieveAbilitySystemComponent* ASC = GetASC();
 	if (!ASC)
 	{
@@ -195,6 +257,11 @@ bool UEnemyCombatComponent::IsPatternActive() const
 
 bool UEnemyCombatComponent::IsAttackable(AActor* Target) const
 {
+	if (!IsValid(Target))
+	{
+		return false;
+	}
+
 	return FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_Attack) != nullptr;
 }
 
@@ -221,6 +288,21 @@ void UEnemyCombatComponent::StartSpecialAttackRetryCooldown()
 	{
 		SpecialAttackRetryCooldownUntilTime =
 			World->GetTimeSeconds() + SpecialAttackRetryCooldownDuration;
+	}
+}
+
+void UEnemyCombatComponent::SuppressSpecialAttackEvaluation(float Duration)
+{
+	if (Duration <= 0.f)
+	{
+		return;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		const float UntilTime = World->GetTimeSeconds() + Duration;
+		SpecialAttackEvaluationLockUntilTime = FMath::Max(SpecialAttackEvaluationLockUntilTime, UntilTime);
+		SpecialAttackRetryCooldownUntilTime = FMath::Max(SpecialAttackRetryCooldownUntilTime, UntilTime);
 	}
 }
 
@@ -338,6 +420,148 @@ float UEnemyCombatComponent::GetAttackDelay(float BaseDelay, float MinDelay) con
 	return FMath::Max(MinDelay, FMath::Max(0.f, BaseDelay) / GetAttackSpeedMultiplier());
 }
 
+bool UEnemyCombatComponent::TryStartSequencePattern(const FMonsterPatternRow& PatternRow, FName PatternRowName, AActor* Target)
+{
+	UAnimSequenceBase* AttackSequence = PatternRow.AttackSequence.LoadSynchronous();
+	if (!AttackSequence)
+	{
+		return false;
+	}
+
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (!OwnerCharacter)
+	{
+		return false;
+	}
+	FaceTarget(Target);
+
+	USkeletalMeshComponent* Mesh = OwnerCharacter->GetMesh();
+	UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	SetSequenceAttackTag(true);
+
+	UAnimMontage* DynamicMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+		AttackSequence,
+		TEXT("DefaultSlot"),
+		0.1f,
+		0.15f,
+		1.f,
+		1);
+	if (!DynamicMontage)
+	{
+		SetSequenceAttackTag(false);
+		return false;
+	}
+
+	bSequencePatternActive = true;
+	HitActors.Empty();
+	SetMovementLockedByAttack(true);
+
+	const float HitboxStartTime = PatternRow.HitboxWindowStartTime;
+	const float HitboxDuration  = PatternRow.HitboxWindowDuration;
+	const float HitboxEndTime   = HitboxStartTime + HitboxDuration;
+	const float FinishTime = FMath::Max(AttackSequence->GetPlayLength(), HitboxEndTime) + 0.05f;
+
+	World->GetTimerManager().SetTimer(
+		SequenceHitboxStartTimerHandle,
+		this,
+		&UEnemyCombatComponent::ActivateHitbox,
+		HitboxStartTime,
+		false);
+
+	World->GetTimerManager().SetTimer(
+		SequenceHitboxEndTimerHandle,
+		this,
+		&UEnemyCombatComponent::DeactivateHitbox,
+		HitboxEndTime,
+		false);
+
+	World->GetTimerManager().SetTimer(
+		SequenceFinishTimerHandle,
+		this,
+		&UEnemyCombatComponent::FinishSequencePattern,
+		FinishTime,
+		false);
+
+	return true;
+}
+
+void UEnemyCombatComponent::FaceTarget(AActor* Target) const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !Target)
+	{
+		return;
+	}
+
+	FVector Direction = Target->GetActorLocation() - OwnerActor->GetActorLocation();
+	Direction.Z = 0.f;
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	OwnerActor->SetActorRotation(Direction.Rotation());
+}
+
+void UEnemyCombatComponent::FinishSequencePattern()
+{
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(SequenceHitboxStartTimerHandle);
+		World->GetTimerManager().ClearTimer(SequenceHitboxEndTimerHandle);
+		World->GetTimerManager().ClearTimer(SequenceFinishTimerHandle);
+	}
+
+	if (bSequencePatternActive)
+	{
+		DeactivateHitbox();
+		SetMovementLockedByAttack(false);
+		bSequencePatternActive = false;
+		ActivePatternRowName = NAME_None;
+	}
+
+	SetSequenceAttackTag(false);
+}
+
+void UEnemyCombatComponent::SetSequenceAttackTag(bool bEnable)
+{
+	URetrieveAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		bSequenceAttackTagApplied = false;
+		return;
+	}
+
+	const FGameplayTag AttackTag = RetrieveGameplayTags::State_Enemy_Attack;
+	if (bEnable)
+	{
+		if (!ASC->HasMatchingGameplayTag(AttackTag))
+		{
+			ASC->AddLooseGameplayTag(AttackTag);
+			bSequenceAttackTagApplied = true;
+		}
+		return;
+	}
+
+	if (bSequenceAttackTagApplied)
+	{
+		ASC->RemoveLooseGameplayTag(AttackTag);
+		bSequenceAttackTagApplied = false;
+	}
+}
+
 void UEnemyCombatComponent::ActivateHitbox()
 {
 	if (!ActiveHitboxComp)
@@ -360,7 +584,11 @@ void UEnemyCombatComponent::ActivateHitbox()
 		return;
 	}
 	
-	if (Row->HitboxBoneName.IsNone())
+	const FName HitboxBoneName = Row->HitboxBoneName;
+	const float HitboxRadius   = Row->HitboxRadius;
+	const FVector HitboxOffset = Row->HitboxOffset;
+
+	if (HitboxBoneName.IsNone())
 	{
 		ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		return;
@@ -368,18 +596,43 @@ void UEnemyCombatComponent::ActivateHitbox()
 	
 	if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
 	{
-		if (!ActiveHitboxComp->AttachToComponent(
+		const bool bAttachedToBone = !HitboxBoneName.IsNone() && OwnerChar->GetMesh()
+			&& OwnerChar->GetMesh()->DoesSocketExist(HitboxBoneName)
+			&& ActiveHitboxComp->AttachToComponent(
 			OwnerChar->GetMesh(),
 			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-			Row->HitboxBoneName))
+			HitboxBoneName);
+
+		if (!bAttachedToBone)
 		{
-			UE_LOG(LogSkeletalMesh, Error, TEXT("[%s] HitBox attachment failed"), *GetName());
+			ActiveHitboxComp->AttachToComponent(
+				OwnerChar->GetRootComponent(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			const FVector FallbackOffset = HitboxOffset.IsNearlyZero()
+				? FVector(FMath::Max(120.f, HitboxRadius * 0.8f), 0.f, 40.f)
+				: HitboxOffset;
+			ActiveHitboxComp->SetRelativeLocation(FallbackOffset);
+			UE_LOG(LogSkeletalMesh, Warning, TEXT("[%s] HitBox bone/socket unavailable. Falling back to forward capsule space. Bone=%s Row=%s"),
+				*GetName(),
+				*HitboxBoneName.ToString(),
+				*ActivePatternRowName.ToString());
+		}
+		else
+		{
+			ActiveHitboxComp->SetRelativeLocation(HitboxOffset);
 		}
 	}
 	
-	ActiveHitboxComp->SetSphereRadius(Row->HitboxRadius);
-	ActiveHitboxComp->SetRelativeLocation(Row->HitboxOffset);
+	ActiveHitboxComp->SetSphereRadius(HitboxRadius);
 	ActiveHitboxComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ActiveHitboxComp->UpdateOverlaps();
+
+	TArray<AActor*> OverlappingActors;
+	ActiveHitboxComp->GetOverlappingActors(OverlappingActors);
+	for (AActor* OverlappingActor : OverlappingActors)
+	{
+		ApplyHitToActor(OverlappingActor, FHitResult());
+	}
 }
 
 void UEnemyCombatComponent::ActivateHitbox(FName InBoneName, FVector InOffset, float InRadius)
@@ -442,19 +695,28 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 	{
 		return;
 	}
+	ApplyHitToActor(OtherActor, SweepResult);
+}
+
+bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult& SweepResult)
+{
+	if (!OtherActor || OtherActor == GetOwner())
+	{
+		return false;
+	}
 	
 	const IAbilitySystemInterface* TargetASCActor = 
 		Cast<IAbilitySystemInterface>(OtherActor);
 
 	if (!TargetASCActor)
 	{
-		return;
+		return false;
 	}
 
 	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	if (!OwnerPawn)
 	{
-		return;
+		return false;
 	}
 	
 	const AAIController* OwnerController =
@@ -463,30 +725,30 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 	if (!OwnerController ||
 		OwnerController->GetTeamAttitudeTowards(*OtherActor) != ETeamAttitude::Hostile)
 	{
-		return;
+		return false;
 	}
 	
 	if (HitActors.Contains(OtherActor))
 	{
-		return;
+		return false;
 	}
 	
 	if (!GetOwner()->HasAuthority())
 	{
-		return;
+		return false;
 	}
 	
 	IAbilitySystemInterface* TargetIF = Cast<IAbilitySystemInterface>(OtherActor);
 	UAbilitySystemComponent* TargetASC = TargetIF ? TargetIF->GetAbilitySystemComponent() : nullptr;
 	if (!TargetASC)
 	{
-		return;
+		return false;
 	}
 	
 	URetrieveAbilitySystemComponent* SourceASC = GetASC();
 	if (!SourceASC || !DamageEffectClass)
 	{
-		return;
+		return false;
 	}
 	
 	HitActors.Add(OtherActor);
@@ -522,17 +784,23 @@ void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp,
 
 		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 	}
-	
+
+	return Spec.IsValid();
 }
 
 const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName) const
 {
-	if (!PatternTable || PatternSlots.IsEmpty() || !GetOwner())
+	AActor* OwnerActor = GetOwner();
+	if (!PatternTable || PatternSlots.IsEmpty() || !IsValid(OwnerActor) || !IsValid(Target))
 	{
+		if (OutRowName)
+		{
+			*OutRowName = NAME_None;
+		}
 		return nullptr;
 	}
 
-	const FVector PawnLocation = GetOwner()->GetActorLocation();
+	const FVector PawnLocation = OwnerActor->GetActorLocation();
 	const float DistanceSq = FVector::DistSquared(PawnLocation, Target->GetActorLocation());
 
 	const FMonsterPatternRow* BestRow = nullptr;
@@ -541,10 +809,10 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 
 	for (const FName& RowName : PatternSlots)
 	{
-		const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(RowName, TEXT("UEnemyCombatComponent"));
+		const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(RowName, TEXT("UEnemyCombatComponent"), false);
 		if (!Row)
 		{
-			UE_LOG(LogTemp,Error, TEXT("[%s] Can't find patternRow. RowName : %s"), *GetName(), *RowName.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("[%s] Can't find patternRow. RowName : %s"), *GetName(), *RowName.ToString());
 			continue;
 		}
 		

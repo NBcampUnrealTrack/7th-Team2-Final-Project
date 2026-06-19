@@ -2,6 +2,8 @@
 
 #include "StateTreeLinker.h"
 #include "StateTreeExecutionContext.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
 #include "AIController.h"
@@ -9,6 +11,84 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Character/RetrieveEnemyCharacter.h"
+
+namespace
+{
+	void SetChaseAnimationTag(APawn* Pawn, const bool bChasing)
+	{
+		if (!Pawn)
+		{
+			return;
+		}
+
+		UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn);
+		if (!ASC)
+		{
+			return;
+		}
+
+		const FGameplayTag ChaseTag = RetrieveGameplayTags::State_Enemy_Chase;
+		if (bChasing)
+		{
+			if (!ASC->HasMatchingGameplayTag(ChaseTag))
+			{
+				ASC->AddLooseGameplayTag(ChaseTag);
+			}
+		}
+		else if (ASC->HasMatchingGameplayTag(ChaseTag))
+		{
+			ASC->RemoveLooseGameplayTag(ChaseTag);
+		}
+	}
+
+	bool ShouldUseForwardLocomotion(const APawn* Pawn)
+	{
+		const ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
+		return EnemyCharacter && EnemyCharacter->UsesForwardLocomotion();
+	}
+
+	bool FaceTargetForAttack(APawn* Pawn, AActor* Target, float DeltaTime, float AcceptanceAngle, float InterpSpeed)
+	{
+		if (!Pawn || !Target)
+		{
+			return true;
+		}
+
+		FVector Direction = Target->GetActorLocation() - Pawn->GetActorLocation();
+		Direction.Z = 0.f;
+		if (Direction.IsNearlyZero())
+		{
+			return true;
+		}
+
+		const FRotator CurrentRotation = Pawn->GetActorRotation();
+		const FRotator TargetRotation = Direction.Rotation();
+		const float SignedDeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetRotation.Yaw);
+		const float DeltaYaw = FMath::Abs(SignedDeltaYaw);
+		if (DeltaYaw <= AcceptanceAngle)
+		{
+			if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn))
+			{
+				EnemyCharacter->StopGroundTurnAnimation();
+			}
+			return true;
+		}
+
+		if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn))
+		{
+			EnemyCharacter->UpdateGroundTurnAnimation(SignedDeltaYaw);
+		}
+
+		const FRotator NewRotation = FMath::RInterpTo(
+			CurrentRotation,
+			FRotator(CurrentRotation.Pitch, TargetRotation.Yaw, CurrentRotation.Roll),
+			DeltaTime,
+			InterpSpeed);
+		Pawn->SetActorRotation(NewRotation);
+		return false;
+	}
+}
 
 bool FStateTreeTask_EnemyAttack::Link(FStateTreeLinker& Linker)
 {
@@ -73,6 +153,12 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 	{
 		return EStateTreeRunStatus::Failed;
 	}
+
+	if (!IsValid(InstanceData.TargetPlayer))
+	{
+		SetChaseAnimationTag(Pawn, false);
+		return EStateTreeRunStatus::Failed;
+	}
 	
 	if (!InstanceData.bStartAttack)
 	{
@@ -88,6 +174,18 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 				if (bCanMove && !InstanceData.ChaseLocation.IsNearlyZero())
 				{
+					SetChaseAnimationTag(Pawn, true);
+
+					if (!ShouldUseForwardLocomotion(Pawn))
+					{
+						FaceTargetForAttack(
+							Pawn,
+							InstanceData.TargetPlayer,
+							DeltaTime,
+							InstanceData.FacingAcceptanceAngle,
+							InstanceData.FacingInterpSpeed);
+					}
+
 					const float MoveDeltaSq = FVector::DistSquared2D(
 						InstanceData.LastMoveRequestLocation,
 						InstanceData.ChaseLocation);
@@ -101,15 +199,21 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 							true,
 							true,
 							true,
-							true);
+							false);
 
 						InstanceData.LastMoveRequestLocation = InstanceData.ChaseLocation;
 					}
+				}
+				else
+				{
+					SetChaseAnimationTag(Pawn, false);
 				}
 			}
 			
 			return EStateTreeRunStatus::Running;
 		}
+
+		SetChaseAnimationTag(Pawn, false);
 
 		if (InstanceData.DistanceToTarget > InstanceData.AttackRange)
 		{
@@ -134,6 +238,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			InstanceData.bStartAttack = true;
 			InstanceData.bObservedPatternActive = false;
 			InstanceData.TimeSinceAttackRequested = 0.f;
+			SetChaseAnimationTag(Pawn, false);
 			
 			if (AAIController* AIC = Pawn->GetController<AAIController>())
 			{
@@ -151,6 +256,17 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 				{
 					MoveComp->StopMovementImmediately();
 				}
+			}
+
+			if (!FaceTargetForAttack(
+				Pawn,
+				InstanceData.TargetPlayer,
+				DeltaTime,
+				InstanceData.FacingAcceptanceAngle,
+				InstanceData.FacingInterpSpeed))
+			{
+				InstanceData.bStartAttack = false;
+				return EStateTreeRunStatus::Running;
 			}
 			
 			if (!InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetPlayer
@@ -215,7 +331,14 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	{
 		Combat->StopCurrentPattern();
 	}
-	
+
+	if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn))
+	{
+		EnemyCharacter->StopGroundTurnAnimation();
+	}
+
+	SetChaseAnimationTag(Pawn, false);
+
 	if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 	{
 		Enc->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);

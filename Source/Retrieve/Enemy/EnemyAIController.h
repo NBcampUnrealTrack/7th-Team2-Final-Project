@@ -20,7 +20,7 @@ class RETRIEVE_API AEnemyAIController : public AAIController
 public:
 	AEnemyAIController(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	
-	void ConfigureStateTree(UStateTree* InStateTree) const;
+	void ConfigureStateTree(UStateTree* InStateTree);
 	
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 	
@@ -38,11 +38,15 @@ private:
 	void InitSightConfig();
 	void InitDamageConfig();
 	
+	void RestartStateTree();
 	void TryStartStateTree();
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")
 	TObjectPtr<UStateTreeAIComponent> StateTreeAIComp;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|AI")
+	TObjectPtr<UStateTree> DefaultStateTree;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")
 	TObjectPtr<UAIPerceptionComponent> AIPerceptionComp;
