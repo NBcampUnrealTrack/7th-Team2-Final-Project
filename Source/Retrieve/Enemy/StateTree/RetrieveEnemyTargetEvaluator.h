@@ -113,6 +113,12 @@ struct RETRIEVE_API FRetrieveEnemyTargetEvaluator : public FStateTreeEvaluatorCo
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0", ClampMax = "180.0"))
 	float HorizontalHalfFOV = 60.f;
 
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
+	float AggroCrowdWeight = 0.35f; // 0 = 순수하게 가장 가까운 대상
+
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float TargetSwitchHysteresis = 0.8f; // 명확하게 더 나은 대상이 아니면 현재 타겟을 유지
+
 private:
 	TStateTreeExternalDataHandle<AAIController> AIControllerHandle;
 	TStateTreeExternalDataHandle<APawn> PawnHandle;

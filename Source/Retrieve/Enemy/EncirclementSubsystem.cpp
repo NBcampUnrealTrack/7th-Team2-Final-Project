@@ -9,49 +9,40 @@ static TAutoConsoleVariable<int32> CVarEncircleDebug(
 	TEXT("Encircle.Debug"), 0,
 	TEXT("1이면 포위 슬롯 링을 디버그 드로우한다."));
 
+static TAutoConsoleVariable<float> CVarEncircleAnchorDeadband(
+	TEXT("Encircle.AnchorDeadband"), 180.f,
+	TEXT("대기자 링이 재정렬되기까지 플레이어가 이동해야 하는 거리(언리얼 단위). 값이 작으면 링이 플레이어를 바짝 따라붙고, 크면 플레이어가 확실히 자리를 옮겼을 때만 재정렬됨."));
+
+static TAutoConsoleVariable<float> CVarEncircleMinArc(
+	TEXT("Encircle.MinArc"), 200.f,
+	TEXT("인접한 대기자 슬롯 간 최소 간격(언리얼 단위). 인원 수에 따른 링 반경 계산에 사용됨. 캡슐 반경의 2배 이상으로 설정할 것."));
+
+static TAutoConsoleVariable<float> CVarEncircleTokenCooldown(
+	TEXT("Encircle.TokenCooldown"), 2.0f,
+	TEXT("적이 공격 토큰을 반납한 뒤, 다음 공격이 가능해지기까지의 대기 시간(초)."));
+
 int32 UEncirclementSubsystem::RequestSlot(AActor* Target, AActor* Requester)
 {
 	if (!Target || !Requester)
 	{
 		return INDEX_NONE;
 	}
-	
 	FRing& Ring = FindOrAddRing(Target);
 
-	// 이미 점유 중이면 그 슬롯 유지
 	const int32 Existing = Ring.Slots.IndexOfByKey(Requester);
 	if (Existing != INDEX_NONE)
 	{
 		return Existing;
 	}
-	
-	// 요청자의 타깃 기준 방위각
+
 	const FVector ToReq = Requester->GetActorLocation() - Target->GetActorLocation();
 	const float ReqAngle = FMath::Atan2(ToReq.Y, ToReq.X);
 
-	// 그 방위에 가장 가까운 '빈' 슬롯
-	int32 BestSlot = INDEX_NONE;
-	float BestDelta = TNumericLimits<float>::Max();
-	const float StepAngle = 2.f * PI / NumSlots;
-	for (int32 i = 0; i < NumSlots; ++i)
-	{
-		if (Ring.Slots[i].IsValid())
-		{
-			continue;   // 점유됨
-		}
-		
-		const float Delta = FMath::Abs(FMath::FindDeltaAngleRadians(ReqAngle, i * StepAngle));
-		if (Delta < BestDelta)
-		{
-			BestDelta = Delta; BestSlot = i;
-		}
-	}
-	
+	const int32 BestSlot = PickBalancedSlot(Ring, ReqAngle);
 	if (BestSlot != INDEX_NONE)
 	{
 		Ring.Slots[BestSlot] = Requester;
 	}
-	
 	return BestSlot;
 }
 
@@ -75,20 +66,28 @@ bool UEncirclementSubsystem::RequestAttackToken(AActor* Target, AActor* Requeste
 	}
 	FRing& Ring = FindOrAddRing(Target);
 	CompactInvalidAttackTokens(Ring);
-	
+
 	if (Ring.AttackTokens.Contains(Requester))
 	{
 		return true;
 	}
-	
-	const int32 CurrentCost = GetCurrentAttackTokenCost(Ring);
-	const int32 RequestCost = GetAttackTokenCost(Requester);
-	const int32 TokenBudget = GetAttackTokenBudget(Ring, Requester);
-	if (CurrentCost + RequestCost > TokenBudget)
+	if (IsOnTokenCooldown(Ring, Requester))
 	{
 		return false;
 	}
-	
+
+	const int32 RequestCost = GetAttackTokenCost(Requester);
+	const int32 CurrentCost = GetCurrentAttackTokenCost(Ring);
+	const int32 Budget = GetAttackTokenBudget(Ring, Requester);
+	if (CurrentCost + RequestCost > Budget)
+	{
+		return false;
+	}
+	if (!IsAmongBestCandidates(Ring, Target, Requester, Budget - CurrentCost))
+	{
+		return false;
+	}
+
 	Ring.AttackTokens.Add(Requester);
 	return true;
 }
@@ -114,28 +113,45 @@ bool UEncirclementSubsystem::CanRequestAttackToken(AActor* Target, AActor* Reque
 	{
 		return false;
 	}
+	static const FRing EmptyRing;
+	const FRing* RingPtr = Rings.Find(Target);
+	const FRing& Ring = RingPtr ? *RingPtr : EmptyRing;
 
-	if (const FRing* Ring = Rings.Find(Target))
+	if (Ring.AttackTokens.Contains(Requester))
 	{
-		int32 ValidTokenCost = 0;
-		for (const TWeakObjectPtr<AActor>& Token : Ring->AttackTokens)
-		{
-			if (Token.Get() == Requester)
-			{
-				return true;
-			}
-
-			if (const AActor* TokenActor = Token.Get())
-			{
-				ValidTokenCost += GetAttackTokenCost(TokenActor);
-			}
-		}
-
-		return ValidTokenCost + GetAttackTokenCost(Requester) <= GetAttackTokenBudget(*Ring, Requester);
+		return true;
 	}
+	if (IsOnTokenCooldown(Ring, Requester))
+	{
+		return false;
+	}
+	const int32 RequestCost = GetAttackTokenCost(Requester);
+	const int32 CurrentCost = GetCurrentAttackTokenCost(Ring);
+	const int32 Budget = GetAttackTokenBudget(Ring, Requester);
+	if (CurrentCost + RequestCost > Budget)
+	{
+		return false;
+	}
+	return IsAmongBestCandidates(Ring, Target, Requester, Budget - CurrentCost);
+}
 
-	const FRing EmptyRing;
-	return GetAttackTokenCost(Requester) <= GetAttackTokenBudget(EmptyRing, Requester);
+FVector UEncirclementSubsystem::GetOrUpdateRingAnchor(AActor* Target)
+{
+	if (!Target)
+	{
+		return FVector::ZeroVector;
+	}
+	FRing& Ring = FindOrAddRing(Target);
+	const FVector PlayerLoc = Target->GetActorLocation();
+	const float Deadband = CVarEncircleAnchorDeadband.GetValueOnGameThread();
+
+	// 플레이어가 명확하게 위치를 옮겼을 때만 링을 재배치한다
+	if (!Ring.bAnchorValid || FVector::Dist2D(Ring.Anchor, PlayerLoc) > Deadband)
+	{
+		Ring.Anchor = PlayerLoc;
+		Ring.bAnchorValid = true;
+	}
+	return Ring.Anchor;
 }
 
 void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requester)
@@ -144,36 +160,55 @@ void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requeste
 	{
 		return;
 	}
-	
 	if (FRing* Ring = Rings.Find(Target))
 	{
-		Ring->AttackTokens.Remove(Requester);
+		if (Ring->AttackTokens.Remove(Requester) > 0)
+		{
+			if (const UWorld* World = GetWorld())
+			{
+				Ring->TokenReleaseTime.Add(Requester, World->GetTimeSeconds());
+			}
+		}
 		CompactInvalidAttackTokens(*Ring);
 	}
 }
 
-FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 SlotIndex,
-	bool bUseOuterRadius, float MinNoise, float MaxNoise, float InnerRadiusOverride, float OuterRadiusOverride) const
+FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 SlotIndex, bool bUseOuterRadius,
+                                                float MinNoise, float MaxNoise, float InnerRadiusOverride,
+                                                float OuterRadiusOverride, float MaxWaiterRadiusOverride) const
 {
 	if (!Target || SlotIndex < 0 || SlotIndex >= NumSlots)
 	{
 		return Target ? Target->GetActorLocation() : FVector::ZeroVector;
 	}
-	
+
 	const float StepAngle = 2.f * PI / NumSlots;
-	const float Angle = SlotIndex * StepAngle;
-	const float EffectiveInnerRadius = InnerRadiusOverride > 0.f ? InnerRadiusOverride : InnerRadius;
-	const float EffectiveOuterRadius = OuterRadiusOverride > 0.f ? OuterRadiusOverride : OuterRadius;
-	float TargetRadius = bUseOuterRadius ? EffectiveOuterRadius : EffectiveInnerRadius;
-	
-	/*if (bUseOuterRadius)
+	const float Angle = SlotIndex * StepAngle; // 고정됨; 서클링 = 의도적인 재슬롯이며, 회전이 아님
+
+	const FRing* Ring = Rings.Find(Target);
+	const float BaseInner = InnerRadiusOverride > 0.f ? InnerRadiusOverride : InnerRadius;
+	const float BaseOuter = OuterRadiusOverride > 0.f ? OuterRadiusOverride : OuterRadius;
+
+	FVector Center;
+	float TargetRadius;
+	if (bUseOuterRadius)
 	{
-		TargetRadius += FMath::FRandRange(MinNoise, MaxNoise);
-	}*/
-	
+		// 대기자: 작은 플레이어 이동이 고리를 끌고 다니지 않도록 고정된 앵커를 기준으로 구성
+		Center = (Ring && Ring->bAnchorValid) ? Ring->Anchor : Target->GetActorLocation();
+		const int32 NumWaiters = Ring ? FMath::Max(1, CountWaiters(*Ring)) : 1;
+		TargetRadius = ComputeRingRadius(NumWaiters, BaseOuter, MaxWaiterRadiusOverride);
+		TargetRadius += SlotRadiusNoise(SlotIndex, MinNoise, MaxNoise);
+	}
+	else
+	{
+		// 공격자: 결단을 내린 소수가 실제로 플레이어에게 도달하도록 실시간으로 추적
+		Center = Target->GetActorLocation();
+		TargetRadius = BaseInner;
+	}
+
 	const FVector Offset(FMath::Cos(Angle) * TargetRadius, FMath::Sin(Angle) * TargetRadius, 0.f);
-	const FVector RawLocation = Target->GetActorLocation() + Offset;
-	
+	const FVector RawLocation = Center + Offset;
+
 	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
 	{
 		FNavLocation Projected;
@@ -182,8 +217,54 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 			return Projected.Location;
 		}
 	}
-	
 	return RawLocation;
+}
+
+FVector UEncirclementSubsystem::GetOverflowStandoffLocation(const AActor* Target, const AActor* Requester,
+                                                            float DesiredRadius) const
+{
+	if (!Target || !Requester)
+	{
+		return Target ? Target->GetActorLocation() : FVector::ZeroVector;
+	}
+	const FRing* Ring = Rings.Find(Target);
+	const FVector Center = (Ring && Ring->bAnchorValid) ? Ring->Anchor : Target->GetActorLocation();
+
+	// 초과된 적들이 한 지점에 쌓이지 않고 흩어지도록 적별로 고정된 각도를 사용
+	const uint32 Hash = Requester->GetUniqueID();
+	const float Angle = FMath::DegreesToRadians(static_cast<float>(Hash % 360));
+	const float Radius = FMath::Max(DesiredRadius, OuterRadius) + 120.f; // 대기자 링보다 살짝 바깥
+
+	const FVector Offset(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
+	const FVector Raw = Center + Offset;
+
+	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+	{
+		FNavLocation Projected;
+		if (NavSys->ProjectPointToNavigation(Raw, Projected, FVector(120.f, 120.f, 1000.f)))
+		{
+			return Projected.Location;
+		}
+	}
+	return Raw;
+}
+
+int32 UEncirclementSubsystem::GetCommittedCount(const AActor* Target) const
+{
+	const FRing* Ring = Rings.Find(Target);
+	if (!Ring)
+	{
+		return 0;
+	}
+	int32 Count = 0;
+	for (const TWeakObjectPtr<AActor>& Slot : Ring->Slots)
+	{
+		if (Slot.IsValid())
+		{
+			++Count;
+		}
+	}
+	return Count;
 }
 
 int32 UEncirclementSubsystem::GetCurrentSlot(AActor* Target, AActor* Requester) const
@@ -325,6 +406,131 @@ int32 UEncirclementSubsystem::GetCurrentAttackTokenCost(const FRing& Ring) const
 	}
 
 	return Cost;
+}
+
+bool UEncirclementSubsystem::IsOnTokenCooldown(const FRing& Ring, const AActor* Requester) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+	if (const float* Released = Ring.TokenReleaseTime.Find(Requester))
+	{
+		return (World->GetTimeSeconds() - *Released) < CVarEncircleTokenCooldown.GetValueOnGameThread();
+	}
+	return false;
+}
+
+float UEncirclementSubsystem::ComputeRingRadius(int32 NumOccupants, float BaseRadius, float MaxRadius) const
+{
+	if (NumOccupants <= 1)
+	{
+		return BaseRadius;
+	}
+	const float MinArc = CVarEncircleMinArc.GetValueOnGameThread();
+	const float NeededByArc = (NumOccupants * MinArc) / (2.f * PI);
+	float R = FMath::Max(BaseRadius, NeededByArc);
+	if (MaxRadius > 0.f)
+	{
+		R = FMath::Min(R, MaxRadius); // 대기자가 StrafeOffRange 내부에 머물도록 함
+	}
+	return R;
+}
+
+int32 UEncirclementSubsystem::CountWaiters(const FRing& Ring) const
+{
+	int32 Count = 0;
+	for (const TWeakObjectPtr<AActor>& Slot : Ring.Slots)
+	{
+		if (Slot.IsValid() && !Ring.AttackTokens.Contains(Slot))
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+float UEncirclementSubsystem::SlotRadiusNoise(int32 SlotIndex, float MinNoise, float MaxNoise) const
+{
+	if (MaxNoise <= MinNoise)
+	{
+		return 0.f;
+	}
+	const float H = FMath::Frac(FMath::Sin(SlotIndex * 12.9898f) * 43758.5453f); // [0,1), 슬롯마다 고정됨
+	return FMath::Lerp(MinNoise, MaxNoise, H);
+}
+
+bool UEncirclementSubsystem::IsAmongBestCandidates(const FRing& Ring, const AActor* Target, const AActor* Requester,
+                                                   int32 SlotsAvailable) const
+{
+	if (SlotsAvailable <= 0 || !Target || !Requester)
+	{
+		return false;
+	}
+	const FVector TargetLoc = Target->GetActorLocation();
+	const float ReqDistSq = FVector::DistSquared(Requester->GetActorLocation(), TargetLoc);
+
+	int32 Better = 0;
+	for (const TWeakObjectPtr<AActor>& SlotPtr : Ring.Slots)
+	{
+		const AActor* Other = SlotPtr.Get();
+		if (!Other || Other == Requester)
+		{
+			continue;
+		}
+		if (Ring.AttackTokens.Contains(Other) || IsOnTokenCooldown(Ring, Other))
+		{
+			continue;
+		}
+		if (FVector::DistSquared(Other->GetActorLocation(), TargetLoc) < ReqDistSq)
+		{
+			++Better;
+		}
+	}
+	return Better < SlotsAvailable;
+}
+
+int32 UEncirclementSubsystem::PickBalancedSlot(const FRing& Ring, float BearingAngle) const
+{
+	const float StepAngle = 2.f * PI / NumSlots;
+	int32 BestSlot = INDEX_NONE;
+	int32 BestGap = -1;
+	float BestBearingDelta = TNumericLimits<float>::Max();
+
+	for (int32 i = 0; i < NumSlots; ++i)
+	{
+		if (Ring.Slots[i].IsValid())
+		{
+			continue;
+		}
+		const int32 Gap = DistanceToNearestOccupied(Ring, i);
+		const float BearingDelta = FMath::Abs(FMath::FindDeltaAngleRadians(BearingAngle, i * StepAngle));
+		if (Gap > BestGap || (Gap == BestGap && BearingDelta < BestBearingDelta))
+		{
+			BestGap = Gap;
+			BestBearingDelta = BearingDelta;
+			BestSlot = i;
+		}
+	}
+	return BestSlot;
+}
+
+int32 UEncirclementSubsystem::DistanceToNearestOccupied(const FRing& Ring, int32 SlotIndex) const
+{
+	int32 Best = NumSlots;
+	bool bAnyOccupied = false;
+	for (int32 j = 0; j < NumSlots; ++j)
+	{
+		if (!Ring.Slots[j].IsValid())
+		{
+			continue;
+		}
+		bAnyOccupied = true;
+		const int32 Raw = FMath::Abs(SlotIndex - j);
+		Best = FMath::Min(Best, FMath::Min(Raw, NumSlots - Raw));
+	}
+	return bAnyOccupied ? Best : NumSlots;
 }
 
 void UEncirclementSubsystem::DrawDebug() const

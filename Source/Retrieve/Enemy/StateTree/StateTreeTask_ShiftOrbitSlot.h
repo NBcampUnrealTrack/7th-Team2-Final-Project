@@ -14,15 +14,22 @@ struct FStateTreeTask_ShiftOrbitSlotInstanceData
 
 	UPROPERTY(EditAnywhere, meta=(Optional))
 	TObjectPtr<AActor> TargetActor = nullptr;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Config")
-	float StrafeInterval = 0.8f;
+	float StrafeInterval = 2.5f;
+
+	UPROPERTY(EditAnywhere, Category = "Config")
+	float StrafeIntervalJitter = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Config")
 	int32 StrafeDirection = 1;
 
 	UPROPERTY(EditAnywhere, Category = "Config", meta=(ClampMin="1"))
-	int32 MaxSlotShiftSteps = 2;
+	int32 MaxSlotShiftSteps = 1;
+	
+	/** 링을 점유하는 적이 해당 값 미만이면 서클링을 생략합니다(1:1 가디언 등은 큰 값으로 설정합니다.) */
+	UPROPERTY(EditAnywhere, Category = "Config", meta=(ClampMin="1"))
+	int32 MinOccupantsToCircle = 1;
 
 	float ElapsedTime = 0.f;
 	bool bOriginalOrient = false;

@@ -176,6 +176,8 @@ void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MsgSubsys.UnregisterListener(GroupAlertHandle);
 	}
 	
+	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
+	
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -420,19 +422,32 @@ void ARetrieveEnemyCharacter::DeactivateEnemy()
 
 void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
 {
-	if (Payload.InstigatorEnemy == this)
+	if (Payload.InstigatorEnemy == this || AlertedTarget)
 	{
 		return;
 	}
-	
-	if (AlertedTarget)
+	if (FVector::Dist(GetActorLocation(), Payload.InstigatorLocation) > GroupAlertRadius)
 	{
 		return;
 	}
-	
-	const float Dist = FVector::Dist(GetActorLocation(), Payload.InstigatorLocation);
-	if (Dist <= GroupAlertRadius)
+	AActor* SpottedActor = Payload.SpottedActor.Get();
+	if (!IsValid(SpottedActor))
 	{
-		AlertedTarget = Payload.SpottedActor.Get();
+		return;
 	}
+
+	if (EngageStaggerMaxDelay <= 0.f)
+	{
+		AlertedTarget = SpottedActor;
+		return;
+	}
+	const float Delay = FMath::FRandRange(0.f, EngageStaggerMaxDelay);
+	FTimerDelegate InDelegate = FTimerDelegate::CreateWeakLambda(this, [this, SpottedActor]()
+	{
+		if (!AlertedTarget && IsValid(SpottedActor))
+		{
+			AlertedTarget = SpottedActor;
+		}
+	});
+	GetWorldTimerManager().SetTimer(AlertStaggerTimer, InDelegate, FMath::Max(0.05f, Delay), false);
 }
