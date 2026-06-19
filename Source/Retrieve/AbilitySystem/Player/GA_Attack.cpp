@@ -432,7 +432,19 @@ void UGA_Attack::ApplyStepDamage()
 			if (!PerHitSpec.IsValid() || !PerHitSpec.Data.IsValid()) continue;
 
 			PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
-			
+
+			// 넉백 강도(콤보 스텝별). BroadcastHitEvent가 공격자→피격자로 자동 적용.
+			if (CachedComboSteps.IsValidIndex(CurrentComboIndex) && CachedComboSteps[CurrentComboIndex].KnockbackStrength > 0.f)
+			{
+				const FWeaponComboStep& KbStep = CachedComboSteps[CurrentComboIndex];
+				PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KbStep.KnockbackStrength);
+				PerHitSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KbStep.KnockbackUpwardStrength);
+			}
+
+			// Attack.Type (방어 처리 결정)
+			PerHitSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
+
+			// HitReact.Type (피격 반응 결정)
 			const ERetrieveHitReactType ReactType = CachedComboSteps.IsValidIndex(CurrentComboIndex)
 				? CachedComboSteps[CurrentComboIndex].HitReactType
 				: ERetrieveHitReactType::Flinch;

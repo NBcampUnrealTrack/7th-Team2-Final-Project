@@ -1,6 +1,7 @@
 #include "AbilitySystem/Player/GA_HeavyAttack_Wind.h"
 
 #include "GameFramework/Character.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/Player/RetrieveHeroComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
@@ -24,7 +25,7 @@ void UGA_HeavyAttack_Wind::ExecuteHeavyEffect(const FGameplayTag& /*ConsumedElem
 		const FVector Dir = ResolveLaunchDirection();
 		if (!Dir.IsNearlyZero())
 		{
-			Character->LaunchCharacter(Dir * LaunchSpeed, /*bXYOverride=*/true, /*bZOverride=*/false);
+			URetrieveKnockbackLibrary::LaunchSelf(Character, Dir, LaunchSpeed, /*bOverrideXY=*/true, /*bOverrideZ=*/false);
 		}
 	}
 

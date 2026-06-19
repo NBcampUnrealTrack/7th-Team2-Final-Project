@@ -4,6 +4,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
+#include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/MeshComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -312,6 +313,11 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid()) return;
 
 	SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, Hit.DamageMultiplier);
+	if (Hit.KnockbackStrength > 0.f)
+	{
+		SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, Hit.KnockbackStrength);
+		SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, Hit.KnockbackUpwardStrength);
+	}
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 
@@ -508,7 +514,7 @@ void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitInd
 			if (!Forward.IsNearlyZero())
 			{
 				const float LaunchSpeed = DashDistance / DashLaunchDuration;
-				Character->LaunchCharacter(Forward * LaunchSpeed, /*bXYOverride=*/true, /*bZOverride=*/false);
+				URetrieveKnockbackLibrary::LaunchSelf(Character, Forward, LaunchSpeed, /*bOverrideXY=*/true, /*bOverrideZ=*/false);
 
 				UE_LOG(LogRetrieveCombat, Log,
 					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, DashDistance=%.1f, LaunchSpeed=%.1f"),

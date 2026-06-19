@@ -41,6 +41,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack", meta = (ClampMin = "0.1"))
 	float MontagePlayRate = 1.0f;
 
+	/** 넉백 수평 강도(0이면 없음). 적중 시 공격자→피격자 방향으로 자동 적용. Fire/Water 파생에서 사용. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	/** 넉백 상향(Z) 강도. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
+
 private:
 	UFUNCTION() 
 	void HandleMontageFinished();

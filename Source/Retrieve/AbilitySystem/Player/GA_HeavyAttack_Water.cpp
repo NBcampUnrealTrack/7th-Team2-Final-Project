@@ -95,6 +95,13 @@ void UGA_HeavyAttack_Water::ApplyAoEColdDamage()
 		if (DamageSpec.IsValid() && DamageSpec.Data.IsValid())
 		{
 			DamageSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMultiplier);
+			if (KnockbackStrength > 0.f)
+			{
+				DamageSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KnockbackStrength);
+				DamageSpec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KnockbackUpwardStrength);
+			}
+			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
+			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
 			
 			AddCombatTagsToDamageSpec(
 				*DamageSpec.Data.Get(),

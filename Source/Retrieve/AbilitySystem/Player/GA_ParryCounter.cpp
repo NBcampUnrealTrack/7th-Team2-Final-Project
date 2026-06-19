@@ -202,6 +202,17 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 	if (Spec.IsValid() && Spec.Data.IsValid())
 	{
 		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CachedParryData.DamageMultiplier);
+		if (CachedParryData.KnockbackStrength > 0.f)
+		{
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, CachedParryData.KnockbackStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, CachedParryData.KnockbackUpwardStrength);
+		}
+		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
+
+		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedParryData.HitReactType); ReactTag.IsValid())
+		{
+			Spec.Data->AddDynamicAssetTag(ReactTag);
+		}
 		
 		AddCombatTagsToDamageSpec(
 			*Spec.Data.Get(),

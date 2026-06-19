@@ -94,6 +94,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_Return, "State.Enemy.Return");
 	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_Dead, "State.Enemy.Dead");
 
+	// ---- Immune
+	UE_DEFINE_GAMEPLAY_TAG(State_Immune_Knockback, "State.Immune.Knockback");
+
 	// ---- Boss state
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Intro, "State.Boss.Intro");
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Combat, "State.Boss.Combat");
@@ -335,6 +338,8 @@ namespace RetrieveGameplayTags
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_Strength, "Data.Knockback.Strength");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_UpwardStrength, "Data.Knockback.UpwardStrength");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxHealth, "Data.Init.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Health, "Data.Init.Health");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");

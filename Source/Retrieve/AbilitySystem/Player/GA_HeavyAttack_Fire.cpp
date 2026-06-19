@@ -97,6 +97,13 @@ void UGA_HeavyAttack_Fire::ApplyRadialDamage()
 		}
 
 		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMultiplier);
+		if (KnockbackStrength > 0.f)
+		{
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KnockbackStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KnockbackUpwardStrength);
+		}
+		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Heavy);
+		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_GuardBreak);
 		
 		AddCombatTagsToDamageSpec(
 			*Spec.Data.Get(),

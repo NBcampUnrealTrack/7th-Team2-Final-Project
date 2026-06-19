@@ -241,7 +241,11 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** 일반 / 에픽 / 보스 구분 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Stats")
 	FGameplayTag MonsterType;
-	
+
+	/** 넉백 면역. 보스는 MonsterType으로 자동 면역되며, 에픽/일반은 이 플래그로 디자이너가 제어. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Knockback")
+	bool bKnockbackImmune = false;
+
 	/** 몬스터 또는 보스가 사용하는 주요 원소 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Stats")
 	FGameplayTag ElementTag;
@@ -467,6 +471,14 @@ struct RETRIEVE_API FBurstHitInstance
 	/** 이 타격이 적중한 대상에 순차 부여할 상태 GE들. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Status")
 	TArray<TSubclassOf<UGameplayEffect>> StatusEffects;
+
+	/** 넉백 수평 강도(0이면 없음). 적중 시 공격자→피격자 방향으로 자동 적용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	/** 넉백 상향(Z) 강도. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
 };
 
 /**
@@ -653,6 +665,14 @@ struct RETRIEVE_API FWeaponComboStep
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
 	FGameplayTag ChargeBonusEventTag;
+
+	/** 넉백 수평 강도(0이면 없음). 콤보 스텝별로 다르게 지정 가능. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	/** 넉백 상향(Z) 강도. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
 };
 
 USTRUCT(BlueprintType)
@@ -695,6 +715,14 @@ struct RETRIEVE_API FWeaponSprintAttack
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Sprint", meta = (ClampMin = "0.0"))
 	float RequiredSprintDuration = 0.5f;
+
+	/** 넉백 수평 강도(0이면 없음). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	/** 넉백 상향(Z) 강도. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
 };
 
 // JumpAttack 높이 구간, 발동 시점 지면 높이가 MinHeight 이상이면 후보가 되고 후보 중 MinHeight가 가장 큰 구간이 선택됨
@@ -744,6 +772,14 @@ struct RETRIEVE_API FWeaponJumpAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
 	float LandingAoeRadius = 250.f;
+
+	// 착지 AoE에 방사형 넉백 적용 여부. 끄면 기존 동작(넉백 없음) 유지.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam")
+	bool bUseLandingKnockback = false;
+
+	// 착지 AoE 방사형 넉백 파라미터. bUseLandingKnockback일 때만 적용.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (EditCondition = "bUseLandingKnockback"))
+	FRetrieveKnockbackParams LandingKnockback;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Slam", meta = (ClampMin = "0.0"))
 	float DiveGravityScale = 0.f;
@@ -779,6 +815,14 @@ struct RETRIEVE_API FParryCounterData
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Groggy", meta = (ClampMin = "0.0"))
 	float GroggyDuration = 3.f;
+
+	/** 넉백 수평 강도(0이면 없음). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	/** 넉백 상향(Z) 강도. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
 };
 
 // 스태프(배틀메이지) 강공격(왼손 투사체) 데이터

@@ -202,7 +202,13 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	{
 		return;
 	}
-	
+
+	// 넉백 면역: 보스(MonsterType) 자동 + 데이터 플래그(에픽/일반). DoKnockback이 이 태그를 체크해 스킵.
+	if (OwnedASC && (Row->MonsterType.MatchesTagExact(RetrieveGameplayTags::Monster_Type_Boss) || Row->bKnockbackImmune))
+	{
+		OwnedASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Immune_Knockback);
+	}
+
 	if (EnemyCombatComponent)
 	{
 		EnemyCombatComponent->Initialize(PatternTable, Row->PatternSlots);
