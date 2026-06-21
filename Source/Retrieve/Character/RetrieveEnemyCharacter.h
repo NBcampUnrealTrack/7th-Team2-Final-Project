@@ -72,13 +72,35 @@ public:
 	bool IsGroggyForAnim()  const { return bCachedIsGroggy; }
 	
 	const FMonsterDataRow* GetMonsterDataRow() const;
+	FName GetMonsterDataRowName() const { return MonsterDataRowName; }
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Enemy|Epic")
 	bool HasAerialPhase() const;
+	virtual bool ShouldUseStateTreeAerialPhase() const { return HasAerialPhase(); }
+
+	void SetAerialSpecialAttackReady(bool bReady);
+	bool IsAerialSpecialAttackReady() const { return bAerialSpecialAttackReady; }
+	void BeginAerialSpecialPhase();
+	void ResetAerialSpecialPhase();
+	float GetAerialSpecialPhaseElapsedTime() const;
 
 	virtual bool UsesForwardLocomotion() const { return false; }
 	virtual void UpdateGroundTurnAnimation(float SignedYawDelta) {}
+	virtual bool ShouldGroundSnapOnSpawn() const { return false; }
 	virtual void StopGroundTurnAnimation() { StopLocomotionMontages(); }
+	virtual bool ShouldUseDirectChaseToTarget() const { return false; }
+	virtual bool ShouldUseDirectVisibilityTargetAcquisition() const { return false; }
+	virtual bool ShouldFaceTargetDuringShiftOrbit() const { return false; }
+	virtual bool ShouldSuppressNormalAttackWhileFlying() const { return false; }
+	virtual bool ShouldUsePatternRangeForNormalAttack() const { return false; }
+	virtual bool ShouldUse2DPatternRangeWhileFlying() const { return false; }
+	virtual bool ShouldTreatZeroPatternMaxRangeAsUnlimited() const { return false; }
+	virtual bool ShouldUseFallbackEpicStateTree() const { return false; }
+	virtual float GetInitialAcquireRangeMultiplierForAI() const { return 1.f; }
+	virtual float GetHorizontalHalfFOVOverrideForAI() const { return -1.f; }
+	virtual float GetSightRadiusMultiplierForAI() const { return 1.f; }
+	virtual float GetLoseSightRadiusMultiplierForAI() const { return 1.f; }
+	virtual float GetPeripheralVisionAngleOverrideForAI() const { return -1.f; }
 
 	void RefreshMoveSpeedFromAttribute();
 	
@@ -195,6 +217,9 @@ private:
 	bool bCachedIsHit       = false;
 	bool bCachedIsStaggered    = false;
 	bool bCachedIsGroggy    = false;
+
+	bool bAerialSpecialAttackReady = false;
+	float AerialSpecialPhaseStartTime = -1.f;
 	
 	FTimerHandle AlertStaggerTimer;
 };

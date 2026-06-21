@@ -37,6 +37,9 @@ protected:
 private:
 	void InitSightConfig();
 	void InitDamageConfig();
+	float GetEffectiveSightRadius() const;
+	float GetEffectiveLoseSightRadius() const;
+	float GetEffectivePeripheralVisionAngleDegrees() const;
 	
 	void RestartStateTree();
 	void TryStartStateTree();
@@ -64,7 +67,7 @@ protected:
 	float LoseSightRadius = 1800.f; // 소실 반경
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|AI|Perception")
 	float PeripheralVisionAngleDegrees = 140.f;   // 시야각 (절반)
-	
+
 	// Team
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|AI|Team")
 	ERetrieveTeam Team = ERetrieveTeam::Enemy;

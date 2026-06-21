@@ -29,16 +29,20 @@ AEnemyProjectile::AEnemyProjectile()
 	CollisionSphere->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	CollisionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	CollisionSphere->SetGenerateOverlapEvents(true);
+	CollisionSphere->SetCanEverAffectNavigation(false);
 	RootComponent = CollisionSphere;
 
 	MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
 	MeshComp->SetupAttachment(CollisionSphere);
 	MeshComp->SetRelativeScale3D(FVector(0.3f));
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComp->SetCanEverAffectNavigation(false);
 
 	FlightVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FlightVFXComponent"));
 	FlightVFXComponent->SetupAttachment(CollisionSphere);
 	FlightVFXComponent->SetAutoActivate(false);
+	FlightVFXComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FlightVFXComponent->SetCanEverAffectNavigation(false);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = CollisionSphere;
@@ -135,6 +139,7 @@ void AEnemyProjectile::SetStatusEffectClass(TSubclassOf<UGameplayEffect> InStatu
 void AEnemyProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+	ConfigureNonBlockingComponents();
 
 	if (CollisionSphere)
 	{
@@ -166,7 +171,7 @@ void AEnemyProjectile::BeginPlay()
 		}
 		else
 		{
-			UNiagaraFunctionLibrary::SpawnSystemAttached(
+			UNiagaraComponent* AttachedVFXComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
 				FlightVFX,
 				GetRootComponent(),
 				NAME_None,
@@ -174,6 +179,33 @@ void AEnemyProjectile::BeginPlay()
 				FRotator::ZeroRotator,
 				EAttachLocation::KeepRelativeOffset,
 				true);
+			if (AttachedVFXComp)
+			{
+				AttachedVFXComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				AttachedVFXComp->SetGenerateOverlapEvents(false);
+				AttachedVFXComp->SetCanEverAffectNavigation(false);
+			}
+		}
+	}
+}
+
+void AEnemyProjectile::ConfigureNonBlockingComponents()
+{
+	TArray<UPrimitiveComponent*> PrimitiveComponents;
+	GetComponents(PrimitiveComponents);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (!PrimitiveComponent)
+		{
+			continue;
+		}
+
+		// 투사체와 VFX는 피해 판정용 쿼리만 수행하고 AI 이동 경로/네비메시에는 장애물로 반영하지 않는다.
+		PrimitiveComponent->SetCanEverAffectNavigation(false);
+		if (PrimitiveComponent != CollisionSphere)
+		{
+			PrimitiveComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PrimitiveComponent->SetGenerateOverlapEvents(false);
 		}
 	}
 }
@@ -215,33 +247,7 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 		return;
 	}
 
-	if (HasAuthority() && DamageEffectClass && ShouldApplyDamageTo(OtherActor))
-	{
-		AActor* SourceActor = GetOwner() ? GetOwner() : GetInstigator();
-		IAbilitySystemInterface* SourceInterface = Cast<IAbilitySystemInterface>(SourceActor);
-		UAbilitySystemComponent* SourceASC = SourceInterface ? SourceInterface->GetAbilitySystemComponent() : nullptr;
-
-		if (SourceASC)
-		{
-			FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-			Context.AddInstigator(SourceActor, this);
-
-			const FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, 1.f, Context);
-			if (Spec.IsValid())
-			{
-				if (const FGameplayTag ReactTag = HitReactTypeToTag(HitReactType); ReactTag.IsValid())
-				{
-					Spec.Data->AddDynamicAssetTag(ReactTag);
-				}
-				if (EffectTag.IsValid())
-				{
-					Spec.Data->AddDynamicAssetTag(EffectTag);
-				}
-
-				SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
-			}
-		}
-	}
+	ApplyDamage(OtherActor);
 
 	ApplyLaunchKnockback(OtherActor, GetActorLocation());
 	ApplyStatusEffect(OtherActor);
@@ -264,6 +270,11 @@ void AEnemyProjectile::OnProjectileStopped(const FHitResult& ImpactResult)
 	const FRotator ImpactRotation = ImpactResult.bBlockingHit
 		? ImpactResult.ImpactNormal.Rotation()
 		: GetActorRotation();
+	// on-stop 반경 데미지는 에픽 AoE 투사체 전용. 일반/보스는 직격 데미지만(원본 동작).
+	if (ShouldApplyImpactRadiusDamage())
+	{
+		ApplyDamageInRadius(ImpactLocation);
+	}
 	ApplyLaunchKnockbackInRadius(ImpactLocation);
 	ApplyStatusEffectInRadius(ImpactLocation);
 	PlayImpactVFX(ImpactLocation, ImpactRotation);
@@ -327,6 +338,101 @@ bool AEnemyProjectile::ShouldApplyDamageTo(const AActor* OtherActor) const
 	}
 
 	return FGenericTeamId::GetAttitude(SourceActor, OtherActor) == ETeamAttitude::Hostile;
+}
+
+bool AEnemyProjectile::ApplyDamage(AActor* OtherActor)
+{
+	if (!HasAuthority() || !DamageEffectClass || !OtherActor || IsIgnoredActor(OtherActor) || !ShouldApplyDamageTo(OtherActor))
+	{
+		return false;
+	}
+
+	IAbilitySystemInterface* TargetInterface = Cast<IAbilitySystemInterface>(OtherActor);
+	UAbilitySystemComponent* TargetASC = TargetInterface ? TargetInterface->GetAbilitySystemComponent() : nullptr;
+	if (!TargetASC)
+	{
+		return false;
+	}
+
+	AActor* SourceActor = GetOwner() ? GetOwner() : GetInstigator();
+	IAbilitySystemInterface* SourceInterface = Cast<IAbilitySystemInterface>(SourceActor);
+	UAbilitySystemComponent* SourceASC = SourceInterface ? SourceInterface->GetAbilitySystemComponent() : nullptr;
+	if (!SourceASC)
+	{
+		return false;
+	}
+
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddInstigator(SourceActor, this);
+
+	const FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, 1.f, Context);
+	if (!Spec.IsValid())
+	{
+		return false;
+	}
+
+	if (const FGameplayTag ReactTag = HitReactTypeToTag(HitReactType); ReactTag.IsValid())
+	{
+		Spec.Data->AddDynamicAssetTag(ReactTag);
+	}
+	if (EffectTag.IsValid())
+	{
+		Spec.Data->AddDynamicAssetTag(EffectTag);
+	}
+
+	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+	return true;
+}
+
+void AEnemyProjectile::ApplyDamageInRadius(const FVector& Origin)
+{
+	const float DamageRadius = FMath::Max3(
+		StatusEffectRadius,
+		LaunchKnockbackRadius,
+		CollisionSphere ? CollisionSphere->GetScaledSphereRadius() : 0.f);
+	if (!HasAuthority() || !GetWorld() || !DamageEffectClass || DamageRadius <= 0.f)
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EnemyProjectileDamage), false, this);
+	QueryParams.AddIgnoredActor(this);
+	if (AActor* OwnerActor = GetOwner())
+	{
+		QueryParams.AddIgnoredActor(OwnerActor);
+	}
+	if (AActor* InstigatorActor = GetInstigator())
+	{
+		QueryParams.AddIgnoredActor(InstigatorActor);
+	}
+
+	TArray<FOverlapResult> Overlaps;
+	if (!GetWorld()->OverlapMultiByObjectType(
+		Overlaps,
+		Origin,
+		FQuat::Identity,
+		ObjectQueryParams,
+		FCollisionShape::MakeSphere(DamageRadius),
+		QueryParams))
+	{
+		return;
+	}
+
+	TSet<AActor*> DamagedActors;
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* HitActor = Overlap.GetActor();
+		if (!HitActor || DamagedActors.Contains(HitActor))
+		{
+			continue;
+		}
+
+		DamagedActors.Add(HitActor);
+		ApplyDamage(HitActor);
+	}
 }
 
 void AEnemyProjectile::ApplyLaunchKnockback(AActor* OtherActor, const FVector& Origin)
@@ -491,6 +597,13 @@ void AEnemyProjectile::PlayImpactVFX(const FVector& Location, const FRotator& Ro
 	if (VFXComp)
 	{
 		VFXComp->SetAutoDestroy(true);
+		VFXComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		VFXComp->SetGenerateOverlapEvents(false);
+		VFXComp->SetCanEverAffectNavigation(false);
+		if (AActor* VFXOwner = VFXComp->GetOwner())
+		{
+			VFXOwner->SetActorEnableCollision(false);
+		}
 
 		// 루핑 NS도 확실히 제거되도록 월드 타이머 매니저로 3초 후 강제 소멸
 		// (ProjectileDestroy 이후에도 월드 타이머는 독립적으로 동작)

@@ -36,6 +36,11 @@ protected:
 	virtual void OnSpecialAttackEnded() {}
 	virtual void OnBeforeProjectileSpawn() {}
 	virtual void OnProjectileSpawned(AEnemyProjectile* Projectile, AActor* AvatarActor) {}
+	virtual float AdjustProjectileFireDelay(float FireDelay, int32 ProjectileIndex) const { return FireDelay; }
+
+	// 다중 투사체 패턴에서 몽타주가 모든 투사체 발사 전에 끝나도 능력을 살려두는 보정 로직.
+	// 기본값 false → 일반/보스는 원본 동작 그대로 유지. 에픽만 override하여 활성화한다.
+	virtual bool UsesProjectileCompletionGuard() const { return false; }
 
 	AActor* GetCachedTargetActor() const { return CachedTargetActor; }
 	const FMonsterProjectilePatternConfig& GetActiveProjectileConfig() const { return ActiveProjectileConfig; }
@@ -46,7 +51,8 @@ protected:
 
 	void ScheduleProjectiles(bool bHasMontage);
 	void SpawnProjectile();
-	void FinishAbility();
+	bool HasPendingScheduledProjectiles() const;
+	virtual void FinishAbility();
 	TSubclassOf<AEnemyProjectile> ResolveProjectileClass() const;
 	bool ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
 		ERetrieveHitReactType* OutHitReactType = nullptr,
@@ -54,7 +60,7 @@ protected:
 		FGameplayTag* OutEffectTag = nullptr,
 		TSubclassOf<UGameplayEffect>* OutStatusEffectClass = nullptr,
 		TSubclassOf<AEnemyProjectile>* OutProjectileClass = nullptr) const;
-	const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
+	virtual const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")
 	TSubclassOf<AEnemyProjectile> ProjectileClass;
@@ -80,6 +86,7 @@ private:
 
 	TArray<FTimerHandle> SpawnTimerHandles;
 	FTimerHandle FinishTimerHandle;
+	bool bWaitingForScheduledProjectiles = false;
 	float ActiveProjectileSpeed = 1200.f;
 	int32 ActiveProjectileSpawnIndex = 0;
 	int32 ActiveProjectileCount = 0;

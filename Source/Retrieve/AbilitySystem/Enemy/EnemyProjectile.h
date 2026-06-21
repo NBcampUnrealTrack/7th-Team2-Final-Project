@@ -62,9 +62,16 @@ protected:
 	virtual bool TryReflectOnHit(AActor* OtherActor, UAbilitySystemComponent* OtherASC) { return false; }
 	virtual bool IsIgnoredActor(const AActor* OtherActor) const;
 
+	// 충돌 정지(지형 등) 시 반경 데미지 적용 여부.
+	// 기본값 false → 일반/보스 투사체는 직격 데미지만 적용(원본 동작 유지, 이중 데미지/의도치 않은 AoE 방지).
+	// 에픽 AoE 투사체만 override하여 true로 활성화한다.
+	virtual bool ShouldApplyImpactRadiusDamage() const { return false; }
+
 	bool IsPlayerTarget(const AActor* OtherActor) const;
 	bool ShouldApplyDamageTo(const AActor* OtherActor) const;
 	void PlayImpactVFX(const FVector& Location, const FRotator& Rotation);
+	bool ApplyDamage(AActor* OtherActor);
+	void ApplyDamageInRadius(const FVector& Origin);
 	void ApplyLaunchKnockback(AActor* OtherActor, const FVector& Origin);
 	void ApplyLaunchKnockbackInRadius(const FVector& Origin);
 	void ApplyStatusEffect(AActor* OtherActor);
@@ -72,6 +79,7 @@ protected:
 	void StopHoming();
 
 private:
+	void ConfigureNonBlockingComponents();
 	void StartHoming(float Strength);
 
 protected:

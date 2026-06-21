@@ -10,6 +10,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Character/RetrieveEnemyCharacter.h"
 #include "NavigationSystem.h"
@@ -69,6 +70,36 @@ namespace
 			return Candidate == Actor;
 		});
 	}
+
+	bool HasDirectVisibilityIgnoringOwner(const APawn* Pawn, const APawn* Target)
+	{
+		if (!Pawn || !Target)
+		{
+			return false;
+		}
+
+		UWorld* World = Pawn->GetWorld();
+		if (!World)
+		{
+			return false;
+		}
+
+		const float PawnEyeHeight = Pawn->BaseEyeHeight > 0.f
+			? Pawn->BaseEyeHeight
+			: Pawn->GetSimpleCollisionHalfHeight() * 0.6f;
+		const float TargetEyeHeight = Target->BaseEyeHeight > 0.f
+			? Target->BaseEyeHeight
+			: Target->GetSimpleCollisionHalfHeight() * 0.6f;
+		const FVector Start = Pawn->GetActorLocation() + FVector(0.f, 0.f, PawnEyeHeight);
+		const FVector End = Target->GetActorLocation() + FVector(0.f, 0.f, TargetEyeHeight);
+
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EpicEnemyTargetVisibility), false);
+		QueryParams.AddIgnoredActor(Pawn);
+		QueryParams.AddIgnoredActor(Target);
+
+		FHitResult Hit;
+		return !World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams);
+	}
 }
 
 bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
@@ -119,7 +150,8 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.bPatrolable = Row->bPatrolable;
 			InstanceData.PatrolRange = Row->PatrolRange;
 			InstanceData.MoveAcceptableRadius = Row->MoveAcceptableRadius;
-			InstanceData.bHasAerialPhase = Row->bHasAerialPhase;
+			InstanceData.bHasAerialPhase = Enemy->ShouldUseStateTreeAerialPhase()
+				&& !Enemy->IsAerialSpecialAttackReady();
 		}
 	}
 }
@@ -175,8 +207,15 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			
 			if (!bFreezeChaseLocation)
 			{
+				const ARetrieveEnemyCharacter* EnemyForMovement = Cast<ARetrieveEnemyCharacter>(Pawn);
 				const float DirectChaseRange = FMath::Max(InstanceData.AttackableRange + 35.f, 0.f);
-				if (InstanceData.DistanceToTarget > DirectChaseRange)
+				if (EnemyForMovement && EnemyForMovement->ShouldUseDirectChaseToTarget())
+				{
+					// 에픽은 단독 교전 비중이 높고 몸집이 커서 포위 슬롯을 찍으면 배회가 과하게 보인다.
+					// 타겟을 잡은 동안에는 링 위치보다 플레이어를 직접 추적해 Chase -> Attack 흐름을 우선한다.
+					InstanceData.ChaseLocation = InstanceData.TargetLocation;
+				}
+				else if (InstanceData.DistanceToTarget > DirectChaseRange)
 				{
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
@@ -188,7 +227,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					{
 						SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
 					}
-				
+
 					if (SlotIndex != INDEX_NONE)
 					{
 						const bool bHadToken = InstanceData.bHasToken;
@@ -299,10 +338,19 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(Pawn, 0))
 	{
+		const ARetrieveEnemyCharacter* EnemyForAcquisition = Cast<ARetrieveEnemyCharacter>(Pawn);
+		const float AcquireRangeMultiplier = EnemyForAcquisition
+			? EnemyForAcquisition->GetInitialAcquireRangeMultiplierForAI()
+			: 1.f;
 		const float PlayerDistSq = FVector::DistSquared(PawnLocation, PlayerPawn->GetActorLocation());
-		const float InitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
+		const float BaseInitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
+		const float InitialAcquireRange = BaseInitialAcquireRange * FMath::Max(1.f, AcquireRangeMultiplier);
+		const bool bHasLineOfSight = AIController->LineOfSightTo(PlayerPawn)
+			|| (EnemyForAcquisition
+				&& EnemyForAcquisition->ShouldUseDirectVisibilityTargetAcquisition()
+				&& HasDirectVisibilityIgnoringOwner(Pawn, PlayerPawn));
 		if (PlayerDistSq <= FMath::Square(InitialAcquireRange)
-			&& AIController->LineOfSightTo(PlayerPawn)
+			&& bHasLineOfSight
 			&& !ContainsActor(PerceivedActors, PlayerPawn))
 		{
 			PerceivedActors.Add(PlayerPawn);
@@ -338,7 +386,14 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			Forward.Z = 0.f;
 			if (!ToTarget.IsNearlyZero() && !Forward.IsNearlyZero())
 			{
-				const float CosHalfFov = FMath::Cos(FMath::DegreesToRadians(HorizontalHalfFOV));
+				const ARetrieveEnemyCharacter* EnemyForFOV = Cast<ARetrieveEnemyCharacter>(Pawn);
+				const float HalfFOVOverride = EnemyForFOV
+					? EnemyForFOV->GetHorizontalHalfFOVOverrideForAI()
+					: -1.f;
+				const float EffectiveHalfFOV = HalfFOVOverride > 0.f
+					? FMath::Max(HorizontalHalfFOV, HalfFOVOverride)
+					: HorizontalHalfFOV;
+				const float CosHalfFov = FMath::Cos(FMath::DegreesToRadians(EffectiveHalfFOV));
 				ToTarget.Normalize();
 				if (FVector::DotProduct(Forward, ToTarget) < CosHalfFov)
 				{
@@ -457,24 +512,58 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			const bool bSpecialAttackRetryCooldownReady =
 				InstanceData.CachedCombatComponent->IsSpecialAttackRetryCooldownReady();
 
-			InstanceData.bSpecialAttackable = bHasValidTarget
+			const ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
+			const UCharacterMovementComponent* CharacterMovement = Pawn->FindComponentByClass<UCharacterMovementComponent>();
+			const bool bShouldSuppressNormalAttackWhileFlying = EnemyCharacter
+				&& EnemyCharacter->ShouldSuppressNormalAttackWhileFlying()
+				&& CharacterMovement
+				&& CharacterMovement->MovementMode == MOVE_Flying;
+			const bool bUsePatternRangeForNormalAttack = EnemyCharacter
+				&& EnemyCharacter->ShouldUsePatternRangeForNormalAttack();
+			const bool bAttackPatternAvailable =
+				InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
+			const bool bNormalAttackable = bCanRequestToken
+				&& !bPatternActive
+				&& !bShouldSuppressNormalAttackWhileFlying
+				&& bAttackPatternAvailable
+				&& (bUsePatternRangeForNormalAttack || InstanceData.DistanceToTarget <= InstanceData.AttackableRange);
+
+			// 특수 공격 가능 여부 — 일반/보스는 원본 동작 그대로(일반 공격 가능 여부와 독립적으로
+			// 쿨다운/락만으로 판정). 에픽도 동일하게 쿨다운 완료 시 발동 가능.
+			const bool bRawSpecialAttackable = bHasValidTarget
 				&& !bPatternActive
 				&& !bSpecialAttackEvaluationLocked
 				&& bSpecialAttackRetryCooldownReady
 				&& InstanceData.CachedCombatComponent->HasAvailablePatternByType(
 					InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
-			
-			InstanceData.bAttackable =
-				bCanRequestToken
-				&& !bPatternActive
-				&& InstanceData.DistanceToTarget <= InstanceData.AttackableRange
-				&& InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
+
+			InstanceData.bSpecialAttackable = bRawSpecialAttackable;
+
+			if (EnemyCharacter && EnemyCharacter->ShouldUsePatternRangeForNormalAttack())
+			{
+				InstanceData.bHasAerialPhase = EnemyCharacter
+					&& EnemyCharacter->ShouldUseStateTreeAerialPhase()
+					&& !EnemyCharacter->IsAerialSpecialAttackReady()
+					&& bRawSpecialAttackable;
+				const bool bEpicHasToken = bHasValidTarget
+					&& EncircleSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
+				InstanceData.bHasToken = bEpicHasToken;
+				InstanceData.bAttackable = bNormalAttackable;
+			}
+			else
+			{
+				// 일반/보스: 원본 동작 그대로. 일반 공격과 특수 공격 판정은 서로 독립적이며
+				// StateTree 전이 우선순위가 선택을 담당한다.
+				InstanceData.bHasAerialPhase = false;
+				InstanceData.bAttackable = bNormalAttackable;
+			}
 		}
 		else
 		{
 			InstanceData.bHasToken   = false;
 			InstanceData.bAttackable = false;
 			InstanceData.bSpecialAttackable = false;
+			InstanceData.bHasAerialPhase = false;
 		}
 	}
 	else
@@ -482,5 +571,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		InstanceData.bHasToken   = false;
 		InstanceData.bAttackable = false;
 		InstanceData.bSpecialAttackable = false;
+		InstanceData.bHasAerialPhase = false;
 	}
 }
