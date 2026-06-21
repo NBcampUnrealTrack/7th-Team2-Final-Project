@@ -106,6 +106,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
+	InstanceData.bAttackTokenAcquired = false;
 
 	if (!IsValid(InstanceData.TargetPlayer))
 	{
@@ -128,12 +129,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	
+
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetPlayer, Pawn))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
+	InstanceData.bAttackTokenAcquired = true;
 	
 	return EStateTreeRunStatus::Running;
 }
@@ -163,7 +165,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 	if (!InstanceData.bStartAttack)
 	{
 		const float AttackStartRange = InstanceData.AttackRange + InstanceData.AttackStartRangeTolerance;
-		if (InstanceData.DistanceToTarget > AttackStartRange)
+		ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
+		const bool bCanUseCurrentPatternRange =
+			EnemyCharacter
+			&& EnemyCharacter->ShouldUsePatternRangeForNormalAttack()
+			&& InstanceData.CachedCombatComponent.IsValid()
+			&& InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
+		if (InstanceData.DistanceToTarget > AttackStartRange && !bCanUseCurrentPatternRange)
 		{
 			InstanceData.TimeInSoftAttackRange = 0.f;
 			
@@ -215,7 +223,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 		SetChaseAnimationTag(Pawn, false);
 
-		if (InstanceData.DistanceToTarget > InstanceData.AttackRange)
+		if (InstanceData.DistanceToTarget > InstanceData.AttackRange && !bCanUseCurrentPatternRange)
 		{
 			InstanceData.TimeInSoftAttackRange += DeltaTime;
 			if (InstanceData.TimeInSoftAttackRange < InstanceData.AttackStartDelay)
@@ -258,15 +266,23 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 				}
 			}
 
-			if (!FaceTargetForAttack(
-				Pawn,
-				InstanceData.TargetPlayer,
-				DeltaTime,
-				InstanceData.FacingAcceptanceAngle,
-				InstanceData.FacingInterpSpeed))
+			const bool bRequireFacingGate = !bCanUseCurrentPatternRange;
+			if (bRequireFacingGate && !FaceTargetForAttack(
+					Pawn,
+					InstanceData.TargetPlayer,
+					DeltaTime,
+					InstanceData.FacingAcceptanceAngle,
+					InstanceData.FacingInterpSpeed))
 			{
 				InstanceData.bStartAttack = false;
 				return EStateTreeRunStatus::Running;
+			}
+			if (!bRequireFacingGate)
+			{
+				if (EnemyCharacter)
+				{
+					EnemyCharacter->StopGroundTurnAnimation();
+				}
 			}
 			
 			if (!InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetPlayer
@@ -312,12 +328,15 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	const bool bStartedAttack = InstanceData.bStartAttack;
+
 	InstanceData.ElapsedTime = 0.f;
 	InstanceData.TimeInSoftAttackRange = 0.f;
 	InstanceData.TimeSinceAttackRequested = 0.f;
 	
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
+	InstanceData.bAttackTokenAcquired = false;
 	
 	InstanceData.LastMoveRequestLocation = FVector::ZeroVector;
 	
@@ -327,9 +346,12 @@ void FStateTreeTask_EnemyAttack::ExitState(
 		return;
 	}
 	
-	if (UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>())
+	if (bStartedAttack)
 	{
-		Combat->StopCurrentPattern();
+		if (UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>())
+		{
+			Combat->StopCurrentPattern();
+		}
 	}
 
 	if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn))

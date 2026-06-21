@@ -53,6 +53,7 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	
 	bool bStartAttack = false;
 	bool bObservedPatternActive = false;
+	bool bAttackTokenAcquired = false;
 	
 	FVector LastMoveRequestLocation = FVector::ZeroVector;
 	

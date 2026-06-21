@@ -24,6 +24,8 @@ protected:
 	virtual bool HandleReflectedOverlap(AActor* OtherActor, const FHitResult& SweepResult) override;
 	virtual bool TryReflectOnHit(AActor* OtherActor, UAbilitySystemComponent* OtherASC) override;
 	virtual bool IsIgnoredActor(const AActor* OtherActor) const override;
+	// 에픽 투사체는 충돌 정지 시 반경 AoE 데미지를 적용한다.
+	virtual bool ShouldApplyImpactRadiusDamage() const override { return true; }
 
 private:
 	void ReflectTowardCounterTarget(AActor* ParryingActor);

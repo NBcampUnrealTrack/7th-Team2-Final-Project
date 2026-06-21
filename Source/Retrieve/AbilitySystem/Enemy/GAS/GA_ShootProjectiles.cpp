@@ -76,6 +76,22 @@ void UGA_ShootProjectiles::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	if (bHasMontage)
 	{
+		// 에픽 전용: 이전에 재생 중이던 동적 슬롯 애니메이션(부양/비행 등)을 정리한 뒤 몽타주 재생.
+		// 일반/보스는 원본 동작 유지(슬롯 정리 없음).
+		if (UsesProjectileCompletionGuard())
+		{
+			if (AActor* AvatarActor = GetAvatarActorFromActorInfo())
+			{
+				if (USkeletalMeshComponent* Mesh = AvatarActor->FindComponentByClass<USkeletalMeshComponent>())
+				{
+					if (UAnimInstance* AnimInstance = Mesh->GetAnimInstance())
+					{
+						AnimInstance->StopSlotAnimation(0.05f, TEXT("DefaultSlot"));
+					}
+				}
+			}
+		}
+
 		MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this, NAME_None, const_cast<UAnimMontage*>(Montage), GetAttackMontagePlayRate(1.f), NAME_None, true);
 		
@@ -98,6 +114,18 @@ void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	if (HasPendingScheduledProjectiles())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] EndAbility deferred while scheduled projectiles remain. Owner=%s Row=%s Cancelled=%d Fired=%d/%d"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()),
+			*ActivePatternRowName.ToString(),
+			bWasCancelled ? 1 : 0,
+			ActiveProjectileSpawnIndex,
+			ActiveProjectileCount);
+		return;
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		for (FTimerHandle& SpawnTimerHandle : SpawnTimerHandles)
@@ -107,6 +135,7 @@ void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		World->GetTimerManager().ClearTimer(FinishTimerHandle);
 	}
 	SpawnTimerHandles.Reset();
+	bWaitingForScheduledProjectiles = false;
 
 	if (MontageTask)
 	{
@@ -175,14 +204,18 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 	}
 	ActiveProjectileSpawnIndex = 0;
 	ActiveProjectileCount = FireDelays.Num();
+	// 완료 가드는 에픽 전용. 일반/보스는 항상 false → EndAbility/OnMontage* 의 신규 분기가 무력화되어 원본 동작.
+	bWaitingForScheduledProjectiles = UsesProjectileCompletionGuard() && ActiveProjectileCount > 0;
 
 	float LastFireDelay = 0.f;
-	for (const float FireDelay : FireDelays)
+	for (int32 FireDelayIndex = 0; FireDelayIndex < FireDelays.Num(); ++FireDelayIndex)
 	{
+		const float FireDelay = FireDelays[FireDelayIndex];
 		const float ClampedDelay = Combat ? Combat->GetAttackDelay(FireDelay) : FMath::Max(0.f, FireDelay);
-		LastFireDelay = FMath::Max(LastFireDelay, ClampedDelay);
+		const float AdjustedDelay = AdjustProjectileFireDelay(ClampedDelay, FireDelayIndex);
+		LastFireDelay = FMath::Max(LastFireDelay, AdjustedDelay);
 
-		if (ClampedDelay <= 0.f)
+		if (AdjustedDelay <= 0.f)
 		{
 			SpawnProjectile();
 			continue;
@@ -190,14 +223,16 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 
 		FTimerHandle SpawnTimerHandle;
 		World->GetTimerManager().SetTimer(SpawnTimerHandle, this, 
-			&UGA_ShootProjectiles::SpawnProjectile, ClampedDelay, false);
+			&UGA_ShootProjectiles::SpawnProjectile, AdjustedDelay, false);
 		SpawnTimerHandles.Add(SpawnTimerHandle);
 	}
 
-	if (!bHasMontage)
+	// 일반/보스: 몽타주가 없을 때만 종료 타이머 설정(원본 동작). 몽타주가 있으면 몽타주 완료가 종료를 구동.
+	// 에픽: 다중 투사체가 몽타주보다 오래 걸릴 수 있으므로 항상 종료 타이머로 안전망 확보.
+	if (!bHasMontage || UsesProjectileCompletionGuard())
 	{
 		World->GetTimerManager().SetTimer(FinishTimerHandle, this, &UGA_ShootProjectiles::FinishAbility,
-			LastFireDelay + 0.2f,false);
+			LastFireDelay + 0.25f, false);
 	}
 }
 
@@ -391,10 +426,17 @@ TSubclassOf<AEnemyProjectile> UGA_ShootProjectiles::ResolveProjectileClass() con
 
 void UGA_ShootProjectiles::FinishAbility()
 {
+	bWaitingForScheduledProjectiles = false;
 	if (IsActive())
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 	}
+}
+
+bool UGA_ShootProjectiles::HasPendingScheduledProjectiles() const
+{
+	return bWaitingForScheduledProjectiles
+		&& ActiveProjectileSpawnIndex < ActiveProjectileCount;
 }
 
 bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternConfig& OutConfig,
@@ -496,11 +538,33 @@ const UAnimMontage* UGA_ShootProjectiles::ResolveMontage(const FGameplayEventDat
 
 void UGA_ShootProjectiles::OnMontageCompleted()
 {
+	if (HasPendingScheduledProjectiles())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] Montage completed before all projectiles fired. Keeping ability alive. Owner=%s Row=%s Fired=%d/%d"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()),
+			*ActivePatternRowName.ToString(),
+			ActiveProjectileSpawnIndex,
+			ActiveProjectileCount);
+		return;
+	}
+
 	FinishAbility();
 }
 
 void UGA_ShootProjectiles::OnMontageInterrupted()
 {
+	if (HasPendingScheduledProjectiles())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] Montage interrupted, but scheduled projectiles remain. Keeping ability alive. Owner=%s Row=%s Fired=%d/%d"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()),
+			*ActivePatternRowName.ToString(),
+			ActiveProjectileSpawnIndex,
+			ActiveProjectileCount);
+		return;
+	}
+
 	if (IsActive())
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);

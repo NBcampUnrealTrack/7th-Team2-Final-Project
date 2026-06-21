@@ -187,6 +187,16 @@ bool UEnemyCombatComponent::HasAvailablePatternByType(AActor* Target, FGameplayT
 	return FindBestPattern(Target, PatternType) != nullptr;
 }
 
+bool UEnemyCombatComponent::HasPatternInRangeByTypeIgnoringCooldown(AActor* Target, FGameplayTag PatternType) const
+{
+	if (!IsValid(Target))
+	{
+		return false;
+	}
+
+	return FindBestPattern(Target, PatternType, nullptr, true) != nullptr;
+}
+
 void UEnemyCombatComponent::StopCurrentPattern()
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
@@ -788,7 +798,7 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 	return Spec.IsValid();
 }
 
-const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName) const
+const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName, bool bIgnoreCooldown) const
 {
 	AActor* OwnerActor = GetOwner();
 	if (!PatternTable || PatternSlots.IsEmpty() || !IsValid(OwnerActor) || !IsValid(Target))
@@ -801,7 +811,23 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 	}
 
 	const FVector PawnLocation = OwnerActor->GetActorLocation();
-	const float DistanceSq = FVector::DistSquared(PawnLocation, Target->GetActorLocation());
+	const ARetrieveEnemyCharacter* OwnerEnemy = Cast<ARetrieveEnemyCharacter>(OwnerActor);
+	const ACharacter* OwnerChar = Cast<ACharacter>(OwnerActor);
+	const UCharacterMovementComponent* OwnerMoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
+	// 에픽 전용: 공중 비행 중(부양)에는 수평 거리만 사용하여 고도 차이로 사거리가 초과되는 문제 방지.
+	// (일반/보스는 비행하지 않으므로 항상 3D 거리 — 원본 동작)
+	const bool bOwnerFlying = OwnerEnemy
+		&& OwnerEnemy->ShouldUse2DPatternRangeWhileFlying()
+		&& OwnerMoveComp
+		&& OwnerMoveComp->MovementMode == MOVE_Flying;
+	const float DistanceSq = bOwnerFlying
+		? FVector::DistSquared2D(PawnLocation, Target->GetActorLocation())
+		: FVector::DistSquared(PawnLocation, Target->GetActorLocation());
+	const float Distance3D = FVector::Distance(PawnLocation, Target->GetActorLocation());
+	const float Distance2D = FVector::Dist2D(PawnLocation, Target->GetActorLocation());
+	const bool bLogPatternSelection =
+		(OwnerEnemy && OwnerEnemy->ShouldUsePatternRangeForNormalAttack())
+		|| RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 
 	const FMonsterPatternRow* BestRow = nullptr;
 	FName BestRowName = NAME_None;
@@ -819,22 +845,74 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 		if (RequiredPatternType.IsValid() &&
 			!Row->PatternType.MatchesTagExact(RequiredPatternType))
 		{
+			if (bLogPatternSelection)
+			{
+				UE_LOG(LogRetrieveCombat, Verbose,
+					TEXT("[FindBestPattern] Skip type. Owner=%s Row=%s Required=%s RowType=%s"),
+					*GetNameSafe(OwnerActor),
+					*RowName.ToString(),
+					*RequiredPatternType.ToString(),
+					*Row->PatternType.ToString());
+			}
 			continue;
 		}
 		
-		if (DistanceSq > FMath::Square(Row->MaxActivationRange))
+		// 에픽 전용: MaxActivationRange == 0 → 사거리 제한 없음으로 해석.
+		// 일반/보스는 원본 strict 동작 유지(MaxActivationRange 값을 그대로 사거리로 적용).
+		const bool bEnforceMaxRange =
+			!OwnerEnemy
+			|| !OwnerEnemy->ShouldTreatZeroPatternMaxRangeAsUnlimited()
+			|| Row->MaxActivationRange > 0.f;
+		if (bEnforceMaxRange && DistanceSq > FMath::Square(Row->MaxActivationRange))
 		{
+			if (bLogPatternSelection)
+			{
+				UE_LOG(LogRetrieveCombat, Warning,
+					TEXT("[FindBestPattern] Skip max range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Max=%.1f Flying=%d"),
+					*GetNameSafe(OwnerActor),
+					*RowName.ToString(),
+					*RequiredPatternType.ToString(),
+					Distance3D,
+					Distance2D,
+					Row->MaxActivationRange,
+					bOwnerFlying ? 1 : 0);
+			}
 			continue;
 		}
 		
 		if (Row->MinActivationRange > 0.f &&
 			DistanceSq < FMath::Square(Row->MinActivationRange))
 		{
+			if (bLogPatternSelection)
+			{
+				UE_LOG(LogRetrieveCombat, Warning,
+					TEXT("[FindBestPattern] Skip min range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Min=%.1f Flying=%d"),
+					*GetNameSafe(OwnerActor),
+					*RowName.ToString(),
+					*RequiredPatternType.ToString(),
+					Distance3D,
+					Distance2D,
+					Row->MinActivationRange,
+					bOwnerFlying ? 1 : 0);
+			}
 			continue;
 		}
 		
-		if (!IsCooldownReady(RowName))
+		if (!bIgnoreCooldown && !IsCooldownReady(RowName))
 		{
+			if (bLogPatternSelection)
+			{
+				const float* Expiry = CooldownExpiry.Find(RowName);
+				const float Remaining = Expiry && GetWorld()
+					? FMath::Max(0.f, *Expiry - GetWorld()->GetTimeSeconds())
+					: -1.f;
+				UE_LOG(LogRetrieveCombat, Warning,
+					TEXT("[FindBestPattern] Skip cooldown. Owner=%s Row=%s Required=%s Remaining=%.2f"),
+					*GetNameSafe(OwnerActor),
+					*RowName.ToString(),
+					*RequiredPatternType.ToString(),
+					Remaining);
+			}
 			continue;
 		}
 		
@@ -849,6 +927,18 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 	if (OutRowName)
 	{
 		*OutRowName = BestRowName;
+	}
+
+	if (bLogPatternSelection && !BestRow)
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[FindBestPattern] No pattern selected. Owner=%s Required=%s Slots=%d Dist3D=%.1f Dist2D=%.1f Flying=%d"),
+			*GetNameSafe(OwnerActor),
+			*RequiredPatternType.ToString(),
+			PatternSlots.Num(),
+			Distance3D,
+			Distance2D,
+			bOwnerFlying ? 1 : 0);
 	}
 	
 	return BestRow;

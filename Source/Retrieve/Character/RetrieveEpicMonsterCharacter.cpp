@@ -4,8 +4,10 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/Enemy/EnemyCombatComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
+#include "DrawDebugHelpers.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
@@ -18,6 +20,13 @@ namespace
 {
 	constexpr int32 EpicTurnLeftDirection = -1;
 	constexpr int32 EpicTurnRightDirection = 1;
+
+	static TAutoConsoleVariable<int32> CVarRetrieveEpicAlignmentDebug(
+		TEXT("Retrieve.Epic.DebugAlignment"),
+		0,
+		TEXT("1이면 에픽 몬스터 캡슐/메시/거리 기준점을 PIE 뷰포트에 표시한다."));
+
+	float CalculateMovementDirectionDegrees(const APawn* Pawn, const FVector& Velocity2D);
 
 	void SetAnimFloatProperty(UAnimInstance* AnimInstance, const FName PropertyName, const float Value)
 	{
@@ -33,6 +42,36 @@ namespace
 		{
 			BoolProperty->SetPropertyValue_InContainer(AnimInstance, bValue);
 		}
+	}
+
+	void ApplyMovementAnimProperties(
+		UAnimInstance* AnimInstance,
+		const APawn* Pawn,
+		const FVector& Movement2D,
+		const float GroundSpeed,
+		const bool bMovingForAnim,
+		const bool bInAerialSpecialMode)
+	{
+		if (!AnimInstance)
+		{
+			return;
+		}
+
+		SetAnimFloatProperty(AnimInstance, TEXT("Speed"), GroundSpeed);
+		SetAnimFloatProperty(AnimInstance, TEXT("GroundSpeed"), GroundSpeed);
+		SetAnimFloatProperty(AnimInstance, TEXT("Direction"), CalculateMovementDirectionDegrees(Pawn, Movement2D));
+		SetAnimBoolProperty(AnimInstance, TEXT("IsMoving"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("bIsMoving"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("ShouldMove"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("bShouldMove"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("IsChasing"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("bIsChasing"), bMovingForAnim);
+		SetAnimBoolProperty(AnimInstance, TEXT("IsFlying"), bInAerialSpecialMode);
+		SetAnimBoolProperty(AnimInstance, TEXT("bIsFlying"), bInAerialSpecialMode);
+		SetAnimBoolProperty(AnimInstance, TEXT("IsAerial"), bInAerialSpecialMode);
+		SetAnimBoolProperty(AnimInstance, TEXT("bIsAerial"), bInAerialSpecialMode);
+		SetAnimBoolProperty(AnimInstance, TEXT("IsInAir"), bInAerialSpecialMode);
+		SetAnimBoolProperty(AnimInstance, TEXT("bIsInAir"), bInAerialSpecialMode);
 	}
 
 	float CalculateMovementDirectionDegrees(const APawn* Pawn, const FVector& Velocity2D)
@@ -79,6 +118,105 @@ namespace
 			bTagAddedByMovement = false;
 		}
 	}
+
+	UAnimSequenceBase* LoadEpicFallbackMoveAnimation(const FName MonsterDataRowName)
+	{
+		static const FName TreantEpicRowName{TEXT("Treant_Epic")};
+		static const FName MagmaEpicRowName{TEXT("Magma_Epic")};
+		static TSoftObjectPtr<UAnimSequenceBase> TreantMoveAnimation{
+			FSoftObjectPath(TEXT("/Game/External/PolygonalCreaturesPack/PolygonalTreant/Animations/Polygonal_Treant_AnimWalk_Forward_WO_Root.Polygonal_Treant_AnimWalk_Forward_WO_Root"))};
+		static TSoftObjectPtr<UAnimSequenceBase> MagmaMoveAnimation{
+			FSoftObjectPath(TEXT("/Game/External/PolygonalCreaturesPack/PolygonalMagma/Animations/Demo_Polygonal_Magma_AnimationsMove_Forward_WO_Root.Demo_Polygonal_Magma_AnimationsMove_Forward_WO_Root"))};
+
+		if (MonsterDataRowName == TreantEpicRowName)
+		{
+			return TreantMoveAnimation.LoadSynchronous();
+		}
+
+		if (MonsterDataRowName == MagmaEpicRowName)
+		{
+			return MagmaMoveAnimation.LoadSynchronous();
+		}
+
+		return nullptr;
+	}
+
+	void DrawEpicAlignmentDebug(ARetrieveEpicMonsterCharacter* Enemy)
+	{
+		if (!Enemy || CVarRetrieveEpicAlignmentDebug.GetValueOnGameThread() <= 0)
+		{
+			return;
+		}
+
+		UWorld* World = Enemy->GetWorld();
+		UCapsuleComponent* Capsule = Enemy->GetCapsuleComponent();
+		USkeletalMeshComponent* Mesh = Enemy->GetMesh();
+		if (!World || !Capsule || !Mesh)
+		{
+			return;
+		}
+
+		const FVector ActorLocation = Enemy->GetActorLocation();
+		const float CapsuleRadiusValue = Capsule->GetScaledCapsuleRadius();
+		const float CapsuleHalfHeightValue = Capsule->GetScaledCapsuleHalfHeight();
+		const FVector CapsuleBottom = ActorLocation - FVector(0.f, 0.f, CapsuleHalfHeightValue);
+		const FVector MeshLocation = Mesh->GetComponentLocation();
+		const FBoxSphereBounds MeshBounds = Mesh->Bounds;
+
+		DrawDebugCapsule(
+			World,
+			ActorLocation,
+			CapsuleHalfHeightValue,
+			CapsuleRadiusValue,
+			Enemy->GetActorQuat(),
+			FColor::Cyan,
+			false,
+			0.f,
+			0,
+			2.f);
+		DrawDebugSphere(World, ActorLocation, 18.f, 12, FColor::Yellow, false, 0.f, 0, 2.f);
+		DrawDebugSphere(World, CapsuleBottom, 16.f, 12, FColor::Green, false, 0.f, 0, 2.f);
+		DrawDebugSphere(World, MeshLocation, 14.f, 12, FColor::Magenta, false, 0.f, 0, 2.f);
+		DrawDebugBox(World, MeshBounds.Origin, MeshBounds.BoxExtent, FColor::Purple, false, 0.f, 0, 1.f);
+		DrawDebugLine(World, ActorLocation, MeshLocation, FColor::Magenta, false, 0.f, 0, 1.f);
+
+		const FMonsterDataRow* Row = Enemy->GetMonsterDataRow();
+		FString DebugText = FString::Printf(
+			TEXT("%s\nActorZ %.1f | CapsuleBottomZ %.1f | MeshZ %.1f | MeshOriginZDelta %.1f\nRadius %.1f | HalfHeight %.1f | AttackableRange %.1f"),
+			*Enemy->GetName(),
+			ActorLocation.Z,
+			CapsuleBottom.Z,
+			MeshLocation.Z,
+			MeshLocation.Z - ActorLocation.Z,
+			CapsuleRadiusValue,
+			CapsuleHalfHeightValue,
+			Row ? Row->AttackableRange : -1.f);
+
+		if (const UEnemyCombatComponent* Combat = Enemy->FindComponentByClass<UEnemyCombatComponent>())
+		{
+			if (AActor* Target = Combat->GetFocusTarget())
+			{
+				const float Distance3D = FVector::Distance(ActorLocation, Target->GetActorLocation());
+				const float Distance2D = FVector::Dist2D(ActorLocation, Target->GetActorLocation());
+				DebugText += FString::Printf(
+					TEXT("\nTarget %s | Dist3D %.1f | Dist2D %.1f | DeltaZ %.1f"),
+					*GetNameSafe(Target),
+					Distance3D,
+					Distance2D,
+					FMath::Abs(ActorLocation.Z - Target->GetActorLocation().Z));
+				DrawDebugLine(World, ActorLocation, Target->GetActorLocation(), FColor::Orange, false, 0.f, 0, 2.f);
+			}
+		}
+
+		DrawDebugString(
+			World,
+			ActorLocation + FVector(0.f, 0.f, CapsuleHalfHeightValue + 80.f),
+			DebugText,
+			nullptr,
+			FColor::White,
+			0.f,
+			true);
+	}
 }
 
 ARetrieveEpicMonsterCharacter::ARetrieveEpicMonsterCharacter(const FObjectInitializer& ObjectInitializer)
@@ -92,10 +230,13 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (const UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	DrawEpicAlignmentDebug(this);
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		const FVector ActorLocation = GetActorLocation();
 		FVector Movement2D(MoveComp->Velocity.X, MoveComp->Velocity.Y, 0.f);
+		bool bUsingLocationDeltaVelocity = false;
 		if (bHasAnimMovementSampleLocation && DeltaSeconds > KINDA_SMALL_NUMBER)
 		{
 			const FVector DeltaLocation2D(
@@ -106,17 +247,24 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 			if (LocationDeltaVelocity2D.SizeSquared() > Movement2D.SizeSquared())
 			{
 				Movement2D = LocationDeltaVelocity2D;
+				bUsingLocationDeltaVelocity = true;
 			}
 		}
 		LastAnimMovementSampleLocation = ActorLocation;
 		bHasAnimMovementSampleLocation = true;
 
 		const float GroundSpeed = Movement2D.Size();
-		const bool bMovingOnGround = GroundSpeed > TurnAnimMovingSpeedThreshold
-			&& !MoveComp->IsFalling()
-			&& MoveComp->MovementMode != MOVE_Flying;
-
-		const bool bMovementShouldDriveChase = bMovingOnGround
+		const bool bInAerialSpecialMode = MoveComp->MovementMode == MOVE_Flying;
+		const bool bMovingForAnim = GroundSpeed > AnimMovingSpeedThreshold
+			&& !bInAerialSpecialMode
+			&& !IsDeadForAnim();
+		if (bUsingLocationDeltaVelocity && bMovingForAnim)
+		{
+			MoveComp->Velocity.X = Movement2D.X;
+			MoveComp->Velocity.Y = Movement2D.Y;
+		}
+		const bool bMovementShouldDriveChase = bMovingForAnim
+			&& !bInAerialSpecialMode
 			&& !IsAttackingForAnim()
 			&& !IsSpecialAttackingForAnim()
 			&& !IsHitForAnim()
@@ -125,19 +273,16 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 			&& !IsDeadForAnim();
 		SetMovementDrivenChaseTag(OwnedASC.Get(), bMovementDrivenChaseTagAdded, bMovementShouldDriveChase);
 
+		if (bInAerialSpecialMode && (GroundTurnMontage || GroundMoveMontage))
+		{
+			StopLocomotionMontages();
+		}
+
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
 			if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
 			{
-				SetAnimFloatProperty(AnimInstance, TEXT("Speed"), GroundSpeed);
-				SetAnimFloatProperty(AnimInstance, TEXT("GroundSpeed"), GroundSpeed);
-				SetAnimFloatProperty(AnimInstance, TEXT("Direction"), CalculateMovementDirectionDegrees(this, Movement2D));
-				SetAnimBoolProperty(AnimInstance, TEXT("IsMoving"), bMovingOnGround);
-				SetAnimBoolProperty(AnimInstance, TEXT("bIsMoving"), bMovingOnGround);
-				SetAnimBoolProperty(AnimInstance, TEXT("ShouldMove"), bMovingOnGround);
-				SetAnimBoolProperty(AnimInstance, TEXT("bShouldMove"), bMovingOnGround);
-				SetAnimBoolProperty(AnimInstance, TEXT("IsChasing"), bMovingOnGround);
-				SetAnimBoolProperty(AnimInstance, TEXT("bIsChasing"), bMovingOnGround);
+				ApplyMovementAnimProperties(AnimInstance, this, Movement2D, GroundSpeed, bMovingForAnim, bInAerialSpecialMode);
 			}
 		}
 
@@ -148,7 +293,9 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 				StopLocomotionMontages();
 			}
 
-			if (!ForcedGroundMoveAnimation.IsNull())
+			if (!ForcedGroundMoveAnimation.IsNull()
+				|| MonsterDataRowName == FName(TEXT("Treant_Epic"))
+				|| MonsterDataRowName == FName(TEXT("Magma_Epic")))
 			{
 				if (USkeletalMeshComponent* MeshComp = GetMesh())
 				{
@@ -159,6 +306,10 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 						if (!bMoveMontagePlaying)
 						{
 							UAnimSequenceBase* MoveSequence = ForcedGroundMoveAnimation.LoadSynchronous();
+							if (!MoveSequence)
+							{
+								MoveSequence = LoadEpicFallbackMoveAnimation(MonsterDataRowName);
+							}
 							if (MoveSequence)
 							{
 								GroundMoveMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(

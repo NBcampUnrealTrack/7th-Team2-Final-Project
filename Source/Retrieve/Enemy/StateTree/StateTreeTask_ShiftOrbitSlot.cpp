@@ -15,6 +15,43 @@ namespace
 		const ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
 		return EnemyCharacter && EnemyCharacter->UsesForwardLocomotion();
 	}
+
+	bool ShouldFaceTargetDuringShiftOrbit(const APawn* Pawn, const AActor* Target)
+	{
+		const ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
+		return EnemyCharacter
+			&& EnemyCharacter->ShouldFaceTargetDuringShiftOrbit()
+			&& IsValid(Target);
+	}
+
+	void ApplyShiftOrbitFacing(
+		APawn* Pawn,
+		UCharacterMovementComponent* CharacterMovement,
+		AActor* Target)
+	{
+		if (!Pawn || !CharacterMovement)
+		{
+			return;
+		}
+
+		const bool bFaceTarget = ShouldFaceTargetDuringShiftOrbit(Pawn, Target);
+		const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
+		Pawn->bUseControllerRotationYaw = bFaceTarget;
+		CharacterMovement->bOrientRotationToMovement = !bFaceTarget && bUseForwardLocomotion;
+		CharacterMovement->bUseControllerDesiredRotation = bFaceTarget || !bUseForwardLocomotion;
+
+		if (AAIController* AIC = Pawn->GetController<AAIController>())
+		{
+			if (bFaceTarget)
+			{
+				AIC->SetFocus(Target, EAIFocusPriority::Gameplay);
+			}
+			else
+			{
+				AIC->ClearFocus(EAIFocusPriority::Gameplay);
+			}
+		}
+	}
 }
 
 bool FStateTreeTask_ShiftOrbitSlot::Link(FStateTreeLinker& Linker)
@@ -51,23 +88,7 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::EnterState(
 	InstanceData.bOriginalControllerRot = CharacterMovement->bUseControllerDesiredRotation;
 	InstanceData.bOriginalUseControllerRotationYaw = Pawn->bUseControllerRotationYaw;
 
-	const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
-	Pawn->bUseControllerRotationYaw = !bUseForwardLocomotion;
-	CharacterMovement->bOrientRotationToMovement = bUseForwardLocomotion;
-	CharacterMovement->bUseControllerDesiredRotation = !bUseForwardLocomotion;
-
-	AAIController* AIC = Pawn->GetController<AAIController>();
-	if (IsValid(AIC))
-	{
-		if (bUseForwardLocomotion)
-		{
-			AIC->ClearFocus(EAIFocusPriority::Gameplay);
-		}
-		else if (IsValid(InstanceData.TargetActor))
-		{
-			AIC->SetFocus(InstanceData.TargetActor, EAIFocusPriority::Gameplay);
-		}
-	}
+	ApplyShiftOrbitFacing(Pawn, CharacterMovement, InstanceData.TargetActor);
 	
 	return EStateTreeRunStatus::Running;
 }
@@ -90,17 +111,9 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 		return EStateTreeRunStatus::Failed;
 	}
 
-	const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
-	if (AAIController* AIC = Pawn->GetController<AAIController>())
+	if (UCharacterMovementComponent* CharacterMovement = Pawn->FindComponentByClass<UCharacterMovementComponent>())
 	{
-		if (bUseForwardLocomotion)
-		{
-			AIC->ClearFocus(EAIFocusPriority::Gameplay);
-		}
-		else if (IsValid(InstanceData.TargetActor))
-		{
-			AIC->SetFocus(InstanceData.TargetActor, EAIFocusPriority::Gameplay);
-		}
+		ApplyShiftOrbitFacing(Pawn, CharacterMovement, InstanceData.TargetActor);
 	}
 
 	UEncirclementSubsystem* EncSubsystem =

@@ -8,6 +8,7 @@
 #include "Enemy/EnemyAIController.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "NavigationSystem.h"
 #include "AIController.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -412,6 +413,8 @@ void ARetrieveEnemyCharacter::HandleDeathEnded(AActor* OwningActor)
 
 void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn)
 {
+	ResetAerialSpecialPhase();
+
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetSimulatePhysics(false);
@@ -434,7 +437,41 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 		GetCharacterMovement()->GravityScale = DefaultGravityScale;
 		GetCharacterMovement()->SetMovementMode(DefaultMovementMode);
 	}
-	
+
+	// 에픽 전용: 스폰 위치가 네비메시(지면)보다 높이 떠 있으면 지면으로 스냅한다.
+	// 드래곤처럼 비행 진입용으로 공중에 배치/스폰된 경우, 지상 전투 시 네비메시 밖이라
+	// 경로탐색이 전부 실패해 제자리에 멈추는 문제를 방지한다. (일반/보스는 기본 false → 무영향)
+	if (ShouldGroundSnapOnSpawn())
+	{
+		if (UWorld* SnapWorld = GetWorld())
+		{
+			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(SnapWorld))
+			{
+				FNavLocation NavLoc;
+				const FVector QueryExtent(800.f, 800.f, 4000.f);
+				if (NavSys->ProjectPointToNavigation(GetActorLocation(), NavLoc, QueryExtent))
+				{
+					const float HalfHeight = GetCapsuleComponent()
+						? GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+						: 0.f;
+					const FVector GroundedLocation(NavLoc.Location.X, NavLoc.Location.Y, NavLoc.Location.Z + HalfHeight);
+					if (FMath::Abs(GetActorLocation().Z - GroundedLocation.Z) > 20.f)
+					{
+						SetActorLocation(GroundedLocation, false, nullptr, ETeleportType::TeleportPhysics);
+						UE_LOG(LogTemp, Warning,
+							TEXT("[ActivateEnemy] Ground-snapped %s to navmesh. NavZ=%.1f NewActorZ=%.1f"),
+							*GetName(), NavLoc.Location.Z, GroundedLocation.Z);
+					}
+				}
+			}
+
+			if (UCharacterMovementComponent* SnapMoveComp = GetCharacterMovement())
+			{
+				SnapMoveComp->SetMovementMode(MOVE_Walking);
+			}
+		}
+	}
+
 	if (bIsRespawn)
 	{
 		if (IsValid(HealthComponent))
@@ -482,14 +519,55 @@ void ARetrieveEnemyCharacter::SetAerialMode(bool bAerial)
 	}
 }
 
+void ARetrieveEnemyCharacter::SetAerialSpecialAttackReady(bool bReady)
+{
+	bAerialSpecialAttackReady = bReady;
+	if (!bReady)
+	{
+		AerialSpecialPhaseStartTime = -1.f;
+	}
+}
+
+void ARetrieveEnemyCharacter::BeginAerialSpecialPhase()
+{
+	if (AerialSpecialPhaseStartTime >= 0.f)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	AerialSpecialPhaseStartTime = World ? World->GetTimeSeconds() : 0.f;
+}
+
+void ARetrieveEnemyCharacter::ResetAerialSpecialPhase()
+{
+	bAerialSpecialAttackReady = false;
+	AerialSpecialPhaseStartTime = -1.f;
+}
+
+float ARetrieveEnemyCharacter::GetAerialSpecialPhaseElapsedTime() const
+{
+	if (AerialSpecialPhaseStartTime < 0.f)
+	{
+		return 0.f;
+	}
+
+	const UWorld* World = GetWorld();
+	return World ? FMath::Max(0.f, World->GetTimeSeconds() - AerialSpecialPhaseStartTime) : 0.f;
+}
+
 bool ARetrieveEnemyCharacter::HasAerialPhase() const
 {
+	// 데이터 기반으로만 판정한다. (특정 행 이름 하드코딩 제거)
+	// 에픽을 보스처럼 지상 전투 + 쿨다운 특수공격으로 운용하기로 했으므로,
+	// DT_MonsterData에서 bHasAerialPhase가 true가 아닌 한 비행 페이즈는 비활성이다.
 	const FMonsterDataRow* Row = GetMonsterDataRow();
 	return Row && Row->bHasAerialPhase;
 }
 
 void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
+	ResetAerialSpecialPhase();
 	StopLocomotionMontages();
 
 	if (UBossHPBarComponent* BossHPBar = FindComponentByClass<UBossHPBarComponent>())

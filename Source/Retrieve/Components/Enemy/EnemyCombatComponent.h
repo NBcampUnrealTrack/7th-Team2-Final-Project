@@ -33,6 +33,8 @@ public:
 	bool RequestPatternByPriority(AActor* Target, FGameplayTag RequiredPatternType);
 	
 	bool HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const;
+
+	bool HasPatternInRangeByTypeIgnoringCooldown(AActor* Target, FGameplayTag PatternType) const;
 	
 	void StopCurrentPattern();
 
@@ -85,7 +87,7 @@ private:
 	bool ApplyHitToActor(AActor* OtherActor, const FHitResult& SweepResult);
 	
 	const FMonsterPatternRow* FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType
-		, FName* OutRowName = nullptr) const;
+		, FName* OutRowName = nullptr, bool bIgnoreCooldown = false) const;
 	bool IsCooldownReady(FName RowName) const;
 	void StartCooldown(FName RowName, float Duration);
 	void LockSpecialAttackEvaluation(float Duration);

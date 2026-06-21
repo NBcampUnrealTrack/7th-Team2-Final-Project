@@ -5,6 +5,14 @@
 #include "Perception/AISenseConfig_Damage.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "GenericTeamAgentInterface.h"
+#include "Character/RetrieveEnemyCharacter.h"
+#include "StateTree.h"
+
+namespace
+{
+	constexpr TCHAR EpicMonsterStateTreePath[] =
+		TEXT("/Game/Retrieve/AI/StateTrees/ST_Monster_Epic.ST_Monster_Epic");
+}
 
 AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -26,6 +34,7 @@ AEnemyAIController::AEnemyAIController(const FObjectInitializer& ObjectInitializ
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	InitSightConfig();
 	
 	GetWorld()->GetTimerManager().SetTimerForNextTick(
 			this, &AEnemyAIController::RestartStateTree);
@@ -123,9 +132,14 @@ void AEnemyAIController::RestartStateTree()
 
 void AEnemyAIController::InitSightConfig()
 {
-	SightConfig->SightRadius = SightRadius;
-	SightConfig->LoseSightRadius = LoseSightRadius;
-	SightConfig->PeripheralVisionAngleDegrees = PeripheralVisionAngleDegrees;
+	if (!SightConfig || !AIPerceptionComp)
+	{
+		return;
+	}
+
+	SightConfig->SightRadius = GetEffectiveSightRadius();
+	SightConfig->LoseSightRadius = GetEffectiveLoseSightRadius();
+	SightConfig->PeripheralVisionAngleDegrees = GetEffectivePeripheralVisionAngleDegrees();
 	SightConfig->SetMaxAge(5.0f);
 	
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
@@ -135,6 +149,27 @@ void AEnemyAIController::InitSightConfig()
 	AIPerceptionComp->ConfigureSense(*SightConfig);
 	AIPerceptionComp->SetDominantSense(SightConfig->GetSenseImplementation());
 	AIPerceptionComp->RequestStimuliListenerUpdate();
+}
+
+float AEnemyAIController::GetEffectiveSightRadius() const
+{
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
+	return SightRadius * (Enemy ? FMath::Max(1.f, Enemy->GetSightRadiusMultiplierForAI()) : 1.f);
+}
+
+float AEnemyAIController::GetEffectiveLoseSightRadius() const
+{
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
+	return LoseSightRadius * (Enemy ? FMath::Max(1.f, Enemy->GetLoseSightRadiusMultiplierForAI()) : 1.f);
+}
+
+float AEnemyAIController::GetEffectivePeripheralVisionAngleDegrees() const
+{
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
+	const float OverrideAngle = Enemy ? Enemy->GetPeripheralVisionAngleOverrideForAI() : -1.f;
+	return OverrideAngle > 0.f
+		? FMath::Max(PeripheralVisionAngleDegrees, OverrideAngle)
+		: PeripheralVisionAngleDegrees;
 }
 
 void AEnemyAIController::InitDamageConfig()
@@ -150,10 +185,24 @@ void AEnemyAIController::TryStartStateTree()
 	if (StateTreeAIComp && !StateTreeAIComp->IsRunning())
 	{
 		StateTreeAIComp->SetStartLogicAutomatically(false);
+		const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
+		if (!DefaultStateTree && Enemy && Enemy->ShouldUseFallbackEpicStateTree())
+		{
+			DefaultStateTree = Cast<UStateTree>(StaticLoadObject(
+				UStateTree::StaticClass(),
+				nullptr,
+				EpicMonsterStateTreePath));
+		}
+
 		if (DefaultStateTree)
 		{
 			StateTreeAIComp->SetStateTree(DefaultStateTree);
 		}
+
+		// StartLogic은 항상 호출해야 한다.
+		// 일반/보스 컨트롤러는 DefaultStateTree 멤버를 비워 두고 StateTreeAIComponent에
+		// 직접 설정된 StateTree 에셋으로 동작한다. StartLogic을 if(DefaultStateTree) 블록
+		// 안에서만 호출하면 이 경우 로직이 시작되지 않아 몬스터가 완전히 정지한다. (회귀 수정)
 		StateTreeAIComp->StartLogic();
 	}
 }
