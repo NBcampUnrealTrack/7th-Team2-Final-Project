@@ -24,6 +24,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void Launch(const FVector& Direction, float Speed = 1200.f);
+
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void PrepareForDelayedLaunch();
+
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void ReleaseDelayedLaunch(
+		const FVector& Direction,
+		float Speed,
+		float Lifetime,
+		float GravityScale = 0.f);
 	
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void ConfigureHoming(AActor* TargetActor, float StartDelay, float Duration, float Strength);
@@ -106,6 +116,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Damage", meta=(ClampMin="0.0"))
+	float DamageMultiplier = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|Knockback")
 	FMonsterLaunchKnockbackConfig LaunchKnockbackConfig;

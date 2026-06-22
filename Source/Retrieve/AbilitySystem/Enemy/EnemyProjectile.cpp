@@ -11,6 +11,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GenericTeamAgentInterface.h"
 #include "GameplayEffect.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "TimerManager.h"
@@ -62,6 +63,43 @@ void AEnemyProjectile::Launch(const FVector& Direction, float Speed)
 	ProjectileMovement->InitialSpeed = Speed;
 	ProjectileMovement->MaxSpeed = Speed;
 	ProjectileMovement->Velocity = Direction.GetSafeNormal() * Speed;
+}
+
+void AEnemyProjectile::PrepareForDelayedLaunch()
+{
+	SetLifeSpan(0.f);
+
+	if (CollisionSphere)
+	{
+		CollisionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->StopMovementImmediately();
+		ProjectileMovement->Deactivate();
+	}
+}
+
+void AEnemyProjectile::ReleaseDelayedLaunch(
+	const FVector& Direction,
+	float Speed,
+	float Lifetime,
+	float GravityScale)
+{
+	if (CollisionSphere)
+	{
+		CollisionSphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->ProjectileGravityScale = GravityScale;
+		ProjectileMovement->Activate(true);
+	}
+
+	Launch(Direction, Speed);
+	SetProjectileLifetime(Lifetime);
 }
 
 void AEnemyProjectile::ConfigureHoming(AActor* TargetActor, float StartDelay, float Duration, float Strength)
@@ -160,31 +198,36 @@ void AEnemyProjectile::BeginPlay()
 			this, &AEnemyProjectile::OnProjectileStopped);
 	}
 
-	if (FlightVFX)
+	if (FlightVFXComponent)
 	{
-		if (FlightVFXComponent)
+		if (FlightVFX)
 		{
 			FlightVFXComponent->SetAsset(FlightVFX);
-			FlightVFXComponent->SetRelativeLocation(FVector::ZeroVector);
-			FlightVFXComponent->SetRelativeRotation(FRotator::ZeroRotator);
+		}
+
+		FlightVFXComponent->SetRelativeLocation(FVector::ZeroVector);
+		FlightVFXComponent->SetRelativeRotation(FRotator::ZeroRotator);
+
+		if (FlightVFXComponent->GetAsset())
+		{
 			FlightVFXComponent->Activate(true);
 		}
-		else
+	}
+	else if (FlightVFX)
+	{
+		UNiagaraComponent* AttachedVFXComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			FlightVFX,
+			GetRootComponent(),
+			NAME_None,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			EAttachLocation::KeepRelativeOffset,
+			true);
+		if (AttachedVFXComp)
 		{
-			UNiagaraComponent* AttachedVFXComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
-				FlightVFX,
-				GetRootComponent(),
-				NAME_None,
-				FVector::ZeroVector,
-				FRotator::ZeroRotator,
-				EAttachLocation::KeepRelativeOffset,
-				true);
-			if (AttachedVFXComp)
-			{
-				AttachedVFXComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				AttachedVFXComp->SetGenerateOverlapEvents(false);
-				AttachedVFXComp->SetCanEverAffectNavigation(false);
-			}
+			AttachedVFXComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			AttachedVFXComp->SetGenerateOverlapEvents(false);
+			AttachedVFXComp->SetCanEverAffectNavigation(false);
 		}
 	}
 }
@@ -241,6 +284,7 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 	{
 		return;
 	}
+
 
 	if (HasAuthority() && TryReflectOnHit(OtherActor, TargetASC))
 	{
@@ -370,6 +414,10 @@ bool AEnemyProjectile::ApplyDamage(AActor* OtherActor)
 	{
 		return false;
 	}
+
+	Spec.Data->SetSetByCallerMagnitude(
+		RetrieveGameplayTags::Data_Damage_Mul,
+		FMath::Max(0.f, DamageMultiplier));
 
 	if (const FGameplayTag ReactTag = HitReactTypeToTag(HitReactType); ReactTag.IsValid())
 	{

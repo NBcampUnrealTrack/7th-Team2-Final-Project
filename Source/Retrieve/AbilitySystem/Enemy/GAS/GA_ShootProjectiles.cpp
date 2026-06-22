@@ -32,7 +32,6 @@ UGA_ShootProjectiles::UGA_ShootProjectiles(const FObjectInitializer& ObjectIniti
 	{
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack,
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileRapid,
-		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileRain,
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileHoming,
 		RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileSpread,
 	};
