@@ -183,6 +183,90 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FMonsterSwordBarrageConfig
+{
+	GENERATED_BODY()
+
+	/** 소환할 검(투사체) 개수 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="1", ClampMax="15"))
+	int32 SwordCount = 5;
+
+	/** 검이 배치되는 호(arc)의 반지름 - 보스 중심에서의 거리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="0.0"))
+	float ArcRadius = 250.f;
+
+	/** 검이 퍼지는 호의 각도 (180 = 반원) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="1.0", ClampMax="360.0"))
+	float ArcAngleDegrees = 180.f;
+
+	/** 호 중심의 높이 오프셋 - 보스 기준 위로 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage")
+	float HeightOffset = 130.f;
+
+	/** 호 중심의 전후 오프셋 — 보스 기준, 음수면 뒤쪽 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage")
+	float ForwardOffset = -80.f;
+
+	/** 어빌리티 시작 후 검 소환까지 대기 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="0.0"))
+	float SummonDelay = 0.5f;
+
+	/** 검 소환 후 발사까지 대기 시간(초) - 검이 떠 있는 예고 구간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="0.0"))
+	float LaunchDelay = 1.f;
+
+	/** 발사된 검의 이동 속도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="1.0"))
+	float ProjectileSpeed = 1600.f;
+
+	/** 발사된 검의 생존 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage", meta=(ClampMin="0.1"))
+	float ProjectileLifetime = 6.f;
+
+	/** 조준점 오프셋 - 타겟 위치 기준 (예: Z+로 몸통 높이 조준) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="SwordBarrage")
+	FVector TargetOffset = FVector(0.f, 0.f, 70.f);
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FMonsterAerialDiveConfig
+{
+	GENERATED_BODY()
+
+	/** 상승 목표 높이 - 보스 현재 위치 기준 위로 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float TakeoffHeight = 650.f;
+
+	/** 상승 속도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float RiseSpeed = 900.f;
+
+	/** 정점에서 조준 유지 시간(초) - 이 동안 타겟 추적 후 방향 락 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float AimDuration = 0.7f;
+
+	/** 급강하 속도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float DiveSpeed = 2800.f;
+
+	/** 단계 전환 도달 판정 허용 오차 - 상승 완료/돌진 완료 거리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float PositionTolerance = 25.f;
+
+	/** 전체 어빌리티 안전 타임아웃(초) - 어떤 단계든 이 시간 초과 시 강제 종료 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float AbilityTimeout = 7.f;
+
+	/** 돌진 목표점 오프셋 - 타겟 위치 기준 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive")
+	FVector TargetOffset = FVector(0.f, 0.f, 0.f);
+
+	/** 타겟 앞에서 멈추는 수평 거리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AerialDive", meta=(ClampMin="0.0"))
+	float DiveStopDistance = 80.f;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FMonsterLaunchKnockbackConfig
 {
 	GENERATED_BODY()
@@ -249,6 +333,14 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 투사체 패턴 설정. 투사체를 사용하지 않는 패턴은 기본값을 사용한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
 	FMonsterProjectilePatternConfig ProjectileConfig;
+
+	/** BossQueen의 SwordBarrage 패턴 설정 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|SwordBarrage")
+	FMonsterSwordBarrageConfig SwordBarrageConfig;
+
+	/** BossQueen의 AerialDive 패턴 설정 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|AerialDive")
+	FMonsterAerialDiveConfig AerialDiveConfig;
 
 	/** 이 패턴에서 사용할 투사체 클래스. 비어 있으면 GA의 기본 ProjectileClass를 사용한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
