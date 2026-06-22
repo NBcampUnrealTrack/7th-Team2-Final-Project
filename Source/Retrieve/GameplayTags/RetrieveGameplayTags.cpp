@@ -262,6 +262,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_Acceleration, "GameplayEvent.Enemy.SpecialAttack.Acceleration");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_DashAttack, "GameplayEvent.Enemy.SpecialAttack.DashAttack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_AerialDive, "GameplayEvent.Enemy.SpecialAttack.AerialDive");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_GroundHazard, "GameplayEvent.Enemy.SpecialAttack.GroundHazard");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_GroundHazards, "GameplayEvent.Enemy.SpecialAttack.GroundHazards");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_WaterPillar, "GameplayEvent.Enemy.SpecialAttack.WaterPillar");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_IcePillar, "GameplayEvent.Enemy.SpecialAttack.IcePillar");
 
 	// ---- Gameplay events: element / core / item
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_Unlock, "GameplayEvent.Element.Unlock");

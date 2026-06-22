@@ -29,6 +29,7 @@ namespace RetrieveBasicHitDamageStatics
 UExecCalc_BasicHitDamage::UExecCalc_BasicHitDamage()
 {
 	RelevantAttributesToCapture.Add(RetrieveBasicHitDamageStatics::Get().AttackPowerDef);
+    RelevantAttributesToCapture.Add(RetrieveBasicHitDamageStatics::Get().IncomingDamageMultiplierDef);
 }
 
 void UExecCalc_BasicHitDamage::Execute_Implementation(
