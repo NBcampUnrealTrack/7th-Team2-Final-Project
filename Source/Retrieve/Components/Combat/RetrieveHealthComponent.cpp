@@ -129,7 +129,12 @@ void URetrieveHealthComponent::HandleHealthChanged(const FOnAttributeChangeData&
 		ImmuneTags.AddTag(DieTag);
 		
 		AbilitySystemComponent->CancelAbilities(nullptr, &ImmuneTags, nullptr);
-		
+
+		// 사망 시 지속 데미지(도트) 상태이상 제거 → 시체에 GE_Burn이 남아 계속 틱(데미지 플로터)하지 않도록.
+		FGameplayTagContainer DotStatusTags;
+		DotStatusTags.AddTag(RetrieveGameplayTags::State_Status_Burn);
+		AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(DotStatusTags);
+
 		FGameplayTagContainer ActivationTags;
 		ActivationTags.AddTag(DieTag);
 		AbilitySystemComponent->TryActivateAbilitiesByTag(ActivationTags);

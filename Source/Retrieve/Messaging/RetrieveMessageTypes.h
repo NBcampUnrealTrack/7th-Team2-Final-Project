@@ -53,9 +53,9 @@ struct FRetrieveElementGaugeBurstPayload
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
 	TObjectPtr<AActor> Instigator = nullptr;
 
-	// 버스트 발동에 쓰인 원소 조합 (Tag → 슬롯 개수)
+	// 버스트를 결정한 현재 원소모드 (Element.Fire/Water/Wind)
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
-	TMap<FGameplayTag, int32> ElementPattern;
+	FGameplayTag BurstElement;
 };
 
 USTRUCT(BlueprintType)
@@ -66,8 +66,9 @@ struct FRetrieveElementGaugeFullPayload
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
 	TObjectPtr<AActor> Instigator = nullptr;
 
+	// 게이지가 가득 찼을 때의 현재 원소모드 (Element.Fire/Water/Wind)
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|ElementGauge")
-	TArray<FGameplayTag> FilledElements;
+	FGameplayTag Element;
 };
 
 /** Channel.Combat.DamageDealt 페이로드 공격자 측 연출(대미지 숫자 플로터 등)에 사용

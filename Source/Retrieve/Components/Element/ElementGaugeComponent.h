@@ -23,9 +23,6 @@ struct FElementSlot
 	int32 MaxGauge = 100;
 	UPROPERTY(BlueprintReadOnly, Category = "Element")
 	bool bFull = false;
-	// 슬롯 원소
-	UPROPERTY(BlueprintReadOnly, Category = "Element")
-	FGameplayTag CurrentElement = RetrieveGameplayTags::Element_None;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnElementSlotsChanged);
@@ -50,14 +47,9 @@ public:
 	// 슬롯이 가득 차있는지 확인
 	UFUNCTION(BlueprintPure, Category = "Gauge")
 	bool IsFull() const;
-	// 현재 조합 반환
-	UFUNCTION(BlueprintPure, Category = "Gauge")
-	TMap<FGameplayTag, int32> GetCurrentCombination() const;
-	// 첫 번째 슬롯 소비
+	// 첫 번째(가장 오래된) 충전 슬롯을 1칸 소비. 소비했으면 true. 원소는 더 이상 구분하지 않는다.
 	UFUNCTION(BlueprintCallable, Category = "Gauge")
-	FGameplayTag ConsumeOldestSlot();
-	UFUNCTION(BlueprintPure, Category = "Gauge")
-	FGameplayTag PeekOldestSlot() const;
+	bool ConsumeOldestSlot();
 	// 슬롯 초기화
 	UFUNCTION(BlueprintCallable, Category = "Gauge")
 	void ClearSlot();

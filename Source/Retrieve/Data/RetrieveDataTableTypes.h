@@ -715,7 +715,8 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	FGameplayTag WeaponType;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element", meta = (Categories = "Element"))
 	FGameplayTag BurstElement;
-	// TODO(하민): [구버전] 정확 조합 매칭용. 원소 다수결 선택에서는 사용하지 않음(BurstElement로 대체). 추후 정리 예정
+	// TODO(하민): [구버전·사용처 없음] 정확 조합 매칭용이었으나 (무기×현재 원소모드) 매칭으로 대체됨.
+	// 마지막 C++ 리더(GetMatchingBurstCombination)가 제거되어 더는 읽히지 않는다. BP 참조 확인 후 이 필드와 DT 열 삭제 권장.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")

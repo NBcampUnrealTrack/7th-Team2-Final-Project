@@ -28,20 +28,25 @@ public:
 	static FLinearColor ElementTagToColor(FGameplayTag ElementTag);
 
 	/**
-	 * SkillCombinationTable에서 ElementPattern에 매칭되는 첫 번째 FSkillCombination을 반환.
-	 * WBP_BurstSkill에서 현재 게이지 상태 → 버스트 스킬 아이콘 조회에 사용.
-	 * 매칭 행이 없거나 테이블이 null이면 false 반환.
-	 *
-	 * Blueprint 사용 예:
-	 *   Pattern  = ElementGaugeComponent.GetCurrentCombination()
-	 *   bFound, Combo = GetMatchingBurstCombination(DT_SkillCombinations, Pattern)
-	 *   if bFound → GetDataTableRow(DT_BuffUIDefinitions, Combo.BurstUITag) → Row.Icon
+	 * 원소 태그(Element.Fire/Water/Wind) → 흡수 버프 UI 태그(UI.Buff.Absorb.*).
+	 * 정의되지 않은 원소면 빈 태그. GA_Absorb / 게이지 위젯의 흡수 아이콘 조회 공용.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|UI|Element",
+		meta = (DisplayName = "Element Tag To Absorb Buff UI Tag"))
+	static FGameplayTag ElementToAbsorbBuffUITag(FGameplayTag ElementTag);
+
+	/**
+	 * SkillCombinationTable에서 (WeaponType + BurstElement)가 일치하는 버스트 행을 반환.
+	 * 버스트 스킬이 게이지 조합이 아닌 (무기 타입 × 현재 원소모드)로 결정되도록 바뀐 뒤의 조회용.
+	 * GA_Burst::FindBurstForElement와 동일 기준이며, Element 매칭 실패 시 Element.None 행으로 폴백한다.
+	 * HUD 버스트 아이콘 미리보기에서 사용.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI|Skill",
-		meta = (DisplayName = "Get Matching Burst Combination"))
-	static bool GetMatchingBurstCombination(
+		meta = (DisplayName = "Get Burst Combination By Element"))
+	static bool GetBurstCombinationByElement(
 		const UDataTable* SkillCombinationTable,
-		const TMap<FGameplayTag, int32>& ElementPattern,
+		FGameplayTag WeaponType,
+		FGameplayTag Element,
 		FSkillCombination& OutCombination);
 
 	/**

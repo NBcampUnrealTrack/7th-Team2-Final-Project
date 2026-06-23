@@ -247,6 +247,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Light);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Heavy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Burst);
+	// GE_Burn(도트) 전용 강도 태그 — 버스트 직격과 다른 DT_HitFeedback 행으로 플로터를 따로 띄운다.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_Burn);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_WeakPoint);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Reaction_Finished);
 
