@@ -87,21 +87,20 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	TMap<FGameplayTag, int32> ElementPattern = Gauge->GetCurrentCombination();
-	
 	const UWeaponComponent* WeaponComp = Avatar->FindComponentByClass<UWeaponComponent>();
 	const FGameplayTag WeaponTypeTag = IsValid(WeaponComp) ? WeaponComp->GetWeaponDataRef().WeaponTypeTag : FGameplayTag();
-	
-	const FGameplayTag DominantElement = ResolveDominantElement(ElementPattern);
-	const FSkillCombination* MatchedRow = FindBurstForElement(WeaponTypeTag, DominantElement);
 
-	if (!MatchedRow && DominantElement != RetrieveGameplayTags::Element_None)
+	// 게이지 슬롯 조합이 아니라 현재 선택된 원소모드로 버스트 스킬을 결정한다.
+	const FGameplayTag CurrentElement = ResolveCurrentElementTag();
+	const FSkillCombination* MatchedRow = FindBurstForElement(WeaponTypeTag, CurrentElement);
+
+	if (!MatchedRow && CurrentElement != RetrieveGameplayTags::Element_None)
 	{
 		MatchedRow = FindBurstForElement(WeaponTypeTag, RetrieveGameplayTags::Element_None);
 	}
 	if (!MatchedRow)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] No burst row for Weapon=%s Element=%s"), *WeaponTypeTag.ToString(), *DominantElement.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] No burst row for Weapon=%s Element=%s"), *WeaponTypeTag.ToString(), *CurrentElement.ToString());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -129,14 +128,12 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 	FRetrieveElementGaugeBurstPayload BurstPayload;
 	BurstPayload.Instigator = Avatar;
-	BurstPayload.ElementPattern = ElementPattern;
+	BurstPayload.BurstElement = CurrentElement;
 	if (UWorld* World = Avatar->GetWorld())
 	{
 		UGameplayMessageSubsystem& MsgSys = UGameplayMessageSubsystem::Get(World);
 		MsgSys.BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Burst, BurstPayload);
 	}
-
-	Gauge->ClearSlot();
 
 	CachedBurstComp = BurstComp;
 	BurstComp->BeginBurstSkill(MatchedRow);
@@ -262,34 +259,6 @@ void UGA_Burst::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	CleanupBurst();
 
 	Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
-}
-
-FGameplayTag UGA_Burst::ResolveDominantElement(const TMap<FGameplayTag, int32>& ElementPattern)
-{
-	FGameplayTag Best;
-	int32 BestCount = 0;
-	bool bTie = false;
-
-	for (const TPair<FGameplayTag, int32>& Pair : ElementPattern)
-	{
-		if (!Pair.Key.IsValid() || Pair.Key == RetrieveGameplayTags::Element_None)
-		{
-			continue;
-		}
-
-		if (Pair.Value > BestCount)
-		{
-			Best = Pair.Key;
-			BestCount = Pair.Value;
-			bTie = false;
-		}
-		else if (Pair.Value == BestCount && BestCount > 0)
-		{
-			bTie = true;
-		}
-	}
-	
-	return (bTie || BestCount == 0) ? RetrieveGameplayTags::Element_None : Best;
 }
 
 const FSkillCombination* UGA_Burst::FindBurstForElement(const FGameplayTag& WeaponType, const FGameplayTag& Element) const

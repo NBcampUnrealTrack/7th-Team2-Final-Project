@@ -56,7 +56,7 @@ public:
 	bool GetSlot0IsFull() const { return SlotFullFlags[0]; }
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
-	FGameplayTag GetSlot0Element() const { return SlotElements[0]; }
+	FGameplayTag GetSlot0Element() const { return CurrentElement; }
 
 	// --- Slot 1 ---
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
@@ -66,7 +66,7 @@ public:
 	bool GetSlot1IsFull() const { return SlotFullFlags[1]; }
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
-	FGameplayTag GetSlot1Element() const { return SlotElements[1]; }
+	FGameplayTag GetSlot1Element() const { return CurrentElement; }
 
 	// --- Slot 2 ---
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
@@ -76,7 +76,7 @@ public:
 	bool GetSlot2IsFull() const { return SlotFullFlags[2]; }
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
-	FGameplayTag GetSlot2Element() const { return SlotElements[2]; }
+	FGameplayTag GetSlot2Element() const { return CurrentElement; }
 
 	// --- 슬롯 색상 (GameplayTag → FLinearColor 변환 결과, FillColorAndOpacity 직접 바인딩용) ---
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
@@ -111,6 +111,5 @@ private:
 
 	float        SlotRatios[MaxSlots]    = { 0.f, 0.f, 0.f };
 	bool         SlotFullFlags[MaxSlots] = { false, false, false };
-	FGameplayTag SlotElements[MaxSlots];
 	bool         bIsGaugeFull = false;
 };

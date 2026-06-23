@@ -11,9 +11,10 @@ UElementGaugeViewModel::UElementGaugeViewModel() {}
 
 // ─────────────────────────── 원소 → 색상 ─────────────────────────────────────
 
-FLinearColor UElementGaugeViewModel::GetSlot0Color() const { return URetrieveElementUILibrary::ElementTagToColor(SlotElements[0]); }
-FLinearColor UElementGaugeViewModel::GetSlot1Color() const { return URetrieveElementUILibrary::ElementTagToColor(SlotElements[1]); }
-FLinearColor UElementGaugeViewModel::GetSlot2Color() const { return URetrieveElementUILibrary::ElementTagToColor(SlotElements[2]); }
+// 슬롯별 원소 구분을 없애고, 게이지 색은 현재 원소모드 하나로 통일한다.
+FLinearColor UElementGaugeViewModel::GetSlot0Color() const { return URetrieveElementUILibrary::ElementTagToColor(CurrentElement); }
+FLinearColor UElementGaugeViewModel::GetSlot1Color() const { return URetrieveElementUILibrary::ElementTagToColor(CurrentElement); }
+FLinearColor UElementGaugeViewModel::GetSlot2Color() const { return URetrieveElementUILibrary::ElementTagToColor(CurrentElement); }
 
 // ─────────────────────────────── 게이지 바인딩 ────────────────────────────────
 
@@ -85,6 +86,15 @@ void UElementGaugeViewModel::RefreshCurrentElement()
 	{
 		CurrentElement = NewElement;
 		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetCurrentElement);
+
+		// 게이지 색이 현재 원소모드를 따르므로, 모드가 바뀌면 슬롯 색/원소도 갱신을 알린다.
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0Element);
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1Element);
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2Element);
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0Color);
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1Color);
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2Color);
+
 		OnCurrentElementChanged.Broadcast(CurrentElement);
 	}
 }
@@ -103,26 +113,20 @@ void UElementGaugeViewModel::HandleSlotsChanged()
 	{
 		SlotRatios[i]    = Gauge->GetSlotRatio(i);
 		SlotFullFlags[i] = Slots[i].bFull;
-		SlotElements[i]  = Slots[i].CurrentElement;
 	}
 
 	const bool bNewFull     = Gauge->IsFull();
 	const bool bFullChanged = (bNewFull != bIsGaugeFull);
 	bIsGaugeFull = bNewFull;
 
-	// WBP_ElementGauge ProgressBar 바인딩용 직접 브로드캐스트
+	// WBP_ElementGauge ProgressBar 바인딩용 직접 브로드캐스트.
+	// 슬롯 색/원소는 현재 원소모드만 따르므로 여기(충전/확정)서는 알리지 않고 RefreshCurrentElement에서만 갱신한다.
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0Ratio);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0IsFull);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0Element);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot0Color);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1Ratio);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1IsFull);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1Element);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot1Color);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2Ratio);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2IsFull);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2Element);
-	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSlot2Color);
 
 	if (bFullChanged)
 	{

@@ -160,31 +160,14 @@ void UElementGaugeComponent::AddChargeInternal(int32 ScaledAmount)
 	else
 	{
 		ElementSlots[CurrentSlotIndex].InternalGauge = SumAmount;
-
-		// 충전 중에도 현재 원소를 반영해 색상이 즉시 표시되도록 한다.
-		if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-		{
-			if (ARetrievePlayerState* PS = OwnerPawn->GetPlayerState<ARetrievePlayerState>())
-			{
-				ElementSlots[CurrentSlotIndex].CurrentElement = PS->GetCurrentElementTag();
-			}
-		}
-
 		OnSlotsChanged.Broadcast();
 	}
 }
 
 void UElementGaugeComponent::CommitSlot()
 {
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (!OwnerPawn) return;
-
-	ARetrievePlayerState* PS = OwnerPawn->GetPlayerState<ARetrievePlayerState>();
-	if (!PS) return;
-
 	ElementSlots[CurrentSlotIndex].InternalGauge = ElementSlots[CurrentSlotIndex].MaxGauge;
 	ElementSlots[CurrentSlotIndex].bFull = true;
-	ElementSlots[CurrentSlotIndex].CurrentElement = PS->GetCurrentElementTag();
 
 	CurrentSlotIndex++;
 	OnSlotsChanged.Broadcast();
@@ -206,15 +189,19 @@ void UElementGaugeComponent::BroadcastGaugeFull() const
 		return;
 	}
 
-	FRetrieveElementGaugeFullPayload Payload;
-	Payload.Instigator = GetOwner();
-	for (const FElementSlot& Slot : ElementSlots)
+	// 슬롯별 원소 구분이 사라졌으므로 현재 원소모드를 그대로 싣는다.
+	FGameplayTag CurrentElement = RetrieveGameplayTags::Element_None;
+	if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
 	{
-		if (Slot.bFull)
+		if (const ARetrievePlayerState* PS = OwnerPawn->GetPlayerState<ARetrievePlayerState>())
 		{
-			Payload.FilledElements.Add(Slot.CurrentElement);
+			CurrentElement = PS->GetCurrentElementTag();
 		}
 	}
+
+	FRetrieveElementGaugeFullPayload Payload;
+	Payload.Instigator = GetOwner();
+	Payload.Element = CurrentElement;
 
 	UGameplayMessageSubsystem::Get(GetWorld())
 		.BroadcastMessage(RetrieveGameplayTags::Channel_ElementGauge_Full, Payload);
@@ -225,35 +212,17 @@ bool UElementGaugeComponent::IsFull() const
 	return CurrentSlotIndex >= SlotCount;
 }
 
-TMap<FGameplayTag, int32> UElementGaugeComponent::GetCurrentCombination() const
+bool UElementGaugeComponent::ConsumeOldestSlot()
 {
-	TMap<FGameplayTag, int32> ElementPattern;
-
-	for (const FElementSlot& Slot : ElementSlots)
-	{
-		if (Slot.bFull)
-		{
-			int32& Count = ElementPattern.FindOrAdd(Slot.CurrentElement, 0);
-			Count++;
-		}
-	}
-
-	return ElementPattern;
-}
-
-FGameplayTag UElementGaugeComponent::ConsumeOldestSlot()
-{
-	if (!ElementSlots[0].bFull) return RetrieveGameplayTags::Element_None;
+	if (!ElementSlots[0].bFull) return false;
 
 	if (IsFull())
 	{
 		URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC();
-		if (!RetrieveASC) return RetrieveGameplayTags::Element_None;
+		if (!RetrieveASC) return false;
 
 		RetrieveASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Gauge_Full, 0);
 	}
-
-	FGameplayTag ElementTag = ElementSlots[0].CurrentElement;
 
 	for (int32 i = 0; i < SlotCount - 1; ++i)
 	{
@@ -265,12 +234,7 @@ FGameplayTag UElementGaugeComponent::ConsumeOldestSlot()
 	CurrentSlotIndex--;
 	OnSlotsChanged.Broadcast();
 
-	return ElementTag;
-}
-
-FGameplayTag UElementGaugeComponent::PeekOldestSlot() const
-{
-	return ElementSlots[0].bFull ? ElementSlots[0].CurrentElement : RetrieveGameplayTags::Element_None;
+	return true;
 }
 
 void UElementGaugeComponent::ClearSlot()

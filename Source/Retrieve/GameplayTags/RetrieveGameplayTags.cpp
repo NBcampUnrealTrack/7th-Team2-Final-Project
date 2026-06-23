@@ -245,6 +245,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Light, "GameplayEvent.Attack.HitSuccess.Light");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Heavy, "GameplayEvent.Attack.HitSuccess.Heavy");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Burst, "GameplayEvent.Attack.HitSuccess.Burst");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Burn, "GameplayEvent.Attack.HitSuccess.Burn");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_WeakPoint, "GameplayEvent.Attack.HitSuccess.WeakPoint");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Reaction_Finished, "GameplayEvent.Reaction.Finished");
 

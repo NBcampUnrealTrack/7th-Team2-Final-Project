@@ -23,48 +23,59 @@ FLinearColor URetrieveElementUILibrary::ElementTagToColor(FGameplayTag ElementTa
 	return FLinearColor(0.3f, 0.3f, 0.3f, 1.0f);
 }
 
-bool URetrieveElementUILibrary::GetMatchingBurstCombination(
+FGameplayTag URetrieveElementUILibrary::ElementToAbsorbBuffUITag(FGameplayTag ElementTag)
+{
+	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Fire))
+	{
+		return RetrieveGameplayTags::UI_Buff_Absorb_Fire;
+	}
+	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Water))
+	{
+		return RetrieveGameplayTags::UI_Buff_Absorb_Water;
+	}
+	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Wind))
+	{
+		return RetrieveGameplayTags::UI_Buff_Absorb_Wind;
+	}
+	return FGameplayTag();
+}
+
+bool URetrieveElementUILibrary::GetBurstCombinationByElement(
 	const UDataTable* SkillCombinationTable,
-	const TMap<FGameplayTag, int32>& ElementPattern,
+	FGameplayTag WeaponType,
+	FGameplayTag Element,
 	FSkillCombination& OutCombination)
 {
-	if (!SkillCombinationTable || ElementPattern.IsEmpty())
+	if (!SkillCombinationTable)
 	{
 		return false;
 	}
 
-	for (auto It = SkillCombinationTable->GetRowMap().CreateConstIterator(); It; ++It)
+	auto FindRow = [SkillCombinationTable](FGameplayTag InWeapon, FGameplayTag InElement) -> const FSkillCombination*
 	{
-		const FSkillCombination* Row = reinterpret_cast<const FSkillCombination*>(It.Value());
-		if (!Row || Row->ElementPattern.IsEmpty())
+		for (auto It = SkillCombinationTable->GetRowMap().CreateConstIterator(); It; ++It)
 		{
-			continue;
-		}
-		if (Row->ElementPattern.Num() != ElementPattern.Num())
-		{
-			continue;
-		}
-
-		// 테이블 패턴의 모든 태그·수량이 현재 패턴과 일치하면 매칭
-		bool bMatch = true;
-		for (const auto& Pair : Row->ElementPattern)
-		{
-			const int32* Found = ElementPattern.Find(Pair.Key);
-			if (!Found || *Found != Pair.Value)
+			const FSkillCombination* Row = reinterpret_cast<const FSkillCombination*>(It.Value());
+			if (Row && Row->WeaponType == InWeapon && Row->BurstElement == InElement)
 			{
-				bMatch = false;
-				break;
+				return Row;
 			}
 		}
+		return nullptr;
+	};
 
-		if (bMatch)
-		{
-			OutCombination = *Row;
-			return true;
-		}
+	const FSkillCombination* Found = FindRow(WeaponType, Element);
+	if (!Found && Element != RetrieveGameplayTags::Element_None)
+	{
+		Found = FindRow(WeaponType, RetrieveGameplayTags::Element_None);
+	}
+	if (!Found)
+	{
+		return false;
 	}
 
-	return false;
+	OutCombination = *Found;
+	return true;
 }
 
 bool URetrieveElementUILibrary::GetBuffUIRow(

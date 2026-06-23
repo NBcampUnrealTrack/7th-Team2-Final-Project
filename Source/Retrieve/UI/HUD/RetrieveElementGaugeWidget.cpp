@@ -1,6 +1,7 @@
 #include "UI/HUD/RetrieveElementGaugeWidget.h"
 
 #include "Components/Element/ElementGaugeComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Engine/DataTable.h"
@@ -122,7 +123,9 @@ void URetrieveElementGaugeWidget::HandleGaugeUpdated()
 void URetrieveElementGaugeWidget::NativeOnElementModeChanged(FGameplayTag NewElement)
 {
 	TriggerElementModePulse(NewElement, /*bImmediate=*/false);
-	UpdateSkillIcons();
+	// 게이지 색을 현재 원소모드로 통일 → 모드 전환 시 이미 채워진 슬롯도 새 색 MI로 갱신한다.
+	// (HandleGaugeUpdated가 UpdateSlot×3 + UpdateSkillIcons를 모두 수행)
+	HandleGaugeUpdated();
 	Super::NativeOnElementModeChanged(NewElement);
 }
 
@@ -139,6 +142,8 @@ void URetrieveElementGaugeWidget::UpdateSlot(int32 SlotIndex, float Ratio, FGame
 			{
 				SlotDMIs[SlotIndex] = UMaterialInstanceDynamic::Create(MI, this);
 				Img->SetBrushFromMaterial(SlotDMIs[SlotIndex]);
+				// MI 교체(원소모드 전환 등) 시 새 DMI에 현재 채움량을 즉시 반영해 빈 게이지로 깜빡이지 않게 한다.
+				SlotDMIs[SlotIndex]->SetScalarParameterValue(TEXT("Percent"), CurrentRatios[SlotIndex]);
 			}
 		}
 
@@ -312,7 +317,7 @@ void URetrieveElementGaugeWidget::UpdateSkillIcons()
 	const FGameplayTag AbsorbElement = (VM && VM->GetSlot0IsFull())
 		? VM->GetSlot0Element()
 		: RetrieveGameplayTags::Element_None;
-	const FGameplayTag AbsorbUITag = ResolveAbsorbBuffUITag(AbsorbElement);
+	const FGameplayTag AbsorbUITag = URetrieveElementUILibrary::ElementToAbsorbBuffUITag(AbsorbElement);
 	const bool bHasAbsorbRow = URetrieveElementUILibrary::GetBuffUIRow(BuffDefinitionTable, AbsorbUITag, AbsorbRow);
 	if (!bHasAbsorbRow && AbsorbUITag.IsValid())
 	{
@@ -343,75 +348,31 @@ void URetrieveElementGaugeWidget::EnsureSkillIconTables()
 	}
 }
 
-FGameplayTag URetrieveElementGaugeWidget::ResolveAbsorbBuffUITag(FGameplayTag ElementTag) const
+bool URetrieveElementGaugeWidget::ResolveBurstBuffUIRow(FRetrieveBuffUIRow& OutRow) const
 {
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Fire))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Fire;
-	}
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Water))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Water;
-	}
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Wind))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Wind;
-	}
-	return FGameplayTag();
-}
-
-bool URetrieveElementGaugeWidget::BuildCurrentBurstPattern(TMap<FGameplayTag, int32>& OutPattern) const
-{
-	OutPattern.Reset();
-
-	if (const APawn* OwningPawn = GetOwningPlayerPawn())
-	{
-		if (const UElementGaugeComponent* Gauge = OwningPawn->FindComponentByClass<UElementGaugeComponent>())
-		{
-			if (!Gauge->IsFull())
-			{
-				return false;
-			}
-
-			OutPattern = Gauge->GetCurrentCombination();
-			return !OutPattern.IsEmpty();
-		}
-	}
-
-	UElementGaugeViewModel* VM = BoundViewModel.Get();
+	const UElementGaugeViewModel* VM = BoundViewModel.Get();
 	if (!VM || !VM->GetIsGaugeFull())
 	{
 		return false;
 	}
 
-	auto AddSlot = [&OutPattern](bool bFull, FGameplayTag Element)
+	// 버스트 스킬은 게이지 조합이 아니라 (무기 타입 × 현재 원소모드)로 결정된다. (GA_Burst와 동일 기준)
+	const FGameplayTag CurrentElement = VM->GetCurrentElement();
+
+	FGameplayTag WeaponTypeTag;
+	if (const APawn* OwningPawn = GetOwningPlayerPawn())
 	{
-		if (bFull && Element.IsValid() && !Element.MatchesTagExact(RetrieveGameplayTags::Element_None))
+		if (const UWeaponComponent* Weapon = OwningPawn->FindComponentByClass<UWeaponComponent>())
 		{
-			OutPattern.FindOrAdd(Element)++;
+			WeaponTypeTag = Weapon->GetWeaponDataRef().WeaponTypeTag;
 		}
-	};
-
-	AddSlot(VM->GetSlot0IsFull(), VM->GetSlot0Element());
-	AddSlot(VM->GetSlot1IsFull(), VM->GetSlot1Element());
-	AddSlot(VM->GetSlot2IsFull(), VM->GetSlot2Element());
-
-	return OutPattern.Num() > 0;
-}
-
-bool URetrieveElementGaugeWidget::ResolveBurstBuffUIRow(FRetrieveBuffUIRow& OutRow) const
-{
-	TMap<FGameplayTag, int32> ElementPattern;
-	if (!BuildCurrentBurstPattern(ElementPattern))
-	{
-		return false;
 	}
 
 	FSkillCombination Combination;
-	if (!URetrieveElementUILibrary::GetMatchingBurstCombination(SkillCombinationTable, ElementPattern, Combination))
+	if (!URetrieveElementUILibrary::GetBurstCombinationByElement(SkillCombinationTable, WeaponTypeTag, CurrentElement, Combination))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ElementGauge] Burst combination row not found. Table=%s PatternCount=%d"),
-			*GetNameSafe(SkillCombinationTable), ElementPattern.Num());
+		UE_LOG(LogTemp, Warning, TEXT("[ElementGauge] Burst combination row not found. Table=%s Weapon=%s Element=%s"),
+			*GetNameSafe(SkillCombinationTable), *WeaponTypeTag.ToString(), *CurrentElement.ToString());
 		return false;
 	}
 

@@ -149,8 +149,6 @@ private:
 	void SetElementIconVisualState(float PulseAlpha);
 	void EnsureSkillIconTables();
 	void UpdateSkillIcons();
-	FGameplayTag ResolveAbsorbBuffUITag(FGameplayTag ElementTag) const;
-	bool BuildCurrentBurstPattern(TMap<FGameplayTag, int32>& OutPattern) const;
 	bool ResolveBurstBuffUIRow(FRetrieveBuffUIRow& OutRow) const;
 	void ApplySkillIcon(UImage* Image, TObjectPtr<UMaterialInstanceDynamic>& IconMID, const FRetrieveBuffUIRow* Row, bool bEnabled);
 

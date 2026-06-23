@@ -7,6 +7,7 @@
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
+#include "UI/RetrieveElementUILibrary.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace
@@ -18,20 +19,7 @@ FGameplayTag ResolveAbsorbBuffUITag(FGameplayTag ElementTag, const TMap<FGamepla
 		return *BuffUITag;
 	}
 
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Fire))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Fire;
-	}
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Water))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Water;
-	}
-	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Wind))
-	{
-		return RetrieveGameplayTags::UI_Buff_Absorb_Wind;
-	}
-
-	return FGameplayTag();
+	return URetrieveElementUILibrary::ElementToAbsorbBuffUITag(ElementTag);
 }
 
 TSubclassOf<UGameplayEffect> LoadDefaultAbsorbEffect(FGameplayTag ElementTag)
@@ -87,7 +75,8 @@ void UGA_Absorb::ActivateAbility(
 		return;
 	}
 
-	const FGameplayTag TargetElement = Gauge->PeekOldestSlot();
+	// 흡수 원소는 게이지 슬롯이 아니라 현재 선택된 원소모드로 결정한다.
+	const FGameplayTag TargetElement = ResolveCurrentElementTag();
 	if (!TargetElement.IsValid() || TargetElement.MatchesTagExact(RetrieveGameplayTags::Element_None))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -109,8 +98,8 @@ void UGA_Absorb::ActivateAbility(
 		return;
 	}
 
-	const FGameplayTag ConsumedElement = Gauge->ConsumeOldestSlot();
-	if (!ConsumedElement.MatchesTagExact(TargetElement))
+	// 원소와 무관하게 충전된 슬롯 한 칸을 소비한다. 소비할 슬롯이 없으면 종료.
+	if (!Gauge->ConsumeOldestSlot())
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -125,7 +114,7 @@ void UGA_Absorb::ActivateAbility(
 		const FActiveGameplayEffectHandle AppliedHandle =
 			ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 
-		const FGameplayTag BuffUITag = ResolveAbsorbBuffUITag(ConsumedElement, ElementToAbsorbBuffUITag);
+		const FGameplayTag BuffUITag = ResolveAbsorbBuffUITag(TargetElement, ElementToAbsorbBuffUITag);
 		if (BuffUITag.IsValid())
 		{
 			if (URetrieveBuffUIBroadcastComponent* BuffUI =
@@ -139,7 +128,7 @@ void UGA_Absorb::ActivateAbility(
 		}
 	}
 	
-	if (PlayCastMontage(ConsumedElement))
+	if (PlayCastMontage(TargetElement))
 	{
 		return;
 	}

@@ -42,9 +42,7 @@ protected:
 		bool bReplicateCancelAbility) override;
 
 private:
-	// 게이지 슬롯의 최다 원소를 산출, 우세 없음/동률/무속성이면 Element.None(무속성)
-	static FGameplayTag ResolveDominantElement(const TMap<FGameplayTag, int32>& ElementPattern);
-	// 무기 타입 + 대표 원소(BurstElement)가 모두 일치하는 버스트 행 반환
+	// 무기 타입 + 현재 원소모드(BurstElement)가 모두 일치하는 버스트 행 반환
 	const FSkillCombination* FindBurstForElement(const FGameplayTag& WeaponType, const FGameplayTag& Element) const;
 
 	UFUNCTION() void HandleMontageCompleted();
