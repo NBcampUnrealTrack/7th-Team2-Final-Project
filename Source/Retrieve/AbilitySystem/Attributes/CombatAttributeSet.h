@@ -80,6 +80,14 @@ public:
 	FGameplayAttributeData StaminaRegenRate;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, StaminaRegenRate)
 
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Poise)
+	FGameplayAttributeData Poise;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, Poise)
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxPoise)
+	FGameplayAttributeData MaxPoise;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxPoise)
+
 private:
 	void ClampAttribute(const FGameplayAttribute& Attribute, float& NewValue) const;
 
@@ -94,6 +102,8 @@ private:
 	UFUNCTION() void OnRep_Stamina(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxStamina(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_StaminaRegenRate(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_Poise(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_MaxPoise(const FGameplayAttributeData& OldValue);
 
 	// 방어 분기 단일 진입점
 	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);

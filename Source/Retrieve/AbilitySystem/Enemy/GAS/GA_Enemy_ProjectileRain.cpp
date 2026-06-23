@@ -62,6 +62,7 @@ void UGA_Enemy_ProjectileRain::ActivateAbility(
 	ActiveHitReactType = PatternRow->HitReactType;
 	ActiveEffectTag = PatternRow->EffectTag;
 	ActiveStatusEffectClass = PatternRow->StatusEffectClass;
+	ActiveDamageMultiplier = FMath::Max(0.f, PatternRow->DamageMultiplier);
 	ActiveProjectileClass = PatternRow->ProjectileClass
 		? PatternRow->ProjectileClass
 		: ProjectileClass;
@@ -406,6 +407,7 @@ void UGA_Enemy_ProjectileRain::SpawnPreparedProjectile(int32 SpawnPointIndex)
 	Projectile->SetEffectTag(ActiveEffectTag);
 	Projectile->SetLaunchKnockbackConfig(ActiveLaunchKnockbackConfig);
 	Projectile->SetStatusEffectClass(ActiveStatusEffectClass);
+	Projectile->SetDamageMultiplier(ActiveDamageMultiplier);
 	Projectile->PrepareForDelayedLaunch();
 	PreparedProjectiles.Add(Projectile);
 	PreparedSpawnPointIndices.Add(SpawnPointIndex);

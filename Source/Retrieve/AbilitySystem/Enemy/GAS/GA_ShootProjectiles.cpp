@@ -151,6 +151,7 @@ void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	ActiveEffectTag = FGameplayTag();
 	ActiveStatusEffectClass = nullptr;
 	ActiveProjectileClass = nullptr;
+	ActiveDamageMultiplier = 1.f;
 	ActivePatternRowName = NAME_None;
 	ActiveProjectileSpawnIndex = 0;
 	ActiveProjectileCount = 0;
@@ -187,7 +188,8 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 		&ActiveLaunchKnockbackConfig,
 		&ActiveEffectTag,
 		&ActiveStatusEffectClass,
-		&ActiveProjectileClass);
+		&ActiveProjectileClass,
+		&ActiveDamageMultiplier);
 	if (!bResolvedPattern)
 	{
 		UE_LOG(LogTemp, Warning,
@@ -359,6 +361,7 @@ void UGA_ShootProjectiles::SpawnProjectile()
 		Projectile->SetEffectTag(ActiveEffectTag);
 		Projectile->SetLaunchKnockbackConfig(ActiveLaunchKnockbackConfig);
 		Projectile->SetStatusEffectClass(ActiveStatusEffectClass);
+		Projectile->SetDamageMultiplier(ActiveDamageMultiplier);
 		Projectile->SetProjectileLifetime(ActiveProjectileConfig.ProjectileLifetime);
 		Projectile->SetGravityScale(ActiveProjectileConfig.bUseGravity
 			? ActiveProjectileConfig.ProjectileGravityScale : 0.f);
@@ -443,7 +446,8 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 	FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig,
 	FGameplayTag* OutEffectTag,
 	TSubclassOf<UGameplayEffect>* OutStatusEffectClass,
-	TSubclassOf<AEnemyProjectile>* OutProjectileClass) const
+	TSubclassOf<AEnemyProjectile>* OutProjectileClass,
+	float* OutDamageMultiplier) const
 {
 	const UEnemyCombatComponent* CombatComponent = GetEnemyCombatComponent();
 
@@ -487,6 +491,10 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 	if (OutProjectileClass)
 	{
 		*OutProjectileClass = Row->ProjectileClass;
+	}
+	if (OutDamageMultiplier)
+	{
+		*OutDamageMultiplier = FMath::Max(0.f, Row->DamageMultiplier);
 	}
 
 	if (OutConfig.ProjectileSpeed <= 0.f)

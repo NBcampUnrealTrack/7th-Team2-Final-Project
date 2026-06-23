@@ -48,6 +48,7 @@ private:
 	void ScheduleGroundHazards();
 	void SpawnGroundHazard(int32 SpawnEntryIndex);
 	bool ResolveGroundLocation(const FVector& RequestedLocation, FVector& OutGroundLocation) const;
+	bool IsTooCloseToExistingHazard(const FVector& GroundLocation) const;
 	void TryFinishAbility();
 	void FinishAbility(bool bWasCancelled);
 
@@ -80,11 +81,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ground Hazard|Ground Trace")
 	float GroundOffset = 5.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ground Hazard|Ground Trace", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float MinGroundNormalZ = 0.7f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ground Hazard|Placement", meta=(ClampMin="0.0"))
+	float MinimumSpawnSpacing = 200.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ground Hazard|Placement", meta=(ClampMin="1"))
+	int32 MaximumPlacementAttempts = 30;
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 
 	TArray<FTimerHandle> SpawnTimerHandles;
+	TArray<FVector> SpawnedGroundLocations;
 	int32 PendingSpawnCount = 0;
 	bool bMontageFinished = false;
 };

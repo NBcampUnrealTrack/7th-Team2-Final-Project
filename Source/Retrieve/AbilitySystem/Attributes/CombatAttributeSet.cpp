@@ -31,6 +31,8 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Stamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, StaminaRegenRate, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Poise, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxPoise, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -95,6 +97,14 @@ void UCombatAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 		NewValue = FMath::Max(0.f, NewValue);
 	}
 	else if (Attribute == GetStaminaRegenRateAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
+	}
+	else if (Attribute == GetPoiseAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxPoise());
+	}
+	else if (Attribute == GetMaxPoiseAttribute())
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
@@ -212,6 +222,16 @@ void UCombatAttributeSet::OnRep_MaxStamina(const FGameplayAttributeData& OldValu
 void UCombatAttributeSet::OnRep_StaminaRegenRate(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, StaminaRegenRate, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_Poise(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, Poise, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_MaxPoise(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxPoise, OldValue);
 }
 
 

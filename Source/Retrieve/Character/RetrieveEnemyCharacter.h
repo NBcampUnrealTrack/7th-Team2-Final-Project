@@ -11,6 +11,7 @@
 
 class URetrieveAbilitySystemComponent;
 class UEnemyCombatComponent;
+class UEnemyPoiseComponent;
 class UPatternCounterComponent;
 class UDropComponent;
 class UNormalMonsterHealthBarComponent;
@@ -155,6 +156,10 @@ protected:
 	/** 패턴 카운터 윈도우 추적 및 그로기 트리거. 에픽·보스에서 확장 재사용. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UPatternCounterComponent> PatternCounterComponent;
+
+	/** Poise 누적 기반 그로기 트리거 담당 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UEnemyPoiseComponent> EnemyPoiseComponent;
 
 	/** 사망 시 드랍 아이템 처리 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
