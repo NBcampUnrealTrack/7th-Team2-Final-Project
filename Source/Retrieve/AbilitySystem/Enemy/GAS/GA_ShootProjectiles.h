@@ -59,7 +59,8 @@ protected:
 		FMonsterLaunchKnockbackConfig* OutLaunchKnockbackConfig = nullptr,
 		FGameplayTag* OutEffectTag = nullptr,
 		TSubclassOf<UGameplayEffect>* OutStatusEffectClass = nullptr,
-		TSubclassOf<AEnemyProjectile>* OutProjectileClass = nullptr) const;
+		TSubclassOf<AEnemyProjectile>* OutProjectileClass = nullptr,
+		float* OutDamageMultiplier = nullptr) const;
 	virtual const UAnimMontage* ResolveMontage(const FGameplayEventData* TriggerEventData) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")
@@ -97,5 +98,6 @@ private:
 	FGameplayTag ActiveEffectTag;
 	TSubclassOf<UGameplayEffect> ActiveStatusEffectClass;
 	TSubclassOf<AEnemyProjectile> ActiveProjectileClass;
+	float ActiveDamageMultiplier = 1.f;
 	FName ActivePatternRowName = NAME_None;
 };

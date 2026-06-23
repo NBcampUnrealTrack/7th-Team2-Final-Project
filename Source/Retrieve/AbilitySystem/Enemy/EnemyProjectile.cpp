@@ -149,6 +149,11 @@ void AEnemyProjectile::SetProjectileLifetime(float Lifetime)
 	}
 }
 
+void AEnemyProjectile::SetDamageMultiplier(float InDamageMultiplier)
+{
+	DamageMultiplier = FMath::Max(0.f, InDamageMultiplier);
+}
+
 void AEnemyProjectile::SetGravityScale(float GravityScale)
 {
 	ProjectileMovement->ProjectileGravityScale = GravityScale;

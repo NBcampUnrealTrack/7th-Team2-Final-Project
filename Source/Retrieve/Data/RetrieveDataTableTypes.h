@@ -330,6 +330,10 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 파훼 시 그로기 지속 시간 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyDuration = 3.f;
+
+	/** 패턴 데미지 배율. 1.0이면 기본 데미지 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Damage", meta=(ClampMin="0.0"))
+	float DamageMultiplier = 1.f;
 	
     /** 선택 우선순위. 높을수록 먼저 시도. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
@@ -443,6 +447,18 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** 그로기 종료 후 재진입 대기 시간 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
 	float GroggyCooldown = 10.f;
+
+	/** Poise 기반 그로기 최대 누적치. 0 이하면 Poise 기반 그로기를 사용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
+	float MaxPoise = 0.f;
+
+	/** 실제 피해량에 곱해 Poise 감소량을 계산하는 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
+	float PoiseDamageMultiplier = 1.f;
+
+	/** Poise 고갈로 발생하는 그로기 지속 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Groggy", meta=(ClampMin="0.0"))
+	float PoiseGroggyDuration = 3.f;
 
 	/** 범위 지정 - 공격 가능 범위 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Attack")

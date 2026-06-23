@@ -120,5 +120,6 @@ private:
 	FGameplayTag ActiveEffectTag;
 	TSubclassOf<UGameplayEffect> ActiveStatusEffectClass;
 	TSubclassOf<AEnemyProjectile> ActiveProjectileClass;
+	float ActiveDamageMultiplier = 1.f;
 	bool bProjectilesReleased = false;
 };

@@ -40,6 +40,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void SetProjectileLifetime(float Lifetime);
+
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetDamageMultiplier(float InDamageMultiplier);
 	
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void SetGravityScale(float GravityScale);

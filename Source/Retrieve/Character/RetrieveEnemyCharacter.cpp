@@ -16,6 +16,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Inventory/DropComponent.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
+#include "Components/Enemy/EnemyPoiseComponent.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
@@ -36,6 +37,7 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 
 	EnemyCombatComponent = CreateDefaultSubobject<UEnemyCombatComponent>(TEXT("EnemyCombatComponent"));
 	PatternCounterComponent = CreateDefaultSubobject<UPatternCounterComponent>(TEXT("PatternCounterComponent"));
+	EnemyPoiseComponent = CreateDefaultSubobject<UEnemyPoiseComponent>(TEXT("EnemyPoiseComponent"));
 	DropComponent = CreateDefaultSubobject<UDropComponent>(TEXT("DropComponent"));
 	NormalHealthBarComponent = CreateDefaultSubobject<UNormalMonsterHealthBarComponent>(TEXT("NormalHealthBarComponent"));
 	NormalHealthBarComponent->SetupAttachment(GetRootComponent());
@@ -299,6 +301,11 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 	if (PatternCounterComponent)
 	{
 		PatternCounterComponent->SetGroggyCooldown(Row->GroggyCooldown);
+	}
+
+	if (EnemyPoiseComponent)
+	{
+		EnemyPoiseComponent->InitializeFromMonsterData(*Row);
 	}
 
 	if (HitReactionComponent && HitReactionProfile)

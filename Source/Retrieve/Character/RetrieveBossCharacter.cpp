@@ -3,7 +3,9 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Components/Enemy/BossPhaseComponent.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
+#include "Components/Enemy/EnemyPoiseComponent.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
+#include "Components/Enemy/PatternCounterComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
@@ -102,11 +104,25 @@ void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 
 	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(
 		MonsterDataRowName, TEXT("ARetrieveBossCharacter::UpdateMonsterDataRow"));
-	if (!Row) { return; }
+	if (!Row)
+	{
+		return;
+	}
+
 
 	if (EnemyCombatComponent)
 	{
 		EnemyCombatComponent->Initialize(PatternTable, Row->PatternSlots);
+	}
+
+	if (PatternCounterComponent)
+	{
+		PatternCounterComponent->SetGroggyCooldown(Row->GroggyCooldown);
+	}
+
+	if (EnemyPoiseComponent)
+	{
+		EnemyPoiseComponent->InitializeFromMonsterData(*Row, true);
 	}
 }
 

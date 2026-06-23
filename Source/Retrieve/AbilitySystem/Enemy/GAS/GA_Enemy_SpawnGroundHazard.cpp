@@ -96,6 +96,7 @@ void UGA_Enemy_SpawnGroundHazard::EndAbility(
 		}
 	}
 	SpawnTimerHandles.Reset();
+	SpawnedGroundLocations.Reset();
 
 	if (MontageTask)
 	{
@@ -177,15 +178,26 @@ void UGA_Enemy_SpawnGroundHazard::SpawnGroundHazard(int32 SpawnEntryIndex)
 		FVector RequestedLocation = BaseLocation
 			+ Avatar->GetActorRotation().RotateVector(SpawnEntry.SpawnOffset);
 
-		if (bRandomSpawn && SpawnableRadius > 0.f)
-		{
-			const FVector2D RandomOffset = FMath::RandPointInCircle(SpawnableRadius);
-			RequestedLocation += FVector(RandomOffset.X, RandomOffset.Y, 0.f);
-		}
+		const int32 PlacementAttempts = bRandomSpawn && SpawnableRadius > 0.f
+			? FMath::Max(1, MaximumPlacementAttempts)
+			: 1;
 
-		FVector GroundLocation;
-		if (ResolveGroundLocation(RequestedLocation, GroundLocation))
+		for (int32 AttemptIndex = 0; AttemptIndex < PlacementAttempts; ++AttemptIndex)
 		{
+			FVector CandidateLocation = RequestedLocation;
+			if (bRandomSpawn && SpawnableRadius > 0.f)
+			{
+				const FVector2D RandomOffset = FMath::RandPointInCircle(SpawnableRadius);
+				CandidateLocation += FVector(RandomOffset.X, RandomOffset.Y, 0.f);
+			}
+
+			FVector GroundLocation;
+			if (!ResolveGroundLocation(CandidateLocation, GroundLocation)
+				|| IsTooCloseToExistingHazard(GroundLocation))
+			{
+				continue;
+			}
+
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = Avatar;
 			SpawnParams.Instigator = Cast<APawn>(Avatar);
@@ -193,11 +205,15 @@ void UGA_Enemy_SpawnGroundHazard::SpawnGroundHazard(int32 SpawnEntryIndex)
 				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 			const FRotator SpawnRotation(0.f, Avatar->GetActorRotation().Yaw, 0.f);
-			World->SpawnActor<AEnemyGroundHazard>(
+			if (World->SpawnActor<AEnemyGroundHazard>(
 				GroundHazardClass,
 				GroundLocation,
 				SpawnRotation,
-				SpawnParams);
+				SpawnParams))
+			{
+				SpawnedGroundLocations.Add(GroundLocation);
+			}
+			break;
 		}
 	}
 
@@ -231,8 +247,32 @@ bool UGA_Enemy_SpawnGroundHazard::ResolveGroundLocation(
 		return false;
 	}
 
+	if (HitResult.ImpactNormal.Z < MinGroundNormalZ)
+	{
+		return false;
+	}
+
 	OutGroundLocation = HitResult.ImpactPoint + HitResult.ImpactNormal * GroundOffset;
 	return true;
+}
+
+bool UGA_Enemy_SpawnGroundHazard::IsTooCloseToExistingHazard(const FVector& GroundLocation) const
+{
+	if (MinimumSpawnSpacing <= 0.f)
+	{
+		return false;
+	}
+
+	const float MinimumSpacingSquared = FMath::Square(MinimumSpawnSpacing);
+	for (const FVector& ExistingLocation : SpawnedGroundLocations)
+	{
+		if (FVector::DistSquared2D(GroundLocation, ExistingLocation) < MinimumSpacingSquared)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void UGA_Enemy_SpawnGroundHazard::TryFinishAbility()

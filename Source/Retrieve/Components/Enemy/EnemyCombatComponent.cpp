@@ -777,6 +777,10 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 				ActivePatternRowName, TEXT("OnHitboxOverlap_HitReact"));
 			if (ActivePatternRow)
 			{
+				Spec.Data->SetSetByCallerMagnitude(
+					RetrieveGameplayTags::Data_Damage_Mul,
+					FMath::Max(0.f, ActivePatternRow->DamageMultiplier));
+
 				if (const FGameplayTag ReactTag = HitReactTypeToTag(ActivePatternRow->HitReactType); ReactTag.IsValid())
 				{
 					Spec.Data->AddDynamicAssetTag(ReactTag);
