@@ -79,6 +79,23 @@ void URetrieveAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag
 	}
 }
 
+bool URetrieveAbilitySystemComponent::HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const
+{
+	if (!InputTag.IsValid())
+	{
+		return false;
+	}
+
+	for (const FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+	{
+		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void URetrieveAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bGamePaused)
 {
 	if (bGamePaused)
@@ -328,7 +345,12 @@ void URetrieveAbilitySystemComponent::ResolveBufferedCombatInput()
 		// 공격류(Ability.Type.Attack)는 자신의 CancelAbilitiesWithTag로 진행 중 공격을 자동 캔슬하고,
 		// 원소 전환처럼 그 태그가 없는 것은 캔슬하지 않아 평타 콤보가 유지된다.
 		// 발동이 실패하면 아무것도 캔슬되지 않으므로 현재 공격은 그대로다(no-slot Heavy / 정지 Sprint 안전).
-		if (TryActivateAbility(Entry.AbilitySpecHandle))
+		// '진행 중 공격을 끊고 들어가는 캔슬-인'인지 발동 직전에 기록한다. 어빌리티가 ActivateAbility에서 읽는다
+		// (CancelOpen 태그는 CancelAbilitiesWithTag로 ActivateAbility 전에 지워져 못 쓴다 → 동기 플래그로 전달).
+		bActivatingAsCancel = bAttackActive;
+		const bool bActivated = TryActivateAbility(Entry.AbilitySpecHandle);
+		bActivatingAsCancel = false;
+		if (bActivated)
 		{
 			// 발동이 버퍼를 흔들어 Index가 무효화됐을 수 있어 신원(Handle+Sequence)으로 제거.
 			CombatInputBuffer.RemoveAll([&Entry](const FRetrieveBufferedCombatInput& E)

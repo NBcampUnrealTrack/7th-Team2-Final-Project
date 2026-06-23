@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
@@ -1083,6 +1083,10 @@ struct RETRIEVE_API FRetrieveWeaponAttachmentData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	FName AttachSocketName = TEXT("Weapon_R");
+
+	// 납검(Sheathed) 시 부착할 캐릭터 소켓(등/허리). 비우면 SetWeaponDrawn(false)가 이 파트를 옮기지 않는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	FName SheathedSocketName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	FTransform RelativeTransform = FTransform::Identity;

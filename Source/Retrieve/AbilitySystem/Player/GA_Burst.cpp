@@ -65,9 +65,10 @@ void UGA_Burst::OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo, const FG
 
 void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
 	AActor* Avatar = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
-	UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
-	if (!IsValid(Avatar) || !IsValid(ASC) || !SkillCombinationTable)
+	if (!IsValid(Avatar) || !SkillCombinationTable)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;

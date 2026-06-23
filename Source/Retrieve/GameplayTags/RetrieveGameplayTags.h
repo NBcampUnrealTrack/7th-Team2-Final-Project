@@ -45,6 +45,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_SprintAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_ParryCounter);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_BowShot);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_StanceTransition);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_EquipTransition);
 
 	// ---- Ability families
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Attack);
@@ -62,6 +64,8 @@ namespace RetrieveGameplayTags
 	// ---- Player state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Normal);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Combat);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_WeaponSheathed);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_StanceBusy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Attacking);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dodging);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Guarding);
@@ -246,6 +250,14 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_HitSuccess_WeakPoint);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Reaction_Finished);
 
+	// ---- Gameplay events: stance (draw / sheathe)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Player_DrawWeapon);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Player_SheatheWeapon);
+
+	// ---- Gameplay events: equip (equip / unequip)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Player_EquipWeapon);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Player_UnequipWeapon);
+	
 	// ---- Gameplay events: boss / pattern counter
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_PatternCast);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Boss_PhaseTransition);

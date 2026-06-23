@@ -5,6 +5,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/Player/ArmorComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
+#include "Components/Combat/CombatStanceComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/Player/RetrieveHeroComponent.h"
@@ -63,6 +64,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
 	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>(TEXT("StaminaComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
+	CombatStanceComponent = CreateDefaultSubobject<UCombatStanceComponent>(TEXT("CombatStanceComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
@@ -115,6 +117,12 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		PawnCosmeticComponent->InitializeWithAbilitySystem(ASC);
 	}
 
+	// 스탠스는 cosmetic 이후 — 무기 레이어 relink가 끝난 뒤 초기 납검 소켓을 맞춘다.
+	if (CombatStanceComponent)
+	{
+		CombatStanceComponent->InitializeWithAbilitySystem(ASC);
+	}
+
 	// 투구 장착 테스트용 코드 (suppression 검증) — cosmetic 초기화 이후에 호출해야 한다.
 	if (HasAuthority() && ArmorComponent)
 	{
@@ -149,6 +157,11 @@ void ASovereignCharacter::UnPossessed()
 	if (PawnCosmeticComponent)
 	{
 		PawnCosmeticComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (CombatStanceComponent)
+	{
+		CombatStanceComponent->UninitializeFromAbilitySystem();
 	}
 
 	if (ElementUnlockComponent)

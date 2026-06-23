@@ -23,6 +23,7 @@ class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
 class UMotionWarpingComponent;
 class URetrieveCameraWaterProbeComponent;
+class UCombatStanceComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
@@ -52,7 +53,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<URetrievePawnCosmeticComponent> PawnCosmeticComponent;
-	
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UCombatStanceComponent> CombatStanceComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
 
