@@ -50,6 +50,6 @@ void ARetrieveAlsCombatCharacter::HandleDeathStarted(AActor* OwningActor)
 		MoveComp->DisableMovement();
 	}
 
-	// ALS 사망 레그돌 (Phase B에서 결정한 사항: 사망 시에만 발동) — wrapper로 호출
-	StartRagdoll();
+	// ALS 사망 레그돌은 GA_Die가 죽음 몽타주 종료 시점에 트리거 (방향 C).
+	// 여기서 즉시 호출하면 몽타주와 동시 발동해 서로 덮어쓰므로 호출하지 않는다.
 }

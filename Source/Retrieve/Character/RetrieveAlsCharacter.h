@@ -50,6 +50,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	bool IsMantling() const;
 
+	/** 구르기/맨틀/낙법 등 ALS 액션(LocomotionAction)이 진행 중인지. GA가 ALS를 모르게 캡슐화. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	bool IsLocomotionActionActive() const;
+
+	/**
+	 * 켜면 ALS의 velocity 기반 회전(RefreshGroundedRotation)을 가로채 현재 facing을 유지.
+	 * 공격 직후 루트모션 잔류/후방 속도로 캐릭터가 도는 것을 막는다. 이동 입력이 들어오면 자동 해제.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
+	void SetHoldFacing(bool bHold) { bHoldFacing = bHold; }
+
 	/** 사망/낙사/Groggy 등 시체화 진입. 시뮬레이션 시작. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	void StartRagdoll();
@@ -116,10 +127,16 @@ protected:
 	virtual void OnLockOnTagChanged(const FGameplayTag Tag, int32 NewCount);
 
 	/** ALS LocomotionAction 변화 → GAS State 태그 미러링 (Rolling→Dodging 등) */
-	virtual void NotifyLocomotionActionChanged(FGameplayTag PreviousLocomotionAction) override;
+	virtual void NotifyLocomotionActionChanged(const FGameplayTag& PreviousLocomotionAction) override;
 
 	/** ALS 착지 낙법 판정 시점. bSuppressLandingRoll이 켜져 있으면 이 착지 1회의 낙법을 억제 */
-	virtual void NotifyLocomotionModeChanged(FGameplayTag PreviousLocomotionMode) override;
+	virtual void NotifyLocomotionModeChanged(const FGameplayTag& PreviousLocomotionMode) override;
+
+	// ALS 회전 확장 훅 — true 반환 시 ALS 기본(velocity) 회전을 스킵. HoldFacing 구현에 사용.
+	virtual bool RefreshCustomGroundedMovingRotation(float DeltaTime) override;
+	virtual bool RefreshCustomGroundedNotMovingRotation(float DeltaTime) override;
+	/** bHoldFacing 동안 현재 facing 유지(회전 스킵). 이동 입력 시 해제하고 false 반환. */
+	bool RefreshHeldFacing();
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Pawn")
 	TObjectPtr<const URetrievePawnData> DefaultPawnData;
@@ -140,4 +157,7 @@ private:
 
 	/** true면 다음 착지 1회의 낙법을 억제 (NotifyLocomotionModeChanged에서 소비). JumpAttack이 발동 시 설정 */
 	bool bSuppressLandingRoll = false;
+
+	/** true면 ALS velocity 회전을 가로채 facing 유지 (공격 종료 후 후방 회전 방지). 이동 입력 시 자동 해제 */
+	bool bHoldFacing = false;
 };

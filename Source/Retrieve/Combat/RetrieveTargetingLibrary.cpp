@@ -1,6 +1,7 @@
 #include "Combat/RetrieveTargetingLibrary.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/Combat/CombatReactionComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -17,6 +18,50 @@ namespace
 		0,
 		TEXT("0: off, 1: 오토타게팅 콘/선택 타겟 표시"),
 		ECVF_Cheat);
+}
+
+FVector URetrieveTargetingLibrary::GetWarpAimDirection(const ACharacter* Source)
+{
+	if (!IsValid(Source))
+	{
+		return FVector::ZeroVector;
+	}
+
+	// 이동 입력 방향 우선. 입력이 중립이면 컨트롤 회전(카메라) 정면으로 fallback.
+	FVector Dir = Source->GetLastMovementInputVector().GetSafeNormal2D();
+	if (Dir.IsNearlyZero())
+	{
+		Dir = Source->GetControlRotation().Vector().GetSafeNormal2D();
+	}
+	return Dir;
+}
+
+AActor* URetrieveTargetingLibrary::ResolveAimTarget(AActor* AvatarActor, float SearchRange, float SearchHalfAngle,
+	float MaxVerticalDelta, float RangeWeightRate)
+{
+	if (!IsValid(AvatarActor))
+	{
+		return nullptr;
+	}
+
+	// 1) 락온 대상 우선
+	if (const UCombatReactionComponent* CombatReaction = AvatarActor->FindComponentByClass<UCombatReactionComponent>())
+	{
+		if (AActor* LockOnTarget = CombatReaction->GetLockOnTarget())
+		{
+			return LockOnTarget;
+		}
+	}
+
+	// 2) 락온 X → 컨트롤 회전 기준 전방 콘 소프트락
+	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
+	if (!IsValid(SourceChar))
+	{
+		return nullptr;
+	}
+
+	const FVector Aim = SourceChar->GetControlRotation().Vector();
+	return FindBestTarget(SourceChar, SearchRange, SearchHalfAngle, Aim, MaxVerticalDelta, RangeWeightRate);
 }
 
 AActor* URetrieveTargetingLibrary::FindBestTarget(ACharacter* Source, float Range, float HalfAngle,

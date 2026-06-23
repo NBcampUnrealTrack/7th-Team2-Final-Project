@@ -17,6 +17,7 @@ class UCombatReactionComponent;
 class USpringArmComponent;
 class UWeaponComponent;
 class UElementGaugeComponent;
+class UStaminaComponent;
 class UPlayerBurstComponent;
 class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
@@ -35,8 +36,6 @@ public:
 	{
 		return FGenericTeamId(static_cast<uint8>(Team));
 	}
-
-	USkeletalMeshComponent* GetVisualMesh() const { return VisualMesh; }
 
 protected:
 	virtual void InitializeAbilitySystem() override;
@@ -65,6 +64,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementGaugeComponent> ElementGaugeComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UStaminaComponent> StaminaComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UPlayerBurstComponent> PlayerBurstComponent;

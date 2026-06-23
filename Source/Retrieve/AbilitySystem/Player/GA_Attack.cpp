@@ -2,20 +2,17 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
-#include "GameFramework/Character.h"
 #include "GameplayEffect.h"
-#include "MotionWarpingComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
-#include "Combat/RetrieveTargetingLibrary.h"
-#include "Components/Combat/CombatReactionComponent.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -33,16 +30,24 @@ UGA_Attack::UGA_Attack()
 
 	// 공중/점프 중 공격 불가
 	bBlockActivationWhileAirborne = true;
-	
+
+	// 구르기/맨틀 등 ALS 액션 중 공격 발동 불가. 단, 캔슬 윈도우가 이 입력을 허용하면 예외(캔슬 우선) — CanActivateAbility 참고.
+	bBlockedByLocomotionAction = true;
+
+	// 평타는 버퍼를 쓴다. 우선순위 0(가장 낮음) — 같은 입력에 묶인 Sprint/Heavy/Jump(우선순위 높음)가
+	// 문맥상 발동 가능하면 그쪽이 먼저 소비된다.
+	bUseCombatInputBuffer = true;
+	CombatInputPriority = 0;
+
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Sprinting);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 	
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 }
 
@@ -107,6 +112,8 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 		ImpactEventTask->ReadyForActivation();
 	}
 
+	// 콤보 다음 타는 ASC 리졸버가 매 프레임 버퍼를 보고 TryConsumeBufferedCombatInput()로 위임한다.
+	// (윈도우 열림 태스크/버퍼 델리게이트 구독 불필요)
 	StartComboStep(0);
 }
 
@@ -148,6 +155,9 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	// 직전 타 태스크를 먼저 정리 — 새 재생이 일으키는 OnInterrupted가 EndAbility로 어빌리티를 취소하지 않도록.
+	// 캔슬/콤보 윈도우 태그는 여기서 강제로 0으로 만들지 않는다. 직전 섹션의 ANS End와
+	// 새 섹션의 ANS Begin이 ref-count로 알아서 짝맞춤한다(겹침 허용). 강제 리셋하면 직전 End가
+	// 한 틱 늦게 떨어질 때 새 윈도우 카운트까지 깎여 전환이 간헐적으로 실패한다. 종료 정리는 EndAbility에서만.
 	if (MontageTask)
 	{
 		MontageTask->EndTask();
@@ -155,16 +165,11 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	}
 
 	CurrentComboIndex = StepIndex;          // 재생 시점에 인덱스 직접 확정 (ImpactBegin 커밋 불필요)
-	PendingComboIndex = INDEX_NONE;
-	bPendingElementRestart = false;
 	bComboChargeBonusGranted = false;
 
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
-
-	// 이 타 시작 시점에 워프 타겟 1회 확정 (락온 우선 -> 전방 콘). 타겟 없으면 내부에서 RemoveWarpTarget.
-	RegisterAttackWarpTarget();
 
 	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
 
@@ -180,123 +185,55 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
 	MontageTask->ReadyForActivation();
-
-	StartListeningComboInput();
 }
 
-AActor* UGA_Attack::ResolveAttackWarpTarget() const
+bool UGA_Attack::TryConsumeBufferedCombatInput(const FRetrieveBufferedCombatInput& BufferedInput)
 {
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!IsValid(AvatarActor))
+	// 리졸버가 '활성 중인 나'의 버퍼 입력을 넘겨준 경우다. 여기서는 콤보 다음 타(내부 전환)만 처리한다.
+	// 원소 전환/외부 공격(Sprint/Heavy/Jump)은 별개 어빌리티라 리졸버가 직접 발동한다 — 여기서 다루지 않음.
+	if (BufferedInput.IntentTag != RetrieveGameplayTags::Ability_Player_Attack)
 	{
-		return nullptr;
+		return false;
 	}
 
-	// 1) 락온 타겟 우선
-	if (const UCombatReactionComponent* CombatReaction = AvatarActor->FindComponentByClass<UCombatReactionComponent>())
+	// 콤보 윈도우가 열려 있어야 다음 타로 넘어간다.
+	// (기존 ComboWindow = State.Combo.Open, 또는 평타를 허용하는 AttackCancelWindow 둘 다 인정)
+	const URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo());
+	if (!IsValid(RetrieveASC))
 	{
-		if (AActor* LockOnTarget = CombatReaction->GetLockOnTarget())
+		return false;
+	}
+	// 자기 콤보 다음 타는 '공격 캔슬 윈도우가 열려 있으면' 진행한다.
+	// (AllowedCancelIntents에 평타를 따로 넣을 필요 없음 — 그 목록은 교차 캔슬용)
+	// State.Combo.Open(레거시 콤보 윈도우)도 그대로 인정.
+	const bool bWindowOpen =
+		RetrieveASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Combo_Open)
+		|| RetrieveASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Attack_CancelOpen);
+	if (!bWindowOpen)
+	{
+		return false;
+	}
+
+	// 콤보 도중 원소가 바뀌었으면(다른 SetElement 발동됨) 새 원소 변형으로 0타부터 다시 시작.
+	if (ResolveCurrentElementTag() != CachedElementTag)
+	{
+		if (!ResolveAttackComboVariant())
 		{
-			return LockOnTarget;
+			return false;
 		}
+		StartComboStep(0);
+		return true;
 	}
 
-	// 2) 비락온 -> 컨트롤 회전 기준 전방 콘 검색
-	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
-	if (!IsValid(SourceChar))
+	// 같은 원소면 다음 타로. 마지막 타면 소비하지 않고 몽타주가 자연 종료되게 둔다.
+	const int32 NextStep = CurrentComboIndex + 1;
+	if (!CachedComboSteps.IsValidIndex(NextStep))
 	{
-		return nullptr;
+		return false;
 	}
 
-	// 소프트 락온: 플레이어가 카메라로 겨눈 방향 기준으로 콘 검색.
-	const FVector Aim = SourceChar->GetControlRotation().Vector();
-	return URetrieveTargetingLibrary::FindBestTarget(
-		SourceChar, WarpSearchRange, WarpSearchHalfAngle, Aim, WarpMaxVerticalDelta, WarpRangeWeightRate);
-}
-
-void UGA_Attack::RegisterAttackWarpTarget()
-{
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	UMotionWarpingComponent* MotionWarping = IsValid(AvatarActor)
-		? AvatarActor->FindComponentByClass<UMotionWarpingComponent>()
-		: nullptr;
-	if (!IsValid(MotionWarping))
-	{
-		return;
-	}
-
-	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
-	AActor* Target = ResolveAttackWarpTarget();
-	if (!IsValid(Target) || !IsValid(SourceChar))
-	{
-		MotionWarping->RemoveWarpTarget(AttackWarpTargetName);   // 타겟 없음 -> 워프 제거, 루트모션 유지
-		return;
-	}
-
-	// 이 콤보 섹션의 루트모션 전진량을 도약 상한으로 사용 (수동값 없이 애님이 곧 거리).
-	float DashDistance = 0.f;
-	if (IsValid(CachedAttackMontage) && CachedComboSteps.IsValidIndex(CurrentComboIndex))
-	{
-		const int32 SectionIdx = CachedAttackMontage->GetSectionIndex(CachedComboSteps[CurrentComboIndex].SectionName);
-		if (SectionIdx != INDEX_NONE)
-		{
-			float SectionStart = 0.f;
-			float SectionEnd = 0.f;
-			CachedAttackMontage->GetSectionStartAndEndTime(SectionIdx, SectionStart, SectionEnd);
-			const FTransform SectionRootMotion = CachedAttackMontage->ExtractRootMotionFromTrackRange(SectionStart, SectionEnd);
-			DashDistance = SectionRootMotion.GetTranslation().Size2D();
-		}
-	}
-
-	const FTransform WarpTransform =
-		URetrieveTargetingLibrary::BuildWarpTransform(SourceChar, Target, WarpStandoffOffset, DashDistance);
-	MotionWarping->AddOrUpdateWarpTargetFromTransform(AttackWarpTargetName, WarpTransform);
-}
-
-void UGA_Attack::StartListeningComboInput()
-{
-	if (InputPressTask)
-	{
-		InputPressTask->EndTask();
-		InputPressTask = nullptr;
-	}
-
-	InputPressTask = UAbilityTask_WaitInputPress::WaitInputPress(this, false);
-	if (InputPressTask)
-	{
-		InputPressTask->OnPress.AddDynamic(this, &ThisClass::HandleInputPressed);
-		InputPressTask->ReadyForActivation();
-	}
-}
-
-void UGA_Attack::HandleInputPressed(float TimeWaited)
-{
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-	
-	if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Combo_Open))
-	{
-		if (ResolveCurrentElementTag() == CachedElementTag)
-		{
-			const int32 NextStep = CurrentComboIndex + 1;
-			if (CachedComboSteps.IsValidIndex(NextStep))
-			{
-				PendingComboIndex = NextStep;   // 예약만 — 현재 섹션은 끊지 않음. OnBlendOut에서 소비(크로스블렌드)
-				bPendingElementRestart = false;
-			}
-			// 마지막 타면 무시 — 현재 몽타주 완주 후 종료
-		}
-		else
-		{
-			bPendingElementRestart = true;  // 다른 원소 → 완주 후 재시작
-			PendingComboIndex = INDEX_NONE;
-		}
-	}
-
-	StartListeningComboInput();
+	StartComboStep(NextStep);
+	return true;
 }
 
 void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
@@ -518,15 +455,8 @@ void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
 
 void UGA_Attack::HandleMontageBlendOut()
 {
-	// 섹션 자연 종료의 블렌드아웃 시작 시점. 예약된 다음 타가 있으면 여기서 재생 → 공격끼리 크로스블렌드.
-	// 예약이 없으면 아무것도 안 함 → 그대로 블렌드아웃 진행 → OnCompleted가 종료를 처리.
-	// (외부 중단은 OnBlendOut이 아니라 OnInterrupted로 분기되므로 여기서 콤보로 오인하지 않음)
-	const int32 Next = PendingComboIndex;
-	PendingComboIndex = INDEX_NONE;
-	if (CachedComboSteps.IsValidIndex(Next))
-	{
-		StartComboStep(Next);
-	}
+	// 콤보 전환은 ComboWindow 열림/입력 프레임에서 즉시 처리한다.
+	// 콤보 전환은 리졸버가 처리한다. BlendOut은 콤보에 관여하지 않으며 섹션 자연 종료는 HandleMontageCompleted가 맡는다.
 }
 
 float UGA_Attack::GetMontagePlayRate() const
@@ -543,16 +473,6 @@ float UGA_Attack::GetMontagePlayRate() const
 
 void UGA_Attack::HandleMontageCompleted()
 {
-	if (bPendingElementRestart)
-	{
-		bPendingElementRestart = false;
-		if (ResolveAttackComboVariant())   // 현재 원소 다시 읽어 새 몽타주+스텝+CachedElementTag 갱신
-		{
-			StartComboStep(0);             // 새 원소 1타부터
-			return;
-		}
-	}
-	
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -567,10 +487,6 @@ void UGA_Attack::HandleMontageCancelled()
 
 void UGA_Attack::StopRuntimeTasks()
 {
-	if (InputPressTask)
-	{
-		InputPressTask->EndTask(); InputPressTask = nullptr;
-	}
 	if (MontageTask)
 	{
 		MontageTask->EndTask(); MontageTask = nullptr;
@@ -585,23 +501,33 @@ void UGA_Attack::StopRuntimeTasks()
 	}
 }
 
-void UGA_Attack::CleanupComboTag() const
+void UGA_Attack::CleanupAttackWindowTags() const
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		RetrieveASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Combo_Open, 0);
+		RetrieveASC->ClearAttackCancelWindows(RetrieveGameplayTags::State_Attack_CancelOpen);
+	}
+	else if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Combo_Open, 0);
+		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Attack_CancelOpen, 0);
 	}
 }
 
 void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopRuntimeTasks();
-	CleanupComboTag();
+	CleanupAttackWindowTags();
+
+	// 공격 종료 후 루트모션 잔류/후방 속도로 ALS가 캐릭터를 도는 것 방지. 이동 입력 시 자동 해제.
+	if (ARetrieveAlsCharacter* AlsCharacter = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		AlsCharacter->SetHoldFacing(true);
+	}
 
 	CurrentComboIndex = INDEX_NONE;
-	PendingComboIndex = INDEX_NONE;
-	bPendingElementRestart = false;
-	
+
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
 	bHasValidPreviousTracePoints = false;
@@ -614,6 +540,6 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 void UGA_Attack::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility)
 {
 	StopRuntimeTasks();
-	CleanupComboTag();
+	CleanupAttackWindowTags();
 	Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
 }

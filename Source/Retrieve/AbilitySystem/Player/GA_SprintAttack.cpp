@@ -31,12 +31,22 @@ UGA_SprintAttack::UGA_SprintAttack()
 
 	bBlockActivationWhileAirborne = true;
 
+	// 구르기/맨틀 등 ALS 액션 중 질주공격 발동 불가. 단, 캔슬 윈도우가 허용하면 예외 — CanActivateAbility 참고.
+	bBlockedByLocomotionAction = true;
+
+	// 버퍼 사용 + 공격류 우선순위. 어떤 공격에서 질주공격으로 캔슬할 수 있는지는 몽타주 AllowedCancelIntents가 정한다.
+	bUseCombatInputBuffer = true;
+	CombatInputPriority = 10;
+
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
+
+	// TODO(CancelWindow): 캔슬 윈도우 작업에서 SprintAttack이 기존 공격을 끊을 수 있는 타이밍을 게이트한다.
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 }
@@ -55,7 +65,26 @@ bool UGA_SprintAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 		return false;
 	}
 
-	if (WeaponComp->GetWeaponDataRef().AttackComboDefinition.IsNull())
+	const FRetrieveWeaponDataRow& WeaponData = WeaponComp->GetWeaponDataRef();
+	if (WeaponData.AttackComboDefinition.IsNull())
+	{
+		return false;
+	}
+
+	const URetrieveHeroComponent* Hero = URetrieveHeroComponent::FindHeroComponent(AvatarActor);
+	if (!Hero || Hero->GetCachedMoveInputDirection().IsNearlyZero(0.1f))
+	{
+		return false;
+	}
+
+	const UAttackComboDefinition* ComboDefinition = WeaponData.AttackComboDefinition.LoadSynchronous();
+	const FWeaponSprintAttack* ResolvedSprint = ComboDefinition ? ComboDefinition->ResolveSprintVariant(ResolveCurrentElementTag()) : nullptr;
+	if (!ResolvedSprint)
+	{
+		return false;
+	}
+
+	if (ResolvedSprint->RequiredSprintDuration > 0.f && Hero->GetTimeSprintingSeconds() < ResolvedSprint->RequiredSprintDuration)
 	{
 		return false;
 	}
@@ -107,7 +136,7 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	// SprintAttack 후에 다시 Sprint + 워밍업을 거쳐야 재발동
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
 	}
 
 	UAnimMontage* Montage = CachedSprintData.Montage.LoadSynchronous();
@@ -132,7 +161,8 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	}
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, 1.f, CachedSprintData.SectionName, true);
+		this, NAME_None, Montage, 1.f, CachedSprintData.SectionName, true,
+		1.f, 0.f, /*bAllowInterruptAfterBlendOut=*/true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);

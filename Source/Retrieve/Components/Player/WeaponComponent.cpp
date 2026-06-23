@@ -367,16 +367,7 @@ USceneComponent* UWeaponComponent::FindAttachmentParent(
 		}
 	}
 
-	TArray<USkeletalMeshComponent*> MeshComponents;
-	Owner->GetComponents<USkeletalMeshComponent>(MeshComponents);
-
-	for (USkeletalMeshComponent* MeshComp : MeshComponents)
-	{
-		if (MeshComp && MeshComp != CharacterOwner->GetMesh() && HasSocket(MeshComp))
-		{
-			return MeshComp;
-		}
-	}
-
+	// 단일 메시 구조: 무기는 항상 leader 스켈레톤(GetMesh)의 소켓에 확정 부착한다.
+	// 모듈러 파츠는 같은 스켈레톤을 LeaderPose로 공유하므로 파츠를 고르면 소켓이 중복 매칭된다.
 	return HasSocket(CharacterOwner->GetMesh()) ? CharacterOwner->GetMesh() : nullptr;
 }

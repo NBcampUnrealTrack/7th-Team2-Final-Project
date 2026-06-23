@@ -253,19 +253,6 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		return;
 	}
 
-	if (PawnData->CharacterStatsRow.IsNone() || !PawnData->CharacterStatsTable)
-	{
-		return;
-	}
-
-	const FCharacterStats* Row = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
-		PawnData->CharacterStatsRow, TEXT("URetrievePawnExtensionComponent::ApplyCharacterStatsRow"));
-
-	if (!Row)
-	{
-		return;
-	}
-
 	UCombatAttributeSet* AttributeSet =
 		const_cast<UCombatAttributeSet*>(AbilitySystemComponent->GetSet<UCombatAttributeSet>());
 
@@ -274,7 +261,19 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		return;
 	}
 
-	// GE_InitStats가 지정되어 있는 경우 (SetByCaller 활용 주입)
+	// 스탯의 단일 출처 = FCharacterStats. 행이 지정/존재하지 않으면 구조체 기본값으로 초기화
+	FCharacterStats DefaultStats;
+	const FCharacterStats* Row = &DefaultStats;
+	if (!PawnData->CharacterStatsRow.IsNone() && PawnData->CharacterStatsTable)
+	{
+		if (const FCharacterStats* Found = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
+			PawnData->CharacterStatsRow, TEXT("URetrievePawnExtensionComponent::ApplyCharacterStatsRow")))
+		{
+			Row = Found;
+		}
+	}
+
+	// GE_InitStats가 지정된 경우: SetByCaller로 전 어트리뷰트 주입
 	if (PawnData->InitStatsEffect)
 	{
 		FGameplayEffectSpecHandle SpecHandle =
@@ -282,35 +281,45 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 
 		if (SpecHandle.IsValid() && SpecHandle.Data.IsValid())
 		{
-			SpecHandle.Data->SetSetByCallerMagnitude(
-				RetrieveGameplayTags::Data_Init_MaxHealth, Row->MaxHealth);
-			SpecHandle.Data->SetSetByCallerMagnitude(
-				RetrieveGameplayTags::Data_Init_Health, Row->MaxHealth);
-			SpecHandle.Data->SetSetByCallerMagnitude(
-				RetrieveGameplayTags::Data_Init_AttackPower, Row->AttackPower);
-			SpecHandle.Data->SetSetByCallerMagnitude(
-				RetrieveGameplayTags::Data_Init_MoveSpeed, 600.f);
-			SpecHandle.Data->SetSetByCallerMagnitude(
-				RetrieveGameplayTags::Data_Init_IncomingDamageMultiplier, 1.f);
+			FGameplayEffectSpec& Spec = *SpecHandle.Data.Get();
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_MaxHealth, Row->MaxHealth);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_Health, Row->MaxHealth);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_AttackPower, Row->AttackPower);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_Defense, Row->Defense);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_MoveSpeed, Row->MoveSpeed);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_IncomingDamageMultiplier, Row->IncomingDamageMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_GuardDamageReduction, Row->GuardDamageReduction);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_AttackSpeedMultiplier, Row->AttackSpeedMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_MaxStamina, Row->MaxStamina);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_Stamina, Row->MaxStamina);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_StaminaRegenRate, Row->StaminaRegenRate);
 
-			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
 		}
 	}
 	else
 	{
-		// GE 할당이 안 되어 있을 때 에러 방지용 안전한 수동 Fallback
+		// GE 미할당 폴백: 데이터 값으로 전 어트리뷰트 직접 세팅
 		AttributeSet->SetMaxHealth(Row->MaxHealth);
 		AttributeSet->SetHealth(Row->MaxHealth);
 		AttributeSet->SetAttackPower(Row->AttackPower);
+		AttributeSet->SetDefense(Row->Defense);
+		AttributeSet->SetMoveSpeed(Row->MoveSpeed);
+		AttributeSet->SetIncomingDamageMultiplier(Row->IncomingDamageMultiplier);
+		AttributeSet->SetGuardDamageReduction(Row->GuardDamageReduction);
+		AttributeSet->SetAttackSpeedMultiplier(Row->AttackSpeedMultiplier);
+		AttributeSet->SetMaxStamina(Row->MaxStamina);
+		AttributeSet->SetStamina(Row->MaxStamina);
+		AttributeSet->SetStaminaRegenRate(Row->StaminaRegenRate);
 	}
 
 	// PIE 검증을 위한 핵심 초기화 로그 출력
-	UE_LOG(LogTemp, Log, TEXT("[StatsInit] Pawn=%s Row=%s HP=%.1f MaxHP=%.1f ATK=%.1f"),
+	UE_LOG(LogTemp, Log, TEXT("[StatsInit] Pawn=%s Row=%s HP=%.1f/%.1f ATK=%.1f Stamina=%.1f/%.1f"),
 		*GetNameSafe(GetOwner()),
 		*PawnData->CharacterStatsRow.ToString(),
-		AttributeSet->GetHealth(),
-		AttributeSet->GetMaxHealth(),
-		AttributeSet->GetAttackPower());
+		AttributeSet->GetHealth(), AttributeSet->GetMaxHealth(),
+		AttributeSet->GetAttackPower(),
+		AttributeSet->GetStamina(), AttributeSet->GetMaxStamina());
 }
 
 void URetrievePawnExtensionComponent::OnActorInitStateChanged(const FActorInitStateChangedParams& Params)

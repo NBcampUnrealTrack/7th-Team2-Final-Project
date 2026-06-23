@@ -3,6 +3,13 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "AbilitySystemComponent.h"
 
+UGA_SetElement_Base::UGA_SetElement_Base()
+{
+	// 원소 전환은 버퍼를 쓰고 우선순위가 가장 높다(공격 도중 캔슬 윈도우에서 평타·다른 공격보다 먼저 소비).
+	bUseCombatInputBuffer = true;
+	CombatInputPriority = 20;
+}
+
 void UGA_SetElement_Base::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);

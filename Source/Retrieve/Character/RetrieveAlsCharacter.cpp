@@ -24,6 +24,7 @@ ARetrieveAlsCharacter::ARetrieveAlsCharacter(const FObjectInitializer& ObjectIni
 	// ALS는 매 프레임 RefreshLocomotion / RefreshView 등을 수행하므로 그대로 유지합니다.
 
 	// 게임 표준: 평시는 이동 방향(액션게임 패턴). 락온/조준 진입은 GAS 태그가 트리거.
+	ViewMode = AlsViewModeTags::ThirdPerson;
 	DesiredRotationMode = AlsRotationModeTags::VelocityDirection;
 
 	PawnExtensionComponent = CreateDefaultSubobject<URetrievePawnExtensionComponent>(TEXT("PawnExtensionComponent"));
@@ -66,7 +67,6 @@ void ARetrieveAlsCharacter::ApplyRetrieveSettingsOverrides()
 	// === Mantle 자동 활성 ===
 	// DA 측 토글이 갈팡질팡하지 않도록 코드에 명시.
 	Settings->Mantling.bAllowMantling          = true;
-	Settings->Mantling.bAutoStartMantlingInAir = true;
 }
 
 void ARetrieveAlsCharacter::Tick(float DeltaTime)
@@ -245,7 +245,17 @@ void ARetrieveAlsCharacter::OnLockOnTagChanged(const FGameplayTag Tag, int32 New
 
 bool ARetrieveAlsCharacter::TryMantle()
 {
-	return StartMantling();
+	if (GetLocomotionMode() == AlsLocomotionModeTags::Grounded)
+	{
+		return StartMantling(Settings->Mantling.GroundedTrace);
+	}
+
+	if (GetLocomotionMode() == AlsLocomotionModeTags::InAir)
+	{
+		return StartMantling(Settings->Mantling.InAirTrace);
+	}
+
+	return false;
 }
 
 bool ARetrieveAlsCharacter::TryMantleFromWater()
@@ -257,6 +267,39 @@ bool ARetrieveAlsCharacter::TryMantleFromWater()
 bool ARetrieveAlsCharacter::IsMantling() const
 {
 	return GetLocomotionAction() == AlsLocomotionActionTags::Mantling;
+}
+
+bool ARetrieveAlsCharacter::IsLocomotionActionActive() const
+{
+	return GetLocomotionAction().IsValid();
+}
+
+bool ARetrieveAlsCharacter::RefreshCustomGroundedMovingRotation(float /*DeltaTime*/)
+{
+	return RefreshHeldFacing();
+}
+
+bool ARetrieveAlsCharacter::RefreshCustomGroundedNotMovingRotation(float /*DeltaTime*/)
+{
+	return RefreshHeldFacing();
+}
+
+bool ARetrieveAlsCharacter::RefreshHeldFacing()
+{
+	if (!bHoldFacing)
+	{
+		return false;   // 평소엔 ALS 기본 회전
+	}
+
+	if (GetLocomotionState().bHasInput)
+	{
+		bHoldFacing = false;   // 플레이어가 이동을 주면 해제 → 정상 로코모션 복귀
+		return false;
+	}
+
+	// 회전하지 않고 현재 facing 유지 → ALS의 velocity(후방 포함) 기반 회전을 스킵
+	RefreshTargetYawAngleUsingActorRotation();
+	return true;
 }
 
 void ARetrieveAlsCharacter::StartRagdoll()
@@ -295,7 +338,7 @@ void ARetrieveAlsCharacter::EndRollLockout()
 	}
 }
 
-void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(FGameplayTag PreviousLocomotionMode)
+void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& PreviousLocomotionMode)
 {
 	// 착지(InAir→Grounded) 판정 바로 그 시점에서만 낙법을 억제
 	// Super가 bStartRollingOnLand + 낙하속도로 낙법을 발동하므로, 
@@ -337,12 +380,18 @@ void ARetrieveAlsCharacter::TurnYawTowardActor(AActor* Target, float InterpSpeed
 	TurnInterpSpeed = InterpSpeed;
 }
 
-void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(FGameplayTag PreviousLocomotionAction)
+void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(const FGameplayTag& PreviousLocomotionAction)
 {
 	Super::NotifyLocomotionActionChanged(PreviousLocomotionAction);
 
 	// State.Player.Dodging은 GA_Dash의 ActivationOwnedTags로만 관리한다.
 	// (ALS Rolling 미러링은 어빌리티 종료 경로와 윈도우가 어긋나 피격 시 태그가 잔존하는 문제가 있어 제거)
+	
+	if (AlsCharacterMovement)
+	{
+		const bool bBlock = LocomotionAction.IsValid() && LocomotionAction != AlsLocomotionActionTags::Sliding;
+		AlsCharacterMovement->SetInputBlocked(bBlock);
+	}
 }
 
 void ARetrieveAlsCharacter::RefreshSwimmingRotation(float DeltaTime)

@@ -6,6 +6,7 @@
 #include "RetrieveModularMeshTypes.generated.h"
 
 class USkeletalMesh;
+class UMaterialInterface;
 class URetrieveModularPartSet;
 
 /**
@@ -25,6 +26,11 @@ public:
 	 *  필요 시 해당 PartSlotTag를 visibility suppression으로 가립니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<URetrieveModularPartSet> DefaultBodyPartSet = nullptr;
+
+	/** 이 레이아웃으로 spawn되는 기본 바디 파츠의 모든 머티리얼 슬롯에 적용할 머티리얼.
+	 *  비우면 각 메시 기본 머티리얼을 유지합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
+	TObjectPtr<UMaterialInterface> BodyMaterialOverride = nullptr;
 };
 
 USTRUCT(BlueprintType)

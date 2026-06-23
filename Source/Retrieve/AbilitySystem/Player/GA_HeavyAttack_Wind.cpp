@@ -12,6 +12,7 @@ UGA_HeavyAttack_Wind::UGA_HeavyAttack_Wind()
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack_Wind);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Action_HighMobility);
 }

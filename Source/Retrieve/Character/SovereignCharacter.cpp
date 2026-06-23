@@ -1,4 +1,4 @@
-﻿#include "Character/SovereignCharacter.h"
+#include "Character/SovereignCharacter.h"
 
 #include "MotionWarpingComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
@@ -10,6 +10,7 @@
 #include "Components/Player/RetrieveHeroComponent.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
+#include "Components/Player/StaminaComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
 #include "Components/Water/RetrieveCameraWaterProbeComponent.h"
 #include "Components/Pawn/RetrievePawnCosmeticComponent.h"
@@ -42,10 +43,9 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	MoveComp->JumpZVelocity = 600.f;
 	MoveComp->AirControl = 0.35f;
 
-	// 메인 메시: ALS 골격(SKM_Als). 비주얼은 VisualMesh가 담당하므로 숨김 + 본 갱신 강제.
+	// 메인 메시 = 가시 leader. 가시성은 PawnCosmeticComponent::ApplyVisualLayout이 모듈러 바디 유무로 제어.
 	if (USkeletalMeshComponent* MainMesh = GetMesh())
 	{
-		MainMesh->SetHiddenInGame(true);
 		MainMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	}
 
@@ -61,6 +61,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
 	ArmorComponent = CreateDefaultSubobject<UArmorComponent>(TEXT("ArmorComponent"));
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
+	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>(TEXT("StaminaComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
@@ -125,6 +126,11 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		ElementGaugeComponent->BindToASC();
 	}
 
+	if (StaminaComponent)
+	{
+		StaminaComponent->InitializeWithAbilitySystem(ASC);
+	}
+
 	if (ElementUnlockComponent)
 	{
 		ElementUnlockComponent->InitializeWithAbilitySystem(ASC);
@@ -149,13 +155,19 @@ void ASovereignCharacter::UnPossessed()
 	{
 		ElementUnlockComponent->UninitializeFromAbilitySystem();
 	}
+
+	if (StaminaComponent)
+	{
+		StaminaComponent->UninitializeFromAbilitySystem();
+	}
 }
 
 void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 {
 	Super::HandleDeathStarted(OwningActor); 
 	
-	if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent()) 
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (ASC)
 	{
 		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Dead);
 	}
@@ -164,7 +176,10 @@ void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 	{
 		return;
 	}
-	
+
+	// GA_Die 활성화는 RetrieveHealthComponent::HandleHealthChanged가 단일 소스로 처리한다
+	// (OnDeathStarted Broadcast 직전에 TryActivateAbilitiesByTag(Die) 수행 → 여기 도달 시 이미 발동됨).
+	// 여기서 다시 부르면 이중 활성화 시도가 되므로 호출하지 않는다.
 	const URetrieveHealthComponent* HC = GetHealthComponent();
 	
 	FPlayerDiedPayload Payload;

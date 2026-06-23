@@ -6,6 +6,7 @@
 #include "Animation/AnimMontage.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayAbilitySpec.h"
@@ -86,15 +87,23 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	}
 
 	TMap<FGameplayTag, int32> ElementPattern = Gauge->GetCurrentCombination();
+	
+	const UWeaponComponent* WeaponComp = Avatar->FindComponentByClass<UWeaponComponent>();
+	const FGameplayTag WeaponTypeTag = IsValid(WeaponComp) ? WeaponComp->GetWeaponDataRef().WeaponTypeTag : FGameplayTag();
+	
+	const FGameplayTag DominantElement = ResolveDominantElement(ElementPattern);
+	const FSkillCombination* MatchedRow = FindBurstForElement(WeaponTypeTag, DominantElement);
 
-	const FSkillCombination* MatchedRow = FindMatchingCombination(ElementPattern);
+	if (!MatchedRow && DominantElement != RetrieveGameplayTags::Element_None)
+	{
+		MatchedRow = FindBurstForElement(WeaponTypeTag, RetrieveGameplayTags::Element_None);
+	}
 	if (!MatchedRow)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] No matching combination found"));
+		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] No burst row for Weapon=%s Element=%s"), *WeaponTypeTag.ToString(), *DominantElement.ToString());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Skill=%s"), *MatchedRow->DisplayName.ToString());
 
 	// 시전 중 이동/회전 잠금 (스킬 타입별 데이터)
 	ApplyCastLockTags(MatchedRow);
@@ -156,25 +165,21 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 void UGA_Burst::HandleMontageCompleted()
 {
-	UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Montage Completed"));
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_Burst::HandleMontageBlendOut()
 {
-	UE_LOG(LogTemp, Log, TEXT("[GA_Burst] Montage BlendOut"));
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_Burst::HandleMontageInterrupted()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] Montage Interrupted"));
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
 void UGA_Burst::HandleMontageCancelled()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] Montage Cancelled"));
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
@@ -258,35 +263,48 @@ void UGA_Burst::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
 }
 
-const FSkillCombination* UGA_Burst::FindMatchingCombination(const TMap<FGameplayTag, int32>& ElementPattern) const
+FGameplayTag UGA_Burst::ResolveDominantElement(const TMap<FGameplayTag, int32>& ElementPattern)
+{
+	FGameplayTag Best;
+	int32 BestCount = 0;
+	bool bTie = false;
+
+	for (const TPair<FGameplayTag, int32>& Pair : ElementPattern)
+	{
+		if (!Pair.Key.IsValid() || Pair.Key == RetrieveGameplayTags::Element_None)
+		{
+			continue;
+		}
+
+		if (Pair.Value > BestCount)
+		{
+			Best = Pair.Key;
+			BestCount = Pair.Value;
+			bTie = false;
+		}
+		else if (Pair.Value == BestCount && BestCount > 0)
+		{
+			bTie = true;
+		}
+	}
+	
+	return (bTie || BestCount == 0) ? RetrieveGameplayTags::Element_None : Best;
+}
+
+const FSkillCombination* UGA_Burst::FindBurstForElement(const FGameplayTag& WeaponType, const FGameplayTag& Element) const
 {
 	if (!SkillCombinationTable) return nullptr;
 
-	static const FString Context(TEXT("GA_Burst::FindMatchingCombination"));
+	static const FString Context(TEXT("GA_Burst::FindBurstForElement"));
 	TArray<FSkillCombination*> Rows;
 	SkillCombinationTable->GetAllRows<FSkillCombination>(Context, Rows);
 
 	for (const FSkillCombination* Row : Rows)
 	{
-		if (Row && DoesCombinationMatch(Row->ElementPattern, ElementPattern))
+		if (Row && Row->WeaponType == WeaponType && Row->BurstElement == Element)
 		{
 			return Row;
 		}
 	}
 	return nullptr;
-}
-
-bool UGA_Burst::DoesCombinationMatch(const TMap<FGameplayTag, int32>& TablePattern, const TMap<FGameplayTag, int32>& CurrentPattern)
-{
-	if (TablePattern.Num() != CurrentPattern.Num()) return false;
-
-	for (const TPair<FGameplayTag, int32>& Pair : TablePattern)
-	{
-		const int32* ElementCount = CurrentPattern.Find(Pair.Key);
-		if (!ElementCount || *ElementCount != Pair.Value)
-		{
-			return false;
-		}
-	}
-	return true;
 }

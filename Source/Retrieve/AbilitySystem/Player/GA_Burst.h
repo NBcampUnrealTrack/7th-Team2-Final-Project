@@ -42,12 +42,10 @@ protected:
 		bool bReplicateCancelAbility) override;
 
 private:
-	// 테이블에서 매칭 조합 반환
-	const FSkillCombination* FindMatchingCombination(const TMap<FGameplayTag, int32>& ElementPattern) const;
-	// 조합 매칭 체크
-	static bool DoesCombinationMatch(
-		const TMap<FGameplayTag, int32>& TablePattern,
-		const TMap<FGameplayTag, int32>& CurrentPattern);
+	// 게이지 슬롯의 최다 원소를 산출, 우세 없음/동률/무속성이면 Element.None(무속성)
+	static FGameplayTag ResolveDominantElement(const TMap<FGameplayTag, int32>& ElementPattern);
+	// 무기 타입 + 대표 원소(BurstElement)가 모두 일치하는 버스트 행 반환
+	const FSkillCombination* FindBurstForElement(const FGameplayTag& WeaponType, const FGameplayTag& Element) const;
 
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageBlendOut();

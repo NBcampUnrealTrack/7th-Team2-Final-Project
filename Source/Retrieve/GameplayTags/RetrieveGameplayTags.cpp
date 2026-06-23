@@ -34,12 +34,14 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Interact, "Ability.Player.Interact");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_LockOn, "Ability.Player.LockOn");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_UseItem, "Ability.Player.UseItem");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement, "Ability.Player.SetElement");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Fire, "Ability.Player.SetElement.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Water, "Ability.Player.SetElement.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SetElement_Wind, "Ability.Player.SetElement.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_RecallLumen, "Ability.Player.RecallLumen");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SprintAttack, "Ability.Player.SprintAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_ParryCounter, "Ability.Player.ParryCounter");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_BowShot, "Ability.Player.BowShot");
 
 	// ---- Ability families
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Type_Attack, "Ability.Type.Attack");
@@ -114,6 +116,7 @@ namespace RetrieveGameplayTags
 	
 	// ---- Combat micro-state
 	UE_DEFINE_GAMEPLAY_TAG(State_Combo_Open, "State.Combo.Open");
+	UE_DEFINE_GAMEPLAY_TAG(State_Attack_CancelOpen, "State.Attack.CancelOpen");
 
 	// ---- Gauge state
 	UE_DEFINE_GAMEPLAY_TAG(State_Gauge_Full, "State.Gauge.Full");
@@ -149,6 +152,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_SwordShield, "Weapon.Type.SwordShield");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_DualBlade, "Weapon.Type.DualBlade");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Staff, "Weapon.Type.Staff");
+	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Bow, "Weapon.Type.Bow");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_Low, "Weapon.Grade.Low");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_Mid, "Weapon.Grade.Mid");
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Grade_High, "Weapon.Grade.High");
@@ -352,6 +356,12 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MoveSpeed, "Data.Init.MoveSpeed");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_IncomingDamageMultiplier, "Data.Init.IncomingDamageMultiplier");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Defense, "Data.Init.Defense");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_GuardDamageReduction, "Data.Init.GuardDamageReduction");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackSpeedMultiplier, "Data.Init.AttackSpeedMultiplier");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxStamina, "Data.Init.MaxStamina");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Stamina, "Data.Init.Stamina");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_StaminaRegenRate, "Data.Init.StaminaRegenRate");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Weapon_AttackPower, "Data.Weapon.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Armor_Defense, "Data.Armor.Defense");
 
@@ -369,6 +379,9 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Staff
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Cast, "GameplayCue.Staff.Cast");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Impact, "GameplayCue.Staff.Impact");
+
+	// ---- Gameplay cues: Parry
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Parry_Success, "GameplayCue.Parry.Success");
 
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");

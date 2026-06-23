@@ -24,9 +24,16 @@ protected:
 	void OpenParryWindow();
 	void StartListeningForParrySuccess();
 	void StopParrySuccessTask();
-
+	void ExecuteParrySuccessCue() const;
+	void PlayParrySuccessMontage();
+	void TriggerHitStop();
+	void ApplyParryStagger(AActor* Attacker);
+	
 	UFUNCTION()
 	void HandleParrySuccess(FGameplayEventData Payload);
+	
+	UFUNCTION()
+	void RestoreTimeDilation();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
@@ -40,10 +47,30 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
 	TSubclassOf<UGameplayEffect> ParryStaggerEffect;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry")
+	TSubclassOf<UGameplayEffect> BossParryStaggerEffect;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry")
+	TSubclassOf<UGameplayEffect> StaminaRestoreEffect;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback")
+	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback", meta = (ClampMin = "0.1"))
+	float ParrySuccessMontagePlayRate = 1.0f;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback|HitStop", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float HitStopTimeDilation = 0.05f;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback|HitStop", meta = (ClampMin = "0.0"))
+	float HitStopDuration = 0.12f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ParrySuccessTask;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> LastParriedAttacker;
+
+	FTimerHandle HitStopTimerHandle;
 };

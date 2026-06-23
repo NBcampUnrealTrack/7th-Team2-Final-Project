@@ -13,6 +13,7 @@ class URetrieveCharacterVisualLayout;
 class URetrieveCosmeticData;
 class URetrieveModularPartSet;
 class UAbilitySystemComponent;
+class UMaterialInterface;
 class USkeletalMesh;
 class USkeletalMeshComponent;
 
@@ -72,12 +73,14 @@ private:
 	void ApplyEquipmentSuppressionForSlot(FGameplayTag EquipmentSlotTag, const TArray<FRetrieveArmorVisualPart>& VisualParts, const FGameplayTagContainer& ExplicitSuppressed);
 	void ClearEquipmentSuppressionForSlot(FGameplayTag EquipmentSlotTag);
 
-	USkeletalMeshComponent* CreateModularPartComponent(USkeletalMesh* Mesh, USkeletalMeshComponent* VisualMesh, AActor* Owner, bool bCastShadow);
+	USkeletalMeshComponent* CreateModularPartComponent(USkeletalMesh* Mesh, USkeletalMeshComponent* LeaderMesh, AActor* Owner, bool bCastShadow);
 	// CurrentMorphTargets(활성 레이아웃의 바디 세트 morph)를 spawn 파츠에 적용. 메시에 없는 morph는 무시된다.
 	void ApplyMorphTargets(USkeletalMeshComponent* MeshComponent) const;
+	// 활성 레이아웃의 BodyMaterialOverride를 파츠의 모든 머티리얼 슬롯에 적용. 비어있으면 무시.
+	void ApplyBodyMaterial(USkeletalMeshComponent* MeshComponent) const;
 	void ApplyMorphTargetsToSpawnedParts() const;
 	void ClearSpawnedModularParts();
-	USkeletalMeshComponent* GetVisualMeshComponent() const;
+	USkeletalMeshComponent* GetLeaderMeshComponent() const;
 	FGameplayTagContainer BuildCosmeticTags() const;
 
 	UPROPERTY(Transient)
@@ -99,6 +102,10 @@ private:
 
 	// 활성 레이아웃의 바디 PartSet에서 가져온 morph 프로파일. 바디 + 방어구 파츠에 일괄 적용한다.
 	TMap<FName, float> CurrentMorphTargets;
+
+	// 활성 레이아웃의 BodyMaterialOverride. 기본 바디 파츠 spawn 시 적용한다.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> CurrentBodyMaterial;
 
 	FGameplayTag CurrentWeaponTypeTag;
 	FGameplayTag CurrentElementTag;

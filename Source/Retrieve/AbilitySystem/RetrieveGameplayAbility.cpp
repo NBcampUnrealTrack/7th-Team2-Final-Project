@@ -2,7 +2,10 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
@@ -27,6 +30,22 @@ FGameplayTag URetrieveGameplayAbility::ResolveCurrentElementTag() const
 	return RetrievePlayerState ? RetrievePlayerState->GetCurrentElementTag() : FGameplayTag();
 }
 
+bool URetrieveGameplayAbility::HasStamina(const FGameplayAbilityActorInfo* ActorInfo, float Cost) const
+{
+	if (Cost <= 0.f)
+	{
+		return true;
+	}
+
+	const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	if (!ASC)
+	{
+		return false;
+	}
+
+	return ASC->GetNumericAttribute(UCombatAttributeSet::GetStaminaAttribute()) >= Cost;
+}
+
 void URetrieveGameplayAbility::OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo,
                                            const FGameplayAbilitySpec& AbilitySpec)
 {
@@ -46,7 +65,47 @@ bool URetrieveGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHand
 		return false;
 	}
 
+	// ALS 액션(구르기/맨틀 등) 진행 중이면 차단. 단, 캔슬 윈도우(AttackCancelWindow)가 이 어빌리티의
+	// 입력 intent를 허용하면 예외 — 캔슬 윈도우가 LocomotionAction 차단을 이긴다(ANS 겹침 시 캔슬 우선).
+	// (LocomotionAction은 ASC 태그가 아니라 ALS API라 캐릭터에 위임. 캔슬 허용은 IsAttackCancelIntentAllowed로 조회)
+	if (bBlockedByLocomotionAction)
+	{
+		if (const ARetrieveAlsCharacter* AlsCharacter = Cast<ARetrieveAlsCharacter>(ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr))
+		{
+			if (AlsCharacter->IsLocomotionActionActive() && !IsAllowedByActiveCancelWindow(ActorInfo, Handle))
+			{
+				return false;
+			}
+		}
+	}
+
 	return true;
+}
+
+bool URetrieveGameplayAbility::IsAllowedByActiveCancelWindow(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpecHandle Handle) const
+{
+	URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr);
+	if (!IsValid(RetrieveASC))
+	{
+		return false;
+	}
+
+	// 이 어빌리티의 입력 intent(DynamicSpecSourceTags의 입력 태그) 중 하나라도 현재 열린 캔슬 윈도우가
+	// 허용하면 LocomotionAction 차단을 무시한다(캔슬 윈도우 우선).
+	const FGameplayAbilitySpec* Spec = RetrieveASC->FindAbilitySpecFromHandle(Handle);
+	if (!Spec)
+	{
+		return false;
+	}
+
+	for (const FGameplayTag& IntentTag : Spec->GetDynamicSpecSourceTags())
+	{
+		if (RetrieveASC->IsAttackCancelIntentAllowed(IntentTag))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool URetrieveGameplayAbility::IsAvatarAirborne(const FGameplayAbilityActorInfo* ActorInfo)
@@ -105,7 +164,7 @@ void URetrieveGameplayAbility::HandleParried(FGameplayEventData /*Payload*/)
 	{
 		return;
 	}
-	
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 		IsValid(ASC) && ParriedStaggerEffect && HasAuthority(&GetCurrentActivationInfoRef()))
 	{

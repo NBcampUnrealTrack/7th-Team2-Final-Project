@@ -31,12 +31,8 @@ private:
 
 	// 조준: 락온 우선 → 없으면 전방 콘 검색
 	AActor* ResolveAimTarget() const;
-	FGameplayTag ResolveCurrentElementTag() const;
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Staff")
-	bool bDebugDraw = false;
-
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Staff|Aim", meta = (ClampMin = "0.0"))
 	float AimSearchRange = 2500.f;
 

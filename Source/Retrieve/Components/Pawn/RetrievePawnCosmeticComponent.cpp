@@ -6,7 +6,6 @@
 #include "GameFramework/Character.h"
 #include "Character/Cosmetics/RetrieveCosmeticData.h"
 #include "Character/Cosmetics/RetrieveModularMeshTypes.h"
-#include "Character/SovereignCharacter.h"
 #include "Components/Player/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerState.h"
@@ -144,10 +143,10 @@ void URetrievePawnCosmeticComponent::ApplyEquipmentPartsForSlot(
 
 	RemoveSpawnedEquipmentForSlot(EquipmentSlotTag);
 
-	USkeletalMeshComponent* VisualMesh = GetVisualMeshComponent();
+	USkeletalMeshComponent* LeaderMesh = GetLeaderMeshComponent();
 	AActor* Owner = GetOwner();
 
-	if (IsValid(VisualMesh) && IsValid(Owner) && VisualParts.Num() > 0)
+	if (IsValid(LeaderMesh) && IsValid(Owner) && VisualParts.Num() > 0)
 	{
 		FRetrieveSpawnedEquipmentVisuals& SpawnedVisuals = SpawnedEquipmentVisuals.FindOrAdd(EquipmentSlotTag);
 		for (const FRetrieveArmorVisualPart& Part : VisualParts)
@@ -158,7 +157,7 @@ void URetrievePawnCosmeticComponent::ApplyEquipmentPartsForSlot(
 			USkeletalMesh* Mesh = Part.Mesh.LoadSynchronous();
 			if (!Mesh) { continue; }
 
-			if (USkeletalMeshComponent* PartComponent = CreateModularPartComponent(Mesh, VisualMesh, Owner, /*bCastShadow=*/true))
+			if (USkeletalMeshComponent* PartComponent = CreateModularPartComponent(Mesh, LeaderMesh, Owner, /*bCastShadow=*/true))
 			{
 				SpawnedVisuals.Components.Add(PartComponent);
 			}
@@ -235,30 +234,31 @@ void URetrievePawnCosmeticComponent::ApplyVisualLayout()
 		return;
 	}
 
-	USkeletalMeshComponent* VisualMesh = GetVisualMeshComponent();
-	if (!IsValid(VisualMesh)) { return; }
+	USkeletalMeshComponent* LeaderMesh = GetLeaderMeshComponent();
+	if (!IsValid(LeaderMesh)) { return; }
 
 	if (DesiredLayout->BaseVisualMesh)
 	{
-		VisualMesh->SetSkeletalMesh(DesiredLayout->BaseVisualMesh);
+		LeaderMesh->SetSkeletalMesh(DesiredLayout->BaseVisualMesh);
 	}
 	CurrentVisualLayout = DesiredLayout;
+	CurrentBodyMaterial = DesiredLayout->BodyMaterialOverride;
 
 	// 레이아웃 기준 기본 바디 파츠를 (재)생성하고, 현재 장비 억제 상태로 visibility 갱신
 	ApplyDefaultBodyPartSet(DesiredLayout->DefaultBodyPartSet);
 	RefreshDefaultPartVisibility();
 
-	// 모듈러 바디가 생성된 경우 통짜 BaseVisualMesh는 숨긴다. 단, VisualMesh는 여전히
+	// 모듈러 바디가 생성된 경우 통짜 BaseVisualMesh는 숨긴다. 단, leader mesh는 여전히
 	// modular part들의 LeaderPose source이므로, 숨겨져도 포즈를 갱신하도록 설정한다.
 	// 자식 파츠까지 같이 숨지 않도록 propagate=false로 둔다.
 	const bool bHasModularBody = SpawnedDefaultBodyParts.Num() > 0;
 	if (bHasModularBody)
 	{
-		VisualMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		LeaderMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 		// 숨겨도 풀바디 그림자는 계속 던지게 한다. 조립 파츠 대신 통짜 메시가 단일 그림자 caster 역할.
-		VisualMesh->SetCastHiddenShadow(true);
+		LeaderMesh->SetCastHiddenShadow(true);
 	}
-	VisualMesh->SetVisibility(!bHasModularBody, /*bPropagateToChildren=*/false);
+	LeaderMesh->SetVisibility(!bHasModularBody, /*bPropagateToChildren=*/false);
 
 	ApplyMorphTargetsToSpawnedParts();
 }
@@ -272,8 +272,8 @@ void URetrievePawnCosmeticComponent::ApplyDefaultBodyPartSet(const URetrieveModu
 
 	if (!PartSet) { return; }
 
-	USkeletalMeshComponent* VisualMesh = GetVisualMeshComponent();
-	if (!IsValid(VisualMesh)) { return; }
+	USkeletalMeshComponent* LeaderMesh = GetLeaderMeshComponent();
+	if (!IsValid(LeaderMesh)) { return; }
 
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner)) { return; }
@@ -288,8 +288,9 @@ void URetrievePawnCosmeticComponent::ApplyDefaultBodyPartSet(const URetrieveModu
 			if (*Existing) { (*Existing)->DestroyComponent(); }
 		}
 
-		if (USkeletalMeshComponent* PartComponent = CreateModularPartComponent(Part.Mesh, VisualMesh, Owner, /*bCastShadow=*/false))
+		if (USkeletalMeshComponent* PartComponent = CreateModularPartComponent(Part.Mesh, LeaderMesh, Owner, /*bCastShadow=*/false))
 		{
+			ApplyBodyMaterial(PartComponent);
 			SpawnedDefaultBodyParts.Add(Part.PartSlotTag, PartComponent);
 		}
 	}
@@ -384,11 +385,11 @@ void URetrievePawnCosmeticComponent::ClearEquipmentSuppressionForSlot(FGameplayT
 
 USkeletalMeshComponent* URetrievePawnCosmeticComponent::CreateModularPartComponent(
 	USkeletalMesh* Mesh,
-	USkeletalMeshComponent* VisualMesh,
+	USkeletalMeshComponent* LeaderMesh,
 	AActor* Owner,
 	bool bCastShadow)
 {
-	if (!Mesh || !IsValid(VisualMesh) || !IsValid(Owner)) { return nullptr; }
+	if (!Mesh || !IsValid(LeaderMesh) || !IsValid(Owner)) { return nullptr; }
 
 	USkeletalMeshComponent* PartComponent = NewObject<USkeletalMeshComponent>(Owner);
 	if (!IsValid(PartComponent)) { return nullptr; }
@@ -398,11 +399,14 @@ USkeletalMeshComponent* URetrievePawnCosmeticComponent::CreateModularPartCompone
 	PartComponent->SetGenerateOverlapEvents(false);
 	PartComponent->SetCanEverAffectNavigation(false);
 	// 조립 파츠가 각자 그림자를 던지면 파츠 경계마다 이음새가 생긴다. 기본 바디 파츠는 그림자를 끄고
-	// 숨긴 통짜 VisualMesh가 풀바디 그림자를 대신 던진다. 장비 파츠는 실루엣 반영을 위해 켜 둔다.
+	// 숨긴 통짜 leader mesh가 풀바디 그림자를 대신 던진다. 장비 파츠는 실루엣 반영을 위해 켜 둔다.
 	PartComponent->SetCastShadow(bCastShadow);
-	PartComponent->AttachToComponent(VisualMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	PartComponent->AttachToComponent(LeaderMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	// 파츠가 leader(통짜 바디) 풀바디 바운드를 공유하게 한다. leader는 숨겨져도
+	// AlwaysTickPoseAndRefreshBones로 바운드가 갱신되므로, 카메라 각도에 따른 파츠 개별 컬링을 막는다.
+	PartComponent->bUseAttachParentBound = true;
 	PartComponent->RegisterComponent();
-	PartComponent->SetLeaderPoseComponent(VisualMesh);
+	PartComponent->SetLeaderPoseComponent(LeaderMesh);
 	ApplyMorphTargets(PartComponent);
 
 	return PartComponent;
@@ -416,6 +420,17 @@ void URetrievePawnCosmeticComponent::ApplyMorphTargets(USkeletalMeshComponent* M
 	for (const TPair<FName, float>& Morph : CurrentMorphTargets)
 	{
 		MeshComponent->SetMorphTarget(Morph.Key, Morph.Value);
+	}
+}
+
+void URetrievePawnCosmeticComponent::ApplyBodyMaterial(USkeletalMeshComponent* MeshComponent) const
+{
+	if (!CurrentBodyMaterial || !IsValid(MeshComponent)) { return; }
+
+	const int32 NumMaterials = MeshComponent->GetNumMaterials();
+	for (int32 Index = 0; Index < NumMaterials; ++Index)
+	{
+		MeshComponent->SetMaterial(Index, CurrentBodyMaterial);
 	}
 }
 
@@ -441,11 +456,11 @@ void URetrievePawnCosmeticComponent::ClearSpawnedModularParts()
 	ClearAllEquipmentVisualSlots();
 }
 
-USkeletalMeshComponent* URetrievePawnCosmeticComponent::GetVisualMeshComponent() const
+USkeletalMeshComponent* URetrievePawnCosmeticComponent::GetLeaderMeshComponent() const
 {
-	if (const ASovereignCharacter* Character = Cast<ASovereignCharacter>(GetOwner()))
+	if (const ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
-		return Character->GetVisualMesh();
+		return Character->GetMesh();
 	}
 	return nullptr;
 }
