@@ -36,6 +36,10 @@ private:
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageBlendOut();
 
+	// 죽음 몽타주 종료(또는 몽타주 없음) 시점에 ALS ragdoll로 전환. 1회만 실행.
+	void TriggerRagdoll();
+	bool bRagdollTriggered = false;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Death",
 		meta = (DisplayName = "사망 몽타주 (FullBody 슬롯 배정)"))
 	TObjectPtr<UAnimMontage> DeathMontage;

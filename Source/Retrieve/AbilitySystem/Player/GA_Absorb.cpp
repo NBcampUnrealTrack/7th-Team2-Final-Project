@@ -1,6 +1,8 @@
 #include "AbilitySystem/Player/GA_Absorb.h"
 
 #include "AbilitySystemComponent.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Animation/AnimMontage.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -57,6 +59,9 @@ UGA_Absorb::UGA_Absorb()
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Absorb);
 	SetAssetTags(Tags);
+	
+	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Movement);
+	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Rotation);
 }
 
 void UGA_Absorb::ActivateAbility(
@@ -133,6 +138,54 @@ void UGA_Absorb::ActivateAbility(
 			}
 		}
 	}
+	
+	if (PlayCastMontage(ConsumedElement))
+	{
+		return;
+	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+bool UGA_Absorb::PlayCastMontage(const FGameplayTag& Element)
+{
+	const TSoftObjectPtr<UAnimMontage>* MontagePtr = ElementToCastMontage.Find(Element);
+	if (!MontagePtr)
+	{
+		return false;
+	}
+
+	UAnimMontage* Montage = MontagePtr->LoadSynchronous();
+	if (!IsValid(Montage))
+	{
+		return false;
+	}
+
+	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, Montage, CastMontagePlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
+	if (!MontageTask)
+	{
+		return false;
+	}
+
+	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleCastMontageFinished);
+	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleCastMontageFinished);
+	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleCastMontageFinished);
+	MontageTask->ReadyForActivation();
+	return true;
+}
+
+void UGA_Absorb::HandleCastMontageFinished()
+{
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/false);
+}
+
+void UGA_Absorb::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	if (MontageTask)
+	{
+		MontageTask->EndTask();
+		MontageTask = nullptr;
+	}
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

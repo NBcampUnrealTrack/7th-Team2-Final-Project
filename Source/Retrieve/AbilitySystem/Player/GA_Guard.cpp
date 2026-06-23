@@ -6,8 +6,10 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Components/Player/WeaponComponent.h"
+#include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "TimerManager.h"
 
 UGA_Guard::UGA_Guard()
 {
@@ -46,7 +48,9 @@ bool UGA_Guard::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	// 막기는 방패 전용 (그 외 무기는 GA_Parry)
 	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
 	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
-	return WeaponComp && WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield;
+	return WeaponComp &&
+		WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield &&
+		HasStamina(ActorInfo, MinimumStaminaToActivate);
 }
 
 void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -86,6 +90,32 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	
 	OpenParryWindow();
 	StartListeningForParrySuccess();
+
+	// 가드 지속 비용: 주기 소모 GE를 적용하고, 점검 타이머로 소진 시 종료
+	if (HasAuthority(&ActivationInfo) && StaminaDrainEffect)
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+			IsValid(ASC) && !StaminaDrainHandle.IsValid())
+		{
+			FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
+			Ctx.AddSourceObject(this);
+			const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(StaminaDrainEffect, GetAbilityLevel(), Ctx);
+			if (Spec.IsValid())
+			{
+				StaminaDrainHandle = ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+			}
+		}
+
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				GuardStaminaTimerHandle,
+				this,
+				&ThisClass::HandleGuardStaminaTick,
+				FMath::Max(StaminaCostTickInterval, 0.01f),
+				true);
+		}
+	}
 }
 
 void UGA_Guard::HandleInputReleased(float /*TimeHeld*/)
@@ -111,11 +141,33 @@ void UGA_Guard::HandleGuardBroken(FGameplayEventData /*Payload*/)
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
 }
 
+void UGA_Guard::HandleGuardStaminaTick()
+{
+	if (!HasStamina(CurrentActorInfo, KINDA_SMALL_NUMBER))
+	{
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
+	}
+}
+
 void UGA_Guard::StopRuntimeTasks()
 {
 	if (MontageTask)      { MontageTask->EndTask();      MontageTask = nullptr; }
 	if (InputReleaseTask) { InputReleaseTask->EndTask(); InputReleaseTask = nullptr; }
 	if (GuardBrokenTask)  { GuardBrokenTask->EndTask();  GuardBrokenTask = nullptr; }
+	
+	if (StaminaDrainHandle.IsValid())
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->RemoveActiveGameplayEffect(StaminaDrainHandle);
+		}
+		StaminaDrainHandle.Invalidate();
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(GuardStaminaTimerHandle);
+	}
 }
 
 void UGA_Guard::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)

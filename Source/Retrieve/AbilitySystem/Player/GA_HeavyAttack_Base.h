@@ -9,7 +9,7 @@ class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
 
 /**
- * 강공격(원소 게이지 1칸 소모)의 추상 베이스
+ * 강공격(스태미너 소비)의 추상 베이스
  */
 UCLASS(Abstract)
 class RETRIEVE_API UGA_HeavyAttack_Base : public URetrieveGameplayAbility
@@ -26,9 +26,9 @@ protected:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
 	virtual void ExecuteHeavyEffect(const FGameplayTag& ConsumedElement);
-	
+
 	void PlayHeavyMontageThenEnd();
-	
+
 	void ExecuteOwnerCue(const FGameplayTag& CueTag) const;
 
 protected:
@@ -37,7 +37,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack")
 	TSoftObjectPtr<UAnimMontage> HeavyMontage;
-	
+
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack", meta = (ClampMin = "0.1"))
 	float MontagePlayRate = 1.0f;
 
@@ -50,7 +50,7 @@ protected:
 	float KnockbackUpwardStrength = 0.f;
 
 private:
-	UFUNCTION() 
+	UFUNCTION()
 	void HandleMontageFinished();
 
 	UPROPERTY(Transient)

@@ -50,6 +50,9 @@ private:
     // 단일 타격 인플릭트
     void ApplyHitToTarget(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult);
 
+    // 적중 VFX/사운드 재생 (FBurstHitInstance.HitVFX/HitSound)
+    void PlayHitFeedback(const FBurstHitInstance& Hit, const FHitResult& HitResult, AActor* Target) const;
+
     // 상태 GE 부여 직전 원소 반응 검사 (ReactionTable 기반)
     void TryElementReaction(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
         const TSubclassOf<UGameplayEffect>& IncomingStatusGE);

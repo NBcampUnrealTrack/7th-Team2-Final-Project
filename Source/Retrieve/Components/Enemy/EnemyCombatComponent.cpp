@@ -789,6 +789,11 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KbCfg.KnockbackStrength);
 					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KbCfg.KnockbackUpwardStrength);
 				}
+
+				if (ActivePatternRow->bCanBeParried)
+				{
+					Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Parryable);
+				}
 			}
 		}
 

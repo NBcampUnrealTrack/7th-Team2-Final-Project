@@ -15,14 +15,6 @@
 
 UCombatAttributeSet::UCombatAttributeSet()
 {
-	InitHealth(100.f);
-	InitMaxHealth(100.f);
-	InitAttackPower(0.f);
-	InitDefense(0.f);
-	InitMoveSpeed(600.f);
-	InitIncomingDamageMultiplier(1.f);
-	InitGuardDamageReduction(0.4f);
-	InitAttackSpeedMultiplier(1.f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -36,12 +28,35 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, IncomingDamageMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, GuardDamageReduction, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackSpeedMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Stamina, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, StaminaRegenRate, COND_None, REPNOTIFY_Always);
+}
+
+void UCombatAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
+{
+	Super::PreAttributeBaseChange(Attribute, NewValue);
+	ClampAttribute(Attribute, NewValue);
 }
 
 void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
+	ClampAttribute(Attribute, NewValue);
+}
 
+void UCombatAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	if (Attribute == GetMaxStaminaAttribute() && GetStamina() > NewValue)
+	{
+		SetStamina(NewValue);
+	}
+}
+
+void UCombatAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, float& NewValue) const
+{
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
@@ -70,6 +85,18 @@ void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute
 	{
 		// 재생속도 0/음수 방지
 		NewValue = FMath::Max(0.1f, NewValue);
+	}
+	else if (Attribute == GetStaminaAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxStamina());
+	}
+	else if (Attribute == GetMaxStaminaAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
+	}
+	else if (Attribute == GetStaminaRegenRateAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
 	}
 }
 
@@ -117,6 +144,19 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 			SetHealth(NewHealth);
 		}
 	}
+	else if (Data.EvaluatedData.Attribute == GetStaminaAttribute())
+	{
+		SetStamina(FMath::Clamp(GetStamina(), 0.f, GetMaxStamina()));
+	}
+	else if (Data.EvaluatedData.Attribute == GetMaxStaminaAttribute())
+	{
+		SetMaxStamina(FMath::Max(0.f, GetMaxStamina()));
+		SetStamina(FMath::Clamp(GetStamina(), 0.f, GetMaxStamina()));
+	}
+	else if (Data.EvaluatedData.Attribute == GetStaminaRegenRateAttribute())
+	{
+		SetStaminaRegenRate(FMath::Max(0.f, GetStaminaRegenRate()));
+	}
 }
 
 void UCombatAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
@@ -159,6 +199,21 @@ void UCombatAttributeSet::OnRep_AttackSpeedMultiplier(const FGameplayAttributeDa
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, AttackSpeedMultiplier, OldValue);
 }
 
+void UCombatAttributeSet::OnRep_Stamina(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, Stamina, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_MaxStamina(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxStamina, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_StaminaRegenRate(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, StaminaRegenRate, OldValue);
+}
+
 
 float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags)
 {
@@ -175,41 +230,47 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	}
 
 	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
-
-	// 1. PARRY
-	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying))
+	
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying)
+		&& !SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
 	{
-		if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
-		{
-			return RawDamage;
-		}
-
 		AActor* InstigatorActor = Context.GetInstigator();
 		AActor* CauserActor = Context.GetEffectCauser();
 
-		// (a) 공격자에게 "패리당함" 발행 → 공격자 GA가 self-stagger + cancel
-		if (IsValid(InstigatorActor))
+		bool bAttackerIsBoss = false;
+		if (const UAbilitySystemComponent* AttackerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InstigatorActor))
 		{
-			FGameplayEventData ToAttacker;
-			ToAttacker.Instigator = InstigatorActor;
-			ToAttacker.Target = TargetActor;
-			ToAttacker.OptionalObject = CauserActor;
-			ToAttacker.EventTag = RetrieveGameplayTags::GameplayEvent_Parried;
-			ToAttacker.TargetTags = SpecTags;
-			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-				InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
+			bAttackerIsBoss = AttackerASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
 		}
 
-		// (b) 방어자에게 "패리 성공" 발행 → GA_Guard가 카운터 윈도우 부여 + Cue
-		FGameplayEventData ToVictim;
-		ToVictim.Instigator = TargetActor;
-		ToVictim.Target = TargetActor;
-		ToVictim.OptionalObject = InstigatorActor;
-		ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-			TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
+		// 보스 X = 기본 패리 가능 / 보스 O = Parryable 태그가 실린 공격만.
+		const bool bParryable = !bAttackerIsBoss || SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Parryable);
+		if (bParryable)
+		{
+			// (a) 공격자에게 "패리당함" 발행 → 공격자 GA가 self-stagger + cancel
+			if (IsValid(InstigatorActor))
+			{
+				FGameplayEventData ToAttacker;
+				ToAttacker.Instigator = InstigatorActor;
+				ToAttacker.Target = TargetActor;
+				ToAttacker.OptionalObject = CauserActor;
+				ToAttacker.EventTag = RetrieveGameplayTags::GameplayEvent_Parried;
+				ToAttacker.TargetTags = SpecTags;
+				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+					InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
+			}
 
-		return 0.f;
+			// (b) 방어자에게 "패리 성공" 발행 → GA_Parry/Guard가 카운터 윈도우 부여 + Cue
+			FGameplayEventData ToVictim;
+			ToVictim.Instigator = TargetActor;
+			ToVictim.Target = TargetActor;
+			ToVictim.OptionalObject = InstigatorActor;
+			ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+				TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
+
+			return 0.f;
+		}
 	}
 
 	// 2. GUARD
@@ -350,14 +411,7 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);
 	}
-	// 테스트 코드
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[HitEvent] AttackerEvent=%s TargetEvent=%s Damage=%.1f Attacker=%s Target=%s"),
-		*AttackerEventTag.ToString(),
-		*TargetEventTag.ToString(),
-		DamageDone,
-		*GetNameSafe(AttackerActor),
-		*GetNameSafe(TargetActor));
-	
+
 	// 공격자 측 연출용 메시지(대미지 플로터 등) GMS로 디커플
 	UWorld* World = AttackerActor->GetWorld();
 	if (IsValid(World) == false)

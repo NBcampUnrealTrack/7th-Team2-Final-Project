@@ -2,6 +2,7 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/RetrieveAnimSlots.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_Die::UGA_Die()
@@ -23,6 +24,8 @@ void UGA_Die::ActivateAbility(
 {
     Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
+    bRagdollTriggered = false;   // 부활 후 재사망 시 다시 ragdoll 가능하도록 리셋
+
     if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
     {
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -31,6 +34,7 @@ void UGA_Die::ActivateAbility(
 
     if (!DeathMontage)
     {
+        TriggerRagdoll();   // 몽타주 없어도 죽음은 ragdoll로 귀결
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
@@ -60,22 +64,40 @@ void UGA_Die::ActivateAbility(
 
 void UGA_Die::HandleMontageCompleted()
 {
+    TriggerRagdoll();
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_Die::HandleMontageBlendOut()
 {
+    TriggerRagdoll();
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
 void UGA_Die::HandleMontageInterrupted()
 {
+    TriggerRagdoll();
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
 void UGA_Die::HandleMontageCancelled()
 {
+    TriggerRagdoll();
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+}
+
+void UGA_Die::TriggerRagdoll()
+{
+    if (bRagdollTriggered)
+    {
+        return;
+    }
+    bRagdollTriggered = true;
+
+    if (ARetrieveAlsCharacter* AlsCharacter = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
+    {
+        AlsCharacter->StartRagdoll();
+    }
 }
 
 void UGA_Die::EndAbility(

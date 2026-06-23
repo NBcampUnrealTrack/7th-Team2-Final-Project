@@ -78,10 +78,6 @@
 			"Enabled": false
 		},
 		{
-			"Name": "SidekickCharacterTool",
-			"Enabled": false
-		},
-		{
 			"Name": "MotionWarping",
 			"Enabled": true
 		}

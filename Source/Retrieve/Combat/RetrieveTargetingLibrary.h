@@ -17,12 +17,22 @@ class RETRIEVE_API URetrieveTargetingLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	// 워프 조준 축(2D 정규화): 이동 입력 방향(WASD/좌스틱) 우선, 중립이면 컨트롤 회전(카메라) 정면.
+	// 입력벡터가 없는 폰(몬스터/AI)은 항상 컨트롤 회전 기준. 둘 다 무효면 ZeroVector.
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Targeting")
+	static FVector GetWarpAimDirection(const ACharacter* Source);
+
 	// Source 기준 Range/HalfAngle 콘 안에서 적대 대상 중 가중점수 최고 타겟 반환. 없으면 nullptr.
 	// AimDirection: 콘 중심(월드, 내부 2D 정규화). RangeWeightRate: 0~1 거리/각도 블렌드.
 	// MaxVerticalDelta: Source와의 수직(Z) 차가 이 값을 넘는 대상은 제외(비평지 닿을 수 없는 타겟 차단).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Targeting")
 	static AActor* FindBestTarget(ACharacter* Source, float Range, float HalfAngle,
 		FVector AimDirection, float MaxVerticalDelta, float RangeWeightRate = 0.5f);
+
+	// 플레이어 조준 보조: 락온 대상 우선 → 없으면 컨트롤 회전 기준 전방 콘(FindBestTarget). 투사체 공격 공용.
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Targeting")
+	static AActor* ResolveAimTarget(AActor* AvatarActor, float SearchRange, float SearchHalfAngle,
+		float MaxVerticalDelta, float RangeWeightRate = 0.5f);
 
 	// 워프 트랜스폼 계산(타겟 유효 케이스 전용).
 	// 캡슐R 합 + StandoffOffset 만큼 떨어진 지점 + 타겟 정조준. Z는 Source 기준 유지.

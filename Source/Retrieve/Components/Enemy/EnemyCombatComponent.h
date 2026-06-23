@@ -118,7 +118,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<USphereComponent> ActiveHitboxComp;
 
-	/** 히트박스 적중 시 적용할 GE (임시: GE_DamageTest, 추후 DT 연동으로 교체) */
+	/** 히트박스 적중 시 적용할 데미지 GE. BP에서 지정(예: BP_BossBase = GE_BasicHitDamage). 패턴 행 bCanBeParried면 Attack.Type.Parryable 동적 주입. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|Hitbox")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 

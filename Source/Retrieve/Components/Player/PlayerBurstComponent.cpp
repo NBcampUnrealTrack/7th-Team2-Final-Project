@@ -15,7 +15,11 @@
 #include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
 
 UPlayerBurstComponent::UPlayerBurstComponent()
 {
@@ -321,6 +325,9 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 
+	// ── 적중 VFX/사운드 (FBurstHitInstance 데이터 기반) ──
+	PlayHitFeedback(Hit, HitResult, Target);
+
 	// ── 상태 부여 + 원소 반응 ──
 	for (const TSubclassOf<UGameplayEffect>& StatusGE : Hit.StatusEffects)
 	{
@@ -335,6 +342,26 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 		{
 			SourceASC->ApplyGameplayEffectSpecToTarget(*StatusSpec.Data.Get(), TargetASC);
 		}
+	}
+}
+
+void UPlayerBurstComponent::PlayHitFeedback(const FBurstHitInstance& Hit, const FHitResult& HitResult, AActor* Target) const
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World)) return;
+
+	const FVector FxLocation = HitResult.ImpactPoint.IsNearlyZero()
+		? (IsValid(Target) ? Target->GetActorLocation() : FVector::ZeroVector)
+		: HitResult.ImpactPoint;
+
+	if (UNiagaraSystem* VFX = Hit.HitVFX.LoadSynchronous())
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, VFX, FxLocation, HitResult.ImpactNormal.Rotation());
+	}
+
+	if (USoundBase* SFX = Hit.HitSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, SFX, FxLocation);
 	}
 }
 

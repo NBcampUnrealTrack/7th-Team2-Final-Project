@@ -42,9 +42,30 @@ struct RETRIEVE_API FCharacterStats : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
 	float MaxHealth = 100.0f;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
 	float AttackPower = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
+	float Defense = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
+	float MoveSpeed = 600.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats")
+	float IncomingDamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float GuardDamageReduction = 0.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats", meta = (ClampMin = "0.1"))
+	float AttackSpeedMultiplier = 1.0f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Stamina")
+	float MaxStamina = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Stamina")
+	float StaminaRegenRate = 50.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -690,6 +711,11 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	FText DisplayName;
 
 	// ---- Pattern / Motion --------
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element", meta = (Categories = "Weapon.Type"))
+	FGameplayTag WeaponType;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element", meta = (Categories = "Element"))
+	FGameplayTag BurstElement;
+	// TODO(하민): [구버전] 정확 조합 매칭용. 원소 다수결 선택에서는 사용하지 않음(BurstElement로 대체). 추후 정리 예정
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Motion")
@@ -1021,10 +1047,10 @@ struct RETRIEVE_API FWeaponStaffAttack
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
 	FVector SpawnOffset = FVector(60.f, -35.f, 50.f);
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
 	FGameplayTag ChargeBonusEventTag;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Element")
 	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> ElementStatusEffects;
 };
@@ -1126,6 +1152,9 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FParryCounterData ParryCounter;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FWeaponStaffAttack StaffAttack;
 

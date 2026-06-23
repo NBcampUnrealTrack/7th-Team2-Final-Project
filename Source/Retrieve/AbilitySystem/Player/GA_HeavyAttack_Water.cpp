@@ -16,6 +16,7 @@ UGA_HeavyAttack_Water::UGA_HeavyAttack_Water()
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack_Water);
+	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 	
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Movement);

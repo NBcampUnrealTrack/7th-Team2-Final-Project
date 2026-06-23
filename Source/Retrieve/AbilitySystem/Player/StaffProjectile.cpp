@@ -4,8 +4,12 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Combat/RetrieveKnockbackLibrary.h"
+#include "Components/MeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/ProjectileMovementComponent.h"
@@ -72,6 +76,77 @@ void AStaffProjectile::ConfigureAttack(
 	ElementTag = InElementTag;
 	ElementStatusEffect = InElementStatusEffect;
 	ChargeBonusEventTag = InChargeBonusEventTag;
+}
+
+AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* AvatarActor, UAbilitySystemComponent* SourceASC,
+	UMeshComponent* WeaponMesh, AActor* AimTarget, const FRetrieveProjectileSpawnParams& Params)
+{
+	if (!Params.ProjectileClass || !IsValid(AvatarActor) || !IsValid(World))
+	{
+		return nullptr;
+	}
+
+	// 스폰 위치: 무기 메시 소켓 → 캐릭터 메시 소켓 → 액터+오프셋
+	FVector SpawnLocation = AvatarActor->GetActorLocation() + AvatarActor->GetActorRotation().RotateVector(Params.SpawnOffset);
+	bool bResolvedSocket = false;
+	if (!Params.SpawnSocketName.IsNone())
+	{
+		if (WeaponMesh && WeaponMesh->DoesSocketExist(Params.SpawnSocketName))
+		{
+			SpawnLocation = WeaponMesh->GetSocketLocation(Params.SpawnSocketName);
+			bResolvedSocket = true;
+		}
+		if (!bResolvedSocket)
+		{
+			if (const ACharacter* Char = Cast<ACharacter>(AvatarActor))
+			{
+				if (USkeletalMeshComponent* CharMesh = Char->GetMesh())
+				{
+					if (CharMesh->DoesSocketExist(Params.SpawnSocketName))
+					{
+						SpawnLocation = CharMesh->GetSocketLocation(Params.SpawnSocketName);
+					}
+				}
+			}
+		}
+	}
+
+	// 발사 방향: 조준 타겟(중심 Bounds) → 없으면 컨트롤 회전 전방
+	FVector Direction = AvatarActor->GetActorForwardVector();
+	if (IsValid(AimTarget))
+	{
+		FVector AimLocation = AimTarget->GetActorLocation();
+		if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(AimTarget->GetRootComponent()))
+		{
+			AimLocation = RootPrimitive->Bounds.Origin;
+		}
+		Direction = (AimLocation - SpawnLocation).GetSafeNormal();
+	}
+	else if (const ACharacter* SourceChar = Cast<ACharacter>(AvatarActor))
+	{
+		Direction = SourceChar->GetControlRotation().Vector();
+	}
+	if (Direction.IsNearlyZero())
+	{
+		Direction = AvatarActor->GetActorForwardVector();
+	}
+
+	const FRotator SpawnRotation = Direction.Rotation();
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = AvatarActor;
+	SpawnParams.Instigator = Cast<APawn>(AvatarActor);
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	AStaffProjectile* Projectile = World->SpawnActor<AStaffProjectile>(Params.ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+	if (!Projectile)
+	{
+		return nullptr;
+	}
+
+	Projectile->ConfigureAttack(SourceASC, AvatarActor, Params.DamageMultiplier, Params.HitReactType,
+		Params.AttackTypeTag, Params.ElementTag, Params.ElementStatusEffect, Params.ChargeBonusEventTag);
+	Projectile->Launch(Direction, Params.Speed);
+	return Projectile;
 }
 
 void AStaffProjectile::BeginPlay()

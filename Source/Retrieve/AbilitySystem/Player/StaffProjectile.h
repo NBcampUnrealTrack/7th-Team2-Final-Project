@@ -8,9 +8,27 @@
 
 class UAbilitySystemComponent;
 class UGameplayEffect;
+class UMeshComponent;
 class UProjectileMovementComponent;
 class USphereComponent;
 class UStaticMeshComponent;
+class UWorld;
+class AStaffProjectile;
+
+// 투사체 스폰 파라미터(스태프 강공·활 공용)
+struct FRetrieveProjectileSpawnParams
+{
+	TSubclassOf<AStaffProjectile> ProjectileClass;
+	float Speed = 1800.f;
+	float DamageMultiplier = 1.f;
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
+	FName SpawnSocketName = NAME_None;
+	FVector SpawnOffset = FVector::ZeroVector;
+	FGameplayTag AttackTypeTag;
+	FGameplayTag ElementTag;
+	TSubclassOf<UGameplayEffect> ElementStatusEffect;
+	FGameplayTag ChargeBonusEventTag;
+};
 
 /**
  * 플레이어 스태프(원거리) 투사체.
@@ -35,6 +53,10 @@ public:
 		const FGameplayTag& InElementTag,
 		TSubclassOf<UGameplayEffect> InElementStatusEffect,
 		const FGameplayTag& InChargeBonusEventTag);
+
+	// 소켓 → 캐릭터메시 → 액터오프셋 위치 + (AimTarget 방향, 없으면 컨트롤 전방)으로 스폰, ConfigureAttack, Launch
+	static AStaffProjectile* SpawnConfigured(UWorld* World, AActor* AvatarActor, UAbilitySystemComponent* SourceASC,
+		UMeshComponent* WeaponMesh, AActor* AimTarget, const FRetrieveProjectileSpawnParams& Params);
 
 protected:
 	virtual void BeginPlay() override;

@@ -446,7 +446,9 @@ void URetrieveHeroComponent::Input_SprintReleased(const FInputActionValue& Input
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
-			ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
+			// Sprinting은 on/off 상태값. SprintAttack 발동 등으로 이미 0일 수 있으므로
+			// RemoveLooseGameplayTag(decrement)가 아니라 SetCount(0)으로 비운다(언더플로 워닝 방지, 다른 클리어 지점과 일관).
+			ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
 			SprintStartTimeSeconds = -1.0;
 		}
 	}

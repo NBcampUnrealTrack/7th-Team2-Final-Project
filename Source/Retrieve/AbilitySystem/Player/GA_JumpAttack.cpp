@@ -33,6 +33,10 @@ UGA_JumpAttack::UGA_JumpAttack()
 	// 공중 전용 어빌리티
 	bBlockActivationWhileAirborne = false;
 
+	// 버퍼 사용 + 공격류 우선순위. 어떤 공격에서 점프공격으로 캔슬할 수 있는지는 몽타주 AllowedCancelIntents가 정한다.
+	bUseCombatInputBuffer = true;
+	CombatInputPriority = 10;
+
 	// 상태 게이트(사망/피격/다운)때 동작 불가
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
@@ -40,6 +44,8 @@ UGA_JumpAttack::UGA_JumpAttack()
 
 	// "공격 중" 상태 태그를 재사용
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
+
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 
 	// 공중 공격 중 가드 차단
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
@@ -52,7 +58,12 @@ bool UGA_JumpAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		return false;
 	}
 
-	if (!IsAvatarAirborne(ActorInfo))
+	// 실제로 낙하(공중) 중일 때만 발동. IsAvatarAirborne은 bPressedJump도 공중으로 치는데,
+	// 점프 입력만 들어가고 실제론 못 뜬 접지 상태에서 발동되면 착지 이벤트(LandedDelegate)가 영영 안 와
+	// 다이브 루프 몽타주가 그 자리에서 무한 반복된다. 버퍼가 있어 실제 이륙 직후 발동돼도 늦지 않다.
+	const ACharacter* AirborneCharacter = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	const UCharacterMovementComponent* MoveComp = AirborneCharacter ? AirborneCharacter->GetCharacterMovement() : nullptr;
+	if (!MoveComp || !MoveComp->IsFalling())
 	{
 		return false;
 	}
