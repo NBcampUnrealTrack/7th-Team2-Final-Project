@@ -1,4 +1,4 @@
-﻿#include "Components/Player/RetrieveHeroComponent.h"
+#include "Components/Player/RetrieveHeroComponent.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -6,6 +6,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputCoreTypes.h"
 #include "../Pawn/RetrievePawnExtensionComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
@@ -371,6 +372,32 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 			if (PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl))
 			{
 				return;
+			}
+		}
+	}
+
+	// 좌클릭(Attack) + Shift = 대시어택 Chord. 평타 인텐트 대신 SprintAttack 인텐트로 치환해
+	// 평타 폴백을 막는다(대시 실패 시 평타가 나가던 문제 제거). Shift는 Sprint 키와 공유.
+	if (InputTag == RetrieveGameplayTags::Ability_Player_Attack)
+	{
+		// 공중에선 chord를 끈다 — Shift+LMB가 attack을 SprintAttack으로 가로채면 점프어택이 굶고
+		// 공중 발동 불가한 SprintAttack이 버퍼에 남아 착지 때 뭉개진다. 대시/방패는 지상 무브.
+		const ACharacter* Char = Cast<ACharacter>(Pawn);
+		const bool bAirborne = Char && Char->GetCharacterMovement() && Char->GetCharacterMovement()->IsFalling();
+
+		const APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
+		if (!bAirborne && PC && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift)))
+		{
+			// 대시어택(SprintAttack 인텐트)을 실제로 가진 경우에만 치환. 미보유 클래스(메이지 등)는
+			// 평타 경로로 그대로 흘려보낸다 — Shift+LMB 입력이 먹통 되는 것 방지.
+			if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+			{
+				if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent();
+					ASC && ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_SprintAttack))
+				{
+					ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_SprintAttack);
+					return;
+				}
 			}
 		}
 	}

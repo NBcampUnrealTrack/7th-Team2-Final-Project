@@ -29,6 +29,19 @@ const FWeaponSprintAttack* UAttackComboDefinition::ResolveSprintVariant(const FG
 	return !SprintDefault.Montage.IsNull() ? &SprintDefault : nullptr;
 }
 
+const FWeaponSprintAttack* UAttackComboDefinition::ResolveBashVariant(const FGameplayTag& ElementTag) const
+{
+	for (const FWeaponSprintAttack& Variant : BashVariants)
+	{
+		if (Variant.ElementTag == ElementTag && !Variant.Montage.IsNull())
+		{
+			return &Variant;
+		}
+	}
+
+	return !BashDefault.Montage.IsNull() ? &BashDefault : nullptr;
+}
+
 const FWeaponJumpAttack* UAttackComboDefinition::ResolveJumpVariant(const FGameplayTag& ElementTag) const
 {
 	

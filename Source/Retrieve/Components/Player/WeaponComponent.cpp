@@ -1,12 +1,14 @@
 #include "Components/Player/WeaponComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Character/Cosmetics/RetrieveAlsLinkedAnimInstance.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
@@ -48,15 +50,47 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 		return true;
 	}
 
-	// 무기별 어빌리티와 메시가 남지 않도록 기존 장착 먼저 정리
-	UnequipWeapon();
-	return ApplyWeaponData(WeaponItemId, *WeaponData);
+	ClearWeaponData(); // 이전 무기 '데이터만' 정리 (OLD 메시는 유지 — 교체 연출이 넘겨받음)
+	if (!ApplyWeaponData(WeaponItemId, *WeaponData))
+	{
+		return false;
+	}
+
+	// NEW 레이어로 먼저 relink → GA가 NEW EquipMontage를 읽도록 broadcast를 트리거보다 앞에 둔다.
+	OnWeaponEquipped.Broadcast(CurrentWeaponDataRow);
+
+	// 연출/비주얼은 GA가. 트리거 실패(미부여/몽타주 없음)면 즉시 데이터로 리빌드.
+	if (!TryTriggerEquipTransition(RetrieveGameplayTags::GameplayEvent_Player_EquipWeapon))
+	{
+		ReconcileVisuals();
+	}
+	return true;
 }
 
 void UWeaponComponent::UnequipWeapon()
 {
 	const FName PreviousWeaponId = CurrentWeaponDataRow;
+	if (PreviousWeaponId.IsNone())
+	{
+		return;
+	}
 
+	ClearWeaponData();
+
+	// 해제 연출은 '벗는' 무기(=현재 링크된 레이어)의 UnequipMontage.
+	// relink(Unarmed) 전에 트리거해 레이어가 살아있을 때 참조를 잡게 한다.
+	const bool bTriggered = TryTriggerEquipTransition(RetrieveGameplayTags::GameplayEvent_Player_UnequipWeapon);
+
+	OnWeaponUnequipped.Broadcast(PreviousWeaponId); // → Cosmetic이 Unarmed로 relink
+
+	if (!bTriggered)
+	{
+		ReconcileVisuals();
+	}
+}
+
+void UWeaponComponent::ClearWeaponData()
+{
 	// 무기 공격력 GE 먼저 제거 (ClearGrantedWeaponAbilities 전에 수행)
 	if (HasAuthorityToModify() && WeaponAttackPowerEffectHandle.IsValid())
 	{
@@ -68,18 +102,41 @@ void UWeaponComponent::UnequipWeapon()
 	}
 
 	ClearGrantedWeaponAbilities();
-	ClearWeaponVisuals();
 
 	CurrentWeaponDataRow = NAME_None;
 	CurrentWeaponData = FRetrieveWeaponDataRow();
 	CurrentWeaponTypeTag = FGameplayTag();
 	CurrentWeaponAffinityTag = FGameplayTag();
 	CurrentWeaponAttackTable = nullptr;
+}
 
-	if (!PreviousWeaponId.IsNone())
+void UWeaponComponent::SpawnWeaponVisuals()
+{
+	if (IsEquipped())
 	{
-		OnWeaponUnequipped.Broadcast(PreviousWeaponId);
+		// 손 소켓에 스폰. 납검 상태 보정은 CombatStance가 OnWeaponEquipped에서 SetWeaponDrawn으로 처리.
+		ApplyWeaponVisuals(CurrentWeaponData);
 	}
+}
+
+void UWeaponComponent::ReconcileVisuals()
+{
+	ClearWeaponVisuals();
+	SpawnWeaponVisuals();
+}
+
+bool UWeaponComponent::TryTriggerEquipTransition(const FGameplayTag& EventTag)
+{
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (!ASC)
+	{
+		return false;
+	}
+
+	FGameplayEventData Payload;
+	Payload.EventTag = EventTag;
+	Payload.Instigator = GetOwner();
+	return ASC->HandleGameplayEvent(EventTag, &Payload) > 0;
 }
 
 void UWeaponComponent::OnRep_CurrentWeaponDataRow()
@@ -87,7 +144,6 @@ void UWeaponComponent::OnRep_CurrentWeaponDataRow()
 	const FName ReplicatedWeaponId = CurrentWeaponDataRow;
 
 	// 클라이언트는 복제된 RowName 기준으로 비주얼과 UI용 캐시만 갱신
-	ClearWeaponVisuals();
 	CurrentWeaponData = FRetrieveWeaponDataRow();
 	CurrentWeaponTypeTag = FGameplayTag();
 	CurrentWeaponAffinityTag = FGameplayTag();
@@ -95,13 +151,16 @@ void UWeaponComponent::OnRep_CurrentWeaponDataRow()
 
 	if (ReplicatedWeaponId.IsNone())
 	{
+		ClearWeaponVisuals();
 		OnWeaponUnequipped.Broadcast(ReplicatedWeaponId);
 		return;
 	}
 
 	if (const FRetrieveWeaponDataRow* WeaponData = FindWeaponData(ReplicatedWeaponId))
 	{
-		ApplyWeaponData(ReplicatedWeaponId, *WeaponData);
+		ApplyWeaponData(ReplicatedWeaponId, *WeaponData); // 클라: 캐시만 (어빌리티/GE는 권위 가드)
+		OnWeaponEquipped.Broadcast(ReplicatedWeaponId);   // → Cosmetic relink
+		ReconcileVisuals();                               // 원격 즉시 스폰 (연출 생략)
 	}
 }
 
@@ -144,6 +203,7 @@ void UWeaponComponent::ClearWeaponVisuals()
 		}
 	}
 	EquippedWeaponMeshComponents.Reset();
+	WeaponAttachParts.Reset();
 }
 
 UMeshComponent* UWeaponComponent::GetPrimaryEquippedWeaponMesh() const
@@ -220,8 +280,8 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 	CurrentWeaponAffinityTag = WeaponData.WeaponAffinityTag;
 	CurrentWeaponAttackTable = WeaponData.WeaponAttackTable.LoadSynchronous();
 
-	ApplyWeaponVisuals(WeaponData);
-	OnWeaponEquipped.Broadcast(CurrentWeaponDataRow);
+	// 비주얼 스폰과 OnWeaponEquipped 브로드캐스트는 호출자(EquipWeapon / OnRep)가 담당한다.
+	// (교체 연출 타이밍 제어 + relink 순서 보장을 위해 데이터 적용과 분리)
 	return true;
 }
 
@@ -256,10 +316,68 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		WeaponMeshComponent->SetRelativeTransform(Attachment.RelativeTransform);
 
 		EquippedWeaponMeshComponents.Add(WeaponMeshComponent);
+
+		// 발검/납검 소켓 스왑용 기록(손=AttachSocketName, 오프셋 보존). 등 소켓은 SetWeaponDrawn에서 레이어 맵으로 해석.
+		FRetrieveEquippedWeaponPart& Part = WeaponAttachParts.AddDefaulted_GetRef();
+		Part.Mesh = WeaponMeshComponent;
+		Part.DrawnSocket = Attachment.AttachSocketName;
+		Part.RelativeTransform = Attachment.RelativeTransform;
+
 		bAttachedAnyPart = true;
 	}
 
 	return bAttachedAnyPart;
+}
+
+void UWeaponComponent::SetWeaponDrawn(bool bDrawn)
+{
+	// 등(수납) 소켓은 무기 타입 레이어가 소유(drawn→sheathed 맵). 발검은 Part의 손 소켓을 그대로 쓰므로 조회 불필요.
+	// spawn 시점이 아니라 여기서 즉석 조회한다(init 때 무기 장착이 cosmetic relink보다 앞서 캐싱하면 None으로 굳음).
+	const URetrieveAlsLinkedAnimInstance* Layer = nullptr;
+	if (!bDrawn)
+	{
+		if (const ACharacter* Character = Cast<ACharacter>(GetOwner()))
+		{
+			if (const USkeletalMeshComponent* CharacterMesh = Character->GetMesh())
+			{
+				for (UAnimInstance* Linked : CharacterMesh->GetLinkedAnimInstances())
+				{
+					if (const URetrieveAlsLinkedAnimInstance* WeaponLayer = Cast<URetrieveAlsLinkedAnimInstance>(Linked))
+					{
+						Layer = WeaponLayer;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
+	{
+		UMeshComponent* Mesh = Part.Mesh;
+		if (!IsValid(Mesh))
+		{
+			continue;
+		}
+
+		// 납검 소켓 매핑이 없는 파트는 그대로 둔다(예: 항상 손에 있는 무기 등).
+		const FName TargetSocket = bDrawn
+			? Part.DrawnSocket
+			: (Layer ? Layer->SheathedSocketByDrawnSocket.FindRef(Part.DrawnSocket) : NAME_None);
+		if (TargetSocket.IsNone())
+		{
+			continue;
+		}
+
+		USceneComponent* AttachParent = Mesh->GetAttachParent();
+		if (!AttachParent)
+		{
+			continue;
+		}
+
+		Mesh->AttachToComponent(AttachParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TargetSocket);
+		Mesh->SetRelativeTransform(Part.RelativeTransform); // SnapToTarget이 0으로 만든 오프셋 복원
+	}
 }
 
 UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeaponAttachmentData& Attachment) const

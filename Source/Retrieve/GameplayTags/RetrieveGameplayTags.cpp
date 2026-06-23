@@ -1,4 +1,4 @@
-﻿#include "RetrieveGameplayTags.h"
+#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -42,6 +42,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SprintAttack, "Ability.Player.SprintAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_ParryCounter, "Ability.Player.ParryCounter");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_BowShot, "Ability.Player.BowShot");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_StanceTransition, "Ability.Player.StanceTransition");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_EquipTransition, "Ability.Player.EquipTransition");
 
 	// ---- Ability families
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Type_Attack, "Ability.Type.Attack");
@@ -59,6 +61,8 @@ namespace RetrieveGameplayTags
 	// ---- Player state
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Normal, "State.Player.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Combat, "State.Player.Combat");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_WeaponSheathed, "State.Player.WeaponSheathed");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_StanceBusy, "State.Player.StanceBusy");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Attacking, "State.Player.Attacking");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dodging, "State.Player.Dodging");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
@@ -243,6 +247,13 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_Burst, "GameplayEvent.Attack.HitSuccess.Burst");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Attack_HitSuccess_WeakPoint, "GameplayEvent.Attack.HitSuccess.WeakPoint");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Reaction_Finished, "GameplayEvent.Reaction.Finished");
+
+	// ---- Gameplay events: stance (draw / sheathe)
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Player_DrawWeapon, "GameplayEvent.Player.DrawWeapon");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Player_SheatheWeapon, "GameplayEvent.Player.SheatheWeapon");
+
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Player_EquipWeapon, "GameplayEvent.Player.EquipWeapon");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Player_UnequipWeapon,	"GameplayEvent.Player.UnequipWeapon");
 
 	// ---- Gameplay events: boss / pattern counter
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Boss_PatternCast, "GameplayEvent.Boss.PatternCast");

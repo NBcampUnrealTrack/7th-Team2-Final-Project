@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -11,7 +12,6 @@
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
-#include "Components/Player/RetrieveHeroComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -27,8 +27,7 @@ UGA_SprintAttack::UGA_SprintAttack()
 	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
 
-	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Player_Sprinting);
-
+	// Sprinting 필요조건 제거: 캔슬-인/제자리 발동을 허용하고, dash/bash는 ActivateAbility에서 분기한다.
 	bBlockActivationWhileAirborne = true;
 
 	// 구르기/맨틀 등 ALS 액션 중 질주공격 발동 불가. 단, 캔슬 윈도우가 허용하면 예외 — CanActivateAbility 참고.
@@ -71,24 +70,7 @@ bool UGA_SprintAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 		return false;
 	}
 
-	const URetrieveHeroComponent* Hero = URetrieveHeroComponent::FindHeroComponent(AvatarActor);
-	if (!Hero || Hero->GetCachedMoveInputDirection().IsNearlyZero(0.1f))
-	{
-		return false;
-	}
-
-	const UAttackComboDefinition* ComboDefinition = WeaponData.AttackComboDefinition.LoadSynchronous();
-	const FWeaponSprintAttack* ResolvedSprint = ComboDefinition ? ComboDefinition->ResolveSprintVariant(ResolveCurrentElementTag()) : nullptr;
-	if (!ResolvedSprint)
-	{
-		return false;
-	}
-
-	if (ResolvedSprint->RequiredSprintDuration > 0.f && Hero->GetTimeSprintingSeconds() < ResolvedSprint->RequiredSprintDuration)
-	{
-		return false;
-	}
-
+	// Sprinting/이동입력/지속시간 게이트는 제거 — 발동은 chord/캔슬로 보장하고 dash/bash 선택은 ActivateAbility에서 한다.
 	return IsValid(DamageEffectClass);
 }
 
@@ -106,37 +88,40 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
-	// 콤보 정의에서 현재 원소의 Sprint variant 해결 (없으면 기본 variant)
 	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
-	const FWeaponSprintAttack* ResolvedSprint = ComboDefinition ? ComboDefinition->ResolveSprintVariant(ResolveCurrentElementTag()) : nullptr;
-	if (!ResolvedSprint)
+	const FGameplayTag ElementTag = ResolveCurrentElementTag();
+
+	// dash vs bash 판정 (velocity 안 봄 — 공격 루트모션 오염 회피):
+	//   캔슬-인(평타 캔슬해서 들어옴) 또는 이동 입력 없음(제자리) → 방패 밀치기
+	//   그 외(단독 + 이동 입력 있음) → 대시 돌진
+	// 캔슬 여부는 CancelOpen 태그가 아니라 리졸버 플래그로 읽는다(태그는 CancelAbilitiesWithTag로 이미 지워짐).
+	const URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo());
+	const bool bCancelIn = RetrieveASC && RetrieveASC->IsActivatingAsCancel();
+	const ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
+	const bool bNoMoveInput = !SourceChar || SourceChar->GetLastMovementInputVector().IsNearlyZero();
+	const bool bUseBash = bCancelIn || bNoMoveInput;
+
+	// bash 우선 해결 → bash variant 없으면 dash 몽타주로 fallback(제자리 재생). dash면 바로 sprint variant.
+	const FWeaponSprintAttack* Resolved = nullptr;
+	if (bUseBash && ComboDefinition)
+	{
+		Resolved = ComboDefinition->ResolveBashVariant(ElementTag);
+	}
+	if (!Resolved && ComboDefinition)
+	{
+		Resolved = ComboDefinition->ResolveSprintVariant(ElementTag);
+	}
+	if (!Resolved)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	CachedSprintData = *ResolvedSprint;
-
-	// RequiredSprintDuration 이상 스프린트 유지해야 발동 (커밋 전 검사 → 미달 시 코스트 미소모)
-	if (CachedSprintData.RequiredSprintDuration > 0.f)
-	{
-		const URetrieveHeroComponent* Hero = URetrieveHeroComponent::FindHeroComponent(AvatarActor);
-		if (!Hero || Hero->GetTimeSprintingSeconds() < CachedSprintData.RequiredSprintDuration)
-		{
-			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-			return;
-		}
-	}
+	CachedSprintData = *Resolved;
 
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
-	}
-
-	// SprintAttack 후에 다시 Sprint + 워밍업을 거쳐야 재발동
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
 	}
 
 	UAnimMontage* Montage = CachedSprintData.Montage.LoadSynchronous();

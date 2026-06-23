@@ -32,7 +32,16 @@ public:
 	TArray<FWeaponSprintAttack> SprintVariants;
 	
 	const FWeaponSprintAttack* ResolveSprintVariant(const FGameplayTag& ElementTag) const;
-	
+
+	// --- Shield Bash (Sprint Attack의 제자리/캔슬 변형. 구조 동일 → FWeaponSprintAttack 재사용) ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ShieldBash")
+	FWeaponSprintAttack BashDefault;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ShieldBash")
+	TArray<FWeaponSprintAttack> BashVariants;
+
+	const FWeaponSprintAttack* ResolveBashVariant(const FGameplayTag& ElementTag) const;
+
 	// --- Jump Attack (Leap) ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "JumpAttack")
 	FWeaponJumpAttack JumpDefault;

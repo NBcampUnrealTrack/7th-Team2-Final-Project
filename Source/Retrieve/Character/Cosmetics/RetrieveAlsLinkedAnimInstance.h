@@ -5,6 +5,7 @@
 
 #include "RetrieveAlsLinkedAnimInstance.generated.h"
 
+class UAnimMontage;
 class URetrieveAlsAnimInstance;
 
 /**
@@ -26,6 +27,26 @@ class RETRIEVE_API URetrieveAlsLinkedAnimInstance : public UAlsLinkedAnimationIn
 
 public:
 	virtual void NativeInitializeAnimation() override;
+
+	// 이 무기 레이어의 발검/납검 몽타주. GA_StanceTransition이 전이 시 꺼내 슬롯에 재생한다.
+	// 무기별 레이어 ABP마다 자기 몽타주를 지정(무기 교체 relink 시 자동으로 딸려옴).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Stance")
+	TObjectPtr<UAnimMontage> DrawMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Stance")
+	TObjectPtr<UAnimMontage> SheatheMontage;
+
+	// 이 무기 레이어의 장착/해제 몽타주. GA_EquipTransition이 교체 시 꺼내 슬롯에 재생한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Equip")
+	TObjectPtr<UAnimMontage> EquipMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Equip")
+	TObjectPtr<UAnimMontage> UnequipMontage;
+
+	// 이 무기 타입의 손 소켓 → 등(수납) 소켓 매핑. 발검/납검 시 WeaponComponent가 이 맵으로 수납 위치를 해석한다.
+	// 무기 변종(데이터 row)이 아니라 타입 단위 속성이라 레이어에 둔다. (relink로 무기 타입마다 자동 교체)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Stance")
+	TMap<FName, FName> SheathedSocketByDrawnSocket;
 
 protected:
 	/**

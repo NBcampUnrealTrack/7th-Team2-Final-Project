@@ -60,6 +60,14 @@ public:
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	void AbilityInputTagReleased(const FGameplayTag& InputTag);
 
+	// 이 입력 인텐트로 발동 가능한(grant된) 어빌리티가 하나라도 있는가.
+	// chord 등 입력 치환 전에 "치환 대상이 실제로 존재하는지" 확인용(없는 클래스 입력 먹통 방지).
+	bool HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const;
+
+	// 지금 발동되는 어빌리티가 '진행 중 공격을 끊는 캔슬-인'으로 발동됐는가(리졸버가 발동 직전 기록).
+	// CancelOpen 태그는 CancelAbilitiesWithTag로 ActivateAbility 전에 지워져, 캔슬 여부 판정에 못 쓴다.
+	bool IsActivatingAsCancel() const { return bActivatingAsCancel; }
+
 	// 매 프레임 호출(비전투 즉시 입력 처리 + 버퍼 소비).
 	void ProcessAbilityInput(float DeltaTime, bool bGamePaused);
 	void ClearAbilityInput();
@@ -94,4 +102,7 @@ protected:
 
 	// 적재 순번 카운터(동순위 최신 우선용).
 	int32 CombatInputSequence = 0;
+
+	// 리졸버가 캔슬-인으로 발동시키는 동안만 true(TryActivateAbility 직전 set, 직후 clear). 동기 구간 전용.
+	bool bActivatingAsCancel = false;
 };
