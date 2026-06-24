@@ -30,6 +30,37 @@ FGameplayTag URetrieveGameplayAbility::ResolveCurrentElementTag() const
 	return RetrievePlayerState ? RetrievePlayerState->GetCurrentElementTag() : FGameplayTag();
 }
 
+FGameplayEffectSpecHandle URetrieveGameplayAbility::MakeSourcedSpec(TSubclassOf<UGameplayEffect> EffectClass, float Level) const
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(ASC) || !EffectClass)
+	{
+		return FGameplayEffectSpecHandle();
+	}
+
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
+	Ctx.AddInstigator(AvatarActor, AvatarActor);
+	Ctx.AddSourceObject(this);
+
+	return ASC->MakeOutgoingSpec(EffectClass, Level, Ctx);
+}
+
+TSubclassOf<UGameplayEffect> URetrieveGameplayAbility::SelectEffectByTargetType(const UAbilitySystemComponent* TargetASC, TSubclassOf<UGameplayEffect> NormalEffect, TSubclassOf<UGameplayEffect> BossEffect)
+{
+	const bool bIsBoss = TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+	return bIsBoss ? BossEffect : NormalEffect;
+}
+
+void URetrieveGameplayAbility::ApplyCommonActionBlocks(bool bBlockAirborne)
+{
+	bBlockActivationWhileAirborne = bBlockAirborne;
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+}
+
 bool URetrieveGameplayAbility::HasStamina(const FGameplayAbilityActorInfo* ActorInfo, float Cost) const
 {
 	if (Cost <= 0.f)
@@ -163,19 +194,6 @@ void URetrieveGameplayAbility::HandleParried(FGameplayEventData /*Payload*/)
 	if (!IsActive())
 	{
 		return;
-	}
-
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-		IsValid(ASC) && ParriedStaggerEffect && HasAuthority(&GetCurrentActivationInfoRef()))
-	{
-		FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
-		Ctx.AddSourceObject(this);
-
-		if (const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(ParriedStaggerEffect, 1.f, Ctx);
-			Spec.IsValid())
-		{
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-		}
 	}
 	
 	CancelAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateCancelAbility=*/true);

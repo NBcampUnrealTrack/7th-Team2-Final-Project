@@ -26,12 +26,8 @@ UGA_ParryCounter::UGA_ParryCounter()
 
 	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Player_CanCounter);
 
-	bBlockActivationWhileAirborne = true;
-
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+	// 공중/회피·경직·다운·사망 중 발동 차단(플레이어 액션 공통 게이트)
+	ApplyCommonActionBlocks();
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 	
@@ -194,11 +190,7 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 		return;
 	}
 
-	FGameplayEffectContextHandle Ctx = SourceASC->MakeEffectContext();
-	Ctx.AddInstigator(AvatarActor, AvatarActor);
-	Ctx.AddSourceObject(this);
-
-	FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), Ctx);
+	FGameplayEffectSpecHandle Spec = MakeSourcedSpec(DamageEffectClass, GetAbilityLevel());
 	if (Spec.IsValid() && Spec.Data.IsValid())
 	{
 		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CachedParryData.DamageMultiplier);
@@ -245,21 +237,11 @@ void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemCo
 	}
 
 	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
-
-	TSubclassOf<UGameplayEffect> GroggyGE = bIsBoss
+	const TSubclassOf<UGameplayEffect> GroggyGE = bIsBoss
 		? CachedParryData.BossGroggyEffect
 		: CachedParryData.NormalGroggyEffect;
 
-	if (!GroggyGE)
-	{
-		return;
-	}
-
-	FGameplayEffectContextHandle GroggyCtx = SourceASC->MakeEffectContext();
-	GroggyCtx.AddInstigator(AvatarActor, AvatarActor);
-	GroggyCtx.AddSourceObject(this);
-
-	FGameplayEffectSpecHandle GroggySpec = SourceASC->MakeOutgoingSpec(GroggyGE, GetAbilityLevel(), GroggyCtx);
+	FGameplayEffectSpecHandle GroggySpec = MakeSourcedSpec(GroggyGE, GetAbilityLevel());
 	if (!GroggySpec.IsValid() || !GroggySpec.Data.IsValid())
 	{
 		return;
