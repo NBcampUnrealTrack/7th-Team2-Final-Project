@@ -20,7 +20,7 @@
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
 #include "UI/ViewModels/ConversationViewModel.h"
-#include "UI/HUD/RetrieveElementGaugeWidget.h"
+#include "UI/ViewModels/QuestTrackerViewModel.h"
 #include "UI/HUD/RetrieveBossHPBarWidget.h"
 #include "UI/ViewModels/BossStatusViewModel.h"
 #include "UI/ViewModels/ElementGaugeViewModel.h"
@@ -541,6 +541,18 @@ bool ARetrievePlayerController::CanOpenPanel(const FRetrievePanelShortcutConfig&
 		UE_LOG(LogTemp, Warning, TEXT("Invalid panel shortcut: %s has no PanelClass."), *ShortcutConfig.Key.ToString());
 		return false;
 	}
+	
+	// 시네마틱 중에는 패널 차단
+	if (const UWorld* World = GetWorld())
+	{
+		if (const ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			if (GS->GetCinematicState().IsActive())
+			{
+				return false;
+			}
+		}
+	}
 
 	if (!ShortcutConfig.bRequiresInventoryOpenPermission)
 	{
@@ -778,9 +790,12 @@ void ARetrievePlayerController::EnsureHUDViewModel()
 	View->SetViewModel(HUDViewModelBindingName, HUDViewModelInstance);
 
 	// 자식 ViewModel도 명시적으로 등록 — WBP_HPBar처럼 클래스 직접 참조 방식과 호환
-	View->SetViewModel(TEXT("PlayerStatus"),  HUDViewModelInstance->GetPlayerStatus());
-	View->SetViewModel(TEXT("ElementGauge"),  HUDViewModelInstance->GetElementGauge());
-	View->SetViewModel(TEXT("BossStatus"),    HUDViewModelInstance->GetBossStatus());
+	View->SetViewModel(TEXT("PlayerStatus"), HUDViewModelInstance->GetPlayerStatus());
+	View->SetViewModel(TEXT("ElementGauge"), HUDViewModelInstance->GetElementGauge());
+	View->SetViewModel(TEXT("BossStatus"), HUDViewModelInstance->GetBossStatus());
+
+	// QuestTracker는 URetrieveQuestTrackerWidget이 자체 NativeConstruct에서 VM 주입 + 시드를
+	// 직접 처리한다 (WBP_HUD에 루트 MVVM 뷰가 없어 상단 주입이 닿지 않으므로 ElementGauge 방식).
 
 	BindBossStatusViewModelToBossBarWidget();
 }
@@ -917,6 +932,11 @@ void ARetrievePlayerController::ClearHUDViewModel()
 		if (UBossStatusViewModel* BossVM = HUDViewModelInstance->GetBossStatus())
 		{
 			BossVM->UnbindFromBoss();
+		}
+
+		if (UQuestTrackerViewModel* Tracker = HUDViewModelInstance->GetQuestTracker())
+		{
+			Tracker->Deinitialize();
 		}
 	}
 }
