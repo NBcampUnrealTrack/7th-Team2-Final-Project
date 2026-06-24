@@ -54,12 +54,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
 	TSubclassOf<UGameplayEffect> StaminaRestoreEffect;
 	
-	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback")
-	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback", meta = (ClampMin = "0.1"))
-	float ParrySuccessMontagePlayRate = 1.0f;
-	
 	UPROPERTY(EditDefaultsOnly, Category = "Parry|Feedback|HitStop", meta = (ClampMin = "0.01", ClampMax = "1.0"))
 	float HitStopTimeDilation = 0.05f;
 	

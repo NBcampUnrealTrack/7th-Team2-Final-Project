@@ -18,12 +18,8 @@ UGA_Parry::UGA_Parry()
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Parry);
 	SetAssetTags(Tags);
 
-	bBlockActivationWhileAirborne = true;
-
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+	// 공중/회피·경직·다운·사망 중 발동 차단(플레이어 액션 공통 게이트)
+	ApplyCommonActionBlocks();
 }
 
 bool UGA_Parry::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const

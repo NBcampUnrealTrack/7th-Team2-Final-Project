@@ -24,14 +24,8 @@ UGA_Guard::UGA_Guard()
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Guarding);
 
-	// 공중/점프 중 가드 불가
-	bBlockActivationWhileAirborne = true;
-
-	// 상태 게이트(회피/경직/다운/사망) 중 가드 차단
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
-	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+	// 공중/회피·경직·다운·사망 중 가드 차단(플레이어 액션 공통 게이트)
+	ApplyCommonActionBlocks();
 
 	// 가드 중 공격 차단 (family + 강공격)
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
@@ -128,10 +122,7 @@ void UGA_Guard::HandleGuardBroken(FGameplayEventData /*Payload*/)
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (IsValid(ASC) && GuardBreakStaggerEffect && HasAuthority(&GetCurrentActivationInfoRef()))
 	{
-		FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
-		Ctx.AddSourceObject(this);
-
-		const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(GuardBreakStaggerEffect, 1.f, Ctx);
+		const FGameplayEffectSpecHandle Spec = MakeSourcedSpec(GuardBreakStaggerEffect, 1.f);
 		if (Spec.IsValid())
 		{
 			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());

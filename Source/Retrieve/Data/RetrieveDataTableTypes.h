@@ -1171,10 +1171,10 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	FWeaponJumpAttack JumpAttack;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FParryCounterData ParryCounter;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "0.1"))
+	float ParrySuccessMontagePlayRate = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FWeaponStaffAttack StaffAttack;

@@ -84,28 +84,23 @@ void UGA_ParryBase::ExecuteParrySuccessCue() const
 
 void UGA_ParryBase::PlayParrySuccessMontage()
 {
-	TSoftObjectPtr<UAnimMontage> MontagePtr = ParrySuccessMontage;
-	if (const AActor* Avatar = GetAvatarActorFromActorInfo())
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	const UWeaponComponent* Weapon = Avatar ? Avatar->FindComponentByClass<UWeaponComponent>() : nullptr;
+	if (!Weapon)
 	{
-		if (const UWeaponComponent* Weapon = Avatar->FindComponentByClass<UWeaponComponent>())
-		{
-			const TSoftObjectPtr<UAnimMontage>& WeaponMontage = Weapon->GetWeaponDataRef().ParrySuccessMontage;
-			if (!WeaponMontage.IsNull())
-			{
-				MontagePtr = WeaponMontage;
-			}
-		}
+		return;
 	}
 
-	UAnimMontage* Montage = MontagePtr.LoadSynchronous();
+	const FRetrieveWeaponDataRow& WeaponData = Weapon->GetWeaponDataRef();
+	UAnimMontage* Montage = WeaponData.ParrySuccessMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		return;
 	}
-	
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->PlayMontage(this, GetCurrentActivationInfoRef(), Montage, ParrySuccessMontagePlayRate);
+		ASC->PlayMontage(this, GetCurrentActivationInfoRef(), Montage, WeaponData.ParrySuccessMontagePlayRate);
 	}
 }
 
@@ -122,21 +117,9 @@ void UGA_ParryBase::ApplyParryStagger(AActor* Attacker)
 	{
 		return;
 	}
-	
-	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
-	const TSubclassOf<UGameplayEffect> StaggerGE = bIsBoss ? BossParryStaggerEffect : ParryStaggerEffect;
 
-	if (!StaggerGE)
-	{
-		return;
-	}
-
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	FGameplayEffectContextHandle Ctx = SourceASC->MakeEffectContext();
-	Ctx.AddInstigator(AvatarActor, AvatarActor);
-	Ctx.AddSourceObject(this);
-
-	const FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(StaggerGE, GetAbilityLevel(), Ctx);
+	const TSubclassOf<UGameplayEffect> StaggerGE = SelectEffectByTargetType(TargetASC, ParryStaggerEffect, BossParryStaggerEffect);
+	const FGameplayEffectSpecHandle Spec = MakeSourcedSpec(StaggerGE, GetAbilityLevel());
 	if (Spec.IsValid())
 	{
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);

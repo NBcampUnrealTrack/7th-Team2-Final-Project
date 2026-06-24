@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "RetrieveGameplayAbility.generated.h"
 
+class UAbilitySystemComponent;
 class UAbilityTask_WaitGameplayEvent;
 class UGameplayEffect;
 struct FRetrieveBufferedCombatInput;
@@ -79,6 +81,7 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Ability|Parry")
 	void StartListeningForParried();
 	
+	// TODO(하민): 패리 스태거는 방어자 push 경로(UGA_ParryBase::ApplyParryStagger)로 일원화됨. 향후 제거 예정
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability|Parry")
 	TSubclassOf<UGameplayEffect> ParriedStaggerEffect;
 
@@ -86,6 +89,15 @@ protected:
 	FGameplayTag ResolveCurrentElementTag() const;
 	
 	bool HasStamina(const FGameplayAbilityActorInfo* ActorInfo, float Cost) const;
+
+	// 컨텍스트(Instigator=아바타, SourceObject=this)를 갖춘 아웃고잉 GE 스펙 생성. ASC/이펙트 없으면 무효 핸들
+	FGameplayEffectSpecHandle MakeSourcedSpec(TSubclassOf<UGameplayEffect> EffectClass, float Level) const;
+
+	// 대상이 보스(Monster.Type.Boss)면 BossEffect, 아니면 NormalEffect 선택
+	static TSubclassOf<UGameplayEffect> SelectEffectByTargetType(const UAbilitySystemComponent* TargetASC, TSubclassOf<UGameplayEffect> NormalEffect, TSubclassOf<UGameplayEffect> BossEffect);
+
+	// 플레이어 액션 공통 발동 게이트: 회피/경직/다운/사망 차단(+선택적으로 공중 차단)
+	void ApplyCommonActionBlocks(bool bBlockAirborne = true);
 
 private:
 	void TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& AbilitySpec) const;
