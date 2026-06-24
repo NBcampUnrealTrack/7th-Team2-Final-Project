@@ -106,7 +106,7 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 			}
 			if (Row->BlockedByStep.IsValid() && Quest->IsStepCompleted(Row->BlockedByStep))
 			{
-				continue; // 이미 완료됨 (e.g. SigilCompleted 이후의 Imprint)
+				continue; // 이미 완료된 토픽 (BlockedByStep)
 			}
 			Eligible.Add(Row);
 		}

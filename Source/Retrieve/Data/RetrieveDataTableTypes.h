@@ -1417,9 +1417,65 @@ struct RETRIEVE_API FQuestStep : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
 	bool bAdvancesSessionToResult = false;
 	
-	/** <Element>SigilActivated 행만 채우기: Channel.Quest.GuardianDefeated 페이로드에 포함됨. */
+	/** <Element>Empowered 행만 채우기: Channel.Quest.GuardianDefeated 페이로드에 포함됨. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
 	FGameplayTag UnlockElementTag;
+};
+
+// ---- 퀘스트 콘텐츠 레이어 (DT_Quest) ------------------------------------------
+
+UENUM(BlueprintType)
+enum class EQuestType : uint8
+{
+	Main,
+	Side
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FQuestObjective
+{
+	GENERATED_BODY()
+
+	/** 트래커/로그에 표시되는 목표 문구. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest", meta = (MultiLine = true))
+	FText ObjectiveText;
+
+	/** 이 목표가 감시하는 라벨. CompletedSteps에 포함되면 ● 완료, 아니면 ○. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	FGameplayTag CompletionTag;
+
+	// TODO: bool bOptional; int32 RequiredCount;  // "몬스터 n마리 처치" 카운터
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FQuestDefinition : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** Quest.Main.* / Quest.Side.* — 퀘스트 식별자 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	FGameplayTag QuestId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	EQuestType Type = EQuestType::Main;
+
+	/** Active / Completed 섹션 내 정렬 순서. 트래커 기본 추적도 이 순서를 따른다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	int32 DisplayOrder = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest", meta = (MultiLine = true))
+	FText Description;
+
+	/** 모두 CompletedSteps에 있어야 퀘스트가 표시(Active)된다. 비어 있으면 시작부터 Active. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	TArray<FGameplayTag> UnlockRequirements;
+
+	/** 표시 순서대로의 목표들(실제 게이팅은 원장이 담당). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	TArray<FQuestObjective> Objectives;
 };
 
 USTRUCT(BlueprintType)
@@ -1467,7 +1523,7 @@ struct RETRIEVE_API FDialogueRow : public FTableRowBase
 	
 	// ── Sigil 행 전용 — ApplySigilTopic에서 소비 ────────────────────────────
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Sigil")
-	FGameplayTag SigilStepTag; // Quest.Step.SigilCompleted | <E>SigilActivated
+	FGameplayTag SigilStepTag; // Quest.Step.TutorialComplete | <Element>Empowered
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Sigil")
 	FGameplayTag VfxCue;   

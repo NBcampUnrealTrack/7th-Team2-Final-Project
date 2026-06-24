@@ -37,6 +37,7 @@ public:
 	const FRetrieveDialogueState& GetDialogueState() const { return DialogueState; }
 	const FRetrieveCinematicState& GetCinematicState() const { return CinematicState; }
 	const UDataTable* GetDialogueTable() const { return DialogueTable; }
+	const UDataTable* GetQuestTable() const { return QuestTable; }
 
 	void RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics, bool bShared = true,
 	                     bool bHoldUntilReplaced = false);
@@ -74,6 +75,10 @@ protected:
 	// ---- Dialogue ----
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dialogue")
 	TObjectPtr<UDataTable> DialogueTable;
+	
+	// --- Quest content ---
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Quest")
+	TObjectPtr<UDataTable> QuestTable;
 
 	UPROPERTY(ReplicatedUsing = OnRep_DialogueState)
 	FRetrieveDialogueState DialogueState;

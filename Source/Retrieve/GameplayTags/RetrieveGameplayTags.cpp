@@ -408,17 +408,25 @@ namespace RetrieveGameplayTags
 	
 	// ---- Quest steps
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_Awakening, "Quest.Step.Awakening");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SigilCompleted, "Quest.Step.SigilCompleted");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TutorialComplete, "Quest.Step.TutorialComplete");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_FireGuardianDefeated, "Quest.Step.FireGuardianDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WindGuardianDefeated, "Quest.Step.WindGuardianDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WaterGuardianDefeated, "Quest.Step.WaterGuardianDefeated");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_FireSigilActivated, "Quest.Step.FireSigilActivated");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WindSigilActivated, "Quest.Step.WindSigilActivated");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WaterSigilActivated, "Quest.Step.WaterSigilActivated");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_FireEmpowered, "Quest.Step.FireEmpowered");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WindEmpowered, "Quest.Step.WindEmpowered");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_WaterEmpowered, "Quest.Step.WaterEmpowered");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SealUnlocked, "Quest.Step.SealUnlocked");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_SealOpened, "Quest.Step.SealOpened");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_QueenDefeated, "Quest.Step.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_GameComplete, "Quest.Step.GameComplete");
+
+	// ---- Quest definitions (DT_Quest QuestIds)
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_OpenYourEyes, "Quest.Main.OpenYourEyes");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ACenturyLater, "Quest.Main.ACenturyLater");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimFire, "Quest.Main.ReclaimFire");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimWater, "Quest.Main.ReclaimWater");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimWind, "Quest.Main.ReclaimWind");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_StormTheCastle, "Quest.Main.StormTheCastle");
 	
 	// ---- Dialogue
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
