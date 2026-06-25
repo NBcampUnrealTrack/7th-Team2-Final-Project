@@ -109,8 +109,9 @@ void UGA_HeavyAttack_Water::ApplyAoEColdDamage()
 				RetrieveGameplayTags::Element_Water,
 				RetrieveGameplayTags::Attack_Type_Heavy,
 				RetrieveGameplayTags::Attack_Property_GuardBreak);
-			DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
-
+			//DamageSpec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
+			AddFeedbackTagsToDamageSpec(*DamageSpec.Data.Get());
+		
 			SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
 		}
 

@@ -212,6 +212,17 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 			RetrieveGameplayTags::Attack_Type_Normal,
 			FGameplayTag(),
 			HitReactTypeToTag(CachedParryData.HitReactType));
+	
+		const FGameplayTag HitSuccessTag = CachedParryData.HitSuccessFeedbackTag.IsValid()
+		? CachedParryData.HitSuccessFeedbackTag 
+		: RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Heavy;
+
+		const FGameplayTag TargetHitTag = CachedParryData.TargetHitFeedbackTag.IsValid()
+		? CachedParryData.TargetHitFeedbackTag
+		: RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
+
+		Spec.Data->AddDynamicAssetTag(HitSuccessTag);
+		Spec.Data->AddDynamicAssetTag(TargetHitTag);
 
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 	}

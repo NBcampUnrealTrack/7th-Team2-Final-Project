@@ -786,6 +786,11 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 					Spec.Data->AddDynamicAssetTag(ReactTag);
 				}
 
+				if (ActivePatternRow->EffectTag.IsValid())
+				{
+					Spec.Data->AddDynamicAssetTag(ActivePatternRow->EffectTag);
+				}
+
 				// 넉백 강도를 GE에 실어 보내면 BroadcastHitEvent가 공격자(적)→피격자로 자동 적용한다.
 				const FMonsterLaunchKnockbackConfig& KbCfg = ActivePatternRow->LaunchKnockbackConfig;
 				if (KbCfg.bUseLaunchKnockback)

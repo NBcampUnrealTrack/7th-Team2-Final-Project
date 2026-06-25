@@ -111,8 +111,9 @@ void UGA_HeavyAttack_Fire::ApplyRadialDamage()
 			RetrieveGameplayTags::Element_Fire,
 			RetrieveGameplayTags::Attack_Type_Heavy,
 			RetrieveGameplayTags::Attack_Property_GuardBreak);
-		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
-
+		//Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::GameplayEvent_Hit_Heavy);
+		AddFeedbackTagsToDamageSpec(*Spec.Data.Get());
+	
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 	}
 }
