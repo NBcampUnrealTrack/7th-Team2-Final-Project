@@ -144,14 +144,15 @@ void UStaminaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 		return;
 	}
 	
-	// TODO(하민): 임시 PIE 표시 (UI 연결 전까지)
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (bShowDebugOnScreen && GEngine && OwnerPawn && OwnerPawn->IsLocallyControlled())
-	{
-		GEngine->AddOnScreenDebugMessage(
-			/*Key=*/8801, /*TimeToDisplay=*/0.f, FColor::Yellow,
-			FString::Printf(TEXT("Stamina: %.0f / %.0f"), GetStamina(), GetMaxStamina()));
-	}
+	// UI(WBP_Stamina) 연동 완료로 PIE 온스크린 디버그 표시 비활성화.
+	// 필요 시 아래 블록과 헤더의 bShowDebugOnScreen 주석을 해제하면 됨.
+	//const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	//if (bShowDebugOnScreen && GEngine && OwnerPawn && OwnerPawn->IsLocallyControlled())
+	//{
+	//	GEngine->AddOnScreenDebugMessage(
+	//		/*Key=*/8801, /*TimeToDisplay=*/0.f, FColor::Yellow,
+	//		FString::Printf(TEXT("Stamina: %.0f / %.0f"), GetStamina(), GetMaxStamina()));
+	//}
 }
 
 float UStaminaComponent::GetStamina() const
