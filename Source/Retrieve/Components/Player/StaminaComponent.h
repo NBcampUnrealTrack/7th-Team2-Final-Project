@@ -54,9 +54,10 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Retrieve|Stamina")
 	TSubclassOf<UGameplayEffect> StaminaRegenEffect;
 
-	// TODO(하민): PIE 화면에 현재 스태미너 표시. UI 연결 후 제거
-	UPROPERTY(EditAnywhere, Category = "Retrieve|Stamina|Debug")
-	bool bShowDebugOnScreen = true;
+	// UI(WBP_Stamina) 연동 완료로 비활성화. PIE 온스크린 스태미너 디버그가 필요하면
+	// 아래 프로퍼티와 StaminaComponent.cpp TickComponent 내 디버그 블록 주석을 해제.
+	//UPROPERTY(EditAnywhere, Category = "Retrieve|Stamina|Debug")
+	//bool bShowDebugOnScreen = true;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
