@@ -7,6 +7,7 @@
 
 class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
+struct FGameplayEffectSpec;
 
 /**
  * 강공격(스태미너 소비)의 추상 베이스
@@ -31,6 +32,8 @@ protected:
 
 	void ExecuteOwnerCue(const FGameplayTag& CueTag) const;
 
+	void AddFeedbackTagsToDamageSpec(FGameplayEffectSpec& Spec) const;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack")
 	bool bActivateForStaff = false;
@@ -48,6 +51,12 @@ protected:
 	/** 넉백 상향(Z) 강도. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackUpwardStrength = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack|Feedback", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
+	FGameplayTag HitSuccessFeedbackTag;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|HeavyAttack|Feedback", meta = (Categories = "GameplayEvent.Hit"))
+	FGameplayTag TargetHitFeedbackTag;
 
 private:
 	UFUNCTION()

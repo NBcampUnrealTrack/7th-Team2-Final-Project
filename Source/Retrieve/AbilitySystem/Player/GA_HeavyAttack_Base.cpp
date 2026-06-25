@@ -5,11 +5,15 @@
 #include "Animation/AnimMontage.h"
 #include "Components/Player/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "GameplayEffectTypes.h"
 
 UGA_HeavyAttack_Base::UGA_HeavyAttack_Base()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	HitSuccessFeedbackTag = RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Heavy;
+	TargetHitFeedbackTag = RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
@@ -108,6 +112,19 @@ void UGA_HeavyAttack_Base::ExecuteOwnerCue(const FGameplayTag& CueTag) const
 		FGameplayCueParameters Params;
 		Params.Instigator = GetAvatarActorFromActorInfo();
 		ASC->ExecuteGameplayCue(CueTag, Params);
+	}
+}
+
+void UGA_HeavyAttack_Base::AddFeedbackTagsToDamageSpec(FGameplayEffectSpec& Spec) const
+{
+	if (HitSuccessFeedbackTag.IsValid())
+	{
+		Spec.AddDynamicAssetTag(HitSuccessFeedbackTag);
+	}
+
+	if (TargetHitFeedbackTag.IsValid())
+	{
+		Spec.AddDynamicAssetTag(TargetHitFeedbackTag);
 	}
 }
 

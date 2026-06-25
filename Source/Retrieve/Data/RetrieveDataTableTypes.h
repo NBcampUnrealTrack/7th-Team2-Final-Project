@@ -654,6 +654,12 @@ struct RETRIEVE_API FBurstHitInstance
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	float DamageMultiplier = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Feedback", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
+	FGameplayTag HitSuccessFeedbackTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Feedback", meta = (Categories = "GameplayEvent.Hit"))
+	FGameplayTag TargetHitFeedbackTag;
+
 	/** 어디서 나가는지. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	EBurstHitSource HitSource = EBurstHitSource::Sword;
@@ -1018,7 +1024,13 @@ struct RETRIEVE_API FParryCounterData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Feedback", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
+	FGameplayTag HitSuccessFeedbackTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Feedback", meta = (Categories = "GameplayEvent.Hit"))
+	FGameplayTag TargetHitFeedbackTag;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Groggy")
 	TSubclassOf<UGameplayEffect> NormalGroggyEffect;
 	

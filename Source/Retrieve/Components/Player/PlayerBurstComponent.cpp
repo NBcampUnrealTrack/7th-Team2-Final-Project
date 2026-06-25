@@ -317,6 +317,18 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid()) return;
 
 	SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, Hit.DamageMultiplier);
+
+	const FGameplayTag HitSuccessTag = Hit.HitSuccessFeedbackTag.IsValid()
+	? Hit.HitSuccessFeedbackTag
+	: RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burst;
+
+	const FGameplayTag TargetHitTag = Hit.TargetHitFeedbackTag.IsValid()
+	? Hit.TargetHitFeedbackTag
+	: RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
+
+	SpecHandle.Data->AddDynamicAssetTag(HitSuccessTag);
+	SpecHandle.Data->AddDynamicAssetTag(TargetHitTag);
+
 	if (Hit.KnockbackStrength > 0.f)
 	{
 		SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, Hit.KnockbackStrength);
