@@ -13,7 +13,7 @@
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/Player/WeaponComponent.h"
-#include "Data/AttackComboDefinition.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -88,7 +88,7 @@ void UGA_SprintAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
-	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	UWeaponAttackDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
 	const FGameplayTag ElementTag = ResolveCurrentElementTag();
 
 	// dash vs bash 판정 (velocity 안 봄 — 공격 루트모션 오염 회피):

@@ -4,13 +4,13 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "AttackComboDefinition.generated.h"
+#include "WeaponAttackDefinition.generated.h"
 
 /**
- * Anim Layer의 Element에 해당하는 Combo Attack Montage의 데이터를 관리하는 DataAsset
+ * 무기의 공격 데이터(콤보/Sprint/Bash/Jump/ParryCounter/Heavy/패리성공)를 담는 DataAsset
  */
 UCLASS(BlueprintType)
-class RETRIEVE_API UAttackComboDefinition : public UDataAsset
+class RETRIEVE_API UWeaponAttackDefinition : public UDataAsset
 {
 	GENERATED_BODY()
 	
@@ -59,4 +59,17 @@ public:
 	TArray<FParryCounterData> ParryVariants;
 
 	const FParryCounterData* ResolveParryVariant(const FGameplayTag& ElementTag) const;
+
+	// --- Heavy Attack (강공격) ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	TArray<FWeaponHeavyAttack> HeavyVariants;
+
+	const FWeaponHeavyAttack* ResolveHeavyVariant(const FGameplayTag& ElementTag) const;
+
+	// --- Parry Success Reaction ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParrySuccess")
+	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParrySuccess", meta = (ClampMin = "0.1"))
+	float ParrySuccessMontagePlayRate = 1.0f;
 };

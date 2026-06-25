@@ -121,7 +121,6 @@ void UWeaponComponent::ClearWeaponData()
 	CurrentWeaponData = FRetrieveWeaponDataRow();
 	CurrentWeaponTypeTag = FGameplayTag();
 	CurrentWeaponAffinityTag = FGameplayTag();
-	CurrentWeaponAttackTable = nullptr;
 }
 
 void UWeaponComponent::SpawnWeaponVisuals()
@@ -196,7 +195,6 @@ void UWeaponComponent::OnRep_CurrentWeaponDataRow()
 	CurrentWeaponData = FRetrieveWeaponDataRow();
 	CurrentWeaponTypeTag = FGameplayTag();
 	CurrentWeaponAffinityTag = FGameplayTag();
-	CurrentWeaponAttackTable = nullptr;
 
 	if (ReplicatedWeaponId.IsNone())
 	{
@@ -333,7 +331,6 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 	CurrentWeaponData = WeaponData;
 	CurrentWeaponTypeTag = WeaponData.WeaponTypeTag;
 	CurrentWeaponAffinityTag = WeaponData.WeaponAffinityTag;
-	CurrentWeaponAttackTable = WeaponData.WeaponAttackTable.LoadSynchronous();
 
 	// 비주얼 스폰과 OnWeaponEquipped 브로드캐스트는 호출자(EquipWeapon / OnRep)가 담당한다.
 	// (교체 연출 타이밍 제어 + relink 순서 보장을 위해 데이터 적용과 분리)

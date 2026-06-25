@@ -1,9 +1,9 @@
 
-#include "AttackComboDefinition.h"
+#include "WeaponAttackDefinition.h"
 
 #include "RetrieveDataTableTypes.h"
 
-const FAttackComboVariant* UAttackComboDefinition::ResolveComboVariant(const FGameplayTag& ElementTag) const
+const FAttackComboVariant* UWeaponAttackDefinition::ResolveComboVariant(const FGameplayTag& ElementTag) const
 {
 	for (const FAttackComboVariant& Variant : ElementVariants)
 	{
@@ -16,7 +16,7 @@ const FAttackComboVariant* UAttackComboDefinition::ResolveComboVariant(const FGa
 	return (!DefaultVariant.ComboSteps.IsEmpty() && !DefaultVariant.Montage.IsNull()) ? &DefaultVariant : nullptr;
 }
 
-const FWeaponSprintAttack* UAttackComboDefinition::ResolveSprintVariant(const FGameplayTag& ElementTag) const
+const FWeaponSprintAttack* UWeaponAttackDefinition::ResolveSprintVariant(const FGameplayTag& ElementTag) const
 {
 	for (const FWeaponSprintAttack& Variant : SprintVariants)
 	{
@@ -29,7 +29,7 @@ const FWeaponSprintAttack* UAttackComboDefinition::ResolveSprintVariant(const FG
 	return !SprintDefault.Montage.IsNull() ? &SprintDefault : nullptr;
 }
 
-const FWeaponSprintAttack* UAttackComboDefinition::ResolveBashVariant(const FGameplayTag& ElementTag) const
+const FWeaponSprintAttack* UWeaponAttackDefinition::ResolveBashVariant(const FGameplayTag& ElementTag) const
 {
 	for (const FWeaponSprintAttack& Variant : BashVariants)
 	{
@@ -42,7 +42,7 @@ const FWeaponSprintAttack* UAttackComboDefinition::ResolveBashVariant(const FGam
 	return !BashDefault.Montage.IsNull() ? &BashDefault : nullptr;
 }
 
-const FWeaponJumpAttack* UAttackComboDefinition::ResolveJumpVariant(const FGameplayTag& ElementTag) const
+const FWeaponJumpAttack* UWeaponAttackDefinition::ResolveJumpVariant(const FGameplayTag& ElementTag) const
 {
 	
 	for (const FWeaponJumpAttack& Variant : JumpVariants)
@@ -55,7 +55,7 @@ const FWeaponJumpAttack* UAttackComboDefinition::ResolveJumpVariant(const FGamep
 	return !JumpDefault.Montage.IsNull() ? &JumpDefault : nullptr;
 }
 
-const FParryCounterData* UAttackComboDefinition::ResolveParryVariant(const FGameplayTag& ElementTag) const
+const FParryCounterData* UWeaponAttackDefinition::ResolveParryVariant(const FGameplayTag& ElementTag) const
 {
 	for (const FParryCounterData& Variant : ParryVariants)
 	{
@@ -65,4 +65,16 @@ const FParryCounterData* UAttackComboDefinition::ResolveParryVariant(const FGame
 		}
 	}
 	return !ParryDefault.CounterMontage.IsNull() ? &ParryDefault : nullptr;
+}
+
+const FWeaponHeavyAttack* UWeaponAttackDefinition::ResolveHeavyVariant(const FGameplayTag& ElementTag) const
+{
+	for (const FWeaponHeavyAttack& Variant : HeavyVariants)
+	{
+		if (Variant.ElementTag == ElementTag && !Variant.Montage.IsNull())
+		{
+			return &Variant;
+		}
+	}
+	return nullptr;
 }

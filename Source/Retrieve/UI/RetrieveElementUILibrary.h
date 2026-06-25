@@ -38,7 +38,7 @@ public:
 	/**
 	 * SkillCombinationTable에서 (WeaponType + BurstElement)가 일치하는 버스트 행을 반환.
 	 * 버스트 스킬이 게이지 조합이 아닌 (무기 타입 × 현재 원소모드)로 결정되도록 바뀐 뒤의 조회용.
-	 * GA_Burst::FindBurstForElement와 동일 기준이며, Element 매칭 실패 시 Element.None 행으로 폴백한다.
+	 * GA_Burst::FindBurstForElement와 동일 기준. (원소는 항상 존재 — None 폴백 없음)
 	 * HUD 버스트 아이콘 미리보기에서 사용.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI|Skill",
