@@ -471,7 +471,9 @@ bool UGA_ShootProjectiles::ResolveProjectilePattern(FMonsterProjectilePatternCon
 		return false;
 	}
 
-	OutConfig = Row->ProjectileConfig;
+	OutConfig = bOverrideProjectileConfig
+		? ProjectileConfigOverride
+		: Row->ProjectileConfig;
 	if (OutHitReactType)
 	{
 		*OutHitReactType = Row->HitReactType;

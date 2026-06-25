@@ -61,6 +61,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rain|Spawn")
 	TSubclassOf<AEnemyProjectile> ProjectileClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rain|Config Override")
+	bool bOverrideProjectileConfig = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rain|Config Override",
+		meta=(EditCondition="bOverrideProjectileConfig", EditConditionHides))
+	FMonsterProjectilePatternConfig ProjectileConfigOverride;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rain|Placement", meta=(ClampMin="0.0"))
 	float WarningRadius = 100.f;
 

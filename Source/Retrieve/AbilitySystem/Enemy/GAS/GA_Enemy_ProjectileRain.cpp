@@ -57,7 +57,9 @@ void UGA_Enemy_ProjectileRain::ActivateAbility(
 		return;
 	}
 
-	ActiveProjectileConfig = PatternRow->ProjectileConfig;
+	ActiveProjectileConfig = bOverrideProjectileConfig
+		? ProjectileConfigOverride
+		: PatternRow->ProjectileConfig;
 	ActiveLaunchKnockbackConfig = PatternRow->LaunchKnockbackConfig;
 	ActiveHitReactType = PatternRow->HitReactType;
 	ActiveEffectTag = PatternRow->EffectTag;

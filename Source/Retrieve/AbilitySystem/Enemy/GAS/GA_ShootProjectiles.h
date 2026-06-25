@@ -78,6 +78,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles")
 	FVector SpawnOffset = FVector(120.f, 0.f, 80.f);
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles|Config Override")
+	bool bOverrideProjectileConfig = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ShootProjectiles|Config Override",
+		meta=(EditCondition="bOverrideProjectileConfig", EditConditionHides))
+	FMonsterProjectilePatternConfig ProjectileConfigOverride;
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;

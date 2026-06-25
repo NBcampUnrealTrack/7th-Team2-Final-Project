@@ -35,6 +35,87 @@ enum class ERetrieveTeam : uint8
 	Enemy   = 2,
 };
 
+UENUM(BlueprintType)
+enum class ERetrieveAttachedNiagaraCleanupGroup : uint8
+{
+	None,
+	Pattern,
+	Counter,
+	Custom
+};
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FEnemyPatternVFXRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Niagara")
+	TObjectPtr<UNiagaraSystem> NiagaraSystem = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
+	FName SocketName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
+	FVector LocationOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
+	FRotator RotationOffset = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
+	TEnumAsByte<EAttachLocation::Type> AttachLocationType = EAttachLocation::KeepRelativeOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Activation")
+	bool bAutoActivate = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Scale")
+	bool bUpdateScaleOverTime = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Scale")
+	FVector StartScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Scale")
+	FVector PeakScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Scale")
+	FVector EndScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Fade", meta=(ClampMin="0.0"))
+	float FadeInTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Fade", meta=(ClampMin="0.0"))
+	float FadeOutTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Alpha")
+	bool bUpdateAlphaOverTime = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Alpha")
+	FName AlphaParameterName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Alpha")
+	float StartAlpha = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Alpha")
+	float PeakAlpha = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Alpha")
+	float EndAlpha = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Cleanup")
+	ERetrieveAttachedNiagaraCleanupGroup CleanupGroup = ERetrieveAttachedNiagaraCleanupGroup::Pattern;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Cleanup", meta=(EditCondition="CleanupGroup == ERetrieveAttachedNiagaraCleanupGroup::Custom"))
+	FName CustomCleanupTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Cleanup", meta=(ClampMin="0", ClampMax="5", UIMin="0", UIMax="5"))
+	int32 CleanupSlot = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|End")
+	bool bDeactivateOnEnd = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|End")
+	bool bDestroyOnEnd = true;
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
 {

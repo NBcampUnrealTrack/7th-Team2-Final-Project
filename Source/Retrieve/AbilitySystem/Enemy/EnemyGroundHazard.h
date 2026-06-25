@@ -7,6 +7,8 @@
 class UDecalComponent;
 class UGameplayEffect;
 class UMaterialInstanceDynamic;
+class UNiagaraComponent;
+class UNiagaraSystem;
 class UPrimitiveComponent;
 class USceneComponent;
 class USphereComponent;
@@ -39,6 +41,7 @@ private:
 	void EnterPhase(EEnemyGroundHazardPhase NewPhase);
 	void UpdatePhase(float DeltaSeconds);
 	void UpdateVisuals(float PhaseAlpha);
+	void UpdateExpandingVFX();
 	void SetDecalRadius(UDecalComponent* Decal, float Radius) const;
 	void ApplyPeriodicEffects();
 	void ApplyPostExposureEffect(AActor* TargetActor);
@@ -87,6 +90,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
 	TObjectPtr<UDecalComponent> ExpandingDecal;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
+	TObjectPtr<UNiagaraComponent> ExpandingVFXComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Timing", meta=(ClampMin="0.0"))
 	float WarningDuration = 1.f;
@@ -147,6 +153,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
 	FName OpacityParameterName = TEXT("Opacity");
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
+	TObjectPtr<UNiagaraSystem> ExpandingVFXSystem;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual", meta=(ClampMin="1.0"))
+	float VFXBaseRadius = 100.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
+	float VFXHeightOffset = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
+	bool bScaleVFXWithRadius = true;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="EnemyGroundHazard|State")
 	EEnemyGroundHazardPhase CurrentPhase = EEnemyGroundHazardPhase::Warning;
 
@@ -159,6 +177,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> ExpandingMaterial;
+
+	FVector InitialExpandingVFXScale = FVector::OneVector;
 
 	float PhaseElapsedTime = 0.f;
 	FTimerHandle PeriodicEffectTimerHandle;
