@@ -286,6 +286,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_GroundHazards);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_WaterPillar);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_IcePillar);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_RoarKnockBack);
 
 	// ---- Gameplay events: element / core / item
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_Unlock);

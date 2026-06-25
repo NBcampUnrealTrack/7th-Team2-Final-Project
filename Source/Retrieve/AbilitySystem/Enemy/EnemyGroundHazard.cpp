@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "NiagaraComponent.h"
 #include "TimerManager.h"
 #include "GameFramework/RootMotionSource.h"
 
@@ -35,6 +36,11 @@ AEnemyGroundHazard::AEnemyGroundHazard()
 	ExpandingDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("ExpandingDecal"));
 	ExpandingDecal->SetupAttachment(SceneRoot);
 	ExpandingDecal->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+
+	ExpandingVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("ExpandingVFXComponent"));
+	ExpandingVFXComponent->SetupAttachment(SceneRoot);
+	ExpandingVFXComponent->SetAutoActivate(false);
+	ExpandingVFXComponent->SetHiddenInGame(true);
 }
 
 void AEnemyGroundHazard::BeginPlay()
@@ -47,9 +53,21 @@ void AEnemyGroundHazard::BeginPlay()
 	CollisionRadiusScale = FMath::Clamp(CollisionRadiusScale, 0.f, 1.f);
 	DirectDamageInterval = FMath::Max(0.01f, DirectDamageInterval);
 	PostExposureDuration = FMath::Max(0.f, PostExposureDuration);
+	VFXBaseRadius = FMath::Max(1.f, VFXBaseRadius);
 
 	CenterMaterial = CenterDecal ? CenterDecal->CreateDynamicMaterialInstance() : nullptr;
 	ExpandingMaterial = ExpandingDecal ? ExpandingDecal->CreateDynamicMaterialInstance() : nullptr;
+	if (ExpandingVFXComponent)
+	{
+		InitialExpandingVFXScale = ExpandingVFXComponent->GetRelativeScale3D();
+		if (ExpandingVFXSystem)
+		{
+			ExpandingVFXComponent->SetAsset(ExpandingVFXSystem);
+		}
+		ExpandingVFXComponent->SetRelativeLocation(FVector(0.f, 0.f, VFXHeightOffset));
+		ExpandingVFXComponent->DeactivateImmediate();
+		ExpandingVFXComponent->SetHiddenInGame(true);
+	}
 	DamageArea->OnComponentBeginOverlap.AddDynamic(this, &AEnemyGroundHazard::OnDamageAreaBeginOverlap);
 	DamageArea->OnComponentEndOverlap.AddDynamic(this, &AEnemyGroundHazard::OnDamageAreaEndOverlap);
 
@@ -72,6 +90,10 @@ void AEnemyGroundHazard::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 	ActorsInsideDamageArea.Empty();
 	RemoveAllContinuousPushSources();
+	if (ExpandingVFXComponent)
+	{
+		ExpandingVFXComponent->DeactivateImmediate();
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -99,6 +121,23 @@ void AEnemyGroundHazard::EnterPhase(EEnemyGroundHazardPhase NewPhase)
 
 	const bool bDamageEnabled = IsDamagePhase(CurrentPhase);
 	DamageArea->SetCollisionEnabled(bDamageEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+
+	if (ExpandingVFXComponent)
+	{
+		const bool bShouldVFXBeActive = CurrentPhase == EEnemyGroundHazardPhase::Expanding
+			|| CurrentPhase == EEnemyGroundHazardPhase::Active;
+		if (bShouldVFXBeActive && ExpandingVFXComponent->GetAsset())
+		{
+			ExpandingVFXComponent->SetHiddenInGame(false);
+			ExpandingVFXComponent->SetVisibility(true, true);
+			ExpandingVFXComponent->Activate(true);
+		}
+		else
+		{
+			ExpandingVFXComponent->Deactivate();
+			ExpandingVFXComponent->SetHiddenInGame(true);
+		}
+	}
 
 	if (!bDamageEnabled)
 	{
@@ -199,6 +238,26 @@ void AEnemyGroundHazard::UpdateVisuals(float PhaseAlpha)
 	{
 		ExpandingMaterial->SetScalarParameterValue(OpacityParameterName, Opacity);
 	}
+
+	UpdateExpandingVFX();
+}
+
+void AEnemyGroundHazard::UpdateExpandingVFX()
+{
+	if (!ExpandingVFXComponent)
+	{
+		return;
+	}
+
+	ExpandingVFXComponent->SetRelativeLocation(FVector(0.f, 0.f, VFXHeightOffset));
+
+	if (!bScaleVFXWithRadius)
+	{
+		return;
+	}
+
+	const float Scale = FMath::Max(0.01f, CurrentRadius / FMath::Max(1.f, VFXBaseRadius));
+	ExpandingVFXComponent->SetRelativeScale3D(InitialExpandingVFXScale * Scale);
 }
 
 void AEnemyGroundHazard::SetDecalRadius(UDecalComponent* Decal, float Radius) const

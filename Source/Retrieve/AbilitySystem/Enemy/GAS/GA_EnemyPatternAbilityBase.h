@@ -16,6 +16,13 @@ public:
 	UGA_EnemyPatternAbilityBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 protected:
+	virtual void EndAbility(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool bReplicateEndAbility,
+		bool bWasCancelled) override;
+
 	UEnemyCombatComponent* GetEnemyCombatComponent() const;
 	const FMonsterPatternRow* GetActivePatternRow() const;
 
@@ -30,4 +37,7 @@ protected:
 
 	UFUNCTION()
 	virtual void OnMontageInterrupted();
+
+private:
+	void CleanupAttachedPatternVFX(const FGameplayAbilityActorInfo* ActorInfo) const;
 };
