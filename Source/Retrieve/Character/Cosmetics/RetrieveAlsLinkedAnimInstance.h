@@ -43,11 +43,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Equip")
 	TObjectPtr<UAnimMontage> UnequipMontage;
 
-	// 이 무기 타입의 손 소켓 → 등(수납) 소켓 매핑. 발검/납검 시 WeaponComponent가 이 맵으로 수납 위치를 해석한다.
-	// 무기 변종(데이터 row)이 아니라 타입 단위 속성이라 레이어에 둔다. (relink로 무기 타입마다 자동 교체)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Stance")
-	TMap<FName, FName> SheathedSocketByDrawnSocket;
-
 protected:
 	/**
 	 * Retrieve typed parent 접근자. Property Access (BlueprintThreadSafe) 전용.

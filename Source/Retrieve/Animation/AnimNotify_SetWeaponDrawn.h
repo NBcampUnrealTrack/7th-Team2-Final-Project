@@ -22,4 +22,9 @@ protected:
 	// true=손 소켓(발검 프레임), false=등 소켓(납검 프레임).
 	UPROPERTY(EditAnywhere, Category = "Retrieve")
 	bool bDrawn = true;
+
+	// 비우면 전체 파트. 특정 손 소켓(DrawnSocket)을 지정하면 그 파트만 스왑한다
+	// — 한 몽타주에서 검(prop_rSocket)·방패(Shield)를 다른 프레임에 옮길 때 사용.
+	UPROPERTY(EditAnywhere, Category = "Retrieve")
+	FName TargetDrawnSocket = NAME_None;
 };

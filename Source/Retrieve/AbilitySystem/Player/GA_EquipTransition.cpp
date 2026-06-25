@@ -83,11 +83,28 @@ void UGA_EquipTransition::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleMontageCompleted);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+
+	// Equip 전환 게이트 태그: WeaponComponent가 스폰을 숨기고(hidden), CombatStance가 자동부착을 노티에 위임한다.
+	// (몽타주가 확정된 경우에만 부여 — 몽타주 없는 fallback은 즉시 visible 스폰이라 켜지 않는다)
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::Ability_Player_EquipTransition);
+	}
+
 	MontageTask->ReadyForActivation();
 }
 
 void UGA_EquipTransition::HandleMontageCompleted()
 {
+	// 몽타주가 끝까지 갔으니 교체 OLD 메시를 이제 파괴(NEW는 발검 노티로 이미 손에 안착).
+	if (const ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		if (UWeaponComponent* Weapon = Character->FindComponentByClass<UWeaponComponent>())
+		{
+			Weapon->DestroyPendingVisuals();
+			Weapon->FinalizeEquipTransitionVisuals(); // 노티가 블렌드로 누락돼도 최종 비주얼 보장
+		}
+	}
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -102,6 +119,7 @@ void UGA_EquipTransition::ReconcileWeaponVisuals()
 	{
 		if (UWeaponComponent* Weapon = Character->FindComponentByClass<UWeaponComponent>())
 		{
+			Weapon->DestroyPendingVisuals(); // 캔슬/인터럽트: 보류된 OLD도 파괴하고 데이터로 리빌드
 			Weapon->ReconcileVisuals();
 		}
 	}
@@ -113,6 +131,12 @@ void UGA_EquipTransition::EndAbility(const FGameplayAbilitySpecHandle Handle, co
 	{
 		MontageTask->EndTask();
 		MontageTask = nullptr;
+	}
+
+	// 게이트 태그 해제(부여 안 됐으면 count 0 → 무해). reconcile/이후 스폰이 정상 경로(visible)를 타도록 먼저 푼다.
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::Ability_Player_EquipTransition);
 	}
 
 	// bWasCancelled = '노티가 비주얼을 못 맞췄을 수 있음'(인터럽트/취소/몽타주 없음/커밋 실패)일 때만 데이터로 봉인.

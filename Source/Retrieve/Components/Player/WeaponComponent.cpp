@@ -1,7 +1,6 @@
 #include "Components/Player/WeaponComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
-#include "Character/Cosmetics/RetrieveAlsLinkedAnimInstance.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -11,6 +10,7 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
+#include "Settings/RetrieveWeaponSocketSettings.h"
 
 UWeaponComponent::UWeaponComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -50,18 +50,32 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 		return true;
 	}
 
-	ClearWeaponData(); // 이전 무기 '데이터만' 정리 (OLD 메시는 유지 — 교체 연출이 넘겨받음)
+	ClearWeaponData(); // 이전 무기 '데이터만' 정리 (OLD 메시는 Pending으로 넘겨 교체 연출이 끝낼 때 파괴)
 	if (!ApplyWeaponData(WeaponItemId, *WeaponData))
 	{
 		return false;
 	}
 
+	// OLD 메시를 NEW 스폰과 분리해 Pending으로 옮긴다. 즉시 숨겨 NEW(노티로 등장)와 겹치지 않게 하고,
+	// 실제 파괴는 교체 몽타주 끝(또는 fallback 즉시)으로 미룬다.
+	for (UMeshComponent* OldMesh : EquippedWeaponMeshComponents)
+	{
+		if (OldMesh)
+		{
+			OldMesh->SetVisibility(false, /*bPropagateToChildren=*/true);
+		}
+	}
+	PendingDestroyMeshComponents.Append(EquippedWeaponMeshComponents);
+	EquippedWeaponMeshComponents.Reset();
+	WeaponAttachParts.Reset();
+
 	// NEW 레이어로 먼저 relink → GA가 NEW EquipMontage를 읽도록 broadcast를 트리거보다 앞에 둔다.
 	OnWeaponEquipped.Broadcast(CurrentWeaponDataRow);
 
-	// 연출/비주얼은 GA가. 트리거 실패(미부여/몽타주 없음)면 즉시 데이터로 리빌드.
+	// 연출/비주얼은 GA가. 트리거 실패(미부여/몽타주 없음)면 OLD 즉시 파괴 + 데이터로 리빌드.
 	if (!TryTriggerEquipTransition(RetrieveGameplayTags::GameplayEvent_Player_EquipWeapon))
 	{
+		DestroyPendingVisuals();
 		ReconcileVisuals();
 	}
 	return true;
@@ -114,8 +128,11 @@ void UWeaponComponent::SpawnWeaponVisuals()
 {
 	if (IsEquipped())
 	{
-		// 손 소켓에 스폰. 납검 상태 보정은 CombatStance가 OnWeaponEquipped에서 SetWeaponDrawn으로 처리.
-		ApplyWeaponVisuals(CurrentWeaponData);
+		// 손 소켓에 스폰. 납검 상태 보정은 스폰 직후 OnWeaponVisualsSpawned을 받는 CombatStance가
+		// SetWeaponDrawn으로 처리한다(이 신호는 모든 스폰 경로의 단일 통로 — fallback/OnRep/장착 노티 공통).
+		// Equip 전환 중이면 숨겨서 스폰 → 발검 노티가 손에 부착하며 보이게 한다(검→방패 순차 등장).
+		ApplyWeaponVisuals(CurrentWeaponData, /*bSpawnHidden=*/IsEquipTransitionActive());
+		OnWeaponVisualsSpawned.Broadcast();
 	}
 }
 
@@ -123,6 +140,38 @@ void UWeaponComponent::ReconcileVisuals()
 {
 	ClearWeaponVisuals();
 	SpawnWeaponVisuals();
+}
+
+void UWeaponComponent::DestroyPendingVisuals()
+{
+	for (UMeshComponent* MeshComponent : PendingDestroyMeshComponents)
+	{
+		if (MeshComponent)
+		{
+			MeshComponent->DestroyComponent();
+		}
+	}
+	PendingDestroyMeshComponents.Reset();
+}
+
+void UWeaponComponent::FinalizeEquipTransitionVisuals()
+{
+	if (IsEquipped())
+	{
+		// Equip 완료 — draw 노티가 블렌드로 누락됐을 수 있으니 전 파트를 보이게 강제(손 소켓에 스폰돼 있음).
+		for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
+		{
+			if (IsValid(Part.Mesh))
+			{
+				Part.Mesh->SetVisibility(true, /*bPropagateToChildren=*/true);
+			}
+		}
+	}
+	else
+	{
+		// Unequip 완료 — 파괴 노티가 누락됐을 수 있으니 메시 정리 보장.
+		ClearWeaponVisuals();
+	}
 }
 
 bool UWeaponComponent::TryTriggerEquipTransition(const FGameplayTag& EventTag)
@@ -242,6 +291,12 @@ bool UWeaponComponent::HasAuthorityToModify() const
 	return !Owner || Owner->HasAuthority();
 }
 
+bool UWeaponComponent::IsEquipTransitionActive() const
+{
+	const UAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	return IsValid(ASC) && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Ability_Player_EquipTransition);
+}
+
 bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeaponDataRow& WeaponData)
 {
 	if (HasAuthorityToModify())
@@ -285,12 +340,19 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 	return true;
 }
 
-bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponData)
+bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponData, bool bSpawnHidden)
 {
 	if (WeaponData.Attachments.IsEmpty())
 	{
 		return false;
 	}
+
+	// 등(수납) 소켓을 스폰 시점에 무기 타입으로 1번 해석해 파트에 캐싱한다.
+	// (이후 SetWeaponDrawn은 파트값만 쓰므로 Unequip으로 타입 태그가 지워져도 납검 위치가 유지된다)
+	const URetrieveWeaponSocketSettings* SocketSettings = GetDefault<URetrieveWeaponSocketSettings>();
+	const FRetrieveSheathedSocketMap* SheathedMap = SocketSettings
+		? SocketSettings->SocketsByWeaponType.Find(CurrentWeaponTypeTag)
+		: nullptr;
 
 	bool bAttachedAnyPart = false;
 	for (const FRetrieveWeaponAttachmentData& Attachment : WeaponData.Attachments)
@@ -314,6 +376,10 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
 			Attachment.AttachSocketName);
 		WeaponMeshComponent->SetRelativeTransform(Attachment.RelativeTransform);
+		if (bSpawnHidden)
+		{
+			WeaponMeshComponent->SetVisibility(false, /*bPropagateToChildren=*/true);
+		}
 
 		EquippedWeaponMeshComponents.Add(WeaponMeshComponent);
 
@@ -321,6 +387,7 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		FRetrieveEquippedWeaponPart& Part = WeaponAttachParts.AddDefaulted_GetRef();
 		Part.Mesh = WeaponMeshComponent;
 		Part.DrawnSocket = Attachment.AttachSocketName;
+		Part.SheathedSocket = SheathedMap ? SheathedMap->DrawnToSheathed.FindRef(Attachment.AttachSocketName) : NAME_None;
 		Part.RelativeTransform = Attachment.RelativeTransform;
 
 		bAttachedAnyPart = true;
@@ -329,41 +396,27 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 	return bAttachedAnyPart;
 }
 
-void UWeaponComponent::SetWeaponDrawn(bool bDrawn)
+void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket)
 {
-	// 등(수납) 소켓은 무기 타입 레이어가 소유(drawn→sheathed 맵). 발검은 Part의 손 소켓을 그대로 쓰므로 조회 불필요.
-	// spawn 시점이 아니라 여기서 즉석 조회한다(init 때 무기 장착이 cosmetic relink보다 앞서 캐싱하면 None으로 굳음).
-	const URetrieveAlsLinkedAnimInstance* Layer = nullptr;
-	if (!bDrawn)
-	{
-		if (const ACharacter* Character = Cast<ACharacter>(GetOwner()))
-		{
-			if (const USkeletalMeshComponent* CharacterMesh = Character->GetMesh())
-			{
-				for (UAnimInstance* Linked : CharacterMesh->GetLinkedAnimInstances())
-				{
-					if (const URetrieveAlsLinkedAnimInstance* WeaponLayer = Cast<URetrieveAlsLinkedAnimInstance>(Linked))
-					{
-						Layer = WeaponLayer;
-						break;
-					}
-				}
-			}
-		}
-	}
-
 	for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
 	{
+		// 특정 파트만 지정된 경우(검/방패 타이밍 분리) 나머지는 건너뛴다. None이면 전체 처리.
+		if (!OnlyDrawnSocket.IsNone() && Part.DrawnSocket != OnlyDrawnSocket)
+		{
+			continue;
+		}
+
 		UMeshComponent* Mesh = Part.Mesh;
 		if (!IsValid(Mesh))
 		{
 			continue;
 		}
 
+		// 이 호출이 대상한 파트는 보이게 한다(Equip 중 hidden 스폰 → 발검 노티가 여기서 등장).
+		Mesh->SetVisibility(true, /*bPropagateToChildren=*/true);
+
 		// 납검 소켓 매핑이 없는 파트는 그대로 둔다(예: 항상 손에 있는 무기 등).
-		const FName TargetSocket = bDrawn
-			? Part.DrawnSocket
-			: (Layer ? Layer->SheathedSocketByDrawnSocket.FindRef(Part.DrawnSocket) : NAME_None);
+		const FName TargetSocket = bDrawn ? Part.DrawnSocket : Part.SheathedSocket;
 		if (TargetSocket.IsNone())
 		{
 			continue;

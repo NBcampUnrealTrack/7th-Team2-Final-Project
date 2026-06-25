@@ -53,10 +53,17 @@ void UCombatStanceComponent::InitializeWithAbilitySystem(UAbilitySystemComponent
 	OwnerASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_WeaponSheathed, 1);
 	OwnerASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Combat, 0);
 
-	// 이미 장착된 무기는 등 소켓으로 맞춰둔다. (무기 장착이 init보다 뒤면 OnWeaponEquipped 시점 동기화 필요 — TODO)
+	// 이미 장착된 무기는 등 소켓으로 맞춰둔다(init 시점에 이미 장착돼 있던 경우).
+	// 그리고 이후 런타임 장착(인벤토리)은 OnWeaponVisualsSpawned을 구독해 스폰 직후 현재 스탠스로 동기화한다.
 	if (UWeaponComponent* Weapon = GetOwner() ? GetOwner()->FindComponentByClass<UWeaponComponent>() : nullptr)
 	{
 		Weapon->SetWeaponDrawn(false);
+		WeaponVisualsSpawnedHandle = Weapon->OnWeaponVisualsSpawned.AddUObject(
+			this, &UCombatStanceComponent::HandleWeaponVisualsSpawned);
+
+		// 장착 = 발검 활동. 스폰 '전'에 발화하는 OnWeaponEquipped에서 스탠스를 미리 발검으로 올린다
+		// → 직후 HandleWeaponVisualsSpawned가 손 소켓에 안착(깜빡임 없음).
+		Weapon->OnWeaponEquipped.AddDynamic(this, &UCombatStanceComponent::HandleWeaponEquipped);
 	}
 }
 
@@ -67,6 +74,16 @@ void UCombatStanceComponent::UninitializeFromAbilitySystem()
 		OwnerASC->AbilityActivatedCallbacks.Remove(AbilityActivateHandle);
 	}
 	AbilityActivateHandle.Reset();
+
+	if (WeaponVisualsSpawnedHandle.IsValid())
+	{
+		if (UWeaponComponent* Weapon = GetOwner() ? GetOwner()->FindComponentByClass<UWeaponComponent>() : nullptr)
+		{
+			Weapon->OnWeaponVisualsSpawned.Remove(WeaponVisualsSpawnedHandle);
+			Weapon->OnWeaponEquipped.RemoveDynamic(this, &UCombatStanceComponent::HandleWeaponEquipped);
+		}
+		WeaponVisualsSpawnedHandle.Reset();
+	}
 
 	if (SpottedListenerHandle.IsValid())
 	{
@@ -157,11 +174,25 @@ void UCombatStanceComponent::HandleSheatheTimer()
 
 void UCombatStanceComponent::HandleAbilityActivated(UGameplayAbility* Ability)
 {
-    // 공격류 발동만 '전투 활동'으로 친다 (점프/구르기 등은 무시). 공격 전이라면 발검 연출 스킵(즉시 손).
-	if (Ability && Ability->GetAssetTags().HasTag(RetrieveGameplayTags::Ability_Type_Attack))
+    // 공격류 발동만 '전투 활동'으로 친다 (점프/구르기 등은 무시).
+	if (!Ability || !Ability->GetAssetTags().HasTag(RetrieveGameplayTags::Ability_Type_Attack))
 	{
-		NotifyCombatActivity(/*bFromAttack=*/true);
+		return;
 	}
+
+	// 평타(일반 콤보) + 납검 → 발검은 GA_Attack이 ActivateAbility에서 직접 처리한다(스윙 스킵 + 발검 트리거).
+	// 이 콜백은 PreActivate에서 ActivateAbility보다 '먼저' 실행되므로
+	// (엔진: CallActivateAbility → PreActivate → ActivateAbility),
+	// 여기서 스탠스를 바꾸면 납검 태그가 먼저 지워져 GA_Attack의 발검 게이트가 깨진다 → 건드리지 않는다.
+	const bool bIsNormalCombo = Ability->GetAssetTags().HasTag(RetrieveGameplayTags::Ability_Player_Attack);
+	const bool bSheathed = IsValid(OwnerASC) && OwnerASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_WeaponSheathed);
+	if (bIsNormalCombo && bSheathed)
+	{
+		return;
+	}
+
+	// 강/대시/점프, 또는 이미 발검 상태의 평타 → 기존처럼 즉시 발검 + 스윙.
+	NotifyCombatActivity(/*bFromAttack=*/true);
 }
 
 void UCombatStanceComponent::HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
@@ -172,4 +203,28 @@ void UCombatStanceComponent::HandlePlayerSpotted(FGameplayTag Channel, const FEn
 	{
 		NotifyCombatActivity(/*bFromAttack=*/false);
 	}
+}
+
+void UCombatStanceComponent::HandleWeaponVisualsSpawned()
+{
+	// Equip 전환 중이면 소켓 배치/표시를 그 몽타주 노티에 위임한다(검→방패 순차 등장).
+	// 스폰은 hidden 상태이므로, 여기서 건드리지 않으면 발검 노티가 부착+visible 할 때까지 숨어 있다.
+	if (IsValid(OwnerASC) && OwnerASC->HasMatchingGameplayTag(RetrieveGameplayTags::Ability_Player_EquipTransition))
+	{
+		return;
+	}
+
+	// 새로 스폰된 무기를 현재 스탠스에 맞춘다. 납검이면 등, 발검이면 손.
+	// (스폰은 항상 손 소켓 기본이므로, 납검 중 런타임 장착 시 여기서 등으로 보낸다)
+	if (UWeaponComponent* Weapon = GetOwner() ? GetOwner()->FindComponentByClass<UWeaponComponent>() : nullptr)
+	{
+		Weapon->SetWeaponDrawn(CurrentStance != ERetrieveCombatStance::Sheathed);
+	}
+}
+
+void UCombatStanceComponent::HandleWeaponEquipped(FName /*WeaponItemId*/)
+{
+	// 장착 = 발검 활동. 연출은 Equip 몽타주가 담당하므로 상태/타이머만 승격한다.
+	// bFromAttack=true → bInstant=true → 발검(Draw) 몽타주는 스킵(Equip 몽타주와 이중 재생 방지).
+	NotifyCombatActivity(/*bFromAttack=*/true);
 }
