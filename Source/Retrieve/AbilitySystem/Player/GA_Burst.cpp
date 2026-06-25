@@ -94,10 +94,7 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	const FGameplayTag CurrentElement = ResolveCurrentElementTag();
 	const FSkillCombination* MatchedRow = FindBurstForElement(WeaponTypeTag, CurrentElement);
 
-	if (!MatchedRow && CurrentElement != RetrieveGameplayTags::Element_None)
-	{
-		MatchedRow = FindBurstForElement(WeaponTypeTag, RetrieveGameplayTags::Element_None);
-	}
+	// 원소는 항상 불/물/바람(보스 해방 시 강화)
 	if (!MatchedRow)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[GA_Burst] No burst row for Weapon=%s Element=%s"), *WeaponTypeTag.ToString(), *CurrentElement.ToString());

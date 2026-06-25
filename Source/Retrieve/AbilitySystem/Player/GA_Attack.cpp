@@ -15,7 +15,7 @@
 #include "Character/RetrieveAlsCharacter.h"
 #include "Components/Combat/CombatStanceComponent.h"
 #include "Components/Player/WeaponComponent.h"
-#include "Data/AttackComboDefinition.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -141,7 +141,7 @@ bool UGA_Attack::ResolveAttackComboVariant()
 {
 	CachedComboSteps.Reset();
 
-	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	UWeaponAttackDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
 	if (!IsValid(ComboDefinition))
 	{
 		return false;

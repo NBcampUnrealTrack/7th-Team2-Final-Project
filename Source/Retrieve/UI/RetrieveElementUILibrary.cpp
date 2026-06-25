@@ -65,10 +65,6 @@ bool URetrieveElementUILibrary::GetBurstCombinationByElement(
 	};
 
 	const FSkillCombination* Found = FindRow(WeaponType, Element);
-	if (!Found && Element != RetrieveGameplayTags::Element_None)
-	{
-		Found = FindRow(WeaponType, RetrieveGameplayTags::Element_None);
-	}
 	if (!Found)
 	{
 		return false;

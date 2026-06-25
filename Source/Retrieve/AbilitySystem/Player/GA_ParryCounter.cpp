@@ -10,7 +10,7 @@
 #include "Combat/RetrieveTargetingLibrary.h"
 #include "Components/Combat/CombatReactionComponent.h"
 #include "Components/Player/WeaponComponent.h"
-#include "Data/AttackComboDefinition.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -78,7 +78,7 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
 	// 콤보 정의에서 현재 원소의 ParryCounter variant 해결 (없으면 기본 variant)
-	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	UWeaponAttackDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
 	const FParryCounterData* ResolvedParry = ComboDefinition ? ComboDefinition->ResolveParryVariant(ResolveCurrentElementTag()) : nullptr;
 	if (!ResolvedParry)
 	{

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "PlayerBurstComponent.generated.h"
 
 struct FSkillCombination;
@@ -27,8 +28,8 @@ public:
     /** ABurstProjectile 등 외부 액터가 적중을 보고할 때 호출하는 공개 래퍼. */
     void ReportProjectileHit(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult);
 
-    // 현재 진행 중인 스킬 컨텍스트
-    const FSkillCombination* ActiveSkill = nullptr;
+    // 공용 진입점: 임의의 공격 실행 spec으로 실행 시작(강공 등도 사용)
+    void BeginAttackExecution(const FAttackExecutionSpec& Spec);
 
 private:
     // AttackType별 분기
@@ -78,6 +79,12 @@ private:
 
     // WorldActor 전용 (소환된 월드 액터 참조)
     TWeakObjectPtr<AActor> SpawnedWorldActor;
+
+    // 현재 진행 중인 실행 spec(버스트/강공 공용)
+    UPROPERTY()
+    FAttackExecutionSpec ActiveSpec;
+
+    bool bHasActiveSpec = false;
 
     // HitIndex별 상태
     TArray<TSet<TObjectPtr<AActor>>> PerHitHitActors;

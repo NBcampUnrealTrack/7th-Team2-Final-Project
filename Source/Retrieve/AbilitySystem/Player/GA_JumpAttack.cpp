@@ -16,7 +16,7 @@
 #include "Character/RetrieveAlsCharacter.h"
 #include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/Player/WeaponComponent.h"
-#include "Data/AttackComboDefinition.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
 
@@ -105,7 +105,7 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
 	// 콤보 정의에서 현재 원소의 Jump variant 해결 (없으면 기본 variant)
-	UAttackComboDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
+	UWeaponAttackDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
 	const FWeaponJumpAttack* ResolvedJump = ComboDefinition ? ComboDefinition->ResolveJumpVariant(ResolveCurrentElementTag()) : nullptr;
 	if (!ResolvedJump)
 	{

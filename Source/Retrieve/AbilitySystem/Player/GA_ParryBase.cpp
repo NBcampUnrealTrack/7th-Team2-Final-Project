@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Components/Player/WeaponComponent.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -91,8 +92,13 @@ void UGA_ParryBase::PlayParrySuccessMontage()
 		return;
 	}
 
-	const FRetrieveWeaponDataRow& WeaponData = Weapon->GetWeaponDataRef();
-	UAnimMontage* Montage = WeaponData.ParrySuccessMontage.LoadSynchronous();
+	const UWeaponAttackDefinition* AttackDef = Weapon->GetWeaponDataRef().AttackComboDefinition.LoadSynchronous();
+	if (!AttackDef)
+	{
+		return;
+	}
+
+	UAnimMontage* Montage = AttackDef->ParrySuccessMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		return;
@@ -100,7 +106,7 @@ void UGA_ParryBase::PlayParrySuccessMontage()
 
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->PlayMontage(this, GetCurrentActivationInfoRef(), Montage, WeaponData.ParrySuccessMontagePlayRate);
+		ASC->PlayMontage(this, GetCurrentActivationInfoRef(), Montage, AttackDef->ParrySuccessMontagePlayRate);
 	}
 }
 

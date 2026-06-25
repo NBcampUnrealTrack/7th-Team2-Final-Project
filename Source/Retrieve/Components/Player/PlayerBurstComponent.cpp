@@ -36,10 +36,44 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 		return;
 	}
 
-	ActiveSkill = Row;
+	// 버스트 행 → 공용 실행 spec 으로 복사 후 위임. (FSkillCombination 미수술; 마지막 개선 단계서 완전 이동 예정)
+	FAttackExecutionSpec Spec;
+	Spec.AttackType           = Row->AttackType;
+	Spec.DamageEffect         = Row->DamageEffect;
+	Spec.ProjectileClass      = Row->ProjectileClass;
+	Spec.WorldSpawnActorClass = Row->WorldSpawnActorClass;
+	Spec.WorldSpawnDistance   = Row->WorldSpawnDistance;
+	Spec.DashDistance         = Row->DashDistance;
+	Spec.DashLaunchDuration   = Row->DashLaunchDuration;
+	Spec.AoeRadius            = Row->AoeRadius;
+	Spec.HitSequence          = Row->HitSequence;
+
+	BeginAttackExecution(Spec);
+}
+
+void UPlayerBurstComponent::EndBurstSkill()
+{
+	UE_LOG(LogRetrieveCombat, Log,
+		TEXT("[PlayerBurstComponent] EndBurstSkill. Owner=%s"),
+		*GetNameSafe(GetOwner()));
+
+	bHasActiveSpec = false;
+	ActiveSpec = FAttackExecutionSpec();
+	SpawnedWorldActor.Reset();
+	PerHitHitActors.Reset();
+	PerHitPreviousPoints.Reset();
+	PerHitHasPrevious.Reset();
+	PerHitProjectileSpawned.Reset();
+	PerHitDashLaunched.Reset();
+}
+
+void UPlayerBurstComponent::BeginAttackExecution(const FAttackExecutionSpec& Spec)
+{
+	ActiveSpec = Spec;
+	bHasActiveSpec = true;
 	SpawnedWorldActor.Reset();
 
-	const int32 HitCount = Row->HitSequence.Num();
+	const int32 HitCount = ActiveSpec.HitSequence.Num();
 	PerHitHitActors.SetNum(HitCount);
 	PerHitPreviousPoints.SetNum(HitCount);
 	PerHitHasPrevious.SetNum(HitCount);
@@ -55,29 +89,13 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 	}
 
 	UE_LOG(LogRetrieveCombat, Log,
-		TEXT("[PlayerBurstComponent] BeginBurstSkill. Owner=%s, ElementPatternSize=%d"),
-		*GetNameSafe(GetOwner()),
-		Row->ElementPattern.Num());
-}
-
-void UPlayerBurstComponent::EndBurstSkill()
-{
-	UE_LOG(LogRetrieveCombat, Log,
-		TEXT("[PlayerBurstComponent] EndBurstSkill. Owner=%s"),
-		*GetNameSafe(GetOwner()));
-
-	ActiveSkill = nullptr;
-	SpawnedWorldActor.Reset();
-	PerHitHitActors.Reset();
-	PerHitPreviousPoints.Reset();
-	PerHitHasPrevious.Reset();
-	PerHitProjectileSpawned.Reset();
-	PerHitDashLaunched.Reset();
+		TEXT("[PlayerBurstComponent] BeginAttackExecution. Owner=%s, HitCount=%d"),
+		*GetNameSafe(GetOwner()), HitCount);
 }
 
 void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
 {
-	if (!ActiveSkill)
+	if (!bHasActiveSpec)
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
 			TEXT("[PlayerBurstComponent] OnBurstHit(%d) called with no active skill. Owner=%s"),
@@ -86,25 +104,25 @@ void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
 		return;
 	}
 
-	if (!ActiveSkill->HitSequence.IsValidIndex(HitIndex))
+	if (!ActiveSpec.HitSequence.IsValidIndex(HitIndex))
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
 			TEXT("[PlayerBurstComponent] OnBurstHit(%d) out of range (HitSequence=%d). Owner=%s"),
 			HitIndex,
-			ActiveSkill->HitSequence.Num(),
+			ActiveSpec.HitSequence.Num(),
 			*GetNameSafe(GetOwner()));
 		return;
 	}
 
-	const FBurstHitInstance& Hit = ActiveSkill->HitSequence[HitIndex];
+	const FBurstHitInstance& Hit = ActiveSpec.HitSequence[HitIndex];
 
-	switch (ActiveSkill->AttackType)
+	switch (ActiveSpec.AttackType)
 	{
-	case EBurstAttackType::Cleave:       DoCleaveHit(Hit, HitIndex); break;
-	case EBurstAttackType::WorldActor:   DoWorldActorHit(Hit, HitIndex); break;
-	case EBurstAttackType::Projectile:   DoProjectileHit(Hit, HitIndex); break;
-	case EBurstAttackType::Dash:         DoDashHit(Hit, HitIndex); break;
-	case EBurstAttackType::AreaOfEffect: DoAoEHit(Hit, HitIndex); break;
+	case EAttackExecutionType::Cleave:       DoCleaveHit(Hit, HitIndex); break;
+	case EAttackExecutionType::WorldActor:   DoWorldActorHit(Hit, HitIndex); break;
+	case EAttackExecutionType::Projectile:   DoProjectileHit(Hit, HitIndex); break;
+	case EAttackExecutionType::Dash:         DoDashHit(Hit, HitIndex); break;
+	case EAttackExecutionType::AreaOfEffect: DoAoEHit(Hit, HitIndex); break;
 	default: break;
 	}
 }
@@ -204,9 +222,9 @@ void UPlayerBurstComponent::BuildSwordTracePoints(const FBurstHitInstance& Hit, 
 void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FVector& CurrentOrigin, float Radius, int32 HitIndex)
 {
 	AActor* Owner = GetOwner();
-	if (!IsValid(Owner) || !ActiveSkill) return;
+	if (!IsValid(Owner) || !bHasActiveSpec) return;
 	if (!Owner->HasAuthority()) return;
-	if (!IsValid(ActiveSkill->DamageEffect)) return;
+	if (!IsValid(ActiveSpec.DamageEffect)) return;
 
 	UWorld* World = Owner->GetWorld();
 	if (!IsValid(World)) return;
@@ -301,7 +319,7 @@ void UPlayerBurstComponent::ReportProjectileHit(AActor* Target, const FBurstHitI
 
 void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInstance& Hit, const FHitResult& HitResult)
 {
-	if (!IsValid(Target) || !ActiveSkill || !IsValid(ActiveSkill->DamageEffect)) return;
+	if (!IsValid(Target) || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
 
 	AActor* Owner = GetOwner();
 	UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Owner);
@@ -313,7 +331,7 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 	Context.AddSourceObject(this);
 	Context.AddHitResult(HitResult, /*bReset=*/true);
 
-	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(ActiveSkill->DamageEffect, 1.f, Context);
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(ActiveSpec.DamageEffect, 1.f, Context);
 	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid()) return;
 
 	SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, Hit.DamageMultiplier);
@@ -333,6 +351,12 @@ void UPlayerBurstComponent::ApplyHitToTarget(AActor* Target, const FBurstHitInst
 	{
 		SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, Hit.KnockbackStrength);
 		SpecHandle.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, Hit.KnockbackUpwardStrength);
+	}
+	
+	AddCombatTagsToDamageSpec(*SpecHandle.Data.Get(), ActiveSpec.ElementTag, ActiveSpec.AttackTypeTag, ActiveSpec.AttackPropertyTag);
+	if (ActiveSpec.HitEventTag.IsValid())
+	{
+		SpecHandle.Data->AddDynamicAssetTag(ActiveSpec.HitEventTag);
 	}
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
@@ -432,18 +456,18 @@ void UPlayerBurstComponent::DoProjectileHit(const FBurstHitInstance& Hit, int32 
 	}
 
 	AActor* Owner = GetOwner();
-	if (!IsValid(Owner) || !ActiveSkill) return;
+	if (!IsValid(Owner) || !bHasActiveSpec) return;
 	if (!Owner->HasAuthority()) return;
-	if (!IsValid(ActiveSkill->ProjectileClass)) return;
+	if (!IsValid(ActiveSpec.ProjectileClass)) return;
 
 	UWorld* World = Owner->GetWorld();
 	if (!IsValid(World)) return;
 
-	if (!ActiveSkill->ProjectileClass->IsChildOf(ABurstProjectile::StaticClass()))
+	if (!ActiveSpec.ProjectileClass->IsChildOf(ABurstProjectile::StaticClass()))
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
 			TEXT("[PlayerBurstComponent] DoProjectileHit: ProjectileClass %s is not ABurstProjectile subclass."),
-			*GetNameSafe(ActiveSkill->ProjectileClass));
+			*GetNameSafe(ActiveSpec.ProjectileClass));
 		return;
 	}
 
@@ -457,7 +481,7 @@ void UPlayerBurstComponent::DoProjectileHit(const FBurstHitInstance& Hit, int32 
 	APawn* InstigatorPawn = Cast<APawn>(Owner);
 
 	ABurstProjectile* Projectile = World->SpawnActorDeferred<ABurstProjectile>(
-		ActiveSkill->ProjectileClass,
+		ActiveSpec.ProjectileClass,
 		SpawnTransform,
 		Owner,
 		InstigatorPawn,
@@ -484,7 +508,7 @@ void UPlayerBurstComponent::DoProjectileHit(const FBurstHitInstance& Hit, int32 
 	UE_LOG(LogRetrieveCombat, Log,
 		TEXT("[PlayerBurstComponent] DoProjectileHit. HitIndex=%d, Class=%s"),
 		HitIndex,
-		*GetNameSafe(ActiveSkill->ProjectileClass));
+		*GetNameSafe(ActiveSpec.ProjectileClass));
 }
 
 void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 HitIndex)
@@ -493,13 +517,13 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 	if (HitIndex == 0 && !SpawnedWorldActor.IsValid())
 	{
 		AActor* Owner = GetOwner();
-		if (IsValid(Owner) && Owner->HasAuthority() && ActiveSkill && IsValid(ActiveSkill->WorldSpawnActorClass))
+		if (IsValid(Owner) && Owner->HasAuthority() && bHasActiveSpec && IsValid(ActiveSpec.WorldSpawnActorClass))
 		{
 			UWorld* World = Owner->GetWorld();
 			if (IsValid(World))
 			{
 				const FVector SpawnLocation = Owner->GetActorLocation()
-					+ Owner->GetActorForwardVector() * ActiveSkill->WorldSpawnDistance;
+					+ Owner->GetActorForwardVector() * ActiveSpec.WorldSpawnDistance;
 				const FRotator SpawnRotation = Owner->GetActorRotation();
 				const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
 
@@ -509,7 +533,7 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 				AActor* Spawned = World->SpawnActor<AActor>(
-					ActiveSkill->WorldSpawnActorClass, SpawnTransform, SpawnParams);
+					ActiveSpec.WorldSpawnActorClass, SpawnTransform, SpawnParams);
 
 				if (IsValid(Spawned))
 				{
@@ -522,7 +546,7 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 				{
 					UE_LOG(LogRetrieveCombat, Warning,
 						TEXT("[PlayerBurstComponent] DoWorldActorHit. SpawnActor failed. Class=%s"),
-						*GetNameSafe(ActiveSkill->WorldSpawnActorClass));
+						*GetNameSafe(ActiveSpec.WorldSpawnActorClass));
 				}
 			}
 		}
@@ -543,8 +567,8 @@ void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitInd
 		}
 
 		ACharacter* Character = Cast<ACharacter>(GetOwner());
-		const float DashDistance = ActiveSkill ? ActiveSkill->DashDistance : 0.f;
-		const float DashLaunchDuration = ActiveSkill ? ActiveSkill->DashLaunchDuration : 0.f;
+		const float DashDistance = bHasActiveSpec ? ActiveSpec.DashDistance : 0.f;
+		const float DashLaunchDuration = bHasActiveSpec ? ActiveSpec.DashLaunchDuration : 0.f;
 		if (IsValid(Character) && DashDistance > 0.f && DashLaunchDuration > 0.f)
 		{
 			FVector Forward = Character->GetActorForwardVector();
@@ -567,6 +591,6 @@ void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitInd
 
 void UPlayerBurstComponent::DoAoEHit(const FBurstHitInstance& Hit, int32 HitIndex)
 {
-	const float Radius = ActiveSkill ? ActiveSkill->AoeRadius : 0.f;
+	const float Radius = bHasActiveSpec ? ActiveSpec.AoeRadius : 0.f;
 	SweepAndApply(Hit, ResolveSourceLocation(Hit), Radius, HitIndex);
 }

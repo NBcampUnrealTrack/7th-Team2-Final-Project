@@ -67,9 +67,6 @@ public:
 	FRetrieveWeaponDataRow GetWeaponData() const { return CurrentWeaponData; }
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
-	UDataTable* GetAttackTable() const { return CurrentWeaponAttackTable; }
-	
-	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
 	UMeshComponent* GetPrimaryEquippedWeaponMesh() const;
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
@@ -124,9 +121,6 @@ protected:
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CurrentWeaponData;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDataTable> CurrentWeaponAttackTable;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMeshComponent>> EquippedWeaponMeshComponents;

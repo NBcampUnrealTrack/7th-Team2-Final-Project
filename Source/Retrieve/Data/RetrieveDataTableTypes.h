@@ -16,7 +16,7 @@ class UAnimMontage;
 class UAnimSequenceBase;
 class UGameplayEffect;
 class URetrieveAbilitySet;
-class UAttackComboDefinition;
+class UWeaponAttackDefinition;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
@@ -627,7 +627,7 @@ struct RETRIEVE_API FElementChargeRule : public FTableRowBase
 };
 
 UENUM(BlueprintType)
-enum class EBurstAttackType : uint8
+enum class EAttackExecutionType : uint8
 {
 	Cleave           UMETA(DisplayName = "단일 강타"),
 	WorldActor       UMETA(DisplayName = "월드 액터 (소환물)"),
@@ -750,19 +750,19 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	bool bLockRotationDuringCast = true;
 	// ---- Attack --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack")
-	EBurstAttackType AttackType = EBurstAttackType::Cleave;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Projectile", meta = (EditCondition = "AttackType == EBurstAttackType::Projectile"))
+	EAttackExecutionType AttackType = EAttackExecutionType::Cleave;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
 	TSubclassOf<AActor> ProjectileClass;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EBurstAttackType::Dash", ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.0"))
 	float DashDistance = 0.f;
 	/** DashDistance를 이동하는 데 걸리는 목표 시간. 발사 속도 = DashDistance / DashLaunchDuration. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EBurstAttackType::Dash", ClampMin = "0.01"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.01"))
 	float DashLaunchDuration = 0.2f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EBurstAttackType::AreaOfEffect", ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect", ClampMin = "0.0"))
 	float AoeRadius = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::WorldActor", ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor", ClampMin = "0.0"))
 	float WorldSpawnDistance = 300.f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EBurstAttackType::WorldActor"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor"))
 	TSubclassOf<AActor> WorldSpawnActorClass;
 	// ---- Damage --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Damage")
@@ -776,6 +776,52 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	/** 버스트 발동 시 버프 바에 표시할 UI 태그. DT_BuffUIDefinitions Row Name과 일치시킨다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
 	FGameplayTag BurstUITag;
+};
+
+// 공격 실행 spec — 공용 실행기(UPlayerBurstComponent)가 소비하는 실행 파라미터 묶음
+USTRUCT()
+struct RETRIEVE_API FAttackExecutionSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	EAttackExecutionType AttackType = EAttackExecutionType::Cleave;
+
+	UPROPERTY()
+	TSubclassOf<UGameplayEffect> DamageEffect;
+
+	UPROPERTY()
+	TSubclassOf<AActor> ProjectileClass;
+
+	UPROPERTY()
+	TSubclassOf<AActor> WorldSpawnActorClass;
+
+	UPROPERTY()
+	float WorldSpawnDistance = 300.f;
+
+	UPROPERTY()
+	float DashDistance = 0.f;
+
+	UPROPERTY()
+	float DashLaunchDuration = 0.2f;
+
+	UPROPERTY()
+	float AoeRadius = 0.f;
+
+	UPROPERTY()
+	TArray<FBurstHitInstance> HitSequence;
+	
+	UPROPERTY()
+	FGameplayTag ElementTag;
+
+	UPROPERTY()
+	FGameplayTag AttackTypeTag;
+
+	UPROPERTY()
+	FGameplayTag AttackPropertyTag;
+
+	UPROPERTY()
+	FGameplayTag HitEventTag;
 };
 
 USTRUCT(BlueprintType)
@@ -1049,39 +1095,95 @@ struct RETRIEVE_API FParryCounterData
 	float KnockbackUpwardStrength = 0.f;
 };
 
-// 스태프(배틀메이지) 강공격(왼손 투사체) 데이터
+// 강공격(Heavy) 데이터
 USTRUCT(BlueprintType)
-struct RETRIEVE_API FWeaponStaffAttack
+struct RETRIEVE_API FWeaponHeavyAttack
 {
 	GENERATED_BODY()
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
-	TSubclassOf<AStaffProjectile> ProjectileClass;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile", meta = (ClampMin = "0.0"))
+
+	// ---- Variant 키 ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Tags", meta = (Categories = "Element"))
+	FGameplayTag ElementTag;
+
+	// ---- Motion ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Montage", meta = (ClampMin = "0.1"))
+	float MontagePlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Motion")
+	bool bLockMovementDuringCast = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Motion")
+	bool bLockRotationDuringCast = true;
+
+	// ---- 실행 타입 (버스트 실행기 재사용) ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack")
+	EAttackExecutionType AttackType = EAttackExecutionType::AreaOfEffect;
+
+	// Projectile
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	TSubclassOf<AActor> ProjectileClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile", ClampMin = "0.0"))
 	float ProjectileSpeed = 1800.f;
 
-	// 발사 시점(초). 비면 즉시 1발, 여러 개면 연사(몽타주 길이 내)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
 	TArray<float> FireDelays;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile", meta = (ClampMin = "0.0"))
-	float DamageMultiplier = 1.2f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
-	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
-	FName SpawnSocketName = NAME_None;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
-	FVector SpawnOffset = FVector(60.f, -35.f, 50.f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Projectile")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	FName SpawnSocketName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	FVector SpawnOffset = FVector(60.f, -35.f, 50.f);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile", ClampMin = "0.0"))
+	float ProjectileDamageMultiplier = 1.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	ERetrieveHitReactType ProjectileHitReactType = ERetrieveHitReactType::Stagger;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	TSubclassOf<UGameplayEffect> ProjectileElementStatusEffect;
+
+	// AoE. 캐릭터 중심 구체 반경
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect", ClampMin = "0.0"))
+	float AoeRadius = 300.f;
+
+	// Dash/Launch. 데미지 없는 순수 이동이면 HitSequence를 비움
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.0"))
+	float DashDistance = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.01"))
+	float DashLaunchDuration = 0.2f;
+
+	// WorldActor (지면 소환물 등)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor"))
+	TSubclassOf<AActor> WorldSpawnActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor", ClampMin = "0.0"))
+	float WorldSpawnDistance = 300.f;
+
+	// ---- Damage (실행기 경로 전용: AoE/Dash/Cleave/WorldActor. Projectile은 투사체 페이로드를 사용) ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Damage", meta = (EditCondition = "AttackType != EAttackExecutionType::Projectile"))
+	TSubclassOf<UGameplayEffect> DamageEffect;
+
+	// 타격 시퀀스. 원소 상태이상(빙결 등)은 각 타격의 StatusEffects로 표현. Projectile 타입은 미사용.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Damage", meta = (EditCondition = "AttackType != EAttackExecutionType::Projectile"))
+	TArray<FBurstHitInstance> HitSequence;
+
+	// ---- Charge / FX ----
+	// 적중 시 원소 게이지 충전 이벤트 태그(현재 모드 원소로 충전)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Charge", meta = (Categories = "GameplayEvent"))
 	FGameplayTag ChargeBonusEventTag;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Staff|Element")
-	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> ElementStatusEffects;
+	// 발동 시 재생할 GameplayCue
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|FX", meta = (Categories = "GameplayCue"))
+	FGameplayTag ImpactCueTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|FX")
+	TSoftObjectPtr<USoundBase> CastSound;
 };
 
 USTRUCT(BlueprintType)
@@ -1153,9 +1255,6 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	TArray<FRetrieveWeaponAttachmentData> Attachments;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	TSoftObjectPtr<UDataTable> WeaponAttackTable;
 	
 	// 버스트 VFX 등 단일 지점 기준으로 쓰는 소켓
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
@@ -1174,22 +1273,7 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	float TraceRadius = 60.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	TSoftObjectPtr<UAttackComboDefinition> AttackComboDefinition;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FWeaponSprintAttack SprintAttack;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FWeaponJumpAttack JumpAttack;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (ClampMin = "0.1"))
-	float ParrySuccessMontagePlayRate = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
-	FWeaponStaffAttack StaffAttack;
+	TSoftObjectPtr<UWeaponAttackDefinition> AttackComboDefinition;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath WeaponAbilitySet;
