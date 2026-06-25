@@ -13,6 +13,7 @@
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
+#include "Components/Combat/CombatStanceComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/AttackComboDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -76,6 +77,25 @@ bool UGA_Attack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
+	// 납검 상태의 평타는 스윙하지 않고 '발검'만 한다(한 번 뽑기).
+	// 발검 트리거를 여기서 직접 호출한다 — CombatStance의 콜백은 PreActivate에서 이 함수보다
+	// 먼저 실행되므로 거기서 스탠스를 바꾸면 납검 태그가 지워져 이 게이트가 깨진다(콜백은 평타+납검에 무동작).
+	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_WeaponSheathed))
+		{
+			if (AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr)
+			{
+				if (UCombatStanceComponent* Stance = AvatarActor->FindComponentByClass<UCombatStanceComponent>())
+				{
+					Stance->NotifyCombatActivity(/*bFromAttack=*/false); // 발검 몽타주 + 디케이 타이머
+				}
+			}
+			EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+			return;
+		}
+	}
 
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{

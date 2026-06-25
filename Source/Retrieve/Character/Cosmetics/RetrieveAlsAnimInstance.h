@@ -26,6 +26,18 @@ public:
 	/** ASC가 준비된 시점에 PropertyMap을 바인딩. 두 경로 어느 쪽에서 호출돼도 안전. */
 	virtual void InitializeWithAbilitySystem(UAbilitySystemComponent* ASC);
 
+	// 스탠스 접근자. C++는 '선언'만 하고 구현은 자식 ABP가 담당한다(= 프로퍼티 맵이 채운 BP 변수를 반환).
+	// 레이어 ABP 상태기가 GetRetrieveParent로 '캐스트 없이' thread-safe 호출 → 클래스가 달라도 BP 값을 읽는다.
+	// (FGameplayTagBlueprintPropertyMap은 BP 변수만 채울 수 있어 C++ 멤버는 불가 → 이 우회로 사용)
+	UFUNCTION(BlueprintImplementableEvent, BlueprintPure, Category = "Retrieve|Stance", meta = (BlueprintThreadSafe))
+	bool IsWeaponSheathed() const;
+
+	UFUNCTION(BlueprintImplementableEvent, BlueprintPure, Category = "Retrieve|Stance", meta = (BlueprintThreadSafe))
+	bool IsInCombat() const;
+
+	UFUNCTION(BlueprintImplementableEvent, BlueprintPure, Category = "Retrieve|Stance", meta = (BlueprintThreadSafe))
+	bool IsGuarding() const;
+
 protected:
 	virtual void NativeInitializeAnimation() override;
 
@@ -33,7 +45,7 @@ protected:
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
 #endif
 
-	/** Class Defaults에서 Tag → 자식 ABP 변수 매핑. 멤버는 자식 ABP가 직접 정의. */
+	/** Class Defaults에서 Tag → 자식 ABP의 BP 변수 매핑. (맵은 BP 변수만 대상 — C++ 멤버는 불가) */
 	UPROPERTY(EditDefaultsOnly, Category = "GameplayTags")
 	FGameplayTagBlueprintPropertyMap CombatTagMap;
 };

@@ -106,10 +106,10 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		PawnExtensionComponent->InitializeAbilitySystem(ASC, RetrievePS);
 		
 		// 검/방패 장착 테스트용 코드
-		if (HasAuthority() && WeaponComponent && !WeaponComponent->IsEquipped())
-		{
-			WeaponComponent->EquipWeapon(TEXT("Weapon_SwordShield_Basic"));
-		}
+		// if (HasAuthority() && WeaponComponent && !WeaponComponent->IsEquipped())
+		// {
+		// 	WeaponComponent->EquipWeapon(TEXT("Weapon_SwordShield_Basic"));
+		// }
 	}
 	
 	if (PawnCosmeticComponent)
@@ -124,10 +124,10 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	}
 
 	// 투구 장착 테스트용 코드 (suppression 검증) — cosmetic 초기화 이후에 호출해야 한다.
-	if (HasAuthority() && ArmorComponent)
-	{
-		ArmorComponent->EquipArmor(RetrieveGameplayTags::Equipment_Slot_Head, TEXT("Helmet_Test"));
-	}
+	// if (HasAuthority() && ArmorComponent)
+	// {
+	// 	ArmorComponent->EquipArmor(RetrieveGameplayTags::Equipment_Slot_Head, TEXT("Helmet_Test"));
+	// }
 
 	if (ElementGaugeComponent)
 	{
