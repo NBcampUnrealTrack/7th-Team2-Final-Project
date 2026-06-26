@@ -8,6 +8,7 @@
 
 class URetrieveMapIconComponent;
 class UTexture2D;
+class URetrieveMapConfigDataAsset;
 
 /**
  * 월드맵 전용 아이콘 스냅샷.
@@ -65,6 +66,28 @@ struct FRetrieveMapTile
 };
 
 /**
+ * 사용자가 월드맵에서 T 키로 찍은 웨이포인트 하나.
+ * WaypointId: 서브시스템이 자동 부여하는 고유 번호 (제거 키로 사용).
+ */
+USTRUCT(BlueprintType)
+struct FUserWaypoint
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Retrieve|Waypoint")
+	int32 WaypointId = -1;
+
+	UPROPERTY(BlueprintReadWrite, Category="Retrieve|Waypoint")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadWrite, Category="Retrieve|Waypoint")
+	FText Label;
+
+	UPROPERTY(BlueprintReadWrite, Category="Retrieve|Waypoint")
+	FLinearColor Color = FLinearColor(1.0f, 0.25f, 0.25f, 1.0f);
+};
+
+/**
  * 미니맵 시스템의 중앙 관리자.
  *
  * UV 축 규약 (north-up):
@@ -81,6 +104,29 @@ class RETRIEVE_API URetrieveMapSubsystem : public UWorldSubsystem
 public:
 	// Landscape BeginPlay 이후 시점에 초기화
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
+
+	/**
+	 * 자동 맵 설정 DataAsset.
+	 *
+	 * BP_MapCaptureActor / RefreshMapAll()에서 자동 갱신되는 값들을 저장한다.
+	 *
+	 * 포함 데이터:
+	 *   - BakedMapTexture
+	 *   - MapOrigin
+	 *   - MapExtentXY
+	 *   - WorldMapIconData
+	 *   - IconRegistry
+	 *
+	 * 이 값이 설정되어 있으면 InitializeBounds()에서
+	 * SceneCapture2D 검색이나 Landscape bounds 계산보다 먼저 사용한다.
+	 *
+	 * 목적:
+	 *   - 월드맵 / 미니맵 / 나침반 좌표계 통일
+	 *   - 맵 변경 시 수동 좌표 입력 제거
+	 *   - World Partition 로딩 타이밍 영향 최소화
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Map")
+	TObjectPtr<URetrieveMapConfigDataAsset> MapConfig;
 
 	// 맵 원점 (월드 X min, Y min)
 	UPROPERTY(BlueprintReadOnly, Category="Retrieve|Minimap")
@@ -143,11 +189,54 @@ public:
 	void SetMapBoundsXY(FVector2D InOrigin, float InExtentX, float InExtentY);
 
 	/**
+	 * DA_MapConfig를 (없으면) 로드하고 그 bounds/텍스처를 즉시 적용한다.
+	 * MapConfig 값은 SceneCapture/Landscape 폴백보다 항상 우선한다.
+	 * 매 틱 호출해도 저렴(이미 로드+유효하면 즉시 반환). 미니맵이 게임 시작 시
+	 * 월드맵을 열지 않고도 올바른 좌표/텍스처를 쓰도록 보장한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
+	void EnsureMapConfigLoaded();
+
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Map")
+	bool InitializeMapConfigRuntime(URetrieveMapConfigDataAsset* OverrideConfig = nullptr);
+	
+	/**
 	 * WorldLocation → 텍스처 UV [0,1].
 	 *   U = (WorldY - OriginY) / MapExtentXY.Y   (East-West)
 	 *   V = 1 - (WorldX - OriginX) / MapExtentXY.X  (North-South, 위쪽=North)
 	 */
 	FVector2D WorldToUV(const FVector& WorldLocation) const;
+
+	/**
+	 * 텍스처 UV [0,1] → 월드 XY 좌표 (WorldToUV 역함수).
+	 * Z = 0 으로 반환; 필요하면 호출자가 Z를 설정할 것.
+	 */
+	FVector UVToWorld(const FVector2D& UV) const;
+
+	// ── 사용자 웨이포인트 ────────────────────────────────────────────────────
+
+	/**
+	 * 웨이포인트를 추가하고 부여된 WaypointId를 반환.
+	 * Label이 비어있으면 자동으로 "[N]" 형식으로 설정.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Waypoint")
+	int32 AddUserWaypoint(
+		FVector InWorldLocation,
+		FText InLabel = FText::GetEmpty(),
+		FLinearColor InColor = FLinearColor(1.0f, 0.25f, 0.25f, 1.0f)
+	);
+
+	/** WaypointId로 웨이포인트 제거. 없으면 false 반환 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Waypoint")
+	bool RemoveUserWaypointById(int32 InWaypointId);
+
+	/** 모든 웨이포인트 삭제 */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Waypoint")
+	void ClearUserWaypoints();
+
+	/** 전체 웨이포인트 배열 읽기 (렌더링/나침반용) */
+	UFUNCTION(BlueprintPure, Category="Retrieve|Waypoint")
+	const TArray<FUserWaypoint>& GetUserWaypoints() const { return UserWaypoints; }
 
 	/**
 	 * GetZoom: 미니맵 머티리얼 Zoom 파라미터 계산.
@@ -198,4 +287,9 @@ private:
 
 	FTimerHandle BoundsRetryTimerHandle;
 	int32 BoundsRetryAttempts = 0;
+
+	UPROPERTY()
+	TArray<FUserWaypoint> UserWaypoints;
+
+	int32 NextWaypointId = 0;
 };

@@ -2,10 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Engine/EngineTypes.h"
 #include "Save/RetrieveSaveGame.h"
 #include "RetrieveSaveSubsystem.generated.h"
 
 class UInventoryComponent;
+class APawn;
+class UCharacterMovementComponent;
+class UWorldPartitionStreamingSourceComponent;
+class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveSaveCompleted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveLoadCompleted);
@@ -25,7 +30,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFastTravelCompleted);
  * 싱글플레이: PlayerController 기반 슬롯 구분 없이 인덱스 기반으로 관리.
  * 멀티플레이 확장: GetSlotNameForPlayer()에 UniqueNetId 접두어 추가.
  */
-UCLASS(BlueprintType)
+UCLASS(BlueprintType, Config = Game)
 class RETRIEVE_API URetrieveSaveSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
@@ -119,6 +124,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool GetBonfireTransform(FName BonfireId, FTransform& OutTransform) const;
 
+	/**
+	 * 에디터에서 활성으로 배치된 모닥불을 런타임에 등록한다(디스크 저장 X).
+	 * MarkBonfireActivated와 달리 세이브 파일을 건드리지 않으므로 실제 진행 상태를 오염시키지 않는다.
+	 * 이미 활성 기록이 있으면(세이브 또는 이전 시드) 덮어쓰지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void RegisterDefaultBonfire(FName BonfireId, const FTransform& ArrivalTransform);
+
 	// ── 원소 해방 (월드 공유 진행 상태) ───────────────────────────────
 
 	/**
@@ -152,6 +165,38 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|FastTravel")
 	FVector FastTravelArrivalOffset = FVector(0.f, 0.f, 50.f);
 
+	/** 목적지 스트리밍 완료를 폴링하는 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|FastTravel")
+	float FastTravelStreamPollInterval = 0.1f;
+
+	/** 스트리밍 소스 등록 직후 오판을 막기 위한 최소 대기 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|FastTravel")
+	float FastTravelStreamMinWait = 0.3f;
+
+	/** 스트리밍이 끝나지 않아도 강제로 진행하는 최대 대기 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|FastTravel")
+	float FastTravelStreamTimeout = 10.0f;
+
+	/** 텔레포트 후 로딩 오버레이를 유지해 카메라 컷/스냅·잔여 팝인을 가리는 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|FastTravel")
+	float FastTravelOverlayHoldAfterArrival = 0.6f;
+
+	/** 도착 후 목적지 기준으로 텍스처/셀/Nanite/VT 요청이 충분히 쌓이도록 주는 최소 유지 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
+	float FastTravelSettleMinRenderTime = 0.8f;
+
+	/** 완료 상태가 이만큼 "연속" 유지돼야 진짜 완료로 인정(첫 틱 오판 방지)(초). */
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
+	float FastTravelSettleStableDuration = 0.5f;
+
+	/** 텍스처/메시 LOD까지 안정되길 기다리는 최대 시간(초). 초과 시 강제로 오버레이 해제. */
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
+	float FastTravelSettleTimeout = 15.0f;
+
+	/** 불러오기 시 SaveSubsystem이 직접 띄우는 로딩화면 위젯(WBP_LoadingCutscene). 재빌드 없이 ini로 변경 가능. */
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
+	TSoftClassPtr<UUserWidget> LoadingScreenWidgetClass;
+
 	// ── 델리게이트 ────────────────────────────────────────────────────
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Save")
@@ -168,6 +213,25 @@ public:
 
 private:
 	void FinishFastTravel();
+
+	/** 빠른 이동/불러오기 공용: 도착 위치로 텔레포트하고 스트리밍이 안정될 때까지 대기한다. */
+	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
+
+	/** 불러오기 등에서 SaveSubsystem이 직접 로딩화면을 띄운다(빠른 이동은 WorldMapWidget이 띄움). */
+	void ShowLoadingScreen(APlayerController* PC);
+	void HideLoadingScreen();
+
+	/** 목적지 스트리밍 완료를 폴링한다(반복 타이머 콜백). */
+	void PollFastTravelStreaming();
+
+	/** 스트리밍 완료/타임아웃 후 지면 스냅 + 텔레포트 + 카메라 컷을 수행한다. */
+	void PerformFastTravelArrival();
+
+	/** 도착 후 레벨+텍스처/메시 LOD 스트리밍이 안정될 때까지 기다린 뒤 오버레이를 해제한다. */
+	void PollFastTravelSettle();
+
+	/** 빠른 이동용 임시 스트리밍 소스 액터를 파괴/해제한다. */
+	void CleanupFastTravelStreamingSource();
 
 	static UInventoryComponent* FindInventoryComponent(AActor* Actor);
 	static bool IsValidSaveSlot(int32 SlotIndex);
@@ -186,9 +250,32 @@ private:
 	TObjectPtr<URetrieveSaveGame> CurrentSaveGame;
 
 	FTimerHandle FastTravelTimerHandle;
+	FTimerHandle FastTravelStreamPollTimerHandle;
+	FTimerHandle FastTravelFinishTimerHandle;
 
 	UPROPERTY()
 	TObjectPtr<APlayerController> PendingFastTravelPC;
+
+	// ── 빠른 이동 도착 보류 상태 (스트리밍 폴링 콜백에서 사용) ──
+	FName PendingFastTravelBonfireId;
+	FTransform PendingFastTravelArrival;
+	TWeakObjectPtr<APawn> PendingFastTravelPawn;
+	TWeakObjectPtr<UCharacterMovementComponent> PendingFastTravelCharMove;
+	bool bPendingFastTravelHadCollision = false;
+	TEnumAsByte<EMovementMode> PendingFastTravelPrevMovementMode = MOVE_None;
+	uint8 PendingFastTravelPrevCustomMode = 0;
+	float FastTravelStreamElapsed = 0.0f;
+	float FastTravelSettleElapsed = 0.0f;
+	float FastTravelSettleStableElapsed = 0.0f;
+
+	/** 목적지 셀 로딩을 유도하는 임시 World Partition 스트리밍 소스 액터/컴포넌트. */
+	UPROPERTY()
+	TObjectPtr<AActor> FastTravelStreamingSourceActor;
+	TWeakObjectPtr<UWorldPartitionStreamingSourceComponent> FastTravelStreamingSourceComp;
+
+	/** 불러오기 경로에서 SaveSubsystem이 직접 띄운 로딩화면 인스턴스. */
+	UPROPERTY()
+	TObjectPtr<UUserWidget> ActiveLoadingScreen;
 
 	static constexpr int32 SaveUserIndex = 0;
 	/** 월드 공유 상태 (화톳불 활성화) 전용 슬롯명 */

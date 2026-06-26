@@ -55,6 +55,19 @@ const FWeaponJumpAttack* UWeaponAttackDefinition::ResolveJumpVariant(const FGame
 	return !JumpDefault.Montage.IsNull() ? &JumpDefault : nullptr;
 }
 
+const FWeaponAbsorbCast* UWeaponAttackDefinition::ResolveAbsorbVariant(const FGameplayTag& ElementTag) const
+{
+	for (const FWeaponAbsorbCast& Variant : AbsorbVariants)
+	{
+		if (Variant.ElementTag == ElementTag && !Variant.Montage.IsNull())
+		{
+			return &Variant;
+		}
+	}
+
+	return !AbsorbDefault.Montage.IsNull() ? &AbsorbDefault : nullptr;
+}
+
 const FParryCounterData* UWeaponAttackDefinition::ResolveParryVariant(const FGameplayTag& ElementTag) const
 {
 	for (const FParryCounterData& Variant : ParryVariants)

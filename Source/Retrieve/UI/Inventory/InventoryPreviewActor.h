@@ -100,6 +100,9 @@ protected:
 
 	UInventoryComponent* ResolveInventoryComponent() const;
 	UArmorComponent* ResolveArmorComponent() const;
+	USkeletalMeshComponent* ResolvePlayerBodyMeshComponent() const;
+	// Source 컴포넌트의 메시/머티리얼/가시성을 Target에 복제하고, 포즈는 PoseSource를 LeaderPose로 따른다.
+	void MirrorPlayerMeshComponent(USkeletalMeshComponent* Target, USkeletalMeshComponent* Source, USkeletalMeshComponent* PoseSource) const;
 	UDataTable* ResolveArmorDataTable() const;
 	USkeletalMeshComponent* ResolvePreviewMeshComponent() const;
 	const FRetrieveInventoryPreviewArmorMontage* FindArmorEquipMontage(FGameplayTag EquipmentSlotTag, FGameplayTag PartSlotTag) const;

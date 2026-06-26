@@ -27,15 +27,18 @@ namespace
 
 ARetrieveBonfireActor::ARetrieveBonfireActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = true;
+	// 비주얼 상태는 상태 변경 시점(활성화/세이브 복원/Begin Play 등)에만 갱신하므로
+	// 매 프레임 틱이 필요 없다.
+	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	SetRootComponent(MeshComponent);
 
 	ArrivalPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("ArrivalPoint"));
 	ArrivalPoint->SetupAttachment(RootComponent);
-	ArrivalPoint->SetRelativeLocation(FVector(120.0f, 0.0f, 0.0f));
+	// 모닥불 메시/불꽃과 겹치지 않도록 충분히 앞쪽에 둔다(빠른 이동 도착 지점).
+	ArrivalPoint->SetRelativeLocation(FVector(280.0f, 0.0f, 0.0f));
 	ArrivalPoint->SetArrowColor(FLinearColor::Yellow);
 
 	MapIconComponent = CreateDefaultSubobject<URetrieveMapIconComponent>(TEXT("MapIconComponent"));
@@ -142,13 +145,6 @@ void ARetrieveBonfireActor::BeginPlay()
 		World->GetTimerManager().SetTimerForNextTick(
 			FTimerDelegate::CreateUObject(this, &ARetrieveBonfireActor::HandleDeferredVisualStateSync));
 	}
-}
-
-void ARetrieveBonfireActor::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	ApplyBonfireVisualState();
 }
 
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)
@@ -371,12 +367,13 @@ void ARetrieveBonfireActor::ApplyBonfireVisualState()
 			FireVFXComponent->SetAsset(FireVFXSystem);
 		}
 
-		FireVFXComponent->SetAutoActivate(bIsActivated);
 		FireVFXComponent->SetHiddenInGame(!bIsActivated, true);
 		FireVFXComponent->SetVisibility(bIsActivated, true);
 
 		if (FireVFXComponent->IsRegistered())
 		{
+			// 등록 이후에는 SetAutoActivate가 효과가 없고 경고만 찍히므로(매 Tick 호출 시 로그 스팸)
+			// 상태는 Activate/DeactivateImmediate로 직접 구동한다.
 			if (bIsActivated)
 			{
 				FireVFXComponent->Activate(true);
@@ -385,6 +382,11 @@ void ARetrieveBonfireActor::ApplyBonfireVisualState()
 			{
 				FireVFXComponent->DeactivateImmediate();
 			}
+		}
+		else
+		{
+			// 아직 등록 전(PostLoad/OnConstruction)에만 AutoActivate가 초기 상태를 결정한다.
+			FireVFXComponent->SetAutoActivate(bIsActivated);
 		}
 	}
 

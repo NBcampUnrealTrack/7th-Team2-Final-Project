@@ -14,6 +14,35 @@
 #include "Rendering/DrawElements.h"
 #include "SlateMaterialBrush.h"
 #include "Styling/CoreStyle.h"
+#include "Data/RetrieveMapConfigDataAsset.h"
+
+namespace
+{
+	static UTexture2D* ResolveMinimapTexture(const URetrieveMinimapWidget* Widget, const URetrieveMapSubsystem* MapSub)
+	{
+		if (!Widget)
+		{
+			return nullptr;
+		}
+
+		if (Widget->BakedMapTexture)
+		{
+			return Widget->BakedMapTexture;
+		}
+
+		if (MapSub && MapSub->MapConfig && MapSub->MapConfig->BakedMapTexture)
+		{
+			return MapSub->MapConfig->BakedMapTexture;
+		}
+
+		if (MapSub && MapSub->BakedMapTexture)
+		{
+			return MapSub->BakedMapTexture;
+		}
+
+		return nullptr;
+	}
+}
 
 void URetrieveMinimapWidget::NativePreConstruct()
 {
@@ -26,12 +55,28 @@ void URetrieveMinimapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	HideSquareMinimapBackground();
+
+	UWorld* World = GetWorld();
+	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+
+	// 월드맵을 열기 전에도 미니맵이 독립적으로 올바른 MapConfig / Bounds / Texture를 갖도록 한다.
+	// 기존에는 NativeTick에서 EnsureMapConfigLoaded()를 호출했기 때문에 첫 Paint 시점에
+	// 폴백 Bounds 또는 빈 Texture로 먼저 그려질 수 있었다.
+	if (MapSub)
+	{
+		MapSub->InitializeMapConfigRuntime(nullptr);
+
+		if (!IconRegistry && MapSub->MapConfig)
+		{
+			IconRegistry = MapSub->MapConfig->IconRegistry;
+		}
+	}
+
 	if (!Image_Minimap)
 	{
 		return;
 	}
-
-	HideSquareMinimapBackground();
 
 	UMaterialInterface* BaseMaterial = MinimapMaterial;
 	if (!BaseMaterial)
@@ -41,32 +86,36 @@ void URetrieveMinimapWidget::NativeConstruct()
 
 	if (!BaseMaterial)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Minimap] NativeConstruct: MinimapMaterial 없음"));
 		return;
 	}
 
 	MinimapMID = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-	if (MinimapMID)
+	if (!MinimapMID)
 	{
-		Image_Minimap->SetBrushFromMaterial(MinimapMID);
-
-		UTexture2D* InitTex = BakedMapTexture;
-		if (!InitTex)
-		{
-			if (UWorld* W = GetWorld())
-			{
-				if (URetrieveMapSubsystem* Sub = W->GetSubsystem<URetrieveMapSubsystem>())
-				{
-					InitTex = Sub->BakedMapTexture;
-				}
-			}
-		}
-		if (InitTex)
-		{
-			MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), InitTex);
-			CachedMIDTexture = InitTex;
-		}
+		UE_LOG(LogTemp, Warning, TEXT("[Minimap] NativeConstruct: MID 생성 실패"));
+		return;
 	}
-	
+
+	Image_Minimap->SetBrushFromMaterial(MinimapMID);
+
+	UTexture2D* InitTex = ResolveMinimapTexture(this, MapSub);
+	if (InitTex)
+	{
+		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), InitTex);
+		CachedMIDTexture = InitTex;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Minimap] NativeConstruct: 초기 MapTexture 없음"));
+	}
+
+	// 첫 프레임부터 CenterUV/Zoom이 기본값으로 그려지는 것을 방지한다.
+	const APlayerController* PC = GetOwningPlayer();
+	if (MapSub && MapSub->HasValidBounds() && PC && PC->GetPawn())
+	{
+		UpdateMinimapMaterial(MapSub, PC->GetPawn()->GetActorLocation());
+	}
 }
 
 void URetrieveMinimapWidget::HideSquareMinimapBackground()
@@ -162,7 +211,6 @@ void URetrieveMinimapWidget::DrawMinimapDecorations(
 		FVector2D(95.0f, 35.0f));
 }
 
-
 void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -175,7 +223,21 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	}
 
 	URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>();
-	if (!MapSub || !MapSub->HasValidBounds())
+	if (!MapSub)
+	{
+		return;
+	}
+
+	// 월드맵 의존 제거: 미니맵도 매 Tick 최소 1회 이상 Config 유효성을 보장한다.
+	// NativeConstruct보다 Subsystem 초기화가 늦은 경우를 위한 안전망이다.
+	MapSub->EnsureMapConfigLoaded();
+
+	if (!IconRegistry && MapSub->MapConfig)
+	{
+		IconRegistry = MapSub->MapConfig->IconRegistry;
+	}
+
+	if (!MapSub->HasValidBounds())
 	{
 		return;
 	}
@@ -185,7 +247,7 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	{
 		UpdateMinimapMaterial(MapSub, PlayerLocation);
 	}
-	
+
 	if (Image_Minimap)
 	{
 		FWidgetTransform Transform;
@@ -204,6 +266,14 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	const FVector& PlayerLocation
 )
 {
+	if (!MinimapMID || !MapSub)
+	{
+		return;
+	}
+
+	// Subsystem 초기화 순서가 늦는 경우에도 여기에서 한 번 더 보장한다.
+	MapSub->EnsureMapConfigLoaded();
+	
 	const FVector2D PlayerUV = MapSub->WorldToUV(PlayerLocation);
 	const float Zoom = MapSub->GetZoom(ViewWorldRadius);
 
@@ -213,17 +283,13 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	);
 	MinimapMID->SetScalarParameterValue(TEXT("Zoom"), Zoom);
 
-	UTexture2D* ActiveTexture = BakedMapTexture;
-	if (!ActiveTexture && MapSub->BakedMapTexture)
-	{
-		ActiveTexture = MapSub->BakedMapTexture;
-	}
-	
+	UTexture2D* ActiveTexture = ResolveMinimapTexture(this, MapSub);
 	if (ActiveTexture && ActiveTexture != CachedMIDTexture)
 	{
 		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), ActiveTexture);
 		CachedMIDTexture = ActiveTexture;
 	}
+
 }
 
 void URetrieveMinimapWidget::DrawCircularMap(
@@ -338,6 +404,12 @@ int32 URetrieveMinimapWidget::NativePaint(
 	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 	int32 CurrentLayer = LayerId;
 
+	// Paint가 Tick보다 먼저 호출되는 프레임에서도 Config를 보장한다.
+	if (MapSub)
+	{
+		MapSub->EnsureMapConfigLoaded();
+	}
+
 	DrawCircularMap(OutDrawElements, CurrentLayer, AllottedGeometry, CameraYaw);
 
 	CurrentLayer = Super::NativePaint(
@@ -349,33 +421,8 @@ int32 URetrieveMinimapWidget::NativePaint(
 
 	const FSlateClippingZone ClipZone(AllottedGeometry.GetLayoutBoundingRect());
 	OutDrawElements.PushClip(ClipZone);
-	
-	{
-		const float MarkerRot = (RotationMode == ERetrieveMinimapRotationMode::NorthUp) ? CameraYaw : 0.0f;
 
-		const FVector2D MarkerSz(PlayerMarkerSize, PlayerMarkerSize);
-		const FVector2D MarkerPos = Center - MarkerSz * 0.5f;
-
-		FSlateBrush Brush;
-		Brush.SetResourceObject(PlayerMarkerTexture);
-		Brush.ImageSize = MarkerSz;
-
-		FSlateDrawElement::MakeRotatedBox(
-			OutDrawElements,
-			++CurrentLayer,
-			AllottedGeometry.ToPaintGeometry(
-				FVector2f(MarkerSz),
-				FSlateLayoutTransform(FVector2f(MarkerPos))
-			),
-			PlayerMarkerTexture ? &Brush : FCoreStyle::Get().GetBrush("WhiteBrush"),
-			ESlateDrawEffect::None,
-			FMath::DegreesToRadians(MarkerRot),
-			TOptional<FVector2D>(AbsCenter),
-			FSlateDrawElement::ERotationSpace::RelativeToWorld,
-			PlayerMarkerColor
-		);
-	}
-	
+	// 에너미/아이콘 마커 (라이브 MapIconComponent) — 원형 반경 안으로 컬링.
 	if (World && MapSub && MapSub->HasValidBounds())
 	{
 		for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
@@ -404,13 +451,77 @@ int32 URetrieveMinimapWidget::NativePaint(
 		}
 	}
 
+	// 사용자 웨이포인트 마커 — 원형 반경 안으로 컬링.
+	if (MapSub)
+	{
+		for (const FUserWaypoint& WP : MapSub->GetUserWaypoints())
+		{
+			const FVector2D WpPos = WorldToLocal(
+				WP.WorldLocation, PlayerLoc, Center, WidgetSize, CameraYaw
+			);
+
+			if (FVector2D::Distance(WpPos, Center) > MiniMapRadius)
+			{
+				continue;
+			}
+
+			const FVector2D WpSz(WaypointMarkerSize, WaypointMarkerSize);
+			const FVector2D WpDrawPos = WpPos - WpSz * 0.5f;
+
+			FSlateBrush WpBrush;
+			if (WaypointMarkerTexture)
+			{
+				WpBrush.SetResourceObject(WaypointMarkerTexture);
+				WpBrush.ImageSize = WpSz;
+			}
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(WpSz),
+					FSlateLayoutTransform(FVector2f(WpDrawPos))
+				),
+				WaypointMarkerTexture ? &WpBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				WaypointMarkerColor
+			);
+		}
+	}
+
+	// 플레이어 마커 (항상 중앙, NorthUp 모드에서 카메라 방향으로 회전).
+	{
+		const float MarkerRot = (RotationMode == ERetrieveMinimapRotationMode::NorthUp) ? CameraYaw : 0.0f;
+
+		const FVector2D MarkerSz(PlayerMarkerSize, PlayerMarkerSize);
+		const FVector2D MarkerPos = Center - MarkerSz * 0.5f;
+
+		FSlateBrush Brush;
+		Brush.SetResourceObject(PlayerMarkerTexture);
+		Brush.ImageSize = MarkerSz;
+
+		FSlateDrawElement::MakeRotatedBox(
+			OutDrawElements,
+			++CurrentLayer,
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f(MarkerSz),
+				FSlateLayoutTransform(FVector2f(MarkerPos))
+			),
+			PlayerMarkerTexture ? &Brush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+			ESlateDrawEffect::None,
+			FMath::DegreesToRadians(MarkerRot),
+			TOptional<FVector2D>(AbsCenter),
+			FSlateDrawElement::ERotationSpace::RelativeToWorld,
+			PlayerMarkerColor
+		);
+	}
+
 	OutDrawElements.PopClip();
 
 	DrawMinimapDecorations(OutDrawElements, CurrentLayer, AllottedGeometry);
 
 	return CurrentLayer;
 }
-
 
 void URetrieveMinimapWidget::ToggleRotationMode()
 {

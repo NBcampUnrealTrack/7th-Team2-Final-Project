@@ -19,7 +19,10 @@ class RETRIEVE_API UBossHPBarComponent : public UActorComponent
 public:
 	UBossHPBarComponent();
 
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Boss HP Bar")
 	void Show();
+
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Boss HP Bar")
 	void Hide();
 
 	FText GetDisplayName() const;

@@ -1,5 +1,6 @@
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
+#include "InputCoreTypes.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 #include "World/RetrieveBonfireActor.h"
@@ -19,6 +20,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
 #include "HAL/PlatformTime.h"
+#include "Data/RetrieveMapConfigDataAsset.h"
 
 // ---------- 초기화 ----------
 
@@ -29,15 +31,16 @@ URetrieveWorldMapWidget::URetrieveWorldMapWidget(const FObjectInitializer& Objec
 
 void URetrieveWorldMapWidget::NativeDestruct()
 {
-	// 월드맵이 닫힐 때(RemoveFromParent) 독립 뷰포트에 추가된 자식 위젯들을 함께 정리한다.
-	// 패널 강제 제거(세션 전환, 다른 패널 열기 등) 시에도 잔여 UI가 남지 않도록 보장.
+	// 월드맵이 닫힐 때 확인 다이얼로그는 정리한다.
 	CloseActiveFastTravelDialog();
 
-	if (IsValid(ActiveFastTravelLoadingOverlay))
-	{
-		ActiveFastTravelLoadingOverlay->RemoveFromParent();
-		ActiveFastTravelLoadingOverlay = nullptr;
-	}
+	// 주의: 로딩 오버레이는 여기서 제거하지 않는다.
+	// 빠른 이동을 확정하면 CloseActivePanel()로 이 월드맵 위젯이 곧 GC되는데,
+	// 여기서 오버레이를 제거하면 빠른 이동(스트리밍/텔레포트)이 끝나기도 전에
+	// 로딩화면이 사라져 버린다. 오버레이는 자신의 OnFastTravelCompleted 바인딩(WBP 내부)으로
+	// 빠른 이동 완료 시점에 스스로 제거되므로 월드맵 수명과 분리한다.
+	// (참조만 끊어 둔다 — 뷰포트에 add되어 있으므로 GC되지 않는다.)
+	ActiveFastTravelLoadingOverlay = nullptr;
 
 	if (UGameInstance* GameInstance = GetGameInstance())
 	{
@@ -67,13 +70,63 @@ void URetrieveWorldMapWidget::NativeConstruct()
 		CurrentLocationText = NSLOCTEXT("RetrieveWorldMap", "CurrentLocation", "현재 위치");
 	}
 
-	// 월드맵을 열 때마다 현재 로드된 모든 MapIconComponent를 스캔해서 스냅샷 갱신.
+	// 월드맵을 열 때마다 MapConfig 기준으로 텍스처/아이콘 설정을 동기화하고,
+	// 현재 로드된 모든 MapIconComponent를 스캔해서 스냅샷 갱신.
 	if (UWorld* World = GetWorld())
 	{
 		if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
 		{
+			MapSub->InitializeMapConfigRuntime(MapConfig);
+			if (MapSub->MapConfig)
+			{
+				if (!BakedMapTexture)
+				{
+					BakedMapTexture = MapSub->MapConfig->BakedMapTexture;
+				}
+
+				if (!WorldMapIconData)
+				{
+					WorldMapIconData = MapSub->MapConfig->WorldMapIconData;
+				}
+
+				if (!IconRegistry)
+				{
+					IconRegistry = MapSub->MapConfig->IconRegistry;
+				}
+			}
+
 			MapSub->RefreshWorldMapSnapshots();
 		}
+	}
+
+	// 에디터에서 활성으로 배치된 모닥불을 세이브 서브시스템에 인메모리 시드.
+	// → WP 스트리밍/액터 로드 여부와 무관하게 활성 표시 + 빠른이동 가능.
+	SeedDefaultActivatedBonfires();
+}
+
+void URetrieveWorldMapWidget::SeedDefaultActivatedBonfires()
+{
+	if (!WorldMapIconData) { return; }
+
+	UGameInstance* GI = GetGameInstance();
+	URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!SaveSub) { return; }
+
+	for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
+	{
+		if (Entry.IconType != ERetrieveMapIconType::Bonfire) { continue; }
+		if (!Entry.bStartActivated || Entry.BonfireId.IsNone()) { continue; }
+
+		// ArrivalTransform이 (0,0,0)로 구워진 경우(에디터 스캔 시 ArrivalPoint 미확정 등)
+		// 모닥불 본체 위치(WorldLocation)를 도착 기준으로 폴백한다. Z는 텔레포트 시 지면 스냅으로 보정.
+		FTransform Arrival = Entry.ArrivalTransform;
+		if (Arrival.GetLocation().IsNearlyZero())
+		{
+			Arrival = FTransform(Entry.WorldLocation);
+		}
+
+		// 이미 활성 기록이 있으면 RegisterDefaultBonfire 내부에서 덮어쓰지 않는다.
+		SaveSub->RegisterDefaultBonfire(Entry.BonfireId, Arrival);
 	}
 }
 
@@ -406,6 +459,52 @@ int32 URetrieveWorldMapWidget::NativePaint(
 		}
 	}
 
+	// ── 사용자 웨이포인트 마커 ─────────────────────────────────────────────────
+	if (MapSub && MapSub->HasValidBounds())
+	{
+		const TArray<FUserWaypoint>& Waypoints = MapSub->GetUserWaypoints();
+		const FSlateFontInfo WpFont = FCoreStyle::GetDefaultFontStyle("Bold", 10);
+
+		for (const FUserWaypoint& WP : Waypoints)
+		{
+			const FVector2D WpUV     = MapSub->WorldToUV(WP.WorldLocation);
+			const FVector2D WpScreen = UVToScreen(WpUV, Center, ScaledW, ScaledH);
+
+			if (!MapViewRect.ContainsPoint(FVector2D(WpScreen))) { continue; }
+
+			const float    Sz      = WaypointMarkerSize;
+			const FVector2D HalfSz(Sz * 0.5f, Sz * 0.5f);
+			const FVector2D DrawPos = WpScreen - HalfSz;
+
+			FSlateBrush WpBrush;
+			if (WaypointMarkerTexture)
+			{
+				WpBrush.SetResourceObject(WaypointMarkerTexture);
+			}
+			WpBrush.ImageSize = FVector2D(Sz, Sz);
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(Sz, Sz),
+					FSlateLayoutTransform(FVector2f(DrawPos))
+				),
+				WaypointMarkerTexture ? &WpBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				WP.Color
+			);
+
+			if (!WP.Label.IsEmpty())
+			{
+				DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
+				          WP.Label.ToString(),
+				          FVector2D(WpScreen.X, WpScreen.Y - HalfSz.Y - 3.0f),
+				          WpFont, WP.Color);
+			}
+		}
+	}
+
 	// ── 플레이어 마커 + 현재 위치 레이블 ─────────────────────────────────────
 	if (PC && PC->GetPawn() && MapSub && MapSub->HasValidBounds())
 	{
@@ -630,6 +729,63 @@ FReply URetrieveWorldMapWidget::NativeOnMouseMove(
 	return FReply::Handled();
 }
 
+FReply URetrieveWorldMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	const FKey PressedKey = InKeyEvent.GetKey();
+
+	// T: 커서 위치에 웨이포인트 추가
+	if (PressedKey == EKeys::T)
+	{
+		UWorld* World = GetWorld();
+		URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+		if (!MapSub || !MapSub->HasValidBounds()) { return FReply::Unhandled(); }
+
+		const FVector2D AbsCursorPos  = FSlateApplication::Get().GetCursorPos();
+		const FVector2D LocalCursorPos = InGeometry.AbsoluteToLocal(FVector2f(AbsCursorPos));
+
+		FVector2D MapViewTopLeft, MapViewSize;
+		GetMapViewRect(InGeometry, MapViewTopLeft, MapViewSize);
+
+		if (!IsInsideMapView(LocalCursorPos, MapViewTopLeft, MapViewSize))
+		{
+			return FReply::Unhandled();
+		}
+
+		const FVector2D Center = MapViewTopLeft + MapViewSize * 0.5f;
+		float BaseW = MapViewSize.X, BaseH = MapViewSize.Y;
+		ComputeBaseMapSize(MapSub, MapViewSize, BaseW, BaseH);
+		const float ScaledW = BaseW * ZoomLevel;
+		const float ScaledH = BaseH * ZoomLevel;
+
+		const FVector2D WaypointUV = ScreenToUV(LocalCursorPos, Center, ScaledW, ScaledH);
+
+		// UV 범위 벗어나면 무시
+		if (WaypointUV.X < 0.0f || WaypointUV.X > 1.0f ||
+		    WaypointUV.Y < 0.0f || WaypointUV.Y > 1.0f)
+		{
+			return FReply::Unhandled();
+		}
+
+		const FVector WaypointWorld = MapSub->UVToWorld(WaypointUV);
+		// 지정한 웨이포인트 색상을 WP.Color로 전달 → 월드맵·미니맵·나침반 모두 이 색상 사용(연동).
+		MapSub->AddUserWaypoint(WaypointWorld, FText::GetEmpty(), WaypointMarkerColor);
+		return FReply::Handled();
+	}
+
+	// Delete: 웨이포인트 전체 삭제
+	if (PressedKey == EKeys::Delete)
+	{
+		UWorld* World = GetWorld();
+		if (URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr)
+		{
+			MapSub->ClearUserWaypoints();
+		}
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
 // ---------- 헬퍼 ----------
 
 void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, FVector2D& OutTopLeft, FVector2D& OutSize) const
@@ -715,6 +871,16 @@ FVector2D URetrieveWorldMapWidget::UVToScreen(
 	return Center + FVector2D(
 		(UV.X - ViewCenterUV.X) * ScaledW,
 		(UV.Y - ViewCenterUV.Y) * ScaledH
+	);
+}
+
+FVector2D URetrieveWorldMapWidget::ScreenToUV(
+	const FVector2D& ScreenPos, const FVector2D& Center,
+	float ScaledW, float ScaledH) const
+{
+	return ViewCenterUV + FVector2D(
+		(ScreenPos.X - Center.X) / FMath::Max(ScaledW, 1.0f),
+		(ScreenPos.Y - Center.Y) / FMath::Max(ScaledH, 1.0f)
 	);
 }
 
@@ -945,6 +1111,12 @@ bool URetrieveWorldMapWidget::IsBonfireEntryActivated(const FRetrieveMapIconEntr
 	if (Entry.IconType != ERetrieveMapIconType::Bonfire)
 	{
 		return false;
+	}
+
+	// 에디터에서 활성으로 배치된 모닥불은 액터/세이브와 무관하게 항상 활성으로 표시.
+	if (Entry.bStartActivated)
+	{
+		return true;
 	}
 
 	const UGameInstance* GI = GetGameInstance();

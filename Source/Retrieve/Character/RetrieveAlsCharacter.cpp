@@ -389,6 +389,20 @@ void ARetrieveAlsCharacter::NotifyLocomotionActionChanged(const FGameplayTag& Pr
 	
 	if (AlsCharacterMovement)
 	{
+		// 프로젝트 운용 규칙:
+		// LocomotionAction은 Retrieve에서 단순한 "공격 상태 표시"가 아니라
+		// CharacterMovement 입력 차단 요청으로 취급한다.
+		//
+		// RootMotion이 있는 공격 몽타주는 애니메이션이 이동과 방향을 직접 소유하므로,
+		// Als.LocomotionAction.Attack Notify를 추가로 두지 않는다.
+		// 두 시스템을 겹치면 입력 복구, 캔슬 윈도우, 콤보 전환, 착지 블렌딩 타이밍을
+		// 추적하기 어려워진다.
+		//
+		// RootMotion이 없는 공격 몽타주는 CharacterMovement가 여전히 플레이어 입력을
+		// 소비할 수 있으므로, 필요한 경우 Als.LocomotionAction.Attack Notify를 사용해
+		// 이 경로로 입력을 차단한다.
+		//
+		// Sliding은 ALS 고유 이동 액션이므로 프로젝트 입력 차단 대상에서 제외한다.
 		const bool bBlock = LocomotionAction.IsValid() && LocomotionAction != AlsLocomotionActionTags::Sliding;
 		AlsCharacterMovement->SetInputBlocked(bBlock);
 	}

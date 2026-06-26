@@ -2641,50 +2641,8 @@ FText UInventoryPanelWidget::GetFullStatDisplayText() const
 	Lines.Add(FString::Printf(TEXT("방어구 방어력: +%.0f"), GetArmorBonusDefense()));
 	Lines.Add(FString::Printf(TEXT("최종 방어력: %.0f"), Defense));
 
-	// DT_CharacterStats 추가 컬럼 자동 표시
-	// MaxHealth, AttackPower는 위에서 이미 처리했으므로 건너뜀
-	if (const APawn* Pawn = GetOwningPlayerPawn())
-	{
-		const URetrievePawnExtensionComponent* PawnExt =
-			URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn);
-		if (PawnExt)
-		{
-			const URetrievePawnData* PawnData = PawnExt->GetPawnData();
-			if (PawnData && PawnData->CharacterStatsTable && !PawnData->CharacterStatsRow.IsNone())
-			{
-				const FCharacterStats* Row = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
-					PawnData->CharacterStatsRow, TEXT("GetFullStatDisplayText"));
-				if (Row)
-				{
-					static const TArray<FName> HandledProps = {
-						GET_MEMBER_NAME_CHECKED(FCharacterStats, MaxHealth),
-						GET_MEMBER_NAME_CHECKED(FCharacterStats, AttackPower),
-					};
-
-					for (TFieldIterator<FNumericProperty> It(FCharacterStats::StaticStruct()); It; ++It)
-					{
-						if (HandledProps.Contains(It->GetFName()))
-						{
-							continue;
-						}
-
-						double Value = 0.0;
-						if (const FDoubleProperty* DP = CastField<FDoubleProperty>(*It))
-							Value = DP->GetPropertyValue_InContainer(Row);
-						else if (const FFloatProperty* FP = CastField<FFloatProperty>(*It))
-							Value = static_cast<double>(FP->GetPropertyValue_InContainer(Row));
-						else if (const FIntProperty* IP = CastField<FIntProperty>(*It))
-							Value = static_cast<double>(IP->GetPropertyValue_InContainer(Row));
-						else
-							continue;
-
-						const FString PropDisplayName = It->GetAuthoredName();
-						Lines.Add(FString::Printf(TEXT("%s: %.0f"), *PropDisplayName, Value));
-					}
-				}
-			}
-		}
-	}
+	// 체력/공격력/방어력 외의 DT_CharacterStats 추가 컬럼(MoveSpeed, MaxStamina 등)은
+	// 인벤토리 최종 스탯 표시에 불필요하므로 자동 표시하지 않는다.
 
 	return FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
