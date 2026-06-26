@@ -141,6 +141,8 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 			const float NewHealth = FMath::Clamp(GetHealth() - FinalDamage, 0.f, GetMaxHealth());
 			SetHealth(NewHealth);
 			BroadcastHitEvent(Data, FinalDamage);
+			
+			
 		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
@@ -356,11 +358,17 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		{
 			const float KbUp = Data.EffectSpec.GetSetByCallerMagnitude(
 				RetrieveGameplayTags::Data_Knockback_UpwardStrength, false, 0.f);
+			const float CancelTargetActionsValue = Data.EffectSpec.GetSetByCallerMagnitude(
+				RetrieveGameplayTags::Data_Knockback_CancelTargetActions,
+				false, 0.f);
+			
 			FRetrieveKnockbackParams Params;
 			Params.Strength = KbStrength;
 			Params.UpwardStrength = KbUp;
-			URetrieveKnockbackLibrary::ApplyKnockbackFromSource(
-				TargetCharacter, AttackerActor->GetActorLocation(), Params);
+			Params.bCancelTargetActions = CancelTargetActionsValue > 0.f;;
+			
+			URetrieveKnockbackLibrary::ApplyPlanarKnockbackFromActor(
+				TargetCharacter, AttackerActor, Params);
 		}
 	}
 

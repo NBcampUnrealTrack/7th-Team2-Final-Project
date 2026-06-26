@@ -31,6 +31,7 @@ UGA_BowShot::UGA_BowShot()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::Animation_Lock_Rotation);

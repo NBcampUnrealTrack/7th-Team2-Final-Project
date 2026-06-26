@@ -5,6 +5,7 @@
 #include "Combat/RetrieveCombatTypes.h"
 #include "RetrieveKnockbackLibrary.generated.h"
 
+class AActor;
 class ACharacter;
 
 /**
@@ -30,6 +31,9 @@ public:
 	// SourceLocation: 공격 원점(공격자 또는 투사체 위치). 방향 = (Target - Source).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Knockback")
 	static void ApplyKnockbackFromSource(ACharacter* Target, const FVector& SourceLocation, const FRetrieveKnockbackParams& Params);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Knockback")
+	static void ApplyPlanarKnockbackFromActor(ACharacter* Target, AActor* SourceActor, const FRetrieveKnockbackParams& Params);
 
 	// [고정 방향] 지정한 월드 방향으로 피격자를 밀친다(바람 등).
 	// WorldDirection은 내부에서 정규화된다. 수평만 원하면 호출 전에 Z를 0으로 둘 것.

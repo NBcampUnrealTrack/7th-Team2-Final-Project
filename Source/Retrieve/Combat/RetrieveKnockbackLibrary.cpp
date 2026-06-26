@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -9,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "TimerManager.h"
 
 void URetrieveKnockbackLibrary::DoKnockback(ACharacter* Target, const FVector& NormalizedDir, float Strength, float UpwardStrength, float Duration)
 {
@@ -78,6 +80,93 @@ void URetrieveKnockbackLibrary::ApplyKnockbackFromSource(ACharacter* Target, con
 	}
 
 	const FVector Direction = (Target->GetActorLocation() - SourceLocation).GetSafeNormal();
+	DoKnockback(Target, Direction, Params.Strength, Params.UpwardStrength, Params.Duration);
+}
+
+void URetrieveKnockbackLibrary::ApplyPlanarKnockbackFromActor(ACharacter* Target, AActor* SourceActor, const FRetrieveKnockbackParams& Params)
+{
+	if (!IsValid(Target) || !IsValid(SourceActor) || Target == SourceActor || Params.Duration <= 0.f)
+	{
+		return;
+	}
+
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target))
+	{
+		if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Immune_Knockback))
+		{
+			return;
+		}
+	}
+
+	const FVector TargetLocation = Target->GetActorLocation();
+	const FVector SourceLocation = SourceActor->GetActorLocation();
+	FVector Direction = Target->GetActorLocation() - SourceActor->GetActorLocation();
+	Direction.Z = 0.f;
+	const FVector RawPlanarDelta = Direction;
+	const bool bUsedFallbackDirection = Direction.IsNearlyZero();
+	if (Direction.IsNearlyZero())
+	{
+		Direction = SourceActor->GetActorForwardVector();
+		Direction.Z = 0.f;
+	}
+
+	Direction = Direction.GetSafeNormal();
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	Target->MoveIgnoreActorAdd(SourceActor);
+
+	if (UWorld* World = Target->GetWorld())
+	{
+		TWeakObjectPtr<ACharacter> WeakTarget(Target);
+		TWeakObjectPtr<AActor> WeakSourceActor(SourceActor);
+
+		FTimerDelegate RestoreCollisionDelegate;
+		RestoreCollisionDelegate.BindLambda([WeakTarget, WeakSourceActor]()
+		{
+			if (WeakTarget.IsValid() && WeakSourceActor.IsValid())
+			{
+				WeakTarget->MoveIgnoreActorRemove(WeakSourceActor.Get());
+			}
+		});
+
+		FTimerHandle RestoreCollisionHandle;
+		World->GetTimerManager().SetTimer(RestoreCollisionHandle, RestoreCollisionDelegate, Params.Duration + 0.05f, false);
+	}
+
+	if (Params.bCancelTargetActions)
+	{
+		if (UAbilitySystemComponent* TargetASC =
+			UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target))
+		{
+			FGameplayTagContainer TagsToCancel;
+			TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
+			TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+			
+			TargetASC->CancelAbilities(&TagsToCancel, nullptr, nullptr);
+
+			TargetASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
+
+			if (UWorld* World = Target->GetWorld())
+			{
+				TWeakObjectPtr<UAbilitySystemComponent> WeakTargetASC(TargetASC);
+
+				FTimerDelegate RemoveForcedKnockbackDelegate;
+				RemoveForcedKnockbackDelegate.BindLambda([WeakTargetASC]()
+				{
+					if (WeakTargetASC.IsValid())
+					{
+						WeakTargetASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
+					}
+				});
+
+				FTimerHandle RemoveForcedKnockbackHandle;
+				World->GetTimerManager().SetTimer(RemoveForcedKnockbackHandle, RemoveForcedKnockbackDelegate, Params.Duration + 0.05f, false);
+			}
+		}
+	}
 	DoKnockback(Target, Direction, Params.Strength, Params.UpwardStrength, Params.Duration);
 }
 

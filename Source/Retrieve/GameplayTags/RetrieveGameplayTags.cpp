@@ -75,6 +75,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Knockdown, "State.Player.Knockdown");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dead, "State.Player.Dead");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedMove, "State.Player.ForcedMove");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedKnockback, "State.Player.ForcedKnockback");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming, "State.Player.Swimming");
@@ -364,6 +365,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_Strength, "Data.Knockback.Strength");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_UpwardStrength, "Data.Knockback.UpwardStrength");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_CancelTargetActions, "Data.Knockback.CancelTargetActions");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxHealth, "Data.Init.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Health, "Data.Init.Health");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackPower, "Data.Init.AttackPower");
