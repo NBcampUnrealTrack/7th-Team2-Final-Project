@@ -70,9 +70,11 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 	//  플레이어의 실제 포즈를 그대로 복사하는 방식이 가장 안정적이다.)
 
 	// 루트(프리뷰 리더)는 PlayerBodyMesh 메시+스켈레톤을 미러링해 방어구 파츠의 LeaderPose 본 매핑을 맞춘다.
-	// 플레이어 바디가 사용하는 ABP 클래스(ABPAls_Retarget 등)를 그대로 가져온다.
-	// LeaderMeshComponent에 동일한 ABP를 독립 인스턴스로 실행해 idle 포즈 + 몽타주 재생을 모두 지원한다.
-	TSubclassOf<UAnimInstance> PreviewAnimClass = PlayerBodyMesh->GetAnimClass();
+	// PreviewAnimClassOverride가 설정된 경우 해당 클래스를 사용하고, 없으면 플레이어 ABP를 폴백으로 사용한다.
+	// LeaderMeshComponent에 ABP를 독립 인스턴스로 실행해 idle 포즈 + 몽타주 재생을 모두 지원한다.
+	TSubclassOf<UAnimInstance> PreviewAnimClass = PreviewAnimClassOverride
+		? PreviewAnimClassOverride
+		: TSubclassOf<UAnimInstance>(PlayerBodyMesh->GetAnimClass());
 	MirrorPlayerMeshComponent(LeaderMeshComponent, PlayerBodyMesh, PlayerBodyMesh);
 
 	// Leader는 자체 AnimInstance로 몽타주를 재생해야 하므로 LeaderPose를 해제하고 ABP를 복원한다.

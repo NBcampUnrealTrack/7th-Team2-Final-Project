@@ -56,6 +56,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
 	FName PreviewSkeletalMeshComponentName = TEXT("SkeletalMeshComp");
 
+	// 설정 시 플레이어 ABP 대신 이 클래스를 프리뷰 리더 메시에 적용한다. ALS 비의존 ABP 사용 시 필수.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
+	TSubclassOf<UAnimInstance> PreviewAnimClassOverride;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
 	TObjectPtr<UDataTable> ArmorDataTableOverride;
 
