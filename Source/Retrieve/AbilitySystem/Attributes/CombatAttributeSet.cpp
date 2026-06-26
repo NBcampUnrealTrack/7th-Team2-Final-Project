@@ -426,7 +426,13 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 
 	EventData.EventTag = AttackerEventTag;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
-	if (TargetActor != AttackerActor)
+
+	// Burn 등 지속 데미지(DoT)는 데미지만 적용하고 피격 반응(움찔/몽타주)은 발생시키지 않는다.
+	// 틱마다 Hit 이벤트가 나가면 매 틱 Flinch가 걸리므로 타겟 Hit 이벤트만 건너뛴다.
+	const bool bIsDamageOverTime =
+		AttackerEventTag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burn);
+
+	if (TargetActor != AttackerActor && !bIsDamageOverTime)
 	{
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);
