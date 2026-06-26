@@ -32,11 +32,18 @@ void ARetrieveGameMode::PostLogin(APlayerController* NewPlayerController)
 
 void ARetrieveGameMode::OnWorldReadyForGameplay()
 {
-	if (ARetrieveGameState* GS = GetRetrieveGameState())
+	ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS)
 	{
-		GS->TransitionTo(ERetrieveSessionState::MainMenu);
-		GS->TransitionTo(ERetrieveSessionState::InGame); // 메인메뉴 생성 전까지 임시
-		BootstrapNewGameQuest(); // 임시
+		return;
+	}
+	
+	GS->TransitionTo(ERetrieveSessionState::MainMenu);
+
+	if (bSkipMainMenuOnBoot)
+	{
+		BootstrapNewGameQuest();
+		GS->TransitionTo(ERetrieveSessionState::InGame);
 	}
 }
 

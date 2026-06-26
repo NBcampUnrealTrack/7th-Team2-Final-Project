@@ -28,6 +28,9 @@
 #include "UI/ViewModels/PlayerStatusViewModel.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "TimerManager.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
 
@@ -111,6 +114,7 @@ void ARetrievePlayerController::BeginPlay()
 
 void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HideLoadingScreen();
 	RemoveActivePanelImmediately();
 
 	if (SessionListener.IsValid())
@@ -215,6 +219,23 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 	{
 		AttackFeedbackComponent->HandlePossessedPawnChanged(InPawn);
 	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		if (const ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			if (GS->GetSessionState() == ERetrieveSessionState::MainMenu)
+			{
+				ApplyMainMenuCamera();
+			}
+		}
+	}
+}
+
+void ARetrievePlayerController::RequestNewGame()
+{
+	ShowLoadingScreen();
+	Server_RequestNewGame();
 }
 
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState NewState)
@@ -223,6 +244,7 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 	CloseConversation();
 	SwapActiveWidget(NewState);
 	UpdateInputMode(NewState);
+	HandleSessionPresentation(NewState);
 }
 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
@@ -357,6 +379,131 @@ TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieve
 	case ERetrieveSessionState::Loading:
 	default:
 		return nullptr;
+	}
+}
+
+void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState NewState)
+{
+	switch (NewState)
+	{
+	case ERetrieveSessionState::MainMenu:
+		ApplyMainMenuCamera();
+		break;
+
+	case ERetrieveSessionState::InGame:
+		ApplyGameplayCamera();
+		if (ActiveLoadingScreen)
+		{
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
+				                                  &ARetrievePlayerController::HideLoadingScreen,
+				                                  LoadingScreenMinSeconds, false);
+			}
+			else
+			{
+				HideLoadingScreen();
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ARetrievePlayerController::ApplyMainMenuCamera()
+{
+	if (APawn* MyPawn = GetPawn())
+	{
+		MyPawn->SetActorHiddenInGame(true);
+		
+		// TODO: (코옵) 권한 검사
+		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
+		{
+			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
+			{
+				MoveComp->StopMovementImmediately();
+				MoveComp->DisableMovement();
+			}
+		}
+	}
+
+	if (AActor* CineCam = FindMainMenuCamera())
+	{
+		SetViewTargetWithBlend(CineCam, 0.f);
+	}
+}
+
+void ARetrievePlayerController::ApplyGameplayCamera()
+{
+	if (APawn* MyPawn = GetPawn())
+	{
+		MyPawn->SetActorHiddenInGame(false);
+
+		// TODO: (코옵) 권한 검사
+		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
+		{
+			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
+			{
+				MoveComp->SetDefaultMovementMode();
+			}
+		}
+		
+		// 메뉴 시점에서 플레이 시점으로 블렌드, 로딩 화면이 가림
+		SetViewTargetWithBlend(MyPawn, MenuToGameplayBlendSeconds);
+	}
+}
+
+AActor* ARetrievePlayerController::FindMainMenuCamera() const
+{
+	if (MainMenuCameraTag.IsNone())
+	{
+		return nullptr;
+	}
+
+	TArray<AActor*> Found;
+	UGameplayStatics::GetAllActorsWithTag(this, MainMenuCameraTag, Found);
+	return Found.Num() > 0 ? Found[0] : nullptr;
+}
+
+void ARetrievePlayerController::ShowLoadingScreen()
+{
+	if (!LoadingScreenClass || ActiveLoadingScreen)
+	{
+		return;
+	}
+
+	ActiveLoadingScreen = CreateWidget<UUserWidget>(this, LoadingScreenClass);
+	if (!ActiveLoadingScreen)
+	{
+		return;
+	}
+
+	// HUD (0), 토스트 (10), 패널 (50) 위의 ZOrder
+	ActiveLoadingScreen->AddToViewport(100);
+
+	// InGame에 도달하지 못했을 때 플레이어가 화면에 갇히지 않도록 함
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			LoadingScreenTimerHandle, this,
+			&ARetrievePlayerController::HideLoadingScreen,
+			LoadingScreenSafetySeconds, false);
+	}
+}
+
+void ARetrievePlayerController::HideLoadingScreen()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LoadingScreenTimerHandle);
+	}
+
+	if (ActiveLoadingScreen)
+	{
+		ActiveLoadingScreen->RemoveFromParent();
+		ActiveLoadingScreen = nullptr;
 	}
 }
 
