@@ -28,6 +28,21 @@ struct FRetrieveMapIconEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon")
 	bool bShowLabel = true;
+
+	/**
+	 * 모닥불 전용 — 에디터에서 활성 상태로 배치된 모닥불인지 여부.
+	 * RefreshFromLevel이 액터의 Is Activated 값을 그대로 굽는다.
+	 * true면 WP 스트리밍/세이브와 무관하게 월드맵에서 활성 표시 + 빠른이동이 가능하다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon|Bonfire")
+	bool bStartActivated = false;
+
+	/**
+	 * 모닥불 전용 — 빠른이동 도착 Transform(ArrivalPoint 기준).
+	 * 액터가 언로드돼도 데이터만으로 빠른이동할 수 있도록 RefreshFromLevel이 굽는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon|Bonfire")
+	FTransform ArrivalTransform;
 };
 
 /**

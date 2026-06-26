@@ -4,6 +4,8 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
 #include "Components/Element/ElementGaugeComponent.h"
+#include "Components/Player/WeaponComponent.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
@@ -128,7 +130,24 @@ void UGA_Absorb::ActivateAbility(
 		}
 	}
 	
-	if (PlayCastMontage(TargetElement))
+	// 신규 표준: 흡수 시전 몽타주는 장착 무기의 AttackDefinition에서 먼저 찾는다.
+	// GA_Absorb는 공용 AbilitySet에서 부여되므로 무기별 모션 데이터는 런타임 무기 데이터가 소유한다.
+	const UWeaponComponent* WeaponComp = Avatar->FindComponentByClass<UWeaponComponent>();
+	const UWeaponAttackDefinition* AttackDefinition = nullptr;
+	if (IsValid(WeaponComp))
+	{
+		AttackDefinition = WeaponComp->GetWeaponDataRef().AttackComboDefinition.LoadSynchronous();
+	}
+
+	const FWeaponAbsorbCast* AbsorbCastData =
+		AttackDefinition ? AttackDefinition->ResolveAbsorbVariant(TargetElement) : nullptr;
+	if (AbsorbCastData && PlayCastMontage(AbsorbCastData->Montage, AbsorbCastData->MontagePlayRate))
+	{
+		return;
+	}
+
+	// 기존 BP_GA_Absorb 기본값을 바로 깨지 않기 위한 fallback.
+	if (PlayLegacyCastMontage(TargetElement))
 	{
 		return;
 	}
@@ -136,22 +155,16 @@ void UGA_Absorb::ActivateAbility(
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
-bool UGA_Absorb::PlayCastMontage(const FGameplayTag& Element)
+bool UGA_Absorb::PlayCastMontage(const TSoftObjectPtr<UAnimMontage>& MontagePtr, const float PlayRate)
 {
-	const TSoftObjectPtr<UAnimMontage>* MontagePtr = ElementToCastMontage.Find(Element);
-	if (!MontagePtr)
-	{
-		return false;
-	}
-
-	UAnimMontage* Montage = MontagePtr->LoadSynchronous();
+	UAnimMontage* Montage = MontagePtr.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		return false;
 	}
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, CastMontagePlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
+		this, NAME_None, Montage, FMath::Max(0.1f, PlayRate), NAME_None, /*bStopWhenAbilityEnds=*/true);
 	if (!MontageTask)
 	{
 		return false;
@@ -162,6 +175,17 @@ bool UGA_Absorb::PlayCastMontage(const FGameplayTag& Element)
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleCastMontageFinished);
 	MontageTask->ReadyForActivation();
 	return true;
+}
+
+bool UGA_Absorb::PlayLegacyCastMontage(const FGameplayTag Element)
+{
+	const TSoftObjectPtr<UAnimMontage>* MontagePtr = ElementToCastMontage.Find(Element);
+	if (!MontagePtr)
+	{
+		return false;
+	}
+
+	return PlayCastMontage(*MontagePtr, CastMontagePlayRate);
 }
 
 void UGA_Absorb::HandleCastMontageFinished()

@@ -5,6 +5,9 @@
 #include "AnimNotifyState_LocomotionLock.generated.h"
 
 /**
+ * Legacy: 현재 전투 몽타주는 ALS 플러그인의 UAlsAnimNotifyState_SetLocomotionAction을 사용합니다.
+ * 이 NotifyState는 이전 Retrieve 잠금 실험 경로로 남아 있으며, 현 전투 몽타주 경로에서 참조하지 않습니다.
+ *
  * 공격/피격/리액션 등의 몽타주 구간에 박아 쓰는 잠금 NotifyState.
  *
  * 회전 잠금: AAlsCharacter::SetLocomotionAction(LocomotionAction_Attack) 호출

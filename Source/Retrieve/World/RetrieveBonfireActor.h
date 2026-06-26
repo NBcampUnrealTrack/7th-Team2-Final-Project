@@ -31,7 +31,6 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
 
 	/** Stable identifier used by saving and fast travel. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Bonfire")

@@ -39,15 +39,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb")
 	TMap<FGameplayTag, FGameplayTag> ElementToAbsorbBuffUITag;
 
-	/** 원소 태그 → 제자리 시전 몽타주(불/물/바람 3개). 비어 있으면 즉시 종료 */
+	/** Legacy fallback: 장착 무기의 AttackDefinition에 Absorb 몽타주가 없을 때만 사용한다.
+	 *  신규 무기별/원소별 흡수 몽타주는 DA_AttackDefinition_*의 Absorb 섹션에 넣는다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb|Motion")
 	TMap<FGameplayTag, TSoftObjectPtr<UAnimMontage>> ElementToCastMontage;
 
+	/** Legacy fallback 몽타주 재생 속도. DA 기반 몽타주는 FWeaponAbsorbCast::MontagePlayRate를 사용한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb|Motion", meta = (ClampMin = "0.1"))
 	float CastMontagePlayRate = 1.0f;
 
 private:
-	bool PlayCastMontage(const FGameplayTag& Element);
+	bool PlayCastMontage(const TSoftObjectPtr<UAnimMontage>& MontagePtr, float PlayRate);
+	bool PlayLegacyCastMontage(FGameplayTag Element);
 
 	UFUNCTION() void HandleCastMontageFinished();
 

@@ -43,6 +43,8 @@ public:
 	void ClearAllEquipmentVisualSlots();
 	void RefreshCosmeticState();
 
+	const TMap<FName, float>& GetCurrentMorphTargets() const { return CurrentMorphTargets; }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Cosmetic")
 	TObjectPtr<URetrieveCosmeticData> CosmeticData;

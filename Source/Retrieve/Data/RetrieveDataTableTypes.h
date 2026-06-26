@@ -1133,6 +1133,21 @@ struct RETRIEVE_API FWeaponJumpAttack
 	TArray<FJumpAttackHeightTier> HeightTiers;
 };
 
+// 흡수 시전 모션 데이터. GA_Absorb는 공용 어빌리티지만, 실제 몽타주는 장착 무기의 AttackDefinition에서 해결한다.
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponAbsorbCast
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Absorb|Tags", meta = (Categories = "Element"))
+	FGameplayTag ElementTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Absorb|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Absorb|Montage", meta = (ClampMin = "0.1"))
+	float MontagePlayRate = 1.0f;
+};
 
 // 패리 성공 후 카운터 공격 데이터, 적 타입(Normal, Boss)에 따라 다른 Groggy GE 적용
 USTRUCT(BlueprintType)

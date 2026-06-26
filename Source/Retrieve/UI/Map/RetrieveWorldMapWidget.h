@@ -15,6 +15,7 @@ class APlayerController;
 class UTexture2D;
 class UUserWidget;
 class UWidget;
+class URetrieveMapConfigDataAsset;
 
 /**
  * 월드맵에서 활성화된 화톳불 아이콘을 더블클릭했을 때 발생.
@@ -182,6 +183,17 @@ public:
 	UFUNCTION(BlueprintPure, Category="Retrieve|WorldMap")
 	float GetZoomLevel() const { return ZoomLevel; }
 
+	// ── 사용자 웨이포인트 마커 ──────────────────────────────────────────────
+	/** T 키로 찍은 웨이포인트 마커 텍스처 (null이면 색상 박스로 대체) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Waypoint")
+	TObjectPtr<UTexture2D> WaypointMarkerTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Waypoint", meta=(ClampMin="8.0"))
+	float WaypointMarkerSize = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Waypoint")
+	FLinearColor WaypointMarkerColor = FLinearColor(1.0f, 0.25f, 0.25f, 1.0f);
+
 	// ── 레이블 텍스트 설정 ──────────────────────────────────────────────────
 	// 플레이어 마커 위에 표시할 텍스트
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label")
@@ -202,6 +214,10 @@ public:
 	// 텍스트 드롭섀도우 색상
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label")
 	FLinearColor LabelShadowColor = FLinearColor(0.f, 0.f, 0.f, 0.8f);
+
+	// 자동 맵 설정 DataAsset
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
+	TObjectPtr<URetrieveMapConfigDataAsset> MapConfig;
 
 protected:
 	UPROPERTY(meta=(BindWidgetOptional))
@@ -233,6 +249,9 @@ protected:
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/** T 키: 커서 위치 → 웨이포인트 추가 / Delete: 전체 초기화 */
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
 	float     ZoomLevel    = 1.0f;
@@ -272,6 +291,12 @@ private:
 	bool TryOpenFastTravelDialog(const ARetrieveBonfireActor& Bonfire);
 
 	bool IsBonfireEntryActivated(const FRetrieveMapIconEntry& Entry) const;
+
+	/**
+	 * 에디터에서 활성으로 배치된 모닥불(bStartActivated)을 세이브 서브시스템에
+	 * 인메모리로 시드한다. WP 스트리밍/액터 로드 여부와 무관하게 빠른이동 Transform을 확보.
+	 */
+	void SeedDefaultActivatedBonfires();
 
 	UFUNCTION()
 	void HandleFastTravelConfirmClicked();
@@ -316,6 +341,10 @@ private:
 	 * ScaledW/ScaledH = BaseW/BaseH * ZoomLevel (축별 독립 스케일).
 	 */
 	FVector2D UVToScreen(const FVector2D& UV, const FVector2D& Center,
+	                     float ScaledW, float ScaledH) const;
+
+	/** UVToScreen 역함수: 위젯 로컬 좌표 → TextureUV */
+	FVector2D ScreenToUV(const FVector2D& ScreenPos, const FVector2D& Center,
 	                     float ScaledW, float ScaledH) const;
 
 	void GetMapViewRect(const FGeometry& AllottedGeometry, FVector2D& OutTopLeft, FVector2D& OutSize) const;

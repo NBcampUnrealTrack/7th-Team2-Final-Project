@@ -1,5 +1,6 @@
 #include "Data/RetrieveMapIconDataAsset.h"
 #include "Components/World/RetrieveMapIconComponent.h"
+#include "Components/ArrowComponent.h"
 #include "World/RetrieveBonfireActor.h"
 #include "EngineUtils.h"
 
@@ -41,6 +42,13 @@ void URetrieveMapIconDataAsset::RefreshFromLevel()
 					TEXT("[MapIconDataAsset] BonfireId is empty: %s"),
 					*Actor->GetName());
 			}
+
+			// 에디터에서 활성으로 배치된 모닥불은 데이터에 활성 상태 + 도착 Transform을 굽는다.
+			// → WP 스트리밍 여부와 무관하게 월드맵 활성 표시 + 빠른이동 가능.
+			Entry.bStartActivated = Bonfire->IsActivated();
+			Entry.ArrivalTransform = IsValid(Bonfire->ArrivalPoint)
+				? Bonfire->ArrivalPoint->GetComponentTransform()
+				: Bonfire->GetActorTransform();
 		}
 
 		Icons.Add(Entry);

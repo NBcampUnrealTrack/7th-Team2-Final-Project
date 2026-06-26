@@ -1,5 +1,6 @@
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "Components/World/RetrieveMapIconComponent.h"
+#include "Data/RetrieveMapConfigDataAsset.h"
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -23,6 +24,53 @@ void URetrieveMapSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	}
 }
 
+void URetrieveMapSubsystem::EnsureMapConfigLoaded()
+{
+	if (MapConfig && HasValidBounds() && BakedMapTexture)
+	{
+		return;
+	}
+
+	InitializeMapConfigRuntime(nullptr);
+}
+
+bool URetrieveMapSubsystem::InitializeMapConfigRuntime(URetrieveMapConfigDataAsset* OverrideConfig)
+{
+	if (OverrideConfig)
+	{
+		MapConfig = OverrideConfig;
+	}
+
+	if (!MapConfig)
+	{
+		MapConfig = LoadObject<URetrieveMapConfigDataAsset>(
+			nullptr,
+			TEXT("/Game/Retrieve/Data/Map/DA_MapConfig.DA_MapConfig")
+		);
+	}
+
+	if (!MapConfig)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Retrieve|Map] InitializeMapConfigRuntime 실패: MapConfig 없음"));
+		return false;
+	}
+
+	BakedMapTexture = MapConfig->BakedMapTexture;
+	MapOrigin       = MapConfig->MapOrigin;
+	MapExtentXY     = MapConfig->MapExtentXY;
+	MapExtent       = FMath::Max(MapExtentXY.X, MapExtentXY.Y);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[Retrieve|Map] Runtime MapConfig 적용 완료: Origin=(%.0f, %.0f), ExtXY=(%.0f x %.0f), Texture=%s"),
+		MapOrigin.X,
+		MapOrigin.Y,
+		MapExtentXY.X,
+		MapExtentXY.Y,
+		*GetNameSafe(BakedMapTexture));
+
+	return HasValidBounds();
+}
+
 bool URetrieveMapSubsystem::InitializeBounds(UWorld& InWorld, bool bLogWarnings)
 {
 	AActor* BestCaptureOwner = nullptr;
@@ -31,6 +79,25 @@ bool URetrieveMapSubsystem::InitializeBounds(UWorld& InWorld, bool bLogWarnings)
 	int32 CandidateCount = 0;
 	int32 OrthographicCount = 0;
 	bool bBestFromDifferentWorld = false;
+
+	// ---------------------------------------------------------------------
+	// MapConfig 우선 사용
+	//
+	// DA_MapConfig에 저장된 값을 SceneCapture2D 검색이나 Landscape bounds
+	// 계산보다 먼저 사용한다. 로드/적용은 EnsureMapConfigLoaded로 일원화.
+	//   - 월드맵 / 미니맵 / 나침반이 같은 좌표계를 사용하고
+	//   - SceneCapture 액터 로딩 순서에 영향받지 않으며
+	//   - 맵 구조가 바뀌어도 RefreshMapAll() 결과만 반영하면 된다.
+	// ---------------------------------------------------------------------
+	EnsureMapConfigLoaded();
+	if (MapConfig)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(BoundsRetryTimerHandle);
+		}
+		return true;
+	}
 
 	auto ScoreCaptureComponent = [](const USceneCaptureComponent2D* Comp, const AActor* Owner)
 	{
@@ -280,6 +347,50 @@ FVector2D URetrieveMapSubsystem::WorldToUV(const FVector& WorldLocation) const
 	const float U = (WorldLocation.Y - MapOrigin.Y) / SafeExtY;
 	const float V = 1.0f - (WorldLocation.X - MapOrigin.X) / SafeExtX;
 	return FVector2D(U, V);
+}
+
+FVector URetrieveMapSubsystem::UVToWorld(const FVector2D& UV) const
+{
+	const float SafeExtX = FMath::Max(MapExtentXY.X, 1.0f);
+	const float SafeExtY = FMath::Max(MapExtentXY.Y, 1.0f);
+	// WorldToUV 역함수:
+	//   U = (WorldY - OriginY) / ExtY  →  WorldY = U * ExtY + OriginY
+	//   V = 1 - (WorldX - OriginX) / ExtX  →  WorldX = (1-V) * ExtX + OriginX
+	const float WorldX = (1.0f - UV.Y) * SafeExtX + MapOrigin.X;
+	const float WorldY = UV.X * SafeExtY + MapOrigin.Y;
+	return FVector(WorldX, WorldY, 0.0f);
+}
+
+int32 URetrieveMapSubsystem::AddUserWaypoint(FVector InWorldLocation, FText InLabel, FLinearColor InColor)
+{
+	FUserWaypoint NewWP;
+	NewWP.WaypointId    = NextWaypointId++;
+	NewWP.WorldLocation = InWorldLocation;
+	NewWP.Color         = InColor;
+
+	if (InLabel.IsEmpty())
+	{
+		NewWP.Label = FText::FromString(FString::Printf(TEXT("[%d]"), NewWP.WaypointId + 1));
+	}
+	else
+	{
+		NewWP.Label = InLabel;
+	}
+
+	UserWaypoints.Add(NewWP);
+	return NewWP.WaypointId;
+}
+
+bool URetrieveMapSubsystem::RemoveUserWaypointById(int32 InWaypointId)
+{
+	const int32 Removed = UserWaypoints.RemoveAll(
+		[InWaypointId](const FUserWaypoint& WP){ return WP.WaypointId == InWaypointId; });
+	return Removed > 0;
+}
+
+void URetrieveMapSubsystem::ClearUserWaypoints()
+{
+	UserWaypoints.Empty();
 }
 
 float URetrieveMapSubsystem::GetZoom(float ViewWorldRadius) const

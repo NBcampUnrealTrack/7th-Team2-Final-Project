@@ -71,6 +71,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	FLinearColor PlayerMarkerColor = FLinearColor::White;
 
+	// 웨이포인트 마커 크기 (픽셀)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint", meta=(ClampMin="4.0"))
+	float WaypointMarkerSize = 14.0f;
+
+	// 웨이포인트 마커 텍스처 (null이면 단색 사각형)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint")
+	TObjectPtr<UTexture2D> WaypointMarkerTexture;
+
+	// 웨이포인트 마커 색상 (미니맵 위젯 클래스에서 지정).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint")
+	FLinearColor WaypointMarkerColor = FLinearColor(1.0f, 0.25f, 0.25f, 1.0f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Bonfire")
 	FLinearColor BonfireActivatedColor = FLinearColor(1.0f, 0.75f, 0.2f, 1.0f);
 

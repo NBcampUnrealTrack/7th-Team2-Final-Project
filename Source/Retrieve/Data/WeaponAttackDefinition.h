@@ -50,6 +50,16 @@ public:
 	TArray<FWeaponJumpAttack> JumpVariants;
 
 	const FWeaponJumpAttack* ResolveJumpVariant(const FGameplayTag& ElementTag) const;
+
+	// --- Absorb Cast ---
+	// GA_Absorb는 공용 AbilitySet에서 부여되지만, 시전 몽타주는 장착 무기별 AttackDefinition에서 해결한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Absorb")
+	FWeaponAbsorbCast AbsorbDefault;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Absorb")
+	TArray<FWeaponAbsorbCast> AbsorbVariants;
+
+	const FWeaponAbsorbCast* ResolveAbsorbVariant(const FGameplayTag& ElementTag) const;
 	
 	// --- Parry Counter ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter")
