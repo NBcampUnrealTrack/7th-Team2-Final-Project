@@ -31,4 +31,10 @@ protected:
 
 	/** 호스트 전용. ResetForTest + Awakening 스텝을 완료합니다. */
 	void BootstrapNewGameQuest();
+
+	/**
+	 * 개발/테스트 편의 플래그. true이면 부팅 시 메인 메뉴를 건너뛰고 즉시 게임플레이를 시작합니다. 기본값 false = 메뉴 표시.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dev")
+	bool bSkipMainMenuOnBoot = true;
 };
