@@ -125,4 +125,8 @@ struct RETRIEVE_API FRetrieveKnockbackParams
 	// 넉백 지속 시간(초). Root Motion으로 미는 시간. 이동 거리 ≈ Strength × Duration. (자기발사 LaunchSelf엔 미적용)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.01"))
 	float Duration = 0.25f;
+	
+	// 넉백 적용 이전에 대상의 액션을 강제 중단시킬지 여부. 모션 워핑으로 인해 넉백이 무시되는 것을 방지하기 위함.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback")
+	bool bCancelTargetActions = false;
 };

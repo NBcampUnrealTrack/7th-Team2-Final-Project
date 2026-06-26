@@ -797,6 +797,7 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 				{
 					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, KbCfg.KnockbackStrength);
 					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, KbCfg.KnockbackUpwardStrength);
+					Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_CancelTargetActions,KbCfg.bCancelTargetActions ? 1.f : 0.f);
 				}
 
 				if (ActivePatternRow->bCanBeParried)

@@ -41,6 +41,7 @@ UGA_JumpAttack::UGA_JumpAttack()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
 
 	// "공격 중" 상태 태그를 재사용
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);

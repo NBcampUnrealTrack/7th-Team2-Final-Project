@@ -30,6 +30,7 @@ UGA_Dash::UGA_Dash()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
 	
 	// 재대시 명시적 차단
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);

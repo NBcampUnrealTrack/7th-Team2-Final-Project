@@ -41,6 +41,7 @@ UGA_SprintAttack::UGA_SprintAttack()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dodging);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
 

@@ -381,6 +381,9 @@ struct RETRIEVE_API FMonsterLaunchKnockbackConfig
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
 	float KnockbackUpwardStrength = 400.f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
+	bool bCancelTargetActions = false;
 };
 
 USTRUCT(BlueprintType)

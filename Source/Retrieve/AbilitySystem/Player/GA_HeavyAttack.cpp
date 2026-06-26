@@ -36,6 +36,7 @@ UGA_HeavyAttack::UGA_HeavyAttack()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_UsingHeavyAttack);
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_ForcedKnockback);
 
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
