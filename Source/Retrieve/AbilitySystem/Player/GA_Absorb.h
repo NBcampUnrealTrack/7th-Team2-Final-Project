@@ -18,6 +18,12 @@ public:
 	UGA_Absorb();
 
 protected:
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr,
+		const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
@@ -28,6 +34,11 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility,
 		bool bWasCancelled) override;
+
+	virtual void CancelAbility(const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool bReplicateCancelAbility) override;
 
 public:
 	/** 원소 태그 → 적용할 GE */
@@ -49,10 +60,15 @@ public:
 	float CastMontagePlayRate = 1.0f;
 
 private:
+	TSubclassOf<UGameplayEffect> ResolveAbsorbEffectClass(FGameplayTag Element) const;
+
+	void CleanupAbsorb();
 	bool PlayCastMontage(const TSoftObjectPtr<UAnimMontage>& MontagePtr, float PlayRate);
 	bool PlayLegacyCastMontage(FGameplayTag Element);
 
-	UFUNCTION() void HandleCastMontageFinished();
+	UFUNCTION() void HandleCastMontageCompleted();
+	UFUNCTION() void HandleCastMontageInterrupted();
+	UFUNCTION() void HandleCastMontageCancelled();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;

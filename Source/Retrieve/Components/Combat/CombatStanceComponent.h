@@ -46,6 +46,7 @@ protected:
 private:
 	// bInstant=true면 연출(몽타주) 없이 소켓을 즉시 스왑(공격전 발검 / 수영 입수 등). false면 몽타주 GA 트리거.
 	void SetStance(ERetrieveCombatStance NewStance, bool bInstant = false);
+	bool IsPlayerAttacking() const;
 	void HandleRelaxTimer();
 	void HandleSheatheTimer();
 	void HandleAbilityActivated(UGameplayAbility* Ability);

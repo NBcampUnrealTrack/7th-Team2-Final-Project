@@ -28,8 +28,6 @@ void UGA_SetElement_Base::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 
 	ASC->AddLooseGameplayTag(ElementTag);
 
-	UE_LOG(LogTemp, Warning, TEXT("Element Mode : %s"), *ElementTag.ToString());
-
 	AActor* Avatar = ActorInfo->AvatarActor.Get();
 
 	FGameplayEventData Payload;

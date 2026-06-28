@@ -19,17 +19,22 @@ UGA_Guard::UGA_Guard()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
-	Tags.AddTag(RetrieveGameplayTags::Ability_Player_Parry);   // 패리 공통 조회용(GA_ParryCounter)
 	SetAssetTags(Tags);
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Guarding);
-
+	ActivationPolicy = ERetrieveAbilityActivationPolicy::WhileInputActive;
+	
 	// 공중/회피·경직·다운·사망 중 가드 차단(플레이어 액션 공통 게이트)
 	ApplyCommonActionBlocks();
 
-	// 가드 중 공격 차단 (family + 강공격)
-	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
+	// Guard 중 일반 공격류는 막되, GuardAttack은 예외로 통과시킨다.
+	// GuardAttack도 Ability.Type.Attack을 갖기 때문에 Ability.Type.Attack 전체를 막으면
+	// Guard 중 Attack 입력이 GuardAttack으로 치환되어도 발동 전에 차단된다.
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_HeavyAttack);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_SprintAttack);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_JumpAttack);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_BowShot);
 }
 
 bool UGA_Guard::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -82,9 +87,6 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		GuardBrokenTask->ReadyForActivation();
 	}
 	
-	OpenParryWindow();
-	StartListeningForParrySuccess();
-
 	// 가드 지속 비용: 주기 소모 GE를 적용하고, 점검 타이머로 소진 시 종료
 	if (HasAuthority(&ActivationInfo) && StaminaDrainEffect)
 	{

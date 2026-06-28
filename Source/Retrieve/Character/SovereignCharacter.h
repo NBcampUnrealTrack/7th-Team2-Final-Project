@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
@@ -24,6 +24,7 @@ class UElementUnlockComponent;
 class UMotionWarpingComponent;
 class URetrieveCameraWaterProbeComponent;
 class UCombatStanceComponent;
+class UCounterTimeDilationComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
@@ -86,6 +87,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<USwimDetectionComponent> SwimDetectionComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UCounterTimeDilationComponent> CounterTimeDilationComponent;
 
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Retrieve|Components")

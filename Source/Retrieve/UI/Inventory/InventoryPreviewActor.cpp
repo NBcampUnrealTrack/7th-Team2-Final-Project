@@ -1,10 +1,13 @@
 #include "UI/Inventory/InventoryPreviewActor.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Character/Cosmetics/RetrieveModularMeshTypes.h"
 #include "Components/Pawn/RetrievePawnCosmeticComponent.h"
 #include "Components/Player/ArmorComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -14,6 +17,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/InventoryPreviewAnimInstance.h"
 
 AInventoryPreviewActor::AInventoryPreviewActor()
 {
@@ -26,6 +30,7 @@ void AInventoryPreviewActor::BeginPlay()
 
 	BindInventoryEvents();
 	UpdateArmorPreview();
+	InitializePreviewAnimation();
 }
 
 void AInventoryPreviewActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -69,21 +74,9 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 	// (ModularSynty용 자체 idle을 Sidekick 바디에 호환 리타겟하면 레퍼런스 포즈 차이로 포즈가 무너지므로,
 	//  플레이어의 실제 포즈를 그대로 복사하는 방식이 가장 안정적이다.)
 
-	// 루트(프리뷰 리더)는 PlayerBodyMesh 메시+스켈레톤을 미러링해 방어구 파츠의 LeaderPose 본 매핑을 맞춘다.
-	// PreviewAnimClassOverride가 설정된 경우 해당 클래스를 사용하고, 없으면 플레이어 ABP를 폴백으로 사용한다.
-	// LeaderMeshComponent에 ABP를 독립 인스턴스로 실행해 idle 포즈 + 몽타주 재생을 모두 지원한다.
-	TSubclassOf<UAnimInstance> PreviewAnimClass = PreviewAnimClassOverride
-		? PreviewAnimClassOverride
-		: TSubclassOf<UAnimInstance>(PlayerBodyMesh->GetAnimClass());
-	MirrorPlayerMeshComponent(LeaderMeshComponent, PlayerBodyMesh, PlayerBodyMesh);
-
-	// Leader는 자체 AnimInstance로 몽타주를 재생해야 하므로 LeaderPose를 해제하고 ABP를 복원한다.
-	// 방어구 파츠는 LeaderMeshComponent가 아닌 PlayerBodyMesh를 직접 LeaderPose로 참조하므로 영향 없다.
-	LeaderMeshComponent->SetLeaderPoseComponent(nullptr);
-	if (PreviewAnimClass)
-	{
-		LeaderMeshComponent->SetAnimInstanceClass(PreviewAnimClass);
-	}
+	// 루트(프리뷰 리더)는 PlayerBodyMesh 메시+스켈레톤만 미러링한다.
+	// AnimClass / SourceMesh 주입은 InitializePreviewAnimation에서만 처리한다.
+	MirrorPreviewLeaderMesh(LeaderMeshComponent, PlayerBodyMesh);
 
 	// 체형 모프 타깃(masculineFeminine 등)을 Leader 메시에 적용해 여성형 체형으로 만든다.
 	// CosmeticComponent는 spawned 파츠에만 SetMorphTarget을 적용하고 GetMesh()에는 적용하지 않으므로
@@ -128,12 +121,78 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 		AddInstanceComponent(PreviewComponent);
 		PreviewComponent->RegisterComponent();
 
-		MirrorPlayerMeshComponent(PreviewComponent, PlayerComponent, PlayerBodyMesh);
+		MirrorPreviewPartMesh(PreviewComponent, PlayerComponent, LeaderMeshComponent);
 		ArmorMeshComponents.Add(PreviewComponent);
+	}
+
+	RefreshSceneCaptureShowOnlyList();
+}
+
+void AInventoryPreviewActor::InitializePreviewAnimation()
+{
+	USkeletalMeshComponent* LeaderMeshComponent = ResolvePreviewMeshComponent();
+	USkeletalMeshComponent* PlayerBodyMesh = ResolvePlayerBodyMeshComponent();
+	APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!LeaderMeshComponent || !PlayerBodyMesh || !PlayerPawn)
+	{
+		return;
+	}
+
+	TSubclassOf<UAnimInstance> PreviewAnimClass = PreviewAnimClassOverride
+		? PreviewAnimClassOverride
+		: TSubclassOf<UAnimInstance>(PlayerBodyMesh->GetAnimClass());
+
+	LeaderMeshComponent->SetLeaderPoseComponent(nullptr);
+	if (PreviewAnimClass)
+	{
+		LeaderMeshComponent->SetAnimInstanceClass(PreviewAnimClass);
+	}
+
+	if (UInventoryPreviewAnimInstance* PreviewAnimInstance = Cast<UInventoryPreviewAnimInstance>(LeaderMeshComponent->GetAnimInstance()))
+	{
+		PreviewAnimInstance->SetSourceMeshComponent(PlayerBodyMesh);
+
+		if (UAbilitySystemComponent* PlayerASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerPawn))
+		{
+			PreviewAnimInstance->InitializeWithAbilitySystem(PlayerASC);
+		}
 	}
 }
 
-void AInventoryPreviewActor::MirrorPlayerMeshComponent(
+void AInventoryPreviewActor::MirrorPreviewLeaderMesh(USkeletalMeshComponent* Target, USkeletalMeshComponent* Source) const
+{
+	if (!IsValid(Target) || !IsValid(Source))
+	{
+		return;
+	}
+
+	if (Target->GetSkeletalMeshAsset() != Source->GetSkeletalMeshAsset())
+	{
+		Target->SetSkeletalMesh(Source->GetSkeletalMeshAsset());
+	}
+	Target->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+	const int32 NumMaterials = Source->GetNumMaterials();
+	for (int32 MaterialIndex = 0; MaterialIndex < NumMaterials; ++MaterialIndex)
+	{
+		Target->SetMaterial(MaterialIndex, Source->GetMaterial(MaterialIndex));
+	}
+
+	if (USkeletalMesh* SkelMesh = Source->GetSkeletalMeshAsset())
+	{
+		for (UMorphTarget* MorphTarget : SkelMesh->GetMorphTargets())
+		{
+			if (MorphTarget)
+			{
+				Target->SetMorphTarget(MorphTarget->GetFName(), Source->GetMorphTarget(MorphTarget->GetFName()));
+			}
+		}
+	}
+
+	Target->SetVisibility(Source->IsVisible(), /*bPropagateToChildren=*/false);
+}
+
+void AInventoryPreviewActor::MirrorPreviewPartMesh(
 	USkeletalMeshComponent* Target,
 	USkeletalMeshComponent* Source,
 	USkeletalMeshComponent* PoseSource) const
@@ -144,7 +203,7 @@ void AInventoryPreviewActor::MirrorPlayerMeshComponent(
 	}
 
 	Target->SetSkeletalMesh(Source->GetSkeletalMeshAsset());
-	// 포즈는 PoseSource(플레이어 바디)에서 LeaderPose로 가져오므로 자체 AnimBP는 비운다.
+	// 포즈는 PoseSource에서 LeaderPose로 가져오므로 파츠 자체 AnimBP는 비운다.
 	Target->SetAnimInstanceClass(nullptr);
 	Target->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
@@ -340,6 +399,52 @@ USkeletalMeshComponent* AInventoryPreviewActor::ResolvePreviewMeshComponent() co
 	}
 
 	return SkeletalMeshComponents.Num() > 0 ? SkeletalMeshComponents[0] : nullptr;
+}
+
+USceneCaptureComponent2D* AInventoryPreviewActor::ResolveSceneCaptureComponent() const
+{
+	TArray<USceneCaptureComponent2D*> SceneCaptureComponents;
+	GetComponents(SceneCaptureComponents);
+
+	if (!PreviewSceneCaptureComponentName.IsNone())
+	{
+		for (USceneCaptureComponent2D* SceneCaptureComponent : SceneCaptureComponents)
+		{
+			if (SceneCaptureComponent && SceneCaptureComponent->GetFName() == PreviewSceneCaptureComponentName)
+			{
+				return SceneCaptureComponent;
+			}
+		}
+	}
+
+	return SceneCaptureComponents.Num() > 0 ? SceneCaptureComponents[0] : nullptr;
+}
+
+void AInventoryPreviewActor::RefreshSceneCaptureShowOnlyList()
+{
+	USceneCaptureComponent2D* SceneCaptureComponent = ResolveSceneCaptureComponent();
+	if (!SceneCaptureComponent)
+	{
+		return;
+	}
+
+	// 방어구/모듈러 파츠는 UpdateArmorPreview에서 재생성되므로 ShowOnlyList도 매번 갱신해야 한다.
+	// 무기도 별도 컴포넌트로 생성되는 경우 같은 방식으로 ShowOnlyList 등록이 필요할 수 있다.
+	SceneCaptureComponent->ShowOnlyActors.Reset();
+	SceneCaptureComponent->ShowOnlyComponents.Reset();
+
+	if (USkeletalMeshComponent* LeaderMeshComponent = ResolvePreviewMeshComponent())
+	{
+		SceneCaptureComponent->ShowOnlyComponent(LeaderMeshComponent);
+	}
+
+	for (USkeletalMeshComponent* ArmorMeshComponent : ArmorMeshComponents)
+	{
+		if (IsValid(ArmorMeshComponent))
+		{
+			SceneCaptureComponent->ShowOnlyComponent(ArmorMeshComponent);
+		}
+	}
 }
 
 const FRetrieveInventoryPreviewArmorMontage* AInventoryPreviewActor::FindArmorEquipMontage(

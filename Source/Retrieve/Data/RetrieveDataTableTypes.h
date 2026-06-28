@@ -1073,6 +1073,51 @@ struct RETRIEVE_API FWeaponSprintAttack
 	float KnockbackUpwardStrength = 0.f;
 };
 
+/**
+ * GuardAttack 전용 액션 데이터.
+ *
+ * FWeaponSprintAttack/BashVariants를 재사용하지 않는 이유:
+ * - BashVariants는 이미 GA_SprintAttack의 제자리/캔슬 bash에서 사용한다.
+ * - 여기에 bCanStartParry를 섞으면 SprintAttack과 GuardAttack 의미가 섞인다.
+ *
+ * 이 데이터는 UWeaponGuardAttackDefinition에만 담고, GuardAttack을 지원하는 무기만 optional reference로 연결한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponGuardAttackData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Tags")
+	FGameplayTag ElementTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Montage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Montage")
+	FName SectionName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Damage", meta = (ClampMin = "0.0"))
+	float DamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Hit")
+	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
+
+	// 이 공격의 trace 기준. 검방패 기본값은 Shield이며, 미래의 GuardPoint 무기는 Weapon으로 확장할 수 있다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Hit")
+	ERetrieveAttackSource AttackSource = ERetrieveAttackSource::Shield;
+
+	// "이 액션이 ParryWindow를 열 수 있는가"만 뜻한다.
+	// 들어오는 적 공격이 패링 가능한지는 Attack.Type.Parryable / Unblockable 태그가 별도로 결정한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Parry")
+	bool bCanStartParry = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackStrength = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Knockback", meta = (ClampMin = "0.0"))
+	float KnockbackUpwardStrength = 0.f;
+};
+
 // JumpAttack 높이 구간, 발동 시점 지면 높이가 MinHeight 이상이면 후보가 되고 후보 중 MinHeight가 가장 큰 구간이 선택됨
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FJumpAttackHeightTier

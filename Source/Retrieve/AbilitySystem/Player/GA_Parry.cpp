@@ -49,8 +49,12 @@ void UGA_Parry::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		return;
 	}
 
-	OpenParryWindow();
-	StartListeningForParrySuccess();
+	// Legacy timing 유지: 비방패 패링은 입력 즉시 window를 열고 ParryActiveDuration 타이머로 종료한다.
+	// GuardAttack만 추후 NotifyState Begin/End 방식으로 window를 제어한다.
+	if (OpenParryWindow())
+	{
+		StartListeningForParrySuccess();	
+	}
 	
 	if (UAnimMontage* Montage = ParryMontage.LoadSynchronous())
 	{

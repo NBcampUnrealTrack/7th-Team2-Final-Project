@@ -19,6 +19,10 @@ UGA_Jump::UGA_Jump()
 
 	// 공격 중에는 점프 잠금. 공격 캔슬은 구르기/스킬로 처리(점프로 캔슬하지 않음).
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
+
+	// Guard 중 Jump는 자연스럽게 Guard를 끊고 점프를 진행한다.
+	// Guard 상태가 공중까지 유지되면 GuardAttack 라우팅/방어 판정이 흐려지므로 이동 상태를 우선한다.
+	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 }
 
 void UGA_Jump::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)

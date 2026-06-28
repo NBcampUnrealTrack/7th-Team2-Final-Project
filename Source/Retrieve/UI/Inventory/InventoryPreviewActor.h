@@ -9,6 +9,7 @@ class UAnimMontage;
 class UArmorComponent;
 class UDataTable;
 class UInventoryComponent;
+class USceneCaptureComponent2D;
 class USkeletalMeshComponent;
 
 USTRUCT(BlueprintType)
@@ -55,6 +56,9 @@ public:
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
 	FName PreviewSkeletalMeshComponentName = TEXT("SkeletalMeshComp");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
+	FName PreviewSceneCaptureComponentName = TEXT("SceneCaptureComp");
 
 	// 설정 시 플레이어 ABP 대신 이 클래스를 프리뷰 리더 메시에 적용한다. ALS 비의존 ABP 사용 시 필수.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
@@ -105,10 +109,13 @@ protected:
 	UInventoryComponent* ResolveInventoryComponent() const;
 	UArmorComponent* ResolveArmorComponent() const;
 	USkeletalMeshComponent* ResolvePlayerBodyMeshComponent() const;
-	// Source 컴포넌트의 메시/머티리얼/가시성을 Target에 복제하고, 포즈는 PoseSource를 LeaderPose로 따른다.
-	void MirrorPlayerMeshComponent(USkeletalMeshComponent* Target, USkeletalMeshComponent* Source, USkeletalMeshComponent* PoseSource) const;
+	void InitializePreviewAnimation();
+	void MirrorPreviewLeaderMesh(USkeletalMeshComponent* Target, USkeletalMeshComponent* Source) const;
+	void MirrorPreviewPartMesh(USkeletalMeshComponent* Target, USkeletalMeshComponent* Source, USkeletalMeshComponent* PoseSource) const;
 	UDataTable* ResolveArmorDataTable() const;
 	USkeletalMeshComponent* ResolvePreviewMeshComponent() const;
+	USceneCaptureComponent2D* ResolveSceneCaptureComponent() const;
+	void RefreshSceneCaptureShowOnlyList();
 	const FRetrieveInventoryPreviewArmorMontage* FindArmorEquipMontage(FGameplayTag EquipmentSlotTag, FGameplayTag PartSlotTag) const;
 	UAnimMontage* ResolveArmorSlotMontage(FGameplayTag EquipmentSlotTag) const;
 	void BindInventoryEvents();

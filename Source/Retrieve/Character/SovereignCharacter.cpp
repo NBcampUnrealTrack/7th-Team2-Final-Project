@@ -22,6 +22,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Components/Pawn/RetrieveCameraBoom.h"
+#include "Components/Player/CounterTimeDilationComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Input/RetrieveInputComponent.h"
@@ -70,7 +71,8 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
 	SwimDetectionComponent = CreateDefaultSubobject<USwimDetectionComponent>(TEXT("SwimDetectionComponent"));
-	
+	CounterTimeDilationComponent = CreateDefaultSubobject<UCounterTimeDilationComponent>(TEXT("CounterTimeDilationComponent"));
+
 	CameraSpringArm = CreateDefaultSubobject<URetrieveCameraBoom>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
 	CameraSpringArm->TargetArmLength = 400.0f;

@@ -16,7 +16,7 @@ enum class ERetrieveAbilityActivationPolicy : uint8
 {
 	OnInputTriggered,
 	OnSpawn,
-	WhileInputActive // reserved; not used in MVP
+	WhileInputActive // 입력을 누르고 있는 동안 미발동 상태면 매 프레임 재시도한다.
 };
 
 UCLASS(Abstract)
@@ -45,6 +45,20 @@ public:
 	 * 기본은 처리 안 함. GA_Attack이 콤보 진행을 위해 override한다.
 	 */
 	virtual bool TryConsumeBufferedCombatInput(const FRetrieveBufferedCombatInput& BufferedInput) { return false; }
+
+	// Montage NotifyState가 특정 Ability 클래스를 몰라도 ParryWindow를 요청할 수 있는 공용 hook.
+	//
+	// 의도:
+	// - AnimNotifyState_ParryWindow는 "현재 어떤 Ability가 GuardAttack인지 / 일반 공격인지"를 몰라야 한다.
+	// - 그래서 NotifyState는 활성 Ability 전체에 이 hook만 요청하고,
+	//   실제로 window를 열 수 있는 Ability가 자기 데이터(bCanStartParry 등)를 보고 응답한다.
+	// - 기본 구현은 false/no-op이다. 즉, override하지 않은 Ability는 ParryWindow NotifyState를 무시한다.
+	//
+	// 장기 확장:
+	// - 현재는 UGA_GuardAttack이 override한다.
+	// - 추후 일반 공격 데이터에 bCanStartParry를 추가하면 UGA_Attack/UGA_SprintAttack도 같은 hook만 override하면 된다.
+	virtual bool OpenNotifyParryWindow() { return false; }
+	virtual void CloseNotifyParryWindow() {}
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability")

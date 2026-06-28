@@ -157,8 +157,24 @@ void UCombatStanceComponent::SetStance(ERetrieveCombatStance NewStance, bool bIn
 	OwnerASC->HandleGameplayEvent(EventTag, &Payload);
 }
 
+bool UCombatStanceComponent::IsPlayerAttacking() const
+{
+	return IsValid(OwnerASC)
+		&& OwnerASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Attacking);
+}
+
 void UCombatStanceComponent::HandleRelaxTimer()
 {
+	if (IsPlayerAttacking())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(RelaxTimerHandle,
+				this, &UCombatStanceComponent::HandleRelaxTimer, FMath::Max(0.01f, RelaxDelay), false);
+		}
+		return;
+	}
+
 	SetStance(ERetrieveCombatStance::DrawnRelaxed);;
 	if (UWorld* World = GetWorld())
 	{
@@ -169,6 +185,12 @@ void UCombatStanceComponent::HandleRelaxTimer()
 
 void UCombatStanceComponent::HandleSheatheTimer()
 {
+	if (IsPlayerAttacking())
+	{
+		NotifyCombatActivity(/*bFromAttack=*/true);
+		return;
+	}
+
 	SetStance(ERetrieveCombatStance::Sheathed);
 }
 

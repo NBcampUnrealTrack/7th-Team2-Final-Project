@@ -6,6 +6,8 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "WeaponAttackDefinition.generated.h"
 
+class UWeaponGuardAttackDefinition;
+
 /**
  * 무기의 공격 데이터(콤보/Sprint/Bash/Jump/ParryCounter/Heavy/패리성공)를 담는 DataAsset
  */
@@ -69,6 +71,12 @@ public:
 	TArray<FParryCounterData> ParryVariants;
 
 	const FParryCounterData* ResolveParryVariant(const FGameplayTag& ElementTag) const;
+
+	// --- Guard Attack (optional) ---
+	// Parry 계열 데이터 아래에 둔다. GuardAttack은 "방패 공격"이면서 동시에 "패링 시도 액션"이기 때문이다.
+	// Staff/Bow처럼 GuardAttack을 지원하지 않는 무기는 이 참조를 비워둔다(null = 미지원).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack")
+	TSoftObjectPtr<UWeaponGuardAttackDefinition> GuardAttackDefinition;
 
 	// --- Heavy Attack (강공격) ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HeavyAttack")

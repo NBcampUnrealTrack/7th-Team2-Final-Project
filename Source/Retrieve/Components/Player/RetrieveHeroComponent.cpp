@@ -385,6 +385,35 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 		const ACharacter* Char = Cast<ACharacter>(Pawn);
 		const bool bAirborne = Char && Char->GetCharacterMovement() && Char->GetCharacterMovement()->IsFalling();
 
+		// Guard 중 Attack 입력은 일반 평타가 아니라 GuardAttack으로 치환한다.
+		// 단, 공중에서는 GuardAttack을 허용하지 않는다. 공중 Attack은 기존 JumpAttack/Attack 흐름이 처리한다.
+		if (!bAirborne)
+		{
+			if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+			{
+				if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
+				{
+					// 패링 성공 후 Attack 입력은 평타/GuardAttack이 아니라 ParryCounter 선택으로 소비한다.
+					// State.Player.CanCounter는 CounterWindowEffect가 부여하는 "카운터 가능" 상태다.
+					const bool bCanCounter = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_CanCounter);
+					const bool bHasParryCounter = ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_ParryCounter);
+					if (bCanCounter && bHasParryCounter)
+					{
+						ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_ParryCounter);
+						return;
+					}
+
+					const bool bGuarding = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
+					const bool bHasGuardAttack = ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_GuardAttack);
+					if (bGuarding && bHasGuardAttack)
+					{
+						ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_GuardAttack);
+						return;
+					}
+				}
+			}
+		}
+
 		const APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
 		if (!bAirborne && PC && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift)))
 		{
