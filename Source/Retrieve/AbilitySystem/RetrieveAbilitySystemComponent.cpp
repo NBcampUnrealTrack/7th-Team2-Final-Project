@@ -164,6 +164,23 @@ void URetrieveAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool 
 
 	// --- 전투 입력: 버퍼에서 발동 가능한 1건 소비(시스템의 단일 결정 지점) ---
 	ResolveBufferedCombatInput();
+
+	// --- WhileInputActive: 홀드 중인데 차단으로 미발동인 어빌리티 재시도 ---
+	// 공격 중 차단된 Guard가 공격 종료 후 자동 진입하는 경로. 발동되면 IsActive로 스킵된다.
+	for (const FGameplayAbilitySpecHandle& SpecHandle : InputHeldSpecHandles)
+	{
+		FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecFromHandle(SpecHandle);
+		if (!AbilitySpec || !AbilitySpec->Ability || AbilitySpec->IsActive())
+		{
+			continue;
+		}
+
+		const URetrieveGameplayAbility* RetrieveAbility = Cast<URetrieveGameplayAbility>(AbilitySpec->Ability);
+		if (RetrieveAbility && RetrieveAbility->GetActivationPolicy() == ERetrieveAbilityActivationPolicy::WhileInputActive)
+		{
+			TryActivateAbility(SpecHandle);
+		}
+	}
 }
 
 void URetrieveAbilitySystemComponent::ClearAbilityInput()
@@ -237,6 +254,37 @@ bool URetrieveAbilitySystemComponent::IsAttackCancelIntentAllowed(const FGamepla
 
 	const int32* Count = AttackCancelIntentCounts.Find(IntentTag);
 	return Count && *Count > 0;
+}
+
+void URetrieveAbilitySystemComponent::SetPendingCounterTarget(AActor* InTarget)
+{
+	if (IsValid(InTarget))
+	{
+		PendingCounterTarget = InTarget;
+		return;
+	}
+
+	PendingCounterTarget.Reset();
+}
+
+AActor* URetrieveAbilitySystemComponent::GetPendingCounterTarget() const
+{
+	return IsValid(PendingCounterTarget.Get()) ? PendingCounterTarget.Get() : nullptr;
+}
+
+void URetrieveAbilitySystemComponent::ClearPendingCounterTarget()
+{
+	PendingCounterTarget.Reset();
+}
+
+void URetrieveAbilitySystemComponent::SetCounterWarpTargetLocked(bool bInLocked)
+{
+	bCounterWarpTargetLocked = bInLocked;
+}
+
+bool URetrieveAbilitySystemComponent::IsCounterWarpTargetLocked() const
+{
+	return bCounterWarpTargetLocked;
 }
 
 void URetrieveAbilitySystemComponent::BufferCombatInput(const FGameplayAbilitySpec& AbilitySpec, const FGameplayTag& InputTag, const URetrieveGameplayAbility& AbilityCDO)

@@ -11,7 +11,12 @@ class UAbilityTask_WaitGameplayEvent;
 class UAnimMontage;
 class UGameplayEffect;
 
-/** 방패(SwordShield) 전용 — 막기(홀드 블록) + 패리. */
+/**
+ * 방패(SwordShield) 전용 홀드 가드.
+ *
+ * 이 Ability는 누르고 있는 동안 Guard 상태와 stamina drain만 담당한다.
+ * 검방패 패리 시도는 GA_GuardAttack + AnimNotifyState_ParryWindow 쪽으로 분리했다.
+ */
 UCLASS()
 class RETRIEVE_API UGA_Guard : public UGA_ParryBase
 {

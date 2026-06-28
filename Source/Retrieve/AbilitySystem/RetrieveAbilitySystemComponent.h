@@ -5,6 +5,7 @@
 #include "GameplayTagContainer.h"
 #include "RetrieveAbilitySystemComponent.generated.h"
 
+class AActor;
 class URetrieveGameplayAbility;
 
 /**
@@ -80,6 +81,14 @@ public:
 	// 지금 열린 윈도우가 이 intent의 캔슬을 허용하는가.
 	bool IsAttackCancelIntentAllowed(const FGameplayTag& IntentTag) const;
 
+	// 카운터 타겟 산출용 약참조 저장/조회. 카운터 성공 시 ParryCounter 대시를 때려박기 위해 UGA_ParryCounter가 사용한다.
+	void SetPendingCounterTarget(AActor* InTarget);
+	AActor* GetPendingCounterTarget() const;
+	void ClearPendingCounterTarget();
+
+	void SetCounterWarpTargetLocked(bool bInLocked);
+	bool IsCounterWarpTargetLocked() const;
+
 protected:
 	// 입력 1건을 버퍼에 적재한다(같은 어빌리티+intent는 최신 1건으로 갱신).
 	void BufferCombatInput(const FGameplayAbilitySpec& AbilitySpec, const FGameplayTag& InputTag, const URetrieveGameplayAbility& AbilityCDO);
@@ -105,4 +114,10 @@ protected:
 
 	// 리졸버가 캔슬-인으로 발동시키는 동안만 true(TryActivateAbility 직전 set, 직후 clear). 동기 구간 전용.
 	bool bActivatingAsCancel = false;
+
+	// 카운터 성공시 Parry Counter 대시를 때려박기 위한 대상을 약참조로 저장
+	TWeakObjectPtr<AActor> PendingCounterTarget;
+
+	// 카운터 대시가 직접 등록한 워프 타겟을 RetrieveAttackWarp Notify가 덮어쓰지 않게 막는다.
+	bool bCounterWarpTargetLocked = false;
 };

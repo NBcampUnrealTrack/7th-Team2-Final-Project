@@ -24,6 +24,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Wind, "Ability.Player.HeavyAttack.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Staff, "Ability.Player.HeavyAttack.Staff");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Guard, "Ability.Player.Guard");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_GuardAttack, "Ability.Player.GuardAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Parry, "Ability.Player.Parry");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Dash, "Ability.Player.Dash");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Blink, "Ability.Player.Blink");

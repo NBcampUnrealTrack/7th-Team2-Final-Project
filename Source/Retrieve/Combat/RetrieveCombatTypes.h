@@ -24,6 +24,19 @@ enum class ERetrieveHitReactType : uint8
 	Knockdown UMETA(DisplayName = "Knockdown")   // 다운
 };
 
+UENUM(BlueprintType)
+enum class ERetrieveAttackSource : uint8
+{
+	// 장착 무기 trace socket을 기준으로 판정한다. 일반 검/창/대검 계열 기본값.
+	Weapon UMETA(DisplayName = "Weapon"),
+
+	// 방패 socket을 기준으로 판정한다. 검방패 GuardAttack, 미래의 방패 무기군이 사용한다.
+	Shield UMETA(DisplayName = "Shield"),
+
+	// 캐릭터 본체/capsule/actor 위치를 기준으로 판정한다. 돌진·몸통박치기류 확장용.
+	Body   UMETA(DisplayName = "Body")
+};
+
 // HitReact.Type.* 는 "피격 반응"만 결정 — Attack.Type(방어 판정)과 독립
 inline FGameplayTag HitReactTypeToTag(ERetrieveHitReactType Type)
 {

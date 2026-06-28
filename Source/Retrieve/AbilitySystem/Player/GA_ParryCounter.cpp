@@ -1,18 +1,30 @@
 #include "AbilitySystem/Player/GA_ParryCounter.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
-#include "AbilitySystem/Player/GA_ParryBase.h"
+#include "MotionWarpingComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Combat/RetrieveTargetingLibrary.h"
-#include "Components/Combat/CombatReactionComponent.h"
+#include "Components/Enemy/EpicMonsterGroggyComponent.h"
+#include "Components/Player/CounterTimeDilationComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
+
+namespace
+{
+const FName& GetCounterWarpTargetName()
+{
+	static const FName CounterWarpTargetName(TEXT("AttackTarget"));
+	return CounterWarpTargetName;
+}
+}
 
 UGA_ParryCounter::UGA_ParryCounter()
 {
@@ -77,30 +89,42 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 
 	CachedWeaponData = CachedWeaponComponent->GetWeaponDataRef();
 
-	// 콤보 정의에서 현재 원소의 ParryCounter variant 해결 (없으면 기본 variant)
 	UWeaponAttackDefinition* ComboDefinition = CachedWeaponData.AttackComboDefinition.LoadSynchronous();
-	const FParryCounterData* ResolvedParry = ComboDefinition ? ComboDefinition->ResolveParryVariant(ResolveCurrentElementTag()) : nullptr;
-	if (!ResolvedParry)
+	if (!IsValid(ComboDefinition))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
-	CachedParryData = *ResolvedParry;
 
-	if (AActor* Target = ResolveCounterTarget())
-	{
-		ApplyCounterToTarget(Target);
-	}
-
-	UAnimMontage* Montage = CachedParryData.CounterMontage.LoadSynchronous();
+	// 카운터 대시는 WeaponAttackDefinition의 ParrySuccessMontage를 사용한다.
+	// 패리 성공 즉시 자동 재생하지 않고, State.Player.CanCounter 상태에서 Attack 입력으로
+	// GA_ParryCounter가 실제 발동된 뒤에만 재생한다.
+	UAnimMontage* Montage = ComboDefinition->ParrySuccessMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
 
+	CachedCounterTarget = ResolveCounterTarget();
+	if (!CachedCounterTarget.IsValid())
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
+
+	RegisterCounterWarpTarget();
+
+	ImpactEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, RetrieveGameplayTags::GameplayEvent_Attack_Impact, nullptr, false, true);
+	if (ImpactEventTask)
+	{
+		ImpactEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
+		ImpactEventTask->ReadyForActivation();
+	}
+
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, 1.f, NAME_None, true);
+		this, NAME_None, Montage, ComboDefinition->ParrySuccessMontagePlayRate, NAME_None, true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -110,59 +134,74 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageCancelled);
+
+	// 카운터 대시 몽타주가 확정된 뒤 reboost에 진입한다.
+	// 몽타주가 없으면 WindowSlow 만료 복구 경로를 그대로 둔다.
+	if (AActor* CounterAvatar = GetAvatarActorFromActorInfo())
+	{
+		if (UCounterTimeDilationComponent* TimeComp = CounterAvatar->FindComponentByClass<UCounterTimeDilationComponent>())
+		{
+			TimeComp->EnterReboost();
+		}
+	}
+
 	MontageTask->ReadyForActivation();
 }
 
 AActor* UGA_ParryCounter::ResolveCounterTarget() const
 {
+	const URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo());
+	if (!IsValid(RetrieveASC))
+	{
+		return nullptr;
+	}
+
+	return RetrieveASC->GetPendingCounterTarget();
+}
+
+void UGA_ParryCounter::RegisterCounterWarpTarget()
+{
+	ACharacter* SourceCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	AActor* TargetActor = CachedCounterTarget.Get();
+	if (!IsValid(SourceCharacter) || !IsValid(TargetActor))
+	{
+		return;
+	}
+
+	UMotionWarpingComponent* MotionWarping = SourceCharacter->FindComponentByClass<UMotionWarpingComponent>();
+	if (!IsValid(MotionWarping))
+	{
+		return;
+	}
+
+	const FTransform WarpTransform = URetrieveTargetingLibrary::BuildWarpTransform(
+		SourceCharacter,
+		TargetActor,
+		CounterWarpStandoffOffset,
+		CounterMaxWarpDistance);
+
+	const FName CounterWarpTargetName = GetCounterWarpTargetName();
+	MotionWarping->AddOrUpdateWarpTargetFromTransform(CounterWarpTargetName, WarpTransform);
+
+	if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		RetrieveASC->SetCounterWarpTargetLocked(true);
+	}
+}
+
+void UGA_ParryCounter::ClearCounterWarpTarget()
+{
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	if (!IsValid(AvatarActor))
 	{
-		return nullptr;
+		return;
 	}
 
-	// 1) 패리 대상(가드/기본 패리 공통) — Ability.Player.Parry 태그로 조회
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (IsValid(ASC))
+	if (UMotionWarpingComponent* MotionWarping = AvatarActor->FindComponentByClass<UMotionWarpingComponent>())
 	{
-		TArray<FGameplayAbilitySpec*> ParrySpecs;
-		FGameplayTagContainer ParryFilter;
-		ParryFilter.AddTag(RetrieveGameplayTags::Ability_Player_Parry);
-		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(ParryFilter, ParrySpecs, false);
-
-		for (const FGameplayAbilitySpec* Spec : ParrySpecs)
-		{
-			if (!Spec) continue;
-			for (UGameplayAbility* Instance : Spec->GetAbilityInstances())
-			{
-				if (UGA_ParryBase* Parry = Cast<UGA_ParryBase>(Instance))
-				{
-					if (AActor* ParriedActor = Parry->GetLastParriedAttacker())
-					{
-						return ParriedActor;
-					}
-				}
-			}
-		}
+		const FName CounterWarpTargetName = GetCounterWarpTargetName();
+		MotionWarping->RemoveWarpTarget(CounterWarpTargetName);
 	}
-
-	// 2) 락온 대상
-	if (const UCombatReactionComponent* CombatReaction = AvatarActor->FindComponentByClass<UCombatReactionComponent>())
-	{
-		if (AActor* LockOnTarget = CombatReaction->GetLockOnTarget())
-		{
-			return LockOnTarget;
-		}
-	}
-
-	// 3) 전방 콘 검색
-	ACharacter* SourceChar = Cast<ACharacter>(AvatarActor);
-	if (!IsValid(SourceChar))
-	{
-		return nullptr;
-	}
-	const FVector Aim = SourceChar->GetControlRotation().Vector();
-	return URetrieveTargetingLibrary::FindBestTarget(SourceChar, 500.f, 90.f, Aim, 200.f, 0.25f);
 }
 
 void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
@@ -193,32 +232,32 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 	FGameplayEffectSpecHandle Spec = MakeSourcedSpec(DamageEffectClass, GetAbilityLevel());
 	if (Spec.IsValid() && Spec.Data.IsValid())
 	{
-		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CachedParryData.DamageMultiplier);
-		if (CachedParryData.KnockbackStrength > 0.f)
+		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CounterDamageMultiplier);
+		if (CounterKnockbackStrength > 0.f)
 		{
-			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, CachedParryData.KnockbackStrength);
-			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, CachedParryData.KnockbackUpwardStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, CounterKnockbackStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, CounterKnockbackUpwardStrength);
 		}
 		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedParryData.HitReactType); ReactTag.IsValid())
+		if (const FGameplayTag ReactTag = HitReactTypeToTag(CounterHitReactType); ReactTag.IsValid())
 		{
 			Spec.Data->AddDynamicAssetTag(ReactTag);
 		}
-		
+
 		AddCombatTagsToDamageSpec(
 			*Spec.Data.Get(),
 			ResolveCurrentElementTag(),
 			RetrieveGameplayTags::Attack_Type_Normal,
 			FGameplayTag(),
-			HitReactTypeToTag(CachedParryData.HitReactType));
-	
-		const FGameplayTag HitSuccessTag = CachedParryData.HitSuccessFeedbackTag.IsValid()
-		? CachedParryData.HitSuccessFeedbackTag 
+			HitReactTypeToTag(CounterHitReactType));
+
+		const FGameplayTag HitSuccessTag = CounterHitSuccessFeedbackTag.IsValid()
+		? CounterHitSuccessFeedbackTag
 		: RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Heavy;
 
-		const FGameplayTag TargetHitTag = CachedParryData.TargetHitFeedbackTag.IsValid()
-		? CachedParryData.TargetHitFeedbackTag
+		const FGameplayTag TargetHitTag = CounterTargetHitFeedbackTag.IsValid()
+		? CounterTargetHitFeedbackTag
 		: RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
 
 		Spec.Data->AddDynamicAssetTag(HitSuccessTag);
@@ -227,47 +266,53 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 	}
 
-	ApplyGroggyToTarget(TargetActor, TargetASC);
+	if (bApplyGroggyOnImpact)
+	{
+		TryApplyMonsterGroggy(TargetActor, CounterGroggyDuration);
+	}
 
 	UE_LOG(LogRetrieveCombat, Log, TEXT("[ParryCounter] Counter applied to %s (DamageMul=%.2f)"),
-		*GetNameSafe(TargetActor), CachedParryData.DamageMultiplier);
+		*GetNameSafe(TargetActor), CounterDamageMultiplier);
 }
 
-void UGA_ParryCounter::ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC) const
+bool UGA_ParryCounter::TryApplyMonsterGroggy(AActor* TargetActor, float Duration) const
 {
-	if (!IsValid(TargetActor) || !IsValid(TargetASC))
+	if (!IsValid(TargetActor) || Duration <= 0.f)
+	{
+		return false;
+	}
+
+	if (UEpicMonsterGroggyComponent* GroggyComp = TargetActor->FindComponentByClass<UEpicMonsterGroggyComponent>())
+	{
+		GroggyComp->ApplyGroggyState(Duration);
+		return true;
+	}
+
+	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!IsValid(TargetASC))
+	{
+		return false;
+	}
+
+	FGameplayEventData GroggyEvent;
+	GroggyEvent.EventTag = RetrieveGameplayTags::GameplayEvent_GroggyTrigger;
+	GroggyEvent.Instigator = GetAvatarActorFromActorInfo();
+	GroggyEvent.Target = TargetActor;
+	GroggyEvent.EventMagnitude = Duration;
+
+	TargetASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_GroggyTrigger, &GroggyEvent);
+	return true;
+}
+
+void UGA_ParryCounter::HandleImpactEvent(FGameplayEventData /*Payload*/)
+{
+	if (!IsActive() || bCounterImpactApplied)
 	{
 		return;
 	}
 
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-	if (!IsValid(AvatarActor) || !IsValid(SourceASC))
-	{
-		return;
-	}
-
-	const bool bIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
-	const TSubclassOf<UGameplayEffect> GroggyGE = bIsBoss
-		? CachedParryData.BossGroggyEffect
-		: CachedParryData.NormalGroggyEffect;
-
-	FGameplayEffectSpecHandle GroggySpec = MakeSourcedSpec(GroggyGE, GetAbilityLevel());
-	if (!GroggySpec.IsValid() || !GroggySpec.Data.IsValid())
-	{
-		return;
-	}
-
-	const float Duration = CachedParryData.GroggyDuration;
-	if (GroggyDurationTag.IsValid() && Duration > 0.f)
-	{
-		GroggySpec.Data->SetSetByCallerMagnitude(GroggyDurationTag, Duration);
-	}
-
-	SourceASC->ApplyGameplayEffectSpecToTarget(*GroggySpec.Data.Get(), TargetASC);
-
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[ParryCounter] Groggy applied to %s (Boss=%d, Duration=%.1f)"),
-		*GetNameSafe(TargetActor), bIsBoss ? 1 : 0, Duration);
+	bCounterImpactApplied = true;
+	ApplyCounterToTarget(CachedCounterTarget.Get());
 }
 
 void UGA_ParryCounter::HandleMontageCompleted()
@@ -288,13 +333,23 @@ void UGA_ParryCounter::HandleMontageCancelled()
 void UGA_ParryCounter::StopRuntimeTasks()
 {
 	if (MontageTask) { MontageTask->EndTask(); MontageTask = nullptr; }
+	if (ImpactEventTask) { ImpactEventTask->EndTask(); ImpactEventTask = nullptr; }
 }
 
 void UGA_ParryCounter::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopRuntimeTasks();
+	ClearCounterWarpTarget();
+
+	if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+	{
+		RetrieveASC->SetCounterWarpTargetLocked(false);
+		RetrieveASC->ClearPendingCounterTarget();
+	}
 
 	CachedWeaponComponent = nullptr;
+	CachedCounterTarget.Reset();
+	bCounterImpactApplied = false;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

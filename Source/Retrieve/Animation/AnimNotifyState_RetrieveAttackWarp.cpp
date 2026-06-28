@@ -1,5 +1,8 @@
 #include "Animation/AnimNotifyState_RetrieveAttackWarp.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Combat/RetrieveTargetingLibrary.h"
 #include "Components/Combat/CombatReactionComponent.h"
@@ -37,6 +40,17 @@ void UAnimNotifyState_RetrieveAttackWarp::ResolveAndRegisterWarpTarget(
 	if (!IsValid(SourceChar))
 	{
 		return;
+	}
+
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(SourceChar))
+	{
+		if (const URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(ASC))
+		{
+			if (RetrieveASC->IsCounterWarpTargetLocked())
+			{
+				return;
+			}
+		}
 	}
 
 	const bool bPlayerControlled = SourceChar->IsPlayerControlled();

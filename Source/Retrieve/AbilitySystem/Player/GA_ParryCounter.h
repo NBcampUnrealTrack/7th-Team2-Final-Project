@@ -6,6 +6,7 @@
 #include "GA_ParryCounter.generated.h"
 
 class UAbilityTask_PlayMontageAndWait;
+class UAbilityTask_WaitGameplayEvent;
 class UGameplayEffect;
 class UWeaponComponent;
 
@@ -31,11 +32,14 @@ private:
 	void StopRuntimeTasks();
 
 	AActor* ResolveCounterTarget() const;
+	void RegisterCounterWarpTarget();
+	void ClearCounterWarpTarget();
 
 	void ApplyCounterToTarget(AActor* TargetActor);
 
-	void ApplyGroggyToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC) const;
+	bool TryApplyMonsterGroggy(AActor* TargetActor, float Duration) const;
 
+	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
@@ -43,20 +47,52 @@ private:
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter")
-	FGameplayTag GroggyDurationTag;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
+	float CounterDamageMultiplier = 2.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage")
+	ERetrieveHitReactType CounterHitReactType = ERetrieveHitReactType::Stagger;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
+	FGameplayTag CounterHitSuccessFeedbackTag;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (Categories = "GameplayEvent.Hit"))
+	FGameplayTag CounterTargetHitFeedbackTag;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
+	float CounterKnockbackStrength = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
+	float CounterKnockbackUpwardStrength = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Groggy")
+	bool bApplyGroggyOnImpact = true;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Groggy", meta = (ClampMin = "0.0"))
+	float CounterGroggyDuration = 3.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|MotionWarping", meta = (ClampMin = "0.0"))
+	float CounterWarpStandoffOffset = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|MotionWarping", meta = (ClampMin = "0.0"))
+	float CounterMaxWarpDistance = 500.f;
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
 
-	// 발동 시 해결된 ParryCounter variant 값 복사본 (원소별 → 없으면 기본)
 	UPROPERTY(Transient)
-	FParryCounterData CachedParryData;
+	TWeakObjectPtr<AActor> CachedCounterTarget;
+
+	UPROPERTY(Transient)
+	bool bCounterImpactApplied = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
 };
