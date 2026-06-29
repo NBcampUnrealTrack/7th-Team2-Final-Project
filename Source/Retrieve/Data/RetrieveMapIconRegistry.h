@@ -37,6 +37,9 @@ enum class ERetrieveMapIconType : uint8
 	Outpost     UMETA(DisplayName="Outpost"),
 	FirstWeapon UMETA(DisplayName="FirstWeapon"),
 	Bonfire     UMETA(DisplayName="Bonfire"),
+	Shop        UMETA(DisplayName="Shop"),
+	// 신규 값은 반드시 끝에 추가 — 기존 enum 정수값(에셋/DataTable 직렬화)이 밀리지 않도록.
+	Enemy       UMETA(DisplayName="Enemy"),
 };
 
 /**

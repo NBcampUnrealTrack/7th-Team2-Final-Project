@@ -11,8 +11,11 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
 #include "Components/Widget.h"
+#include "Components/PanelWidget.h"
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Rendering/DrawElements.h"
@@ -219,57 +222,67 @@ void URetrieveWorldMapWidget::ComputeBaseMapSize(
 	const FVector2D& MapViewSize,
 	float& OutBaseW, float& OutBaseH) const
 {
+	// ── 1) 기준(fit) 크기 계산 ────────────────────────────────────────────────
 	if (bStretchMapToViewport)
 	{
 		OutBaseW = FMath::Max(MapViewSize.X, 1.0f);
 		OutBaseH = FMath::Max(MapViewSize.Y, 1.0f);
-		return;
-	}
-
-	const UTexture2D* ActiveTexture = BakedMapTexture;
-	if (!ActiveTexture && MapSub)
-	{
-		ActiveTexture = MapSub->BakedMapTexture;
-	}
-
-	if (ActiveTexture && ActiveTexture->GetSizeX() > 0 && ActiveTexture->GetSizeY() > 0)
-	{
-		const float TextureAspect = static_cast<float>(ActiveTexture->GetSizeX())
-			/ static_cast<float>(ActiveTexture->GetSizeY());
-		OutBaseW = FMath::Max(MapViewSize.X, 1.0f);
-		OutBaseH = OutBaseW / TextureAspect;
-		if (OutBaseH > MapViewSize.Y)
-		{
-			OutBaseH = FMath::Max(MapViewSize.Y, 1.0f);
-			OutBaseW = OutBaseH * TextureAspect;
-		}
-		return;
-	}
-
-	const float MapSide = FMath::Min(MapViewSize.X, MapViewSize.Y);
-
-	// 기본값: 정사각
-	OutBaseW = OutBaseH = MapSide;
-
-	if (!MapSub || !MapSub->HasValidBounds()) { return; }
-
-	// TextureAspect = U축(Y world, 화면 가로) / V축(X world, 화면 세로)
-	const float ExtentY = FMath::Max(MapSub->MapExtentXY.Y, 1.0f);  // U 방향
-	const float ExtentX = FMath::Max(MapSub->MapExtentXY.X, 1.0f);  // V 방향
-	const float Aspect  = ExtentY / ExtentX;                         // W:H 비율
-
-	if (Aspect >= 1.0f)
-	{
-		// 가로가 더 긴 레벨: 가로를 MapSide에 맞추고 세로를 줄임
-		OutBaseW = MapSide;
-		OutBaseH = MapSide / Aspect;
 	}
 	else
 	{
-		// 세로가 더 긴 레벨: 세로를 MapSide에 맞추고 가로를 줄임
-		OutBaseW = MapSide * Aspect;
-		OutBaseH = MapSide;
+		const UTexture2D* ActiveTexture = BakedMapTexture;
+		if (!ActiveTexture && MapSub)
+		{
+			ActiveTexture = MapSub->BakedMapTexture;
+		}
+
+		if (ActiveTexture && ActiveTexture->GetSizeX() > 0 && ActiveTexture->GetSizeY() > 0)
+		{
+			const float TextureAspect = static_cast<float>(ActiveTexture->GetSizeX())
+				/ static_cast<float>(ActiveTexture->GetSizeY());
+			OutBaseW = FMath::Max(MapViewSize.X, 1.0f);
+			OutBaseH = OutBaseW / TextureAspect;
+			if (OutBaseH > MapViewSize.Y)
+			{
+				OutBaseH = FMath::Max(MapViewSize.Y, 1.0f);
+				OutBaseW = OutBaseH * TextureAspect;
+			}
+		}
+		else
+		{
+			const float MapSide = FMath::Min(MapViewSize.X, MapViewSize.Y);
+
+			// 기본값: 정사각
+			OutBaseW = OutBaseH = MapSide;
+
+			if (MapSub && MapSub->HasValidBounds())
+			{
+				// TextureAspect = U축(Y world, 화면 가로) / V축(X world, 화면 세로)
+				const float ExtentY = FMath::Max(MapSub->MapExtentXY.Y, 1.0f);  // U 방향
+				const float ExtentX = FMath::Max(MapSub->MapExtentXY.X, 1.0f);  // V 방향
+				const float Aspect  = ExtentY / ExtentX;                         // W:H 비율
+
+				if (Aspect >= 1.0f)
+				{
+					// 가로가 더 긴 레벨: 가로를 MapSide에 맞추고 세로를 줄임
+					OutBaseW = MapSide;
+					OutBaseH = MapSide / Aspect;
+				}
+				else
+				{
+					// 세로가 더 긴 레벨: 세로를 MapSide에 맞추고 가로를 줄임
+					OutBaseW = MapSide * Aspect;
+					OutBaseH = MapSide;
+				}
+			}
+		}
 	}
+
+	// ── 2) 사용자 조정 배율 적용 (텍스처·아이콘 공통, 단일 출구) ────────────────
+	// 아이콘은 ScaledW/ScaledH(= Base * Zoom)로 그려지므로 여기서 한 번만 곱하면
+	// 텍스처와 아이콘이 동일 배율로 스케일되어 정합이 항상 유지된다.
+	OutBaseW *= FMath::Max(MapTextureScale.X, 0.01f);
+	OutBaseH *= FMath::Max(MapTextureScale.Y, 0.01f);
 }
 
 // ---------- 페인트 ----------
@@ -290,13 +303,47 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	);
 
 	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
+
+	// 디버그: 위젯 크기가 바뀔 때만 1회 로깅. 크기가 0/1 이하이면 아래에서 early-return → 맵 텍스처 통째로 스킵.
+	if (!DbgLastPaintWidgetSize.Equals(WidgetSize, 0.5f))
+	{
+		DbgLastPaintWidgetSize = WidgetSize;
+		if (WidgetSize.X <= 1.0f || WidgetSize.Y <= 1.0f)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[WorldMap] NativePaint — WidgetSize too small, map drawing skipped (%.1f, %.1f)"),
+				WidgetSize.X, WidgetSize.Y);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log,
+				TEXT("[WorldMap] NativePaint enter — WidgetSize=(%.1f, %.1f)"),
+				WidgetSize.X, WidgetSize.Y);
+
+			// 디버그: MapViewport → 루트까지 부모 체인의 런타임 geometry/렌더 트랜스폼을 1회 덤프.
+			// 어느 위젯에서 크기가 절반으로 꺾이는지(레이아웃 vs 렌더스케일) 데이터로 특정한다.
+			for (UWidget* W = MapViewport; W; W = W->GetParent())
+			{
+				const FGeometry& G = W->GetCachedGeometry();
+				const FWidgetTransform RT = W->GetRenderTransform();
+				UE_LOG(LogTemp, Warning,
+					TEXT("[WorldMap][Chain] %s (%s) LocalSize=(%.1f, %.1f) AbsPos=(%.1f, %.1f) RTScale=(%.2f, %.2f) RTTrans=(%.1f, %.1f) Opacity=%.2f"),
+					*W->GetName(), *W->GetClass()->GetName(),
+					G.GetLocalSize().X, G.GetLocalSize().Y,
+					G.GetAbsolutePosition().X, G.GetAbsolutePosition().Y,
+					RT.Scale.X, RT.Scale.Y, RT.Translation.X, RT.Translation.Y,
+					W->GetRenderOpacity());
+			}
+		}
+	}
+
 	if (WidgetSize.X <= 1.0f || WidgetSize.Y <= 1.0f) { return CurrentLayer; }
 
 	FVector2D MapViewTopLeft;
 	FVector2D MapViewSize;
 	GetMapViewRect(AllottedGeometry, MapViewTopLeft, MapViewSize);
 
-	const FVector2D Center  = MapViewTopLeft + MapViewSize * 0.5f;
+	const FVector2D Center  = GetMapDrawCenter(MapViewTopLeft, MapViewSize);
 
 	// 게임 상태 취득
 	const APlayerController* PC    = GetWorldMapPlayerController();
@@ -332,7 +379,25 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	const FVector2D AbsMapTopLeft     = FVector2D(AllottedGeometry.LocalToAbsolute(FVector2f(MapViewTopLeft)));
 	const FVector2D AbsMapBottomRight = FVector2D(AllottedGeometry.LocalToAbsolute(FVector2f(MapViewTopLeft + MapViewSize)));
 	FSlateRect MapViewAbsRect(AbsMapTopLeft.X, AbsMapTopLeft.Y, AbsMapBottomRight.X, AbsMapBottomRight.Y);
-	MapViewAbsRect = MapViewAbsRect.IntersectionWith(WidgetAbsRect);
+	const FSlateRect IntersectedRect = MapViewAbsRect.IntersectionWith(WidgetAbsRect);
+
+	// 가드: 맵 뷰 rect가 위젯과 거의 겹치지 않으면(=좌표 계산이 어긋나 맵이 패널 밖으로 나간 경우)
+	// 텍스처가 통째로 클립되어 빈 화면이 된다. 이때는 위젯 전체로 클립을 폴백해 최소한 보이게 하고 경고 로그.
+	const float IntersectW = IntersectedRect.Right - IntersectedRect.Left;
+	const float IntersectH = IntersectedRect.Bottom - IntersectedRect.Top;
+	if (IntersectW <= 1.0f || IntersectH <= 1.0f)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WorldMap] Map view rect outside widget — clip fallback to full widget. "
+			     "MapView=(%.1f, %.1f, %.1f, %.1f) Widget=(%.1f, %.1f, %.1f, %.1f)"),
+			MapViewAbsRect.Left, MapViewAbsRect.Top, MapViewAbsRect.Right, MapViewAbsRect.Bottom,
+			WidgetAbsRect.Left, WidgetAbsRect.Top, WidgetAbsRect.Right, WidgetAbsRect.Bottom);
+		MapViewAbsRect = WidgetAbsRect;
+	}
+	else
+	{
+		MapViewAbsRect = IntersectedRect;
+	}
 	const FSlateClippingZone ClipZone(MapViewAbsRect);
 	OutDrawElements.PushClip(ClipZone);
 
@@ -391,7 +456,29 @@ int32 URetrieveWorldMapWidget::NativePaint(
 		if (ActiveTexture)
 		{
 			FSlateBrush MapBrush;
-			MapBrush.SetResourceObject(ActiveTexture);
+
+			// 표시 머티리얼이 있으면 알파 반전(빈 공간 투명) 머티리얼로 그린다.
+			if (MapDisplayMaterial)
+			{
+				if (!MapDisplayMID || MapDisplayMID->Parent != MapDisplayMaterial)
+				{
+					MapDisplayMID = UMaterialInstanceDynamic::Create(
+						MapDisplayMaterial, const_cast<URetrieveWorldMapWidget*>(this));
+				}
+				if (MapDisplayMID)
+				{
+					MapDisplayMID->SetTextureParameterValue(TEXT("MapTex"), ActiveTexture);
+					MapBrush.SetResourceObject(MapDisplayMID);
+				}
+				else
+				{
+					MapBrush.SetResourceObject(ActiveTexture);
+				}
+			}
+			else
+			{
+				MapBrush.SetResourceObject(ActiveTexture);
+			}
 			MapBrush.ImageSize = FVector2D(BaseW, BaseH);
 
 			FSlateDrawElement::MakeBox(
@@ -581,7 +668,7 @@ FReply URetrieveWorldMapWidget::NativeOnMouseWheel(
 		return FReply::Unhandled();
 	}
 
-	const FVector2D Center        = MapViewTopLeft + MapViewSize * 0.5f;
+	const FVector2D Center        = GetMapDrawCenter(MapViewTopLeft, MapViewSize);
 
 	URetrieveMapSubsystem* MapSub = GetWorld()
 		? GetWorld()->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
@@ -751,7 +838,7 @@ FReply URetrieveWorldMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, con
 			return FReply::Unhandled();
 		}
 
-		const FVector2D Center = MapViewTopLeft + MapViewSize * 0.5f;
+		const FVector2D Center = GetMapDrawCenter(MapViewTopLeft, MapViewSize);
 		float BaseW = MapViewSize.X, BaseH = MapViewSize.Y;
 		ComputeBaseMapSize(MapSub, MapViewSize, BaseW, BaseH);
 		const float ScaledW = BaseW * ZoomLevel;
@@ -788,10 +875,35 @@ FReply URetrieveWorldMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, con
 
 // ---------- 헬퍼 ----------
 
+FVector2D URetrieveWorldMapWidget::GetMapDrawCenter(const FVector2D& MapViewTopLeft, const FVector2D& MapViewSize) const
+{
+	// 텍스처·아이콘 공통 기준점. MapTextureOffset을 여기 한 곳에서 더해 항상 함께 이동한다.
+	return MapViewTopLeft + MapViewSize * 0.5f + MapTextureOffset;
+}
+
 void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, FVector2D& OutTopLeft, FVector2D& OutSize) const
 {
 	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
 
+	// ── 해상도 독립 기준 rect (Border_Window 퍼센트 앵커 + MapViewportPadding) ──
+	// AllottedGeometry 한 좌표계 안에서만 계산되므로 해상도/DPI/렌더 트랜스폼에 견고하다.
+	// 1차(MapViewport geometry) 결과 검증과 폴백 양쪽에 사용한다.
+	const float BW_Left   = WidgetSize.X * MapWindowAnchorMin.X;
+	const float BW_Top    = WidgetSize.Y * MapWindowAnchorMin.Y;
+	const float BW_Right  = WidgetSize.X * MapWindowAnchorMax.X;
+	const float BW_Bottom = WidgetSize.Y * MapWindowAnchorMax.Y;
+
+	const FVector2D RefTopLeft(
+		BW_Left + MapViewportPadding.Left,
+		BW_Top  + MapViewportPadding.Top);
+	const FVector2D RefSize(
+		FMath::Max(1.0f, (BW_Right  - BW_Left) - MapViewportPadding.Left - MapViewportPadding.Right),
+		FMath::Max(1.0f, (BW_Bottom - BW_Top)  - MapViewportPadding.Top  - MapViewportPadding.Bottom));
+
+	// ── 1차: MapViewport geometry ─────────────────────────────────────────────
+	// 정상일 때 정확하고 WBP 레이아웃 변경에도 자동 적응한다. 단, 일부 해상도/타이밍에서
+	// 자식 위젯 cached geometry가 부모(AllottedGeometry)와 좌표계가 어긋나 우하단 절반짜리
+	// 비정상 rect를 돌려주는 경우가 있어, 기준 rect로 타당성을 검증한 뒤에만 채택한다.
 	if (MapViewport)
 	{
 		const FGeometry& ViewGeometry = MapViewport->GetCachedGeometry();
@@ -800,7 +912,7 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 		{
 			const FVector2D AbsTopLeft = FVector2D(ViewGeometry.LocalToAbsolute(FVector2f::ZeroVector));
 			const FVector2D AbsBottomRight = FVector2D(ViewGeometry.LocalToAbsolute(FVector2f(ViewSize)));
-			FVector2D CandidateTopLeft = AllottedGeometry.AbsoluteToLocal(AbsTopLeft);
+			const FVector2D CandidateTopLeft = AllottedGeometry.AbsoluteToLocal(AbsTopLeft);
 			const FVector2D CandidateBottomRight = AllottedGeometry.AbsoluteToLocal(AbsBottomRight);
 
 			const FSlateRect WidgetRect(0.0f, 0.0f, WidgetSize.X, WidgetSize.Y);
@@ -816,26 +928,57 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 			const float CandidateH = CandidateRect.Bottom - CandidateRect.Top;
 			if (CandidateW > 1.0f && CandidateH > 1.0f)
 			{
-				OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
-				OutSize = FVector2D(CandidateW, CandidateH);
-				return;
+				// 타당성 검증: 크기가 기준의 70% 이상이고 중심이 기준에서 크게 벗어나지 않을 것.
+				const bool bSizePlausible =
+					CandidateW >= RefSize.X * 0.7f && CandidateH >= RefSize.Y * 0.7f;
+				const FVector2D CandCenter(
+					CandidateRect.Left + CandidateW * 0.5f,
+					CandidateRect.Top  + CandidateH * 0.5f);
+				const FVector2D RefCenter = RefTopLeft + RefSize * 0.5f;
+				const bool bPosPlausible =
+					FMath::Abs(CandCenter.X - RefCenter.X) <= WidgetSize.X * 0.25f &&
+					FMath::Abs(CandCenter.Y - RefCenter.Y) <= WidgetSize.Y * 0.25f;
+
+				if (bSizePlausible && bPosPlausible)
+				{
+					OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
+					OutSize = FVector2D(CandidateW, CandidateH);
+					LogMapViewRect(TEXT("MapViewport"), WidgetSize, OutTopLeft, OutSize);
+					return;
+				}
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("[WorldMap] MapViewport geometry implausible — using anchor fallback. "
+					     "Cand TL=(%.1f, %.1f) Size=(%.1f, %.1f) vs Ref TL=(%.1f, %.1f) Size=(%.1f, %.1f)"),
+					CandidateRect.Left, CandidateRect.Top, CandidateW, CandidateH,
+					RefTopLeft.X, RefTopLeft.Y, RefSize.X, RefSize.Y);
 			}
 		}
 	}
 
-	// 폴백: Border_Window의 퍼센트 앵커 + MapViewportPadding으로 해상도 독립적 계산.
-	// MapViewport->GetCachedGeometry()가 (0,0)일 때(빈 CanvasPanel 최적화)도 항상 정확.
-	const float BW_Left   = WidgetSize.X * MapWindowAnchorMin.X;
-	const float BW_Top    = WidgetSize.Y * MapWindowAnchorMin.Y;
-	const float BW_Right  = WidgetSize.X * MapWindowAnchorMax.X;
-	const float BW_Bottom = WidgetSize.Y * MapWindowAnchorMax.Y;
+	// ── 폴백: 해상도 독립 기준 rect ───────────────────────────────────────────
+	OutTopLeft = RefTopLeft;
+	OutSize    = RefSize;
+	LogMapViewRect(TEXT("Fallback(Anchor+Padding)"), WidgetSize, OutTopLeft, OutSize);
+}
 
-	OutTopLeft = FVector2D(
-		BW_Left + MapViewportPadding.Left,
-		BW_Top  + MapViewportPadding.Top);
-	OutSize = FVector2D(
-		FMath::Max(1.0f, (BW_Right  - BW_Left) - MapViewportPadding.Left - MapViewportPadding.Right),
-		FMath::Max(1.0f, (BW_Bottom - BW_Top)  - MapViewportPadding.Top  - MapViewportPadding.Bottom));
+void URetrieveWorldMapWidget::LogMapViewRect(const TCHAR* PathName, const FVector2D& WidgetSize,
+                                             const FVector2D& TopLeft, const FVector2D& Size) const
+{
+	// 해상도 변경/경로 전환 등 값이 의미 있게 바뀐 경우에만 로깅 — 매 프레임 스팸 방지.
+	const bool bChanged =
+		DbgLastRectPath != PathName
+		|| !DbgLastRectTopLeft.Equals(TopLeft, 0.5f)
+		|| !DbgLastRectSize.Equals(Size, 0.5f);
+	if (!bChanged) { return; }
+
+	DbgLastRectPath    = PathName;
+	DbgLastRectTopLeft = TopLeft;
+	DbgLastRectSize    = Size;
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[WorldMap] GetMapViewRect path=%s Widget=(%.0f, %.0f) TopLeft=(%.1f, %.1f) Size=(%.1f, %.1f)"),
+		PathName, WidgetSize.X, WidgetSize.Y, TopLeft.X, TopLeft.Y, Size.X, Size.Y);
 }
 
 APlayerController* URetrieveWorldMapWidget::GetWorldMapPlayerController() const
