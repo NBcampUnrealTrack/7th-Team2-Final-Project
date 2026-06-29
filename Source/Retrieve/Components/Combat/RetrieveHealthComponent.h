@@ -48,6 +48,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void ResetHealth();
+	void Revive();
 	
 public:
 	UPROPERTY(BlueprintAssignable)

@@ -6,10 +6,13 @@
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerState.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameFramework/PlayerStart.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Net/UnrealNetwork.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "World/GuardianCoreSpawnerComponent.h"
 
 ARetrieveGameState::ARetrieveGameState(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
@@ -26,6 +29,7 @@ void ARetrieveGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ARetrieveGameState, HostPlayerState);
 	DOREPLIFETIME(ARetrieveGameState, DialogueState);
 	DOREPLIFETIME(ARetrieveGameState, CinematicState);
+	DOREPLIFETIME(ARetrieveGameState, LastCheckpointBonfireId);
 }
 
 APawn* ARetrieveGameState::GetHostPawn() const
@@ -333,4 +337,58 @@ void ARetrieveGameState::OnRep_CinematicState()
 		Message.bActive = CinematicState.bActive;
 		UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Cinematic_Changed, Message);
 	}
+}
+
+// ── 체크포인트 ────────────────────────────────────────────────────────────
+
+
+void ARetrieveGameState::SetLastCheckpointBonfire(FName BonfireId)
+{
+	if (!HasAuthority() || BonfireId.IsNone())
+	{
+		return;
+	}
+	LastCheckpointBonfireId = BonfireId;
+}
+
+void ARetrieveGameState::SeedDefaultCheckpointIfUnset()
+{
+	if (!HasAuthority() || !LastCheckpointBonfireId.IsNone())
+	{
+		return;
+	}
+	LastCheckpointBonfireId = DefaultStartBonfireId; // NAME_None일 수 있음, getter가 PlayerStart로 폴백
+}
+
+FTransform ARetrieveGameState::GetLastCheckpointOrFallback() const
+{
+	const URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance()
+		                                              ? GetGameInstance()->GetSubsystem<URetrieveSaveSubsystem>()
+		                                              : nullptr;
+
+	if (SaveSubsystem)
+	{
+		FTransform OutTransform;
+
+		// 1) 마지막으로 휴식한 모닥불
+		if (!LastCheckpointBonfireId.IsNone() && SaveSubsystem->GetBonfireTransform(LastCheckpointBonfireId, OutTransform))
+		{
+			return OutTransform;
+		}
+
+		// 2) 기본 시작 모닥불 (첫 휴식 전)
+		if (!DefaultStartBonfireId.IsNone() && SaveSubsystem->GetBonfireTransform(DefaultStartBonfireId, OutTransform))
+		{
+			return OutTransform;
+		}
+	}
+
+	// 3) PlayerStart 폴백, 항상 플레이어가 스폰 가능함을 보장
+	if (const AActor* Start = UGameplayStatics::GetActorOfClass(GetWorld(), APlayerStart::StaticClass()))
+	{
+		return Start->GetActorTransform();
+	}
+
+	// 4) 최후 수단
+	return FTransform::Identity;
 }

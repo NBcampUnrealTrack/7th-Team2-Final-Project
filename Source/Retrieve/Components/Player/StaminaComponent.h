@@ -36,6 +36,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Stamina")
 	bool HasStamina(float Cost) const;
+	
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Stamina")
+	void ResetStamina();
 
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Stamina")
 	FOnStaminaChanged OnStaminaChanged;

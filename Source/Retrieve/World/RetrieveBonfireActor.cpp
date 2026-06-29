@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "Core/RetrieveGameState.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UnrealType.h"
 
@@ -153,6 +154,15 @@ void ARetrieveBonfireActor::BeginPlay()
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)
 {
 	ActivateBonfire();
+	
+	// 이 모닥불을 리스폰 체크포인트로 기록(호스트 권한. OnApplied는 호스트 전용), 이미 불이 켜진 모닥불에 재휴식해도 갱신됨.
+	if (UWorld* World = GetWorld())
+	{
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			GS->SetLastCheckpointBonfire(BonfireId);
+		}
+	}
 
 	// 모든 ShopComponent에 순환 재고 갱신 신호 전송
 	if (UWorld* World = GetWorld())

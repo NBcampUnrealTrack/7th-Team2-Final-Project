@@ -43,6 +43,7 @@ protected:
 	virtual void InitializeAbilitySystem() override;
 	virtual void UnPossessed() override;
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
+	virtual void Revive(const FTransform& RespawnTransform) override;
 
 	virtual USpringArmComponent* GetCameraSpringArm() const override { return CameraSpringArm; }
 

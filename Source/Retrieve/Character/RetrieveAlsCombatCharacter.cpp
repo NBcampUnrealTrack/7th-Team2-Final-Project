@@ -11,6 +11,17 @@ ARetrieveAlsCombatCharacter::ARetrieveAlsCombatCharacter(const FObjectInitialize
 	HealthComponent = CreateDefaultSubobject<URetrieveHealthComponent>(TEXT("HealthComponent"));
 }
 
+void ARetrieveAlsCombatCharacter::Revive(const FTransform& RespawnTransform)
+{
+	if (HealthComponent)
+	{
+		HealthComponent->Revive();
+	}
+	StopRagdoll();
+	SetActorLocationAndRotation(RespawnTransform.GetLocation(), RespawnTransform.GetRotation().Rotator(), false,
+	                            nullptr, ETeleportType::TeleportPhysics);
+}
+
 void ARetrieveAlsCombatCharacter::BeginPlay()
 {
 	Super::BeginPlay();
