@@ -1,0 +1,679 @@
+#include "UI/Map/RetrieveCompassWidget.h"
+#include "Subsystems/RetrieveMapSubsystem.h"
+#include "Components/World/RetrieveMapIconComponent.h"
+#include "Data/RetrieveMapIconRegistry.h"
+
+#include "Camera/PlayerCameraManager.h"
+#include "Engine/Texture2D.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
+#include "Rendering/DrawElements.h"
+#include "Styling/CoreStyle.h"
+#include "Fonts/FontMeasure.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+
+// ── 내부 상수 ────────────────────────────────────────────────────────────────
+
+namespace
+{
+	// 45° 간격 방위 (Yaw 기준: 0=N, 90=E, ±180=S, -90=W)
+	struct FCompassDirection
+	{
+		float    Bearing;   // 도
+		FString  Label;
+		bool     bCardinal; // true = N/E/S/W
+	};
+
+	static const FCompassDirection GDirections[] =
+	{
+		{   0.0f, TEXT("N"),  true  },
+		{  45.0f, TEXT("NE"), false },
+		{  90.0f, TEXT("E"),  true  },
+		{ 135.0f, TEXT("SE"), false },
+		{ 180.0f, TEXT("S"),  true  },
+		{ -135.0f, TEXT("SW"), false },
+		{ -90.0f, TEXT("W"),  true  },
+		{ -45.0f, TEXT("NW"), false },
+	};
+}
+
+// ── 보조 함수 ────────────────────────────────────────────────────────────────
+
+float URetrieveCompassWidget::BearingToX(
+	float BearingDeg, float CameraYaw, float CompassWidth) const
+{
+	float RelAngle = BearingDeg - CameraYaw;
+
+	// [-180, 180] 정규화
+	while (RelAngle >  180.0f) { RelAngle -= 360.0f; }
+	while (RelAngle < -180.0f) { RelAngle += 360.0f; }
+
+	const float HalfFOV = FieldOfViewDeg * 0.5f;
+	if (FMath::Abs(RelAngle) >= HalfFOV) { return -1.0f; } // 범위 밖
+
+	// -HalfFOV → 0, +HalfFOV → CompassWidth
+	return (RelAngle / FieldOfViewDeg + 0.5f) * CompassWidth;
+}
+
+void URetrieveCompassWidget::DrawCompassText(
+	FSlateWindowElementList& OutDrawElements,
+	int32& LayerId,
+	const FGeometry& AllottedGeometry,
+	const FString& Text,
+	const FVector2D& CenterPos,
+	const FSlateFontInfo& Font,
+	const FLinearColor& Color
+) const
+{
+	const TSharedRef<FSlateFontMeasure> FontMeasure =
+		FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	const FVector2D TextSz = FontMeasure->Measure(Text, Font);
+	const FVector2D DrawPos(CenterPos.X - TextSz.X * 0.5f, CenterPos.Y - TextSz.Y * 0.5f);
+
+	// 드롭 섀도우
+	FSlateDrawElement::MakeText(
+		OutDrawElements,
+		LayerId,
+		AllottedGeometry.ToPaintGeometry(
+			FVector2f(TextSz),
+			FSlateLayoutTransform(FVector2f(DrawPos + FVector2D(1.0f, 1.0f)))
+		),
+		Text,
+		Font,
+		ESlateDrawEffect::None,
+		FLinearColor(0.0f, 0.0f, 0.0f, 0.7f)
+	);
+
+	FSlateDrawElement::MakeText(
+		OutDrawElements,
+		++LayerId,
+		AllottedGeometry.ToPaintGeometry(
+			FVector2f(TextSz),
+			FSlateLayoutTransform(FVector2f(DrawPos))
+		),
+		Text,
+		Font,
+		ESlateDrawEffect::None,
+		Color
+	);
+}
+
+
+// ── 위젯 마커 풀링 ───────────────────────────────────────────────────────────
+
+namespace
+{
+	constexpr int32 CompassWorldIconMarkerKeyBase = 100000;
+	constexpr int32 CompassWaypointMarkerKeyBase  = 200000;
+	constexpr int32 CompassEnemyMarkerKeyBase     = 300000;
+}
+
+int32 URetrieveCompassWidget::GetStableEnemyMarkerKey(const URetrieveMapIconComponent* Icon)
+{
+	const FObjectKey Key(Icon);
+	if (const int32* Found = EnemyIconSlots.Find(Key))
+	{
+		return CompassEnemyMarkerKeyBase + *Found;
+	}
+
+	const int32 NewSlot = NextEnemySlot++;
+	EnemyIconSlots.Add(Key, NewSlot);
+	return CompassEnemyMarkerKeyBase + NewSlot;
+}
+
+bool URetrieveCompassWidget::HasUsableMarkerPanel() const
+{
+	return bEnableMarkerWidgetPooling && IsValid(CanvasPanel_CompassMarkers);
+}
+
+TSubclassOf<UUserWidget> URetrieveCompassWidget::GetWidgetClassForIconType(ERetrieveMapIconType IconType) const
+{
+	// 에너미 마커는 정적 WorldMapIconData가 아니라 라이브 GetIcons() 경로(UpdateWidgetMarkers)가
+	// 전담한다. 따라서 정적 경로에서는 EnemyIconTypes를 위젯 풀링 대상에서 제외한다.
+	// (이중 표시 방지 — 가이드 STEP 4)
+	if (EnemyIconTypes.Contains(IconType))
+	{
+		return nullptr;
+	}
+
+	// 정적 WorldMapIconData 전용 위젯 마커가 필요하면 여기에서 타입별로 반환한다.
+	return nullptr;
+}
+
+bool URetrieveCompassWidget::ShouldUseWidgetMarker(ERetrieveMapIconType IconType) const
+{
+	return HasUsableMarkerPanel() && GetWidgetClassForIconType(IconType) != nullptr;
+}
+
+UUserWidget* URetrieveCompassWidget::GetOrCreatePooledMarker(
+	const int32 MarkerKey,
+	TSubclassOf<UUserWidget> WidgetClass
+)
+{
+	if (!HasUsableMarkerPanel() || !WidgetClass)
+	{
+		return nullptr;
+	}
+
+	if (TObjectPtr<UUserWidget>* ExistingWidget = MarkerWidgetPool.Find(MarkerKey))
+	{
+		return ExistingWidget->Get();
+	}
+
+	UUserWidget* NewWidget = CreateWidget<UUserWidget>(GetOwningPlayer(), WidgetClass);
+	if (!IsValid(NewWidget))
+	{
+		return nullptr;
+	}
+
+	NewWidget->SetVisibility(ESlateVisibility::Collapsed);
+	NewWidget->SetIsEnabled(true);
+	NewWidget->SetRenderOpacity(1.0f);
+	NewWidget->SetColorAndOpacity(FLinearColor::White);
+	
+	CanvasPanel_CompassMarkers->AddChild(NewWidget);
+	if (UCanvasPanelSlot* NewSlot = Cast<UCanvasPanelSlot>(NewWidget->Slot))
+	{
+		NewSlot->SetZOrder(100);
+	}
+	MarkerWidgetPool.Add(MarkerKey, NewWidget);
+
+	return NewWidget;
+}
+
+void URetrieveCompassWidget::SetPooledMarkerTransform(
+	UUserWidget* MarkerWidget,
+	const FVector2D& CenterPos,
+	const FVector2D& Size
+) const
+{
+	if (!IsValid(MarkerWidget))
+	{
+		return;
+	}
+
+	MarkerWidget->SetRenderOpacity(1.0f);
+	MarkerWidget->SetColorAndOpacity(FLinearColor::White);
+
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
+	{
+		CanvasSlot->SetAutoSize(false);
+		CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+		CanvasSlot->SetPosition(CenterPos - Size * 0.5f);
+		CanvasSlot->SetSize(Size);
+		CanvasSlot->SetZOrder(100);
+	}
+
+	MarkerWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
+	{
+		CanvasSlot->SetZOrder(100);
+	}
+}
+
+void URetrieveCompassWidget::CollapseUnusedMarkers(const TSet<int32>& ActiveMarkerKeys)
+{
+	for (const TPair<int32, TObjectPtr<UUserWidget>>& Pair : MarkerWidgetPool)
+	{
+		if (!ActiveMarkerKeys.Contains(Pair.Key) && IsValid(Pair.Value))
+		{
+			Pair.Value->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void URetrieveCompassWidget::UpdateWidgetMarkers(const FGeometry& MyGeometry)
+{
+	if (!HasUsableMarkerPanel())
+	{
+		return;
+	}
+
+	const FVector2D Size = MyGeometry.GetLocalSize();
+	const float Width = Size.X;
+	const float Height = Size.Y;
+	if (Width < 2.0f || Height < 2.0f)
+	{
+		CollapseUnusedMarkers(TSet<int32>());
+		return;
+	}
+
+	const APlayerController* PC = GetOwningPlayer();
+	const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (!Pawn)
+	{
+		CollapseUnusedMarkers(TSet<int32>());
+		return;
+	}
+
+	const FVector PlayerLoc = Pawn->GetActorLocation();
+	const float CameraYaw = PC->PlayerCameraManager
+		? PC->PlayerCameraManager->GetCameraRotation().Yaw
+		: PC->GetControlRotation().Yaw;
+
+	const float BandCenterY = Height * FMath::Clamp(CompassBandYRatio, 0.0f, 1.0f);
+	TSet<int32> ActiveMarkerKeys;
+
+	if (WorldMapIconData && IconRegistry)
+	{
+		for (int32 IconIndex = 0; IconIndex < WorldMapIconData->Icons.Num(); ++IconIndex)
+		{
+			const FRetrieveMapIconEntry& Entry = WorldMapIconData->Icons[IconIndex];
+
+			if (Entry.IconType == ERetrieveMapIconType::None ||
+				Entry.IconType == ERetrieveMapIconType::Player ||
+				EnemyIconTypes.Contains(Entry.IconType) ||
+				HiddenIconTypesOnCompass.Contains(Entry.IconType))
+			{
+				continue;
+			}
+
+			TSubclassOf<UUserWidget> MarkerWidgetClass = GetWidgetClassForIconType(Entry.IconType);
+			if (!MarkerWidgetClass)
+			{
+				continue;
+			}
+
+			const FVector Delta = Entry.WorldLocation - PlayerLoc;
+			const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+			const float IconX = BearingToX(BearingDeg, CameraYaw, Width);
+			if (IconX < 0.0f)
+			{
+				continue;
+			}
+
+			const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Entry.IconType);
+			const float IconSize = FMath::Max(Row.IconSize * CompassIconSizeScale, 8.0f);
+			const FVector2D IconSize2D(IconSize, IconSize);
+			const FVector2D IconCenter(IconX + WidgetMarkerOffset.X, BandCenterY + WidgetMarkerOffset.Y);
+
+			const int32 MarkerKey = CompassWorldIconMarkerKeyBase + IconIndex;
+			if (UUserWidget* MarkerWidget = GetOrCreatePooledMarker(MarkerKey, MarkerWidgetClass))
+			{
+				SetPooledMarkerTransform(MarkerWidget, IconCenter, IconSize2D);
+				ActiveMarkerKeys.Add(MarkerKey);
+			}
+		}
+	}
+
+	// ── 라이브 에너미 마커 (미니맵과 동일 소스 GetIcons()) ──────────────────────
+	if (EnemyMarkerWidgetClass)
+	{
+		UWorld* World = GetWorld();
+		URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+
+		if (MapSub)
+		{
+			for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
+			{
+				if (!IsValid(Icon) || !IsValid(Icon->GetOwner()))      { continue; }
+				if (!Icon->bShowOnMinimap)                             { continue; }
+				if (!EnemyIconTypes.Contains(Icon->IconType))          { continue; }
+				if (HiddenIconTypesOnCompass.Contains(Icon->IconType)) { continue; }
+
+				const FVector IconWorld = Icon->GetOwner()->GetActorLocation();
+
+				if (EnemyViewRadius > 0.0f &&
+					FVector::Dist2D(PlayerLoc, IconWorld) > EnemyViewRadius)
+				{
+					continue;
+				}
+
+				const FVector Delta = IconWorld - PlayerLoc;
+				const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+				const float IconX = BearingToX(BearingDeg, CameraYaw, Width);
+				if (IconX < 0.0f)
+				{
+					continue;
+				}
+
+				// 크기: Override → Registry → 폴백
+				float IconSize = EnemyMarkerSize;
+				if (Icon->bOverrideIcon)
+				{
+					IconSize = FMath::Max(Icon->OverrideSize * CompassIconSizeScale, 8.0f);
+				}
+				else if (IconRegistry)
+				{
+					const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Icon->IconType);
+					IconSize = FMath::Max(Row.IconSize * CompassIconSizeScale, 8.0f);
+				}
+
+				const FVector2D IconSize2D(IconSize, IconSize);
+				const FVector2D IconCenter(IconX + WidgetMarkerOffset.X, BandCenterY + WidgetMarkerOffset.Y);
+
+				const int32 MarkerKey = GetStableEnemyMarkerKey(Icon);
+				if (UUserWidget* MarkerWidget = GetOrCreatePooledMarker(MarkerKey, EnemyMarkerWidgetClass))
+				{
+					SetPooledMarkerTransform(MarkerWidget, IconCenter, IconSize2D);
+					ActiveMarkerKeys.Add(MarkerKey);
+				}
+			}
+		}
+	}
+
+	if (UserWaypointMarkerWidgetClass)
+	{
+		UWorld* World = GetWorld();
+		URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+
+		if (MapSub)
+		{
+			const TArray<FUserWaypoint>& Waypoints = MapSub->GetUserWaypoints();
+
+			for (int32 WaypointIndex = 0; WaypointIndex < Waypoints.Num(); ++WaypointIndex)
+			{
+				const FUserWaypoint& WP = Waypoints[WaypointIndex];
+
+				const FVector Delta = WP.WorldLocation - PlayerLoc;
+				const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+				const float MarkerX = BearingToX(BearingDeg, CameraYaw, Width);
+				if (MarkerX < 0.0f)
+				{
+					continue;
+				}
+
+				const FVector2D MarkerSize(WaypointMarkerSize, WaypointMarkerSize);
+				const FVector2D MarkerCenter(MarkerX + WaypointWidgetMarkerOffset.X, BandCenterY + WaypointWidgetMarkerOffset.Y);
+
+				const int32 MarkerKey = CompassWaypointMarkerKeyBase + FMath::Max(WP.WaypointId, 0);
+				if (UUserWidget* MarkerWidget = GetOrCreatePooledMarker(MarkerKey, UserWaypointMarkerWidgetClass))
+				{
+					SetPooledMarkerTransform(MarkerWidget, MarkerCenter, MarkerSize);
+					// 나침반 위젯 클래스의 WaypointMarkerColor로 틴트 (미니맵과 동일한 지정 방식).
+					MarkerWidget->SetColorAndOpacity(WaypointMarkerColor);
+					ActiveMarkerKeys.Add(MarkerKey);
+				}
+			}
+		}
+	}
+
+	CollapseUnusedMarkers(ActiveMarkerKeys);
+}
+
+void URetrieveCompassWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	UpdateWidgetMarkers(MyGeometry);
+}
+
+void URetrieveCompassWidget::NativeDestruct()
+{
+	MarkerWidgetPool.Empty();
+	EnemyIconSlots.Empty();
+	NextEnemySlot = 0;
+	Super::NativeDestruct();
+}
+
+
+// ── NativePaint ──────────────────────────────────────────────────────────────
+
+int32 URetrieveCompassWidget::NativePaint(
+	const FPaintArgs&         Args,
+	const FGeometry&          AllottedGeometry,
+	const FSlateRect&         MyCullingRect,
+	FSlateWindowElementList&  OutDrawElements,
+	int32                     LayerId,
+	const FWidgetStyle&       InWidgetStyle,
+	bool                      bParentEnabled
+) const
+{
+	int32 CurrentLayer = LayerId;
+
+	const FVector2D Size = AllottedGeometry.GetLocalSize();
+	const float Width = Size.X;
+	const float Height = Size.Y;
+	if (Width < 2.0f || Height < 2.0f)
+	{
+		return Super::NativePaint(
+			Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+			CurrentLayer, InWidgetStyle, bParentEnabled
+		);
+	}
+
+	const float CenterX = Width * 0.5f;
+	const float BandCenterY = Height * FMath::Clamp(CompassBandYRatio, 0.0f, 1.0f);
+
+	const APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		return Super::NativePaint(
+			Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+			CurrentLayer, InWidgetStyle, bParentEnabled
+		);
+	}
+
+	const APawn* Pawn = PC->GetPawn();
+	if (!Pawn)
+	{
+		return Super::NativePaint(
+			Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+			CurrentLayer, InWidgetStyle, bParentEnabled
+		);
+	}
+
+	const FVector PlayerLoc = Pawn->GetActorLocation();
+
+	const float CameraYaw = PC->PlayerCameraManager
+		? PC->PlayerCameraManager->GetCameraRotation().Yaw
+		: PC->GetControlRotation().Yaw;
+
+	// 배경
+	if (bDrawBuiltinBackground)
+	{
+		if (CompassBandTexture)
+		{
+			FSlateBrush BandBrush;
+			BandBrush.SetResourceObject(CompassBandTexture);
+			BandBrush.ImageSize = Size;
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(),
+				&BandBrush
+			);
+		}
+		else
+		{
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(),
+				FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				BackgroundColor
+			);
+		}
+	}
+
+	// 방위 눈금 + 레이블
+	if (bDrawBuiltinCardinals)
+	{
+		const FSlateFontInfo CardinalFont = FCoreStyle::GetDefaultFontStyle("Bold", CardinalFontSize);
+		const FSlateFontInfo SubCardinalFont = FCoreStyle::GetDefaultFontStyle("Regular", SubCardinalFontSize);
+
+		for (const FCompassDirection& Dir : GDirections)
+		{
+			const float X = BearingToX(Dir.Bearing, CameraYaw, Width);
+			if (X < 0.0f) { continue; }
+
+			const FLinearColor TickCol = Dir.bCardinal ? CardinalColor : TickColor;
+			const float TickH = Dir.bCardinal ? BandCenterY * 1.1f : BandCenterY * 0.7f;
+			const float TickW = Dir.bCardinal ? 2.0f : 1.0f;
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(TickW, TickH),
+					FSlateLayoutTransform(FVector2f(X - TickW * 0.5f, 0.0f))
+				),
+				FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				TickCol
+			);
+
+			const FSlateFontInfo& UseFont = Dir.bCardinal ? CardinalFont : SubCardinalFont;
+
+			DrawCompassText(
+				OutDrawElements,
+				CurrentLayer,
+				AllottedGeometry,
+				Dir.Label,
+				FVector2D(X, TickH + (Dir.bCardinal ? 10.0f : 8.0f)),
+				UseFont,
+				Dir.bCardinal ? CardinalColor : TickColor
+			);
+		}
+	}
+
+	// 월드맵 등록 아이콘
+	if (WorldMapIconData && IconRegistry)
+	{
+		for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
+		{
+			if (Entry.IconType == ERetrieveMapIconType::None ||
+				Entry.IconType == ERetrieveMapIconType::Player ||
+				EnemyIconTypes.Contains(Entry.IconType) ||
+				HiddenIconTypesOnCompass.Contains(Entry.IconType))
+			{
+				continue;
+			}
+
+			if (ShouldUseWidgetMarker(Entry.IconType))
+			{
+				continue;
+			}
+
+			const FVector Delta = Entry.WorldLocation - PlayerLoc;
+			const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+
+			const float IconX = BearingToX(BearingDeg, CameraYaw, Width);
+			if (IconX < 0.0f) { continue; }
+
+			const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Entry.IconType);
+
+			UTexture2D* IconTexture = Row.IconTexture;
+			const FLinearColor IconColor = Row.IconColor;
+			const float IconSize = FMath::Max(Row.IconSize * CompassIconSizeScale, 8.0f);
+
+			const FVector2D IconSz(IconSize, IconSize);
+			const FVector2D DrawPos(
+				IconX - IconSize * 0.5f,
+				BandCenterY - IconSize * 0.5f - 10.0f
+			);
+
+			FSlateBrush IconBrush;
+			if (IconTexture)
+			{
+				IconBrush.SetResourceObject(IconTexture);
+			}
+			IconBrush.ImageSize = IconSz;
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(IconSz),
+					FSlateLayoutTransform(FVector2f(DrawPos))
+				),
+				IconTexture ? &IconBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				IconColor
+			);
+		}
+	}
+
+	// 웨이포인트 마커
+	UWorld* World = GetWorld();
+	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+
+	if (MapSub)
+	{
+		const TArray<FUserWaypoint>& Waypoints = MapSub->GetUserWaypoints();
+		const FSlateFontInfo WpFont = FCoreStyle::GetDefaultFontStyle("Bold", 9);
+
+		for (const FUserWaypoint& WP : Waypoints)
+		{
+			const FVector Delta = WP.WorldLocation - PlayerLoc;
+			const float DistXY = FVector2D(Delta.X, Delta.Y).Size();
+			const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+
+			const float MarkerX = BearingToX(BearingDeg, CameraYaw, Width);
+			if (MarkerX < 0.0f) { continue; }
+
+			if (HasUsableMarkerPanel() && UserWaypointMarkerWidgetClass)
+			{
+				continue;
+			}
+
+			const float HalfSz = WaypointMarkerSize * 0.5f;
+			const FLinearColor MarkerCol = WP.Color;
+
+			FSlateBrush WpBrush;
+			if (WaypointMarkerTexture)
+			{
+				WpBrush.SetResourceObject(WaypointMarkerTexture);
+				WpBrush.ImageSize = FVector2D(WaypointMarkerSize, WaypointMarkerSize);
+			}
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(WaypointMarkerSize, WaypointMarkerSize),
+					FSlateLayoutTransform(FVector2f(MarkerX - HalfSz, BandCenterY - HalfSz))
+				),
+				WaypointMarkerTexture ? &WpBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				MarkerCol
+			);
+
+			if (DistXY > 0.1f)
+			{
+				const FString DistStr = FString::Printf(TEXT("%.0fm"), DistXY / 100.0f);
+
+				DrawCompassText(
+					OutDrawElements,
+					CurrentLayer,
+					AllottedGeometry,
+					DistStr,
+					FVector2D(MarkerX, BandCenterY + HalfSz + 10.0f),
+					WpFont,
+					MarkerCol
+				);
+			}
+		}
+	}
+
+	// 중앙 지시선
+	const float LineW = 2.0f;
+	const float LineH = BandCenterY * 1.3f;
+
+	FSlateDrawElement::MakeBox(
+		OutDrawElements,
+		++CurrentLayer,
+		AllottedGeometry.ToPaintGeometry(
+			FVector2f(LineW, LineH),
+			FSlateLayoutTransform(FVector2f(CenterX - LineW * 0.5f, 0.0f))
+		),
+		FCoreStyle::Get().GetBrush("WhiteBrush"),
+		ESlateDrawEffect::None,
+		CenterTickColor
+	);
+
+	CurrentLayer = Super::NativePaint(
+		Args,
+		AllottedGeometry,
+		MyCullingRect,
+		OutDrawElements,
+		CurrentLayer,
+		InWidgetStyle,
+		bParentEnabled
+	);
+
+	return CurrentLayer;
+}
