@@ -16,6 +16,8 @@ class UTexture2D;
 class UUserWidget;
 class UWidget;
 class URetrieveMapConfigDataAsset;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 /**
  * 월드맵에서 활성화된 화톳불 아이콘을 더블클릭했을 때 발생.
@@ -52,6 +54,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
 	TObjectPtr<UTexture2D> BakedMapTexture;
 
+	/**
+	 * 맵 텍스처를 그릴 때 사용할 UI 머티리얼 (선택).
+	 * 캡처 알파가 반전(지형 A=0, 빈공간 A=255)돼 있으므로 머티리얼에서 Opacity=1-Tex.A 로
+	 * 보정하면 빈 공간이 투명해진다. 'MapTex' 텍스처 파라미터에 맵 텍스처가 주입된다.
+	 * 미설정 시 기존처럼 텍스처를 그대로(불투명) 그린다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
+	TObjectPtr<UMaterialInterface> MapDisplayMaterial;
+
 	// 플레이어 방향 마커 텍스처 (위쪽이 북쪽)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
 	TObjectPtr<UTexture2D> PlayerMarkerTexture;
@@ -72,7 +83,7 @@ public:
 	 * WBP에서 MapViewport 슬롯을 바꾸면 이 값도 맞춰 업데이트할 것.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Layout")
-	FMargin MapViewportPadding = FMargin(80.0f, 80.0f, 99.0f, 54.0f);
+	FMargin MapViewportPadding = FMargin(98.0f, 74.0f, 117.0f, 72.0f);
 
 	/**
 	 * WBP에서 Border_Window가 차지하는 화면 비율 (Min = 좌상단, Max = 우하단).
@@ -88,6 +99,21 @@ public:
 	// false: 텍스처/레벨 종횡비를 유지하며 뷰포트 안에서 최대 크기로 그림 (letterbox)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Layout")
 	bool bStretchMapToViewport = true;
+
+	/**
+	 * 기준(fit) 크기에 곱하는 추가 배율 (가로/세로 독립). 1 = 기준 그대로.
+	 * 값을 키우면 텍스처가 영역을 더 채우고(넘치면 클리핑), 가로/세로를 따로 줘서 늘릴 수 있다.
+	 * 텍스처와 아이콘에 동일하게 적용되므로 아이콘은 항상 텍스처와 정합을 유지한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Layout")
+	FVector2D MapTextureScale = FVector2D(1.0f, 1.0f);
+
+	/**
+	 * 맵 텍스처를 뷰포트 영역 내에서 미세 이동(픽셀, zoom=1 기준). 텍스처와 아이콘에 동일 적용.
+	 * 텍스처 콘텐츠가 한쪽으로 치우쳐 보일 때 중심을 맞추는 용도.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Layout")
+	FVector2D MapTextureOffset = FVector2D(0.0f, 0.0f);
 
 	// 1 = 맵 전체 표시, 값이 클수록 확대
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap", meta=(ClampMin="1.0"))
@@ -268,6 +294,18 @@ private:
 	mutable float     CachedPaintScaledW  = 1.0f;
 	mutable float     CachedPaintScaledH  = 1.0f;
 
+	// 디버그: 맵 뷰 사각형 계산 경로/결과를 값이 바뀔 때만 1회 로깅하기 위한 캐시.
+	mutable FString   DbgLastRectPath;
+	mutable FVector2D DbgLastRectTopLeft = FVector2D(-1.f, -1.f);
+	mutable FVector2D DbgLastRectSize    = FVector2D(-1.f, -1.f);
+
+	// 디버그: NativePaint 진입 시 위젯 크기를 값이 바뀔 때만 1회 로깅하기 위한 캐시.
+	mutable FVector2D DbgLastPaintWidgetSize = FVector2D(-1.f, -1.f);
+
+	// MapDisplayMaterial로부터 생성한 동적 머티리얼 인스턴스(맵 텍스처 파라미터 주입용) 캐시.
+	UPROPERTY(Transient)
+	mutable TObjectPtr<UMaterialInstanceDynamic> MapDisplayMID;
+
 	// ViewCenterUV를 맵 범위 내로 클램핑
 	void ClampViewCenter();
 
@@ -348,6 +386,13 @@ private:
 	                     float ScaledW, float ScaledH) const;
 
 	void GetMapViewRect(const FGeometry& AllottedGeometry, FVector2D& OutTopLeft, FVector2D& OutSize) const;
+
+	/** 맵 텍스처/아이콘 공통 중심 = 뷰포트 중앙 + MapTextureOffset. 텍스처와 아이콘 정합 보장. */
+	FVector2D GetMapDrawCenter(const FVector2D& MapViewTopLeft, const FVector2D& MapViewSize) const;
+
+	// 디버그: 맵 뷰 사각형 계산 경로와 결과를 값이 바뀔 때만 1회 로깅(매 프레임 스팸 방지).
+	void LogMapViewRect(const TCHAR* PathName, const FVector2D& WidgetSize,
+	                    const FVector2D& TopLeft, const FVector2D& Size) const;
 	bool IsInsideMapView(const FVector2D& LocalPosition, const FVector2D& MapTopLeft, const FVector2D& MapSize) const;
 	APlayerController* GetWorldMapPlayerController() const;
 
