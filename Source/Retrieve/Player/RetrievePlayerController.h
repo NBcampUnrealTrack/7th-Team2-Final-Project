@@ -10,16 +10,22 @@
 #include "RetrievePlayerController.generated.h"
 
 class ARetrievePlayerState;
+class ACameraActor;
 class UInventoryComponent;
 class URetrieveGamePanelWidget;
 class URetrieveMinimapWidget;
 class URetrieveHealthComponent;
 class URetrieveBossHPBarWidget;
+class URetrieveQuickSlotWheelWidget;
+class URetrieveShopComponent;
+class URetrieveShopDefinitionAsset;
 class UUserWidget;
+class UDataTable;
 class UWeaponComponent;
 class UHUDViewModel;
 class UConversationViewModel;
 class UAttackFeedbackComponent;
+struct FRetrieveLumenCommandPayload;
 
 USTRUCT(BlueprintType)
 struct FRetrievePanelShortcutConfig
@@ -201,6 +207,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Map")
 	void ToggleMinimapRotationMode();
 
+	/** 메인 메뉴/일시정지/화톳불 UI에서 설정 버튼에 직접 연결할 진입점. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Settings")
+	void OpenSettingsPanel();
+
+	/** 상점 패널을 열고 InitializeShopPanel을 자동으로 호출합니다. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
+	void OpenShopPanel(TSubclassOf<URetrieveGamePanelWidget> ShopPanelClass,
+	                   URetrieveShopDefinitionAsset* ShopDefinition);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
+	void OpenShopFromCurrentConversation(bool bOpenSellTab);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
+	bool ReturnToShopConversation();
+
 protected:
 	bool TryHandleMinimapShortcut(FKey Key);
 	bool TryHandlePanelShortcut(FKey Key);
@@ -218,6 +239,39 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|UI")
 	TArray<FRetrievePanelShortcutConfig> PanelShortcuts;
+
+	/** 기본 설정 화면. 별도 BP 배선 없이 SettingsPanelKey로도 열 수 있다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
+	TSoftClassPtr<URetrieveGamePanelWidget> SettingsPanelClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
+	FKey SettingsPanelKey = EKeys::F10;
+
+	/** 상점 패널 위젯 클래스. BP_RetrievePlayerController에서 WBP_ShopPanel 할당 */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Shop")
+	TSubclassOf<URetrieveGamePanelWidget> ShopPanelWidgetClass;
+
+	// ── 인게임 퀵슬롯 라디얼 휠 ──────────────────────────────────────────
+	// QuickSlotWheelKey를 누르고 있는 동안 휠을 열고, 떼면 마우스 방향 슬롯을 사용한다.
+	void OpenQuickSlotWheel();
+	void CloseQuickSlotWheelAndUse();
+
+	/** 라디얼 휠을 여는(누르고 있는) 키. 기본 T. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|QuickSlot")
+	FKey QuickSlotWheelKey = EKeys::T;
+
+	/** 인게임 라디얼 휠 위젯 클래스 (WBP_QuickSlotWheel). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|QuickSlot")
+	TSubclassOf<URetrieveQuickSlotWheelWidget> QuickSlotWheelClass;
+
+	/** 휠 슬롯 아이콘용 DataTable (WBP_InventoryPanel의 것과 동일). */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|QuickSlot")
+	TObjectPtr<UDataTable> QuickSlotIconTable;
+
+	UPROPERTY()
+	TObjectPtr<URetrieveQuickSlotWheelWidget> QuickSlotWheelInstance;
+
+	bool bQuickSlotWheelOpen = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|UI")
 	TObjectPtr<URetrieveGamePanelWidget> ActivePanel;
@@ -273,6 +327,81 @@ protected:
 
 #pragma endregion
 
+#pragma region Shop
+
+protected:
+	UPROPERTY()
+	TObjectPtr<URetrieveShopDefinitionAsset> PendingShopDefinition;
+
+	UPROPERTY()
+	TObjectPtr<URetrieveShopComponent> PendingShopComponent;
+
+	bool bPendingShopOpenSellTab = false;
+
+	UPROPERTY()
+	TObjectPtr<AActor> CurrentDialogueNPC;
+
+	UPROPERTY()
+	TObjectPtr<AActor> CurrentShopNPC;
+
+	bool bCanReturnToShopConversation = false;
+
+	FGameplayMessageListenerHandle ShopCommandHandle;
+
+	void HandleShopOpenCommand(const FRetrieveLumenCommandPayload& Payload);
+
+	// ── 상점/대화 NPC 포커스 카메라 ──────────────────────────────────────────
+	// NPC는 풀 캐릭터(3인칭 카메라 리그 보유)라 그 카메라를 쓰면 NPC 뒤통수가 보인다.
+	// 그래서 NPC 앞쪽에 임시 카메라 액터를 스폰해 NPC 정면을 프레이밍한다.
+
+	/** 뷰 타깃 블렌드 시간(초). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraBlendTime = 0.6f;
+
+	/** NPC 정면에서 떨어지는 거리(cm). 클수록 멀리서 본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraDistance = 320.0f;
+
+	/** 카메라 높이(cm, NPC 액터 기준). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraHeight = 135.0f;
+
+	/** 카메라가 바라보는 지점의 높이(cm, NPC 액터 기준 — 보통 얼굴/가슴). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraLookAtHeight = 95.0f;
+
+	/** 상점 NPC 포커스 카메라 시야각. 낮을수록 더 줌인된다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera", meta = (ClampMin = "20.0", ClampMax = "90.0"))
+	float ShopCameraFOV = 55.0f;
+
+	// Positive values move the NPC to the right side of the screen.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraFrameRightOffset = 70.0f;
+
+	/** NPC 액터 Forward 기준 카메라 배치 각도(도, Z축 회전).
+	 *  0 = 액터 Forward 쪽, 180 = 반대쪽. 메시 정면이 액터 Forward와 반대면 180이 정면. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	float ShopCameraOrbitYaw = 180.0f;
+
+	/** 상점 카메라 동안 플레이어 폰을 일시적으로 숨길지 여부. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
+	bool bHidePlayerDuringShopCamera = true;
+
+	/** 현재 상점 카메라(NPC 포커스)가 활성 상태인지 */
+	bool bShopCameraActive = false;
+
+	/** NPC 정면 프레이밍용으로 스폰해 재사용하는 카메라 액터. */
+	UPROPERTY()
+	TObjectPtr<ACameraActor> ShopFocusCameraActor;
+
+	/** TargetActor(상점 NPC 등)의 정면을 비추도록 카메라를 블렌드한다. */
+	void FocusCameraOnActor(AActor* TargetActor);
+
+	/** 플레이어 폰으로 뷰 타깃을 복귀한다. */
+	void RestorePlayerCameraView();
+
+#pragma endregion
+
 #pragma region Lumen Control
 
 public:
@@ -304,7 +433,7 @@ protected:
 	UWeaponComponent* GetPawnWeaponComponent() const;
 
 	double LastInputRealTimeSeconds = 0.0;
-	
+
 	// AttackFeedback 관련 멤버변수
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<UAttackFeedbackComponent> AttackFeedbackComponent;

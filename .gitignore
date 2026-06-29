@@ -103,3 +103,9 @@ AGENTS.md
 체크리스트.md
 작업일지.md
 .scrum-state.json
+
+# 로컬 전용 스크립트 (Unreal 자동화 Python, MCP 보조 스크립트)
+Scripts/
+
+# 로컬 전용 Python 자동화 스크립트
+Content/Python/

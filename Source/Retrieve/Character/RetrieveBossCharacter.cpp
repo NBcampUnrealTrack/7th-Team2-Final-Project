@@ -14,6 +14,8 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
+#include "Data/RetrieveMapIconRegistry.h"
 
 ARetrieveBossCharacter::ARetrieveBossCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -23,6 +25,12 @@ ARetrieveBossCharacter::ARetrieveBossCharacter(const FObjectInitializer& ObjectI
 	if (NormalHealthBarComponent)
 	{
 		NormalHealthBarComponent->SetHealthBarEnabled(false);
+	}
+
+	// 보스는 미니맵·나침반에서 Boss 아이콘으로 표시 (부모가 만든 컴포넌트의 타입만 변경).
+	if (MapIconComponent)
+	{
+		MapIconComponent->IconType = ERetrieveMapIconType::Boss;
 	}
 }
 

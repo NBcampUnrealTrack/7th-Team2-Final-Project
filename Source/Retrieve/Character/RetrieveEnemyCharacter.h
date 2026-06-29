@@ -19,6 +19,7 @@ class USphereComponent;
 class UHitReactionComponent;
 class URetrieveHitReactionProfile;
 class UAnimMontage;
+class URetrieveMapIconComponent;
 
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDataRow;
@@ -176,7 +177,11 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UNormalMonsterHealthBarComponent> NormalHealthBarComponent;
-	
+
+	/** 미니맵·나침반 마커 등록용. 기본 IconType=Enemy(보스는 생성자에서 Boss로 변경). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<URetrieveMapIconComponent> MapIconComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<USphereComponent> FistHitbox;
 	

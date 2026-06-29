@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "UI/HUD/RetrieveDamageFloaterWidget.h"
+#include "Settings/RetrieveGameUserSettings.h"
 
 UAttackFeedbackComponent::UAttackFeedbackComponent()
 {
@@ -184,6 +185,12 @@ void UAttackFeedbackComponent::HandleHitFeedback(FGameplayTag EventTag, const FG
 
 void UAttackFeedbackComponent::PlayCameraShake(const FHitFeedback& Feedback) const
 {
+	const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+	if (Settings && Settings->bReduceMotion)
+	{
+		return;
+	}
+
 	if (Feedback.CameraShake.IsNull())
 	{
 		return;
@@ -200,7 +207,8 @@ void UAttackFeedbackComponent::PlayCameraShake(const FHitFeedback& Feedback) con
 	{
 		return;
 	}
-	PC->ClientStartCameraShake(ShakeClass, Feedback.CameraShakeScale);
+	const float UserScale = Settings ? Settings->CameraShakeScale : 1.f;
+	PC->ClientStartCameraShake(ShakeClass, Feedback.CameraShakeScale * UserScale);
 }
 
 void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRetrieveDamageDealtPayload& Payload)
@@ -237,6 +245,12 @@ void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRe
 
 void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, float DamageValue, const FHitFeedback& Feedback)
 {
+	if (const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+		Settings && !Settings->bShowDamageNumbers)
+	{
+		return;
+	}
+
 	if (IsValid(Target) == false || IsValid(DamageFloaterClass) == false)
 	{
 		return;

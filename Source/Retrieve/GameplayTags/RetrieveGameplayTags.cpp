@@ -336,6 +336,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_ElementGauge_Burst, "Channel.ElementGauge.Burst");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Item_ElementBuff, "Channel.Item.ElementBuff");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_World_OutpostActivated, "Channel.World.OutpostActivated");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Player_Rested, "Channel.Player.Rested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Player_Died, "Channel.Player.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Monster_Died, "Channel.Monster.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Game_QueenDefeated, "Channel.Game.QueenDefeated");
@@ -358,6 +359,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Command_Recall, "Channel.Lumen.Command.Recall");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Lumen_Mode_Changed, "Channel.Lumen.Mode.Changed");
 	
+	// ---- Message channels: Shop
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Shop_OpenShop, "Channel.Shop.OpenShop");
+
 	// ---- Message channels: Dialogue / Cinematic
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
@@ -434,6 +438,10 @@ namespace RetrieveGameplayTags
 	
 	// ---- Dialogue
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_General, "Speaker.NPC.General");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_OpenShop, "Topic.ShopNPC.OpenShop");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_Buy, "Topic.ShopNPC.Buy");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_Sell, "Topic.ShopNPC.Sell");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_Imprint, "Topic.Lumen.Imprint");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_About, "Topic.Lumen.About");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FollowWait, "Topic.Lumen.FollowWait");
