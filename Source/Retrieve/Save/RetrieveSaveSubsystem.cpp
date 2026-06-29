@@ -79,6 +79,7 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		SlotSave->ActivatedBonfireTransforms = CurrentSaveGame->ActivatedBonfireTransforms;
 		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
 		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
+		SlotSave->ShopRepurchaseHistory      = CurrentSaveGame->ShopRepurchaseHistory;
 	}
 
 	// LoadSnapshot 기록
@@ -874,4 +875,12 @@ UInventoryComponent* URetrieveSaveSubsystem::FindInventoryComponent(AActor* Acto
 bool URetrieveSaveSubsystem::IsValidSaveSlot(int32 SlotIndex)
 {
 	return SlotIndex >= 0 && SlotIndex < MaxSaveSlots;
+}
+
+void URetrieveSaveSubsystem::FlushWorldState()
+{
+	if (CurrentSaveGame)
+	{
+		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+	}
 }

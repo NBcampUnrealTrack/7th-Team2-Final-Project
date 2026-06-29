@@ -4,6 +4,9 @@
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Player/RetrievePlayerController.h"
@@ -150,6 +153,16 @@ void ARetrieveBonfireActor::BeginPlay()
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)
 {
 	ActivateBonfire();
+
+	// 모든 ShopComponent에 순환 재고 갱신 신호 전송
+	if (UWorld* World = GetWorld())
+	{
+		FRetrievePlayerRestedPayload Payload;
+		Payload.Instigator = InteractionInstigator;
+		Payload.BonfireId = BonfireId;
+		UGameplayMessageSubsystem::Get(World).BroadcastMessage(
+			RetrieveGameplayTags::Channel_Player_Rested, Payload);
+	}
 
 	const float MenuOpenDelay = GetBonfireMenuOpenDelay();
 	if (MenuOpenDelay <= KINDA_SMALL_NUMBER)

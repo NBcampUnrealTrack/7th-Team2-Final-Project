@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Shop/RetrieveShopTypes.h"
 #include "RetrieveSaveGame.generated.h"
 
 /**
@@ -53,4 +54,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	int32 SaveVersion = 1;
+
+	/** 상점 판매 재구매 히스토리 (최대 20건 FIFO). 판매 시 기록, 재구매 시 제거 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TArray<FShopRepurchaseRecord> ShopRepurchaseHistory;
 };

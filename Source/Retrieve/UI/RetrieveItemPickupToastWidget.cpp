@@ -36,7 +36,10 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 
 	UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DisplayName='%s'"), *DisplayName.ToString());
 
-	if (ItemIconImage)
+	// 위젯 트리의 Image 이름이 'ItemIcon'이라 BindWidget 멤버(ItemIconImage)와 불일치하여
+	// 자동 바인딩되지 않는다(아이콘 미표시 버그). 이름으로 직접 조회한다(프로젝트의 GetWidgetFromName 패턴).
+	UImage* IconImg = ItemIconImage ? ItemIconImage.Get() : Cast<UImage>(GetWidgetFromName(TEXT("ItemIcon")));
+	if (IconImg)
 	{
 		if (UDataTable* IconDT = LoadObject<UDataTable>(
 			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_ItemIcon.DT_ItemIcon")))
@@ -46,8 +49,9 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 			{
 				if (UTexture2D* Tex = IconRow->IconTexture.LoadSynchronous())
 				{
-					ItemIconImage->SetBrushFromTexture(Tex, true);
-					ItemIconImage->SetVisibility(ESlateVisibility::Visible);
+					IconImg->SetBrushFromTexture(Tex, false);
+					IconImg->SetRenderOpacity(1.f);
+					IconImg->SetVisibility(ESlateVisibility::Visible);
 				}
 				else
 				{
@@ -63,6 +67,10 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_ItemIcon load FAILED"));
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] ItemIcon widget NOT FOUND"));
 	}
 
 	if (ItemNameText)
