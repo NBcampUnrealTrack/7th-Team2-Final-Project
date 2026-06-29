@@ -7,12 +7,16 @@
 #include "Character/Cosmetics/RetrieveModularMeshTypes.h"
 #include "Components/Pawn/RetrievePawnCosmeticComponent.h"
 #include "Components/Player/ArmorComponent.h"
-#include "Components/SceneCaptureComponent2D.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
+#include "Components/MeshComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -43,6 +47,9 @@ void AInventoryPreviewActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AInventoryPreviewActor::ClearArmorMeshes()
 {
+	// 앵커를 먼저 파괴하면 자식 무기가 월드 위치를 유지한 채 분리되어 공중에 남는다.
+	ClearWeaponPreviewMeshes();
+
 	for (USkeletalMeshComponent* ArmorMeshComponent : ArmorMeshComponents)
 	{
 		if (IsValid(ArmorMeshComponent))
@@ -50,8 +57,13 @@ void AInventoryPreviewActor::ClearArmorMeshes()
 			ArmorMeshComponent->DestroyComponent();
 		}
 	}
-
 	ArmorMeshComponents.Reset();
+
+	if (IsValid(WeaponSocketAnchorComponent))
+	{
+		WeaponSocketAnchorComponent->DestroyComponent();
+		WeaponSocketAnchorComponent = nullptr;
+	}
 }
 
 void AInventoryPreviewActor::UpdateArmorPreview()
@@ -90,6 +102,8 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 	}
 
 	// 플레이어의 나머지 스켈레탈 메시 컴포넌트(기본 파츠 + 방어구)를 복제한다.
+	// PlayerBodyMesh의 명명된 소켓에 붙은 컴포넌트(무기)는 건너뛴다.
+	// 무기는 플레이어 라이브 상태(납검/전환 중 hidden 등)에 독립적으로 데이터에서 직접 재구성한다.
 	TArray<USkeletalMeshComponent*> PlayerMeshComponents;
 	PlayerPawn->GetComponents(PlayerMeshComponents);
 	for (USkeletalMeshComponent* PlayerComponent : PlayerMeshComponents)
@@ -99,6 +113,12 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 			continue;
 		}
 		if (!PlayerComponent->GetSkeletalMeshAsset())
+		{
+			continue;
+		}
+		// 바디 메시의 명명된 소켓에 붙은 컴포넌트 = 무기 → 데이터 기반으로 별도 처리
+		if (PlayerComponent->GetAttachParent() == PlayerBodyMesh
+			&& !PlayerComponent->GetAttachSocketName().IsNone())
 		{
 			continue;
 		}
@@ -114,7 +134,7 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 		PreviewComponent->SetCastShadow(false);
 		PreviewComponent->bCastDynamicShadow = false;
 		PreviewComponent->bCastStaticShadow = false;
-		// 위치는 프리뷰 리더에 붙이고, register 후 LeaderPose를 걸어야 master bone map이 정상 구축된다.
+		// 방어구 파츠는 루트에 붙이고 LeaderPose로 본 포즈를 따른다.
 		PreviewComponent->AttachToComponent(LeaderMeshComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		PreviewComponent->bUseAttachParentBound = true;
 
@@ -125,6 +145,124 @@ void AInventoryPreviewActor::UpdateArmorPreview()
 		ArmorMeshComponents.Add(PreviewComponent);
 	}
 
+	// 무기 소켓 앵커: PlayerBodyMesh를 LeaderPose로 따르므로 Weapon_R 소켓이
+	// 방어구 파츠와 동일한 좌표계(플레이어 실제 포즈)에서 평가된다.
+	WeaponSocketAnchorComponent = NewObject<USkeletalMeshComponent>(this);
+	if (WeaponSocketAnchorComponent)
+	{
+		WeaponSocketAnchorComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WeaponSocketAnchorComponent->SetGenerateOverlapEvents(false);
+		WeaponSocketAnchorComponent->SetCastShadow(false);
+		WeaponSocketAnchorComponent->bCastDynamicShadow = false;
+		WeaponSocketAnchorComponent->bCastStaticShadow = false;
+		WeaponSocketAnchorComponent->SetVisibility(false, false);
+		WeaponSocketAnchorComponent->AttachToComponent(LeaderMeshComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		WeaponSocketAnchorComponent->bUseAttachParentBound = true;
+		AddInstanceComponent(WeaponSocketAnchorComponent);
+		WeaponSocketAnchorComponent->RegisterComponent();
+		MirrorPreviewLeaderMesh(WeaponSocketAnchorComponent, PlayerBodyMesh);
+		// LeaderPose를 설정해야 소켓이 애니메이션 포즈 기준으로 평가된다.
+		// (없으면 T-pose 소켓 위치에 무기가 붙어 공중에 떠 보인다)
+		WeaponSocketAnchorComponent->SetLeaderPoseComponent(LeaderMeshComponent);
+		// MirrorPreviewLeaderMesh 가 Source 가시성을 복사하므로 앵커는 다시 숨긴다.
+		WeaponSocketAnchorComponent->SetVisibility(false, false);
+	}
+
+	RefreshWeaponPreview(BoundInventoryComponent
+		? BoundInventoryComponent->GetEquippedWeaponId()
+		: NAME_None);
+
+	RefreshSceneCaptureShowOnlyList();
+}
+
+void AInventoryPreviewActor::ClearWeaponPreviewMeshes()
+{
+	for (UMeshComponent* WeaponMeshComponent : WeaponPreviewMeshComponents)
+	{
+		if (IsValid(WeaponMeshComponent))
+		{
+			WeaponMeshComponent->DestroyComponent();
+		}
+	}
+	WeaponPreviewMeshComponents.Reset();
+}
+
+void AInventoryPreviewActor::RefreshWeaponPreview(FName WeaponItemId)
+{
+	ClearWeaponPreviewMeshes();
+
+	if (WeaponItemId.IsNone() || !IsValid(WeaponSocketAnchorComponent))
+	{
+		RefreshSceneCaptureShowOnlyList();
+		return;
+	}
+
+	APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	UWeaponComponent* WeaponComponent = PlayerPawn
+		? PlayerPawn->FindComponentByClass<UWeaponComponent>()
+		: nullptr;
+	if (!WeaponComponent)
+	{
+		return;
+	}
+
+	// 현재 장착 여부와 무관하게 WeaponItemId 로 데이터를 직접 조회한다.
+	// (미장착 무기도 인벤토리 프리뷰에서 표시되어야 하므로)
+	const FRetrieveWeaponDataRow* WeaponDataPtr = WeaponComponent->FindWeaponData(WeaponItemId);
+	if (!WeaponDataPtr)
+	{
+		return;
+	}
+
+	for (const FRetrieveWeaponAttachmentData& Attachment : WeaponDataPtr->Attachments)
+	{
+		UMeshComponent* PreviewWeaponMesh = nullptr;
+		if (Attachment.MeshType == ERetrieveWeaponMeshType::StaticMesh)
+		{
+			if (UStaticMesh* StaticMesh = Attachment.StaticMesh.LoadSynchronous())
+			{
+				UStaticMeshComponent* StaticMeshComponent = NewObject<UStaticMeshComponent>(this);
+				StaticMeshComponent->SetStaticMesh(StaticMesh);
+				PreviewWeaponMesh = StaticMeshComponent;
+			}
+		}
+		else if (USkeletalMesh* SkeletalMesh = Attachment.SkeletalMesh.LoadSynchronous())
+		{
+			USkeletalMeshComponent* SkeletalMeshComponent = NewObject<USkeletalMeshComponent>(this);
+			SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
+			PreviewWeaponMesh = SkeletalMeshComponent;
+		}
+
+		if (!PreviewWeaponMesh)
+		{
+			continue;
+		}
+
+		if (!Attachment.AttachSocketName.IsNone()
+			&& !WeaponSocketAnchorComponent->DoesSocketExist(Attachment.AttachSocketName))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[InventoryPreview] Weapon socket not found. Weapon=%s Socket=%s"),
+				*WeaponItemId.ToString(), *Attachment.AttachSocketName.ToString());
+			PreviewWeaponMesh->DestroyComponent();
+			continue;
+		}
+
+		PreviewWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PreviewWeaponMesh->SetGenerateOverlapEvents(false);
+		PreviewWeaponMesh->SetCanEverAffectNavigation(false);
+		PreviewWeaponMesh->SetCastShadow(false);
+		AddInstanceComponent(PreviewWeaponMesh);
+		PreviewWeaponMesh->RegisterComponent();
+		PreviewWeaponMesh->AttachToComponent(
+			WeaponSocketAnchorComponent,
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			Attachment.AttachSocketName);
+		PreviewWeaponMesh->SetRelativeTransform(Attachment.RelativeTransform);
+		WeaponPreviewMeshComponents.Add(PreviewWeaponMesh);
+	}
+
+	// 새로 추가된 무기 메시를 SceneCapture show-only 목록에 반영한다.
 	RefreshSceneCaptureShowOnlyList();
 }
 
@@ -235,6 +373,11 @@ void AInventoryPreviewActor::MirrorPreviewPartMesh(
 	}
 }
 
+void AInventoryPreviewActor::HandleEquippedWeaponChanged(FName WeaponItemId)
+{
+	RefreshWeaponPreview(WeaponItemId);
+}
+
 void AInventoryPreviewActor::HandleEquippedArmorChanged(FGameplayTag EquipmentSlotTag, FName ArmorItemId)
 {
 	UpdateArmorPreview();
@@ -307,7 +450,6 @@ bool AInventoryPreviewActor::PlayArmorEquipMontage(FGameplayTag EquipmentSlotTag
 	{
 		AnimInstance->Montage_JumpToSection(StartSection, MontageToPlay);
 	}
-
 
 	return true;
 }
@@ -429,7 +571,6 @@ void AInventoryPreviewActor::RefreshSceneCaptureShowOnlyList()
 	}
 
 	// 방어구/모듈러 파츠는 UpdateArmorPreview에서 재생성되므로 ShowOnlyList도 매번 갱신해야 한다.
-	// 무기도 별도 컴포넌트로 생성되는 경우 같은 방식으로 ShowOnlyList 등록이 필요할 수 있다.
 	SceneCaptureComponent->ShowOnlyActors.Reset();
 	SceneCaptureComponent->ShowOnlyComponents.Reset();
 
@@ -443,6 +584,14 @@ void AInventoryPreviewActor::RefreshSceneCaptureShowOnlyList()
 		if (IsValid(ArmorMeshComponent))
 		{
 			SceneCaptureComponent->ShowOnlyComponent(ArmorMeshComponent);
+		}
+	}
+
+	for (UMeshComponent* WeaponMeshComponent : WeaponPreviewMeshComponents)
+	{
+		if (IsValid(WeaponMeshComponent))
+		{
+			SceneCaptureComponent->ShowOnlyComponent(WeaponMeshComponent);
 		}
 	}
 }
@@ -510,6 +659,8 @@ void AInventoryPreviewActor::BindInventoryEvents()
 
 	if (BoundInventoryComponent)
 	{
+		BoundInventoryComponent->OnEquippedWeaponChanged.RemoveDynamic(this, &ThisClass::HandleEquippedWeaponChanged);
+		BoundInventoryComponent->OnEquippedWeaponChanged.AddDynamic(this, &ThisClass::HandleEquippedWeaponChanged);
 		BoundInventoryComponent->OnEquippedArmorChanged.RemoveDynamic(this, &ThisClass::HandleEquippedArmorChanged);
 		BoundInventoryComponent->OnEquippedArmorChanged.AddDynamic(this, &ThisClass::HandleEquippedArmorChanged);
 	}
@@ -519,6 +670,7 @@ void AInventoryPreviewActor::UnbindInventoryEvents()
 {
 	if (BoundInventoryComponent)
 	{
+		BoundInventoryComponent->OnEquippedWeaponChanged.RemoveDynamic(this, &ThisClass::HandleEquippedWeaponChanged);
 		BoundInventoryComponent->OnEquippedArmorChanged.RemoveDynamic(this, &ThisClass::HandleEquippedArmorChanged);
 	}
 }

@@ -11,6 +11,7 @@ class UArmorComponent;
 class UWeaponComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FInventoryChangedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCurrencyChangedSignature, int32, NewAmount);
 // ItemId + CategoryTag + Quantity — 픽업 토스트 등 UI가 카테고리 구분 없이 DataTable을 찾을 수 있도록 Tag 포함
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FInventoryItemChangedSignature, FName, ItemId, FGameplayTag, ItemCategoryTag, int32, Quantity);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEquippedArmorChangedSignature, FGameplayTag, EquipmentSlotTag, FName, ArmorItemId);
@@ -19,6 +20,40 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FConsumableSlotChangedSignature, in
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FConsumableSlotUsedSignature, int32, SlotKey);
 // 제작 결과 알림 — bSuccess: 성공 여부, RecipeId: 레시피 ID, OutputItemId: 결과물 아이템 ID
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FCraftCompletedSignature, bool, bSuccess, FName, RecipeId, FName, OutputItemId);
+
+// 무기+소모품 공용 퀵슬롯 엔트리
+USTRUCT(BlueprintType)
+struct FRetrieveQuickSlotEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 SlotKey = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (Categories = "Item"))
+	FGameplayTag ItemCategoryTag;
+
+	bool IsValid() const
+	{
+		return SlotKey != INDEX_NONE && !ItemId.IsNone() && ItemCategoryTag.IsValid();
+	}
+
+	void Reset()
+	{
+		SlotKey = INDEX_NONE;
+		ItemId = NAME_None;
+		ItemCategoryTag = FGameplayTag();
+	}
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FRetrieveQuickSlotChangedSignature,
+	int32, SlotKey,
+	FRetrieveQuickSlotEntry, Entry
+);
 
 // 아이템 보유 상태만 관리한다. 전투 반영은 WeaponComponent와 GAS에서 처리
 // ItemId는 무기, 소모품, 재료 전체에서 겹치지 않게 사용
@@ -83,8 +118,37 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UseConsumableSlot(int32 SlotKey);
 
+	// ── 공용 퀵슬롯 (무기 + 소모품) ─────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
+	bool AssignQuickSlotItem(int32 SlotKey, FName ItemId, FGameplayTag ItemCategoryTag);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
+	bool UnassignQuickSlotItem(int32 SlotKey);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
+	FRetrieveQuickSlotEntry GetQuickSlotEntry(int32 SlotKey) const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
+	int32 GetAssignedQuickSlotKey(FName ItemId, FGameplayTag ItemCategoryTag) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
+	bool ActivateQuickSlotItem(int32 SlotKey);
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool CraftItem(FName RecipeId);
+
+	// ── Currency ──────────────────────────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Currency")
+	bool AddCurrency(int32 Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|Currency")
+	bool SpendCurrency(int32 Amount);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Currency")
+	int32 GetCurrency() const { return Currency; }
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Currency")
+	bool HasEnoughCurrency(int32 Amount) const { return Currency >= Amount; }
 
 	/** 제작 가능 여부만 검사 (재료 차감 없음). UI 버튼 활성화 판단에 사용 */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
@@ -148,9 +212,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory")
 	FConsumableSlotUsedSignature OnConsumableSlotUsed;
 
+	/** 무기+소모품 공용 퀵슬롯 변경 이벤트. QuickSlotWheelWidget이 구독 */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|QuickSlot")
+	FRetrieveQuickSlotChangedSignature OnQuickSlotChanged;
+
 	/** 제작 완료(성공/실패 모두) 시 브로드캐스트. CraftPanel이 결과를 표시하는 데 사용 */
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Craft")
 	FCraftCompletedSignature OnCraftCompleted;
+
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Inventory|Currency")
+	FCurrencyChangedSignature OnCurrencyChanged;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryItems, Category = "Retrieve|Inventory")
@@ -171,6 +242,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedArmorSlots, Category = "Retrieve|Inventory")
 	TArray<FRetrieveEquippedArmorEntry> EquippedArmorSlots;
 
+	// 공용 퀵슬롯 (비복제, 로컬 전용). 복제가 필요한 슬롯 4&5 소모품은 ConsumableSlot4/5ItemId로 별도 관리
+	UPROPERTY()
+	TMap<int32, FRetrieveQuickSlotEntry> QuickSlots;
+
 	// 전투 소모품 슬롯 4, 5번. TMap은 복제 불가라 필드로 직접 관리
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_ConsumableSlots, Category = "Retrieve|Inventory")
 	FName ConsumableSlot4ItemId = NAME_None;
@@ -182,6 +257,9 @@ protected:
 	// → OnRep_LastAddedItem에서 OnItemAdded.Broadcast — WBP_HUD 토스트 트리거
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_LastAddedItem, Category = "Retrieve|Inventory")
 	FRetrieveItemStack LastAddedItemNotification;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Currency, Category = "Retrieve|Inventory|Currency")
+	int32 Currency = 0;
 
 	UFUNCTION()
 	void OnRep_InventoryItems();
@@ -197,6 +275,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_LastAddedItem();
+
+	UFUNCTION()
+	void OnRep_Currency();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestEquipWeapon(FName WeaponItemId);
@@ -224,6 +305,18 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerCraftItem(FName RecipeId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerAssignQuickSlotItem(int32 SlotKey, FName ItemId, FGameplayTag ItemCategoryTag);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUnassignQuickSlotItem(int32 SlotKey);
+
+	UFUNCTION(Server, Reliable)
+	void ServerAddCurrency(int32 Amount);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSpendCurrency(int32 Amount);
 
 	UArmorComponent* GetArmorComponent() const;
 	UWeaponComponent* GetWeaponComponent() const;
