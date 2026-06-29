@@ -20,6 +20,7 @@
 #include "InputCoreTypes.h"
 #include "Input/RetrieveInputComponent.h"
 #include "Input/RetrieveInputConfig.h"
+#include "Settings/RetrieveGameUserSettings.h"
 
 
 const FName URetrieveHeroComponent::NAME_ActorFeatureName("Hero");
@@ -283,15 +284,19 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 	}
 
 	const FVector2D Value = InputActionValue.Get<FVector2D>();
+	const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+	const float SensitivityX = Settings ? Settings->MouseSensitivityX : 1.f;
+	const float SensitivityY = Settings ? Settings->MouseSensitivityY : 1.f;
+	const float PitchSign = Settings && Settings->bInvertMouseY ? -1.f : 1.f;
 
 	if (Value.X != 0.0f)
 	{
-		Pawn->AddControllerYawInput(Value.X);
+		Pawn->AddControllerYawInput(Value.X * SensitivityX);
 	}
 
 	if (Value.Y != 0.0f)
 	{
-		Pawn->AddControllerPitchInput(Value.Y);
+		Pawn->AddControllerPitchInput(Value.Y * SensitivityY * PitchSign);
 	}
 }
 

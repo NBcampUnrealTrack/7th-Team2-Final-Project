@@ -199,7 +199,7 @@ void ARetrieveGameState::AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign)
 		if (Row->CommandChannel.IsValid())
 		{
 			FRetrieveLumenCommandPayload Message;
-			Message.CommandTag = Row->CommandChannel;
+			Message.CommandTag = Row->TopicId.IsValid() ? Row->TopicId : Row->CommandChannel;
 			Message.Instigator = Sovereign;
 			if (UWorld* World = GetWorld())
 			{

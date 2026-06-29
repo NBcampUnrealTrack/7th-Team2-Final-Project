@@ -228,6 +228,21 @@ struct FRetrieveGuardianDefeatedPayload
 	FGameplayTag GuardianElement;
 };
 
+// ---- 화톳불 / 휴식 --------------------------------------------------
+
+/** Channel.Player.Rested 페이로드. 플레이어가 화톳불을 사용할 때 브로드캐스트. */
+USTRUCT(BlueprintType)
+struct FRetrievePlayerRestedPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Rest")
+	TObjectPtr<AActor> Instigator;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Rest")
+	FName BonfireId;
+};
+
 // ---- 대화 / 시네마틱 --------------------------------------------------
 
 /** 토픽 종류. Story = 대사 라인들, Command = Lumen 커맨드, Sigil = 대화+VFX */

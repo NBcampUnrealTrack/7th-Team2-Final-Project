@@ -381,8 +381,8 @@ struct RETRIEVE_API FMonsterLaunchKnockbackConfig
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
 	float KnockbackUpwardStrength = 400.f;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback", meta=(ClampMin="0.0"))
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback")
 	bool bCancelTargetActions = false;
 };
 
@@ -961,6 +961,9 @@ struct RETRIEVE_API FRetrieveInventorySaveData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	TMap<int32, FName> ConsumableSlotItemIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	int32 Currency = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -1107,7 +1110,6 @@ struct RETRIEVE_API FWeaponGuardAttackData
 	ERetrieveAttackSource AttackSource = ERetrieveAttackSource::Shield;
 
 	// "이 액션이 ParryWindow를 열 수 있는가"만 뜻한다.
-	// 들어오는 적 공격이 패링 가능한지는 Attack.Type.Parryable / Unblockable 태그가 별도로 결정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GuardAttack|Parry")
 	bool bCanStartParry = false;
 
@@ -1433,6 +1435,9 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|UI", meta = (MultiLine = true))
 	FText ShortDescription;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Economy", meta = (ClampMin = "0"))
+	int32 BasePrice = 500;
 };
 
 // 방어구 데이터. 복제는 RowName을 사용하고, 외형은 VisualData를 로컬에서 재구성한다.
@@ -1470,6 +1475,9 @@ struct RETRIEVE_API FRetrieveArmorDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|UI", meta = (MultiLine = true))
 	FText ShortDescription;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Economy", meta = (ClampMin = "0"))
+	int32 BasePrice = 300;
 };
 
 // 소모 아이템 데이터. 실제 회복/버프 적용은 UseItem Ability에서 처리
@@ -1519,6 +1527,9 @@ struct RETRIEVE_API FRetrieveConsumableItemRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|UI", meta = (MultiLine = true))
 	FText ShortDescription;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable|Economy", meta = (ClampMin = "0"))
+	int32 BasePrice = 100;
 };
 
 USTRUCT(BlueprintType)
@@ -1543,6 +1554,9 @@ struct RETRIEVE_API FRetrieveMaterialItemRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material|UI", meta = (MultiLine = true))
 	FText ShortDescription;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Material|Economy", meta = (ClampMin = "0"))
+	int32 BasePrice = 50;
 };
 
 // 화톳불 저장 시 플레이어 복원 기준 스냅샷
@@ -1833,4 +1847,13 @@ struct RETRIEVE_API FRetrieveBuffUIRow : public FTableRowBase
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BuffUI", meta = (ClampMin = 0.0))
 	float DurationOverride = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FRetrieveShopDialogueData : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText Dialogue;
 };

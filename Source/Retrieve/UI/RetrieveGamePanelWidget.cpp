@@ -1,6 +1,7 @@
 #include "UI/RetrieveGamePanelWidget.h"
 
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "UI/Sound/RetrieveUISoundTypes.h"
 
 URetrieveGamePanelWidget::URetrieveGamePanelWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -15,11 +16,13 @@ void URetrieveGamePanelWidget::RequestClose()
 
 bool URetrieveGamePanelWidget::PlayPanelOpenVFX()
 {
+	PlayUISound(ERetrieveUISoundEvent::PanelOpen);
 	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Open);
 }
 
 bool URetrieveGamePanelWidget::PlayPanelCloseVFX()
 {
+	PlayUISound(ERetrieveUISoundEvent::PanelClose);
 	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Close, true);
 }
 

@@ -97,6 +97,9 @@ public:
 	FWeaponVisualsSpawnedSignature OnWeaponVisualsSpawned;
 
 	const FRetrieveWeaponDataRow& GetWeaponDataRef() const { return CurrentWeaponData; }
+
+	/** WeaponItemId 에 해당하는 DataTable 행을 반환. 없으면 nullptr. 장착 여부 무관. */
+	const FRetrieveWeaponDataRow* FindWeaponData(FName WeaponItemId) const;
 	
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -145,7 +148,6 @@ protected:
 	void OnRep_CurrentWeaponDataRow();
 
 	URetrieveAbilitySystemComponent* GetRetrieveAbilitySystemComponent() const;
-	const FRetrieveWeaponDataRow* FindWeaponData(FName WeaponItemId) const;
 	void ClearGrantedWeaponAbilities();
 	void ClearWeaponData();                                       // 데이터/어빌리티/GE 정리 (비주얼·브로드캐스트 없음)
 	bool TryTriggerEquipTransition(const FGameplayTag& EventTag); // GA_EquipTransition 트리거, 발동 여부 반환

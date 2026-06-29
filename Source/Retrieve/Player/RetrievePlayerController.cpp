@@ -16,6 +16,13 @@
 #include "Logging/RetrieveCheatManager.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "UI/Inventory/InventoryPanelWidget.h"
+#include "UI/HUD/RetrieveQuickSlotWheelWidget.h"
+#include "UI/Shop/ShopPanelWidget.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Shop/RetrieveShopDefinitionAsset.h"
+#include "Components/World/RetrieveDialogueComponent.h"
+#include "Components/World/RetrieveShopComponent.h"
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
@@ -28,10 +35,12 @@
 #include "UI/ViewModels/PlayerStatusViewModel.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
 
 namespace
@@ -65,6 +74,8 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 	bShowMouseCursor = false;
 	CheatClass = URetrieveCheatManager::StaticClass();
 	AttackFeedbackComponent = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
+	SettingsPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Settings/WBP_SettingsScreen.WBP_SettingsScreen_C")));
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -95,6 +106,17 @@ void ARetrievePlayerController::BeginPlay()
 		return;
 	}
 
+	// 상점 포커스 카메라를 미리 스폰해 전환 시점의 스폰 히치를 제거한다.
+	if (!ShopFocusCameraActor)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ShopFocusCameraActor = World->SpawnActor<ACameraActor>(
+			ACameraActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	}
+
 	SessionListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveSessionStatePayload>(
 		RetrieveGameplayTags::Channel_Session_StateChanged,
 		[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
@@ -106,6 +128,17 @@ void ARetrievePlayerController::BeginPlay()
 			}
 		});
 
+	ShopCommandHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveLumenCommandPayload>(
+		RetrieveGameplayTags::Channel_Shop_OpenShop,
+		[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
+	(FGameplayTag /*Channel*/, const FRetrieveLumenCommandPayload& Payload)
+		{
+			if (ARetrievePlayerController* PC = WeakThis.Get())
+			{
+				PC->HandleShopOpenCommand(Payload);
+			}
+		});
+
 	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
 		HandleSessionStateChanged(GS->GetSessionState());
@@ -114,7 +147,6 @@ void ARetrievePlayerController::BeginPlay()
 
 void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	HideLoadingScreen();
 	RemoveActivePanelImmediately();
 
 	if (SessionListener.IsValid())
@@ -124,6 +156,15 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(SessionListener);
 		}
 		SessionListener = FGameplayMessageListenerHandle();
+	}
+
+	if (ShopCommandHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(ShopCommandHandle);
+		}
+		ShopCommandHandle = FGameplayMessageListenerHandle();
 	}
 
 	if (ActiveTopLevelWidget)
@@ -139,6 +180,12 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 	}
 
 	CloseConversation();
+	if (ShopFocusCameraActor)
+	{
+		ShopFocusCameraActor->Destroy();
+		ShopFocusCameraActor = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -180,6 +227,28 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 		LastInputRealTimeSeconds = World->GetRealTimeSeconds();
 	}
 
+	// 라디얼 퀵슬롯 휠: 키를 누르고 있는 동안 열고, 떼면 방향 슬롯 사용
+	if (QuickSlotWheelKey.IsValid() && Params.Key == QuickSlotWheelKey)
+	{
+		if (Params.Event == IE_Pressed)
+		{
+			// 다른 패널이 열려 있지 않을 때만 인게임 휠을 연다
+			if (!ActivePanel && !bQuickSlotWheelOpen)
+			{
+				OpenQuickSlotWheel();
+				return true;
+			}
+		}
+		else if (Params.Event == IE_Released)
+		{
+			if (bQuickSlotWheelOpen)
+			{
+				CloseQuickSlotWheelAndUse();
+				return true;
+			}
+		}
+	}
+
 	if (Params.Event == IE_Pressed)
 	{
 		if (ActivePanel && Params.Key == EKeys::Escape)
@@ -190,6 +259,12 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 		if (TryHandleMinimapShortcut(Params.Key))
 		{
+			return true;
+		}
+
+		if (SettingsPanelKey.IsValid() && Params.Key == SettingsPanelKey)
+		{
+			OpenSettingsPanel();
 			return true;
 		}
 
@@ -219,17 +294,6 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 	{
 		AttackFeedbackComponent->HandlePossessedPawnChanged(InPawn);
 	}
-
-	if (const UWorld* World = GetWorld())
-	{
-		if (const ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
-		{
-			if (GS->GetSessionState() == ERetrieveSessionState::MainMenu)
-			{
-				ApplyMainMenuCamera();
-			}
-		}
-	}
 }
 
 void ARetrievePlayerController::RequestNewGame()
@@ -245,6 +309,126 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 	SwapActiveWidget(NewState);
 	UpdateInputMode(NewState);
 	HandleSessionPresentation(NewState);
+}
+
+void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState NewState)
+{
+	switch (NewState)
+	{
+	case ERetrieveSessionState::MainMenu:
+		ApplyMainMenuCamera();
+		break;
+
+	case ERetrieveSessionState::InGame:
+		ApplyGameplayCamera();
+		if (ActiveLoadingScreen)
+		{
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
+				                                  &ARetrievePlayerController::HideLoadingScreen,
+				                                  LoadingScreenMinSeconds, false);
+			}
+			else
+			{
+				HideLoadingScreen();
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ARetrievePlayerController::ApplyMainMenuCamera()
+{
+	if (APawn* MyPawn = GetPawn())
+	{
+		MyPawn->SetActorHiddenInGame(true);
+
+		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
+		{
+			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
+			{
+				MoveComp->StopMovementImmediately();
+				MoveComp->DisableMovement();
+			}
+		}
+	}
+
+	if (AActor* CineCam = FindMainMenuCamera())
+	{
+		SetViewTargetWithBlend(CineCam, 0.f);
+	}
+}
+
+void ARetrievePlayerController::ApplyGameplayCamera()
+{
+	if (APawn* MyPawn = GetPawn())
+	{
+		MyPawn->SetActorHiddenInGame(false);
+
+		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
+		{
+			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
+			{
+				MoveComp->SetDefaultMovementMode();
+			}
+		}
+
+		SetViewTargetWithBlend(MyPawn, MenuToGameplayBlendSeconds);
+	}
+}
+
+AActor* ARetrievePlayerController::FindMainMenuCamera() const
+{
+	if (MainMenuCameraTag.IsNone())
+	{
+		return nullptr;
+	}
+
+	TArray<AActor*> Found;
+	UGameplayStatics::GetAllActorsWithTag(this, MainMenuCameraTag, Found);
+	return Found.Num() > 0 ? Found[0] : nullptr;
+}
+
+void ARetrievePlayerController::ShowLoadingScreen()
+{
+	if (!LoadingScreenClass || ActiveLoadingScreen)
+	{
+		return;
+	}
+
+	ActiveLoadingScreen = CreateWidget<UUserWidget>(this, LoadingScreenClass);
+	if (!ActiveLoadingScreen)
+	{
+		return;
+	}
+
+	ActiveLoadingScreen->AddToViewport(100);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			LoadingScreenTimerHandle, this,
+			&ARetrievePlayerController::HideLoadingScreen,
+			LoadingScreenSafetySeconds, false);
+	}
+}
+
+void ARetrievePlayerController::HideLoadingScreen()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LoadingScreenTimerHandle);
+	}
+
+	if (ActiveLoadingScreen)
+	{
+		ActiveLoadingScreen->RemoveFromParent();
+		ActiveLoadingScreen = nullptr;
+	}
 }
 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState NewState)
@@ -382,131 +566,6 @@ TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieve
 	}
 }
 
-void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState NewState)
-{
-	switch (NewState)
-	{
-	case ERetrieveSessionState::MainMenu:
-		ApplyMainMenuCamera();
-		break;
-
-	case ERetrieveSessionState::InGame:
-		ApplyGameplayCamera();
-		if (ActiveLoadingScreen)
-		{
-			if (UWorld* World = GetWorld())
-			{
-				World->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
-				                                  &ARetrievePlayerController::HideLoadingScreen,
-				                                  LoadingScreenMinSeconds, false);
-			}
-			else
-			{
-				HideLoadingScreen();
-			}
-		}
-		break;
-
-	default:
-		break;
-	}
-}
-
-void ARetrievePlayerController::ApplyMainMenuCamera()
-{
-	if (APawn* MyPawn = GetPawn())
-	{
-		MyPawn->SetActorHiddenInGame(true);
-		
-		// TODO: (코옵) 권한 검사
-		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
-		{
-			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
-			{
-				MoveComp->StopMovementImmediately();
-				MoveComp->DisableMovement();
-			}
-		}
-	}
-
-	if (AActor* CineCam = FindMainMenuCamera())
-	{
-		SetViewTargetWithBlend(CineCam, 0.f);
-	}
-}
-
-void ARetrievePlayerController::ApplyGameplayCamera()
-{
-	if (APawn* MyPawn = GetPawn())
-	{
-		MyPawn->SetActorHiddenInGame(false);
-
-		// TODO: (코옵) 권한 검사
-		if (ACharacter* MyCharacter = Cast<ACharacter>(MyPawn))
-		{
-			if (UCharacterMovementComponent* MoveComp = MyCharacter->GetCharacterMovement())
-			{
-				MoveComp->SetDefaultMovementMode();
-			}
-		}
-		
-		// 메뉴 시점에서 플레이 시점으로 블렌드, 로딩 화면이 가림
-		SetViewTargetWithBlend(MyPawn, MenuToGameplayBlendSeconds);
-	}
-}
-
-AActor* ARetrievePlayerController::FindMainMenuCamera() const
-{
-	if (MainMenuCameraTag.IsNone())
-	{
-		return nullptr;
-	}
-
-	TArray<AActor*> Found;
-	UGameplayStatics::GetAllActorsWithTag(this, MainMenuCameraTag, Found);
-	return Found.Num() > 0 ? Found[0] : nullptr;
-}
-
-void ARetrievePlayerController::ShowLoadingScreen()
-{
-	if (!LoadingScreenClass || ActiveLoadingScreen)
-	{
-		return;
-	}
-
-	ActiveLoadingScreen = CreateWidget<UUserWidget>(this, LoadingScreenClass);
-	if (!ActiveLoadingScreen)
-	{
-		return;
-	}
-
-	// HUD (0), 토스트 (10), 패널 (50) 위의 ZOrder
-	ActiveLoadingScreen->AddToViewport(100);
-
-	// InGame에 도달하지 못했을 때 플레이어가 화면에 갇히지 않도록 함
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			LoadingScreenTimerHandle, this,
-			&ARetrievePlayerController::HideLoadingScreen,
-			LoadingScreenSafetySeconds, false);
-	}
-}
-
-void ARetrievePlayerController::HideLoadingScreen()
-{
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(LoadingScreenTimerHandle);
-	}
-
-	if (ActiveLoadingScreen)
-	{
-		ActiveLoadingScreen->RemoveFromParent();
-		ActiveLoadingScreen = nullptr;
-	}
-}
-
 float ARetrievePlayerController::GetSecondsSinceLastInput() const
 {
 	const UWorld* World = GetWorld();
@@ -552,6 +611,24 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	{
 		InventoryPanel->InitializeInventoryPanel(GetPawnInventoryComponent(), GetPawnWeaponComponent());
 	}
+	if (UShopPanelWidget* ShopPanel = Cast<UShopPanelWidget>(NewPanel))
+	{
+		if (PendingShopDefinition)
+		{
+			ShopPanel->InitializeShopPanel(GetPawnInventoryComponent(), PendingShopDefinition, PendingShopComponent);
+			if (bPendingShopOpenSellTab)
+			{
+				ShopPanel->SwitchToSellTab();
+			}
+			else
+			{
+				ShopPanel->SwitchToBuyTab();
+			}
+			PendingShopDefinition = nullptr;
+			PendingShopComponent = nullptr;
+			bPendingShopOpenSellTab = false;
+		}
+	}
 
 	ActivePanel = NewPanel;
 	ActivePanelClass = PanelClass;
@@ -568,6 +645,24 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 
 	NewPanel->SetKeyboardFocus();
 	NewPanel->PlayPanelOpenVFX();
+}
+
+void ARetrievePlayerController::OpenSettingsPanel()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = SettingsPanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open settings: SettingsPanelClass is empty."));
+		return;
+	}
+
+	FRetrievePanelShortcutConfig SettingsShortcut;
+	SettingsShortcut.Key = SettingsPanelKey;
+	SettingsShortcut.PanelClass = PanelClass;
+	if (CanOpenPanel(SettingsShortcut))
+	{
+		OpenExclusivePanel(PanelClass, SettingsPanelKey);
+	}
 }
 
 void ARetrievePlayerController::CloseActivePanel()
@@ -610,6 +705,7 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 
 	ActivePanel->OnCloseRequested.RemoveDynamic(this, &ThisClass::HandleActivePanelCloseRequested);
 	ActivePanel->OnUIVFXFinished.RemoveDynamic(this, &ThisClass::HandleActivePanelCloseVFXFinished);
+	const bool bRemovingShopPanel = ActivePanel->IsA<UShopPanelWidget>();
 	ActivePanel->RemoveFromParent();
 	ActivePanel = nullptr;
 	ActivePanelClass = nullptr;
@@ -618,6 +714,104 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	FInputModeGameOnly InputMode;
 	SetInputMode(InputMode);
 	bShowMouseCursor = false;
+
+	// 상점 등으로 NPC를 비추던 카메라를 플레이어로 복귀한다.
+	if (bShopCameraActive)
+	{
+		RestorePlayerCameraView();
+	}
+
+	if (bRemovingShopPanel)
+	{
+		bCanReturnToShopConversation = false;
+		CurrentShopNPC = nullptr;
+	}
+}
+
+void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor)
+{
+	UWorld* World = GetWorld();
+	if (!TargetActor || !World)
+	{
+		return;
+	}
+
+	// NPC 정면 기준으로 카메라 위치/회전 계산.
+	// 메시 정면이 액터 Forward와 반대인 경우가 많아 OrbitYaw로 배치 방향을 조정한다.
+	const FVector NpcLoc = TargetActor->GetActorLocation();
+	const FVector Forward = TargetActor->GetActorForwardVector();
+	const FVector Dir = Forward.RotateAngleAxis(ShopCameraOrbitYaw, FVector::UpVector);
+	const FVector CamLoc = NpcLoc + Dir * ShopCameraDistance
+		+ FVector(0.0f, 0.0f, ShopCameraHeight);
+	const FVector BaseLookAt = NpcLoc + FVector(0.0f, 0.0f, ShopCameraLookAtHeight);
+	const FRotator BaseCamRot = (BaseLookAt - CamLoc).Rotation();
+	const FVector CameraRight = FRotationMatrix(BaseCamRot).GetUnitAxis(EAxis::Y);
+	const FVector LookAt = BaseLookAt - CameraRight * ShopCameraFrameRightOffset;
+	const FRotator CamRot = (LookAt - CamLoc).Rotation();
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[ShopCamera] PC=%s Target=%s Distance=%.1f Height=%.1f LookAtHeight=%.1f FOV=%.1f FrameRightOffset=%.1f OrbitYaw=%.1f CamLoc=%s LookAt=%s"),
+		*GetClass()->GetPathName(),
+		*GetNameSafe(TargetActor),
+		ShopCameraDistance,
+		ShopCameraHeight,
+		ShopCameraLookAtHeight,
+		ShopCameraFOV,
+		ShopCameraFrameRightOffset,
+		ShopCameraOrbitYaw,
+		*CamLoc.ToCompactString(),
+		*LookAt.ToCompactString());
+
+	// 카메라 액터를 한 번만 스폰해 재사용한다.
+	if (!ShopFocusCameraActor)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ShopFocusCameraActor = World->SpawnActor<ACameraActor>(
+			ACameraActor::StaticClass(), CamLoc, CamRot, SpawnParams);
+	}
+	else
+	{
+		ShopFocusCameraActor->SetActorLocationAndRotation(CamLoc, CamRot);
+	}
+
+	if (!ShopFocusCameraActor)
+	{
+		return;
+	}
+	if (UCameraComponent* CameraComponent = ShopFocusCameraActor->GetCameraComponent())
+	{
+		CameraComponent->SetFieldOfView(ShopCameraFOV);
+	}
+
+	SetViewTargetWithBlend(ShopFocusCameraActor, ShopCameraBlendTime,
+		EViewTargetBlendFunction::VTBlend_Cubic, 0.0f, false);
+	bShopCameraActive = true;
+
+	// 상점 카메라 동안 플레이어 폰을 일시적으로 숨긴다.
+	if (bHidePlayerDuringShopCamera)
+	{
+		if (APawn* ControlledPawn = GetPawn())
+		{
+			ControlledPawn->SetActorHiddenInGame(true);
+		}
+	}
+}
+
+void ARetrievePlayerController::RestorePlayerCameraView()
+{
+	bShopCameraActive = false;
+
+	if (AActor* PawnTarget = GetPawn())
+	{
+		// 숨겼던 플레이어 폰을 다시 표시한다.
+		PawnTarget->SetActorHiddenInGame(false);
+
+		SetViewTargetWithBlend(PawnTarget, ShopCameraBlendTime,
+			EViewTargetBlendFunction::VTBlend_Cubic, 0.0f, false);
+	}
 }
 
 void ARetrievePlayerController::HandleActivePanelCloseFallback()
@@ -679,6 +873,73 @@ bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
 	}
 
 	return false;
+}
+
+void ARetrievePlayerController::OpenQuickSlotWheel()
+{
+	if (bQuickSlotWheelOpen || !QuickSlotWheelClass)
+	{
+		return;
+	}
+
+	if (!QuickSlotWheelInstance)
+	{
+		QuickSlotWheelInstance = CreateWidget<URetrieveQuickSlotWheelWidget>(this, QuickSlotWheelClass);
+		if (QuickSlotWheelInstance)
+		{
+			QuickSlotWheelInstance->AddToViewport(70);
+		}
+	}
+
+	if (!QuickSlotWheelInstance)
+	{
+		return;
+	}
+
+	QuickSlotWheelInstance->InitializeQuickSlotWheel(GetPawnInventoryComponent(), QuickSlotIconTable);
+	QuickSlotWheelInstance->OpenForUse();
+
+	// 마우스 방향 선택을 위해 GameAndUI. 커서는 추적은 유지하되 모양을 None으로 해서
+	// 화면에는 보이지 않게 한다(절대 좌표 기반 방향 선택이 계속 동작).
+	FInputModeGameAndUI Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	Mode.SetHideCursorDuringCapture(false);
+	SetInputMode(Mode);
+	bShowMouseCursor = true;
+	CurrentMouseCursor = EMouseCursor::None;
+
+	// 커서를 화면 중앙(휠 중심 부근)으로 옮겨 중립 상태에서 시작
+	if (GEngine && GEngine->GameViewport)
+	{
+		FVector2D ViewportSize;
+		GEngine->GameViewport->GetViewportSize(ViewportSize);
+		SetMouseLocation(static_cast<int32>(ViewportSize.X * 0.5f),
+		                 static_cast<int32>(ViewportSize.Y * 0.5f));
+	}
+
+	bQuickSlotWheelOpen = true;
+}
+
+void ARetrievePlayerController::CloseQuickSlotWheelAndUse()
+{
+	if (!bQuickSlotWheelOpen)
+	{
+		return;
+	}
+
+	if (QuickSlotWheelInstance)
+	{
+		// 마우스 방향으로 하이라이트된 슬롯 사용 후 휠 닫기
+		QuickSlotWheelInstance->ActivateHighlightedSlotAndClose();
+	}
+
+	// 게임 입력 모드로 복귀 + 커서 모양 복원
+	FInputModeGameOnly GameMode;
+	SetInputMode(GameMode);
+	bShowMouseCursor = false;
+	CurrentMouseCursor = EMouseCursor::Default;
+
+	bQuickSlotWheelOpen = false;
 }
 
 bool ARetrievePlayerController::CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const
@@ -849,8 +1110,18 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	}
 	ConversationVM = NewObject<UConversationViewModel>(this);
 	ConversationVM->Initialize(World, this);
+	CurrentDialogueNPC = NPC;
 	ConversationVM->BuildOpeningTopicsFor(NPC);
-	
+
+	// NPC 대화 시작 애니메이션 트리거
+	if (NPC)
+	{
+		if (URetrieveDialogueComponent* DC = NPC->FindComponentByClass<URetrieveDialogueComponent>())
+		{
+			DC->PlayGreetingAnimation();
+		}
+	}
+
 	if (UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr)
 	{
 		if (UMVVMView* View = MVVM->GetViewFromUserWidget(ConversationInstance))
@@ -876,6 +1147,15 @@ void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGa
 			GS->AdvanceDialogue(TopicId, GetPawn());
 		}
 	}
+
+	// 선택된 TopicId에 해당하는 NPC 애니메이션 트리거
+	if (CurrentDialogueNPC)
+	{
+		if (URetrieveDialogueComponent* DC = CurrentDialogueNPC->FindComponentByClass<URetrieveDialogueComponent>())
+		{
+			DC->PlayTopicAnimation(TopicId);
+		}
+	}
 }
 
 void ARetrievePlayerController::Server_RequestLumenToggleWait_Implementation()
@@ -884,6 +1164,16 @@ void ARetrievePlayerController::Server_RequestLumenToggleWait_Implementation()
 
 void ARetrievePlayerController::CloseConversation()
 {
+	// NPC 유휴 애니메이션 복귀
+	if (CurrentDialogueNPC)
+	{
+		if (URetrieveDialogueComponent* DC = CurrentDialogueNPC->FindComponentByClass<URetrieveDialogueComponent>())
+		{
+			DC->ReturnToIdle();
+		}
+	}
+	CurrentDialogueNPC = nullptr;
+
 	if (ConversationInstance)
 	{
 		ConversationInstance->RemoveFromParent();
@@ -1086,4 +1376,74 @@ void ARetrievePlayerController::ClearHUDViewModel()
 			Tracker->Deinitialize();
 		}
 	}
+}
+
+void ARetrievePlayerController::OpenShopPanel(TSubclassOf<URetrieveGamePanelWidget> ShopPanelClass,
+                                               URetrieveShopDefinitionAsset* ShopDefinition)
+{
+	PendingShopDefinition = ShopDefinition;
+	OpenExclusivePanel(ShopPanelClass, EKeys::Invalid);
+}
+
+void ARetrievePlayerController::HandleShopOpenCommand(const FRetrieveLumenCommandPayload& Payload)
+{
+	const bool bOpenSellTab = Payload.CommandTag.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Sell)
+		|| Payload.CommandTag.ToString().Contains(TEXT(".Sell"));
+	OpenShopFromCurrentConversation(bOpenSellTab);
+}
+
+void ARetrievePlayerController::OpenShopFromCurrentConversation(bool bOpenSellTab)
+{
+	if (!ShopPanelWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleShopOpenCommand: ShopPanelWidgetClass가 비어 있습니다. BP_RetrievePlayerController에서 할당하세요."));
+		return;
+	}
+
+	URetrieveShopDefinitionAsset* ShopDef = nullptr;
+	URetrieveShopComponent* ShopComp = nullptr;
+	if (CurrentDialogueNPC)
+	{
+		ShopComp = CurrentDialogueNPC->FindComponentByClass<URetrieveShopComponent>();
+		if (ShopComp)
+			ShopDef = ShopComp->ShopDefinition;
+	}
+
+	if (!ShopDef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleShopOpenCommand: NPC에 RetrieveShopComponent 또는 ShopDefinition이 없습니다."));
+		return;
+	}
+
+	PendingShopComponent = ShopComp;
+	bPendingShopOpenSellTab = bOpenSellTab;
+
+	// CloseConversation()이 CurrentDialogueNPC를 비우므로 미리 보관한다.
+	AActor* ShopNPC = CurrentDialogueNPC;
+	CurrentShopNPC = ShopNPC;
+	bCanReturnToShopConversation = true;
+
+	CloseConversation();
+	OpenShopPanel(ShopPanelWidgetClass, ShopDef);
+
+	// 상점 NPC를 정면으로 비추도록 카메라를 블렌드한다.
+	FocusCameraOnActor(ShopNPC);
+}
+
+bool ARetrievePlayerController::ReturnToShopConversation()
+{
+	if (!bCanReturnToShopConversation)
+	{
+		return false;
+	}
+
+	AActor* ShopNPC = CurrentShopNPC.Get();
+	if (!ShopNPC)
+	{
+		return false;
+	}
+
+	RemoveActivePanelImmediately();
+	Client_OpenConversation(ShopNPC);
+	return true;
 }
