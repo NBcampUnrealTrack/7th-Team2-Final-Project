@@ -37,6 +37,7 @@ FReply UCraftRecipeEntryWidget::NativeOnPreviewMouseButtonDown(
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
+		PlayUISound(ERetrieveUISoundEvent::Press);
 		HandleClicked();
 		return FReply::Handled();
 	}
@@ -62,6 +63,7 @@ void UCraftRecipeEntryWidget::NativeOnMouseEnter(
 	const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+	PlayUISound(ERetrieveUISoundEvent::Hover);
 	bHovered = true;
 	RefreshVisualState();
 }
@@ -69,6 +71,7 @@ void UCraftRecipeEntryWidget::NativeOnMouseEnter(
 void UCraftRecipeEntryWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
+	PlayUISound(ERetrieveUISoundEvent::Unhover);
 	bHovered = false;
 	RefreshVisualState();
 }

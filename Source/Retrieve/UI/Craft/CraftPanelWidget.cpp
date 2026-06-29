@@ -130,6 +130,8 @@ void UCraftPanelWidget::BindButtonEvents()
 		Slider_CraftCount->SetValue(1.f);
 		Slider_CraftCount->SetStepSize(1.f);
 	}
+
+	RegisterSoundButton(Button_Craft);
 }
 
 void UCraftPanelWidget::ApplyStaticTexts()

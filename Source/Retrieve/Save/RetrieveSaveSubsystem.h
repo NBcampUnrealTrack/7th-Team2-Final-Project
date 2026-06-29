@@ -104,6 +104,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	URetrieveSaveGame* GetCurrentSaveGame() const { return CurrentSaveGame; }
 
+	/** CurrentSaveGame을 WorldState 슬롯에 즉시 기록 (PlayerController 없이). 상점 판매 등 인게임 이벤트용 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void FlushWorldState();
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool HasSaveGameForPlayer(APlayerController* PlayerController) const;
 

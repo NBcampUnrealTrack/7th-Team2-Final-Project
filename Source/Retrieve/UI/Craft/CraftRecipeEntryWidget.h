@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/VFX/RetrieveUIVFXWidget.h"
 #include "CraftRecipeEntryWidget.generated.h"
 
 class UButton;
@@ -11,7 +11,7 @@ class UTextBlock;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCraftRecipeEntryClickedSignature, FName, RecipeId);
 
 UCLASS()
-class RETRIEVE_API UCraftRecipeEntryWidget : public UUserWidget
+class RETRIEVE_API UCraftRecipeEntryWidget : public URetrieveUIVFXWidget
 {
 	GENERATED_BODY()
 
