@@ -36,6 +36,24 @@ void URetrieveHealthComponent::ResetHealth()
 	UE_LOG(LogTemp, Display, TEXT("[%s] HealthRevocer!"), *GetOwner()->GetName());
 }
 
+void URetrieveHealthComponent::Revive()
+{
+	if (!AbilitySystemComponent || !AttributeSet)
+	{
+		return;
+	}
+
+	FGameplayTagContainer DieTags;
+	DieTags.AddTag(RetrieveGameplayTags::Ability_Common_Die);
+	AbilitySystemComponent->CancelAbilities(&DieTags);
+
+	FGameplayTagContainer StatusTags;
+	StatusTags.AddTag(RetrieveGameplayTags::State_Status_Burn);
+	AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(StatusTags);
+
+	ResetHealth();
+}
+
 void URetrieveHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UninitializeWithAbilitySystem();

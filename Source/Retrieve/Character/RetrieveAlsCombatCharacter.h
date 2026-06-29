@@ -21,6 +21,8 @@ public:
 	
 	URetrieveHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	
+	virtual void Revive(const FTransform& RespawnTransform);
+	
 protected:
 	virtual void BeginPlay() override;
 	

@@ -96,13 +96,14 @@ bool UStaminaComponent::TryBindAttributeSet()
 	}
 
 	StaminaChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			UCombatAttributeSet::GetStaminaAttribute())
-		.AddUObject(this, &UStaminaComponent::HandleStaminaAttributeChanged);
+		                                             UCombatAttributeSet::GetStaminaAttribute())
+	                                             .AddUObject(this, &UStaminaComponent::HandleStaminaAttributeChanged);
 
 	MaxStaminaChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			UCombatAttributeSet::GetMaxStaminaAttribute())
-		.AddUObject(this, &UStaminaComponent::HandleMaxStaminaAttributeChanged);
-	
+		                                                UCombatAttributeSet::GetMaxStaminaAttribute())
+	                                                .AddUObject(
+		                                                this, &UStaminaComponent::HandleMaxStaminaAttributeChanged);
+
 	if (const AActor* Owner = GetOwner(); Owner && Owner->HasAuthority()
 		&& StaminaRegenEffect && !RegenEffectHandle.IsValid())
 	{
@@ -134,7 +135,8 @@ void UStaminaComponent::BroadcastStaminaChanged()
 	OnStaminaChanged.Broadcast(GetStamina(), GetMaxStamina());
 }
 
-void UStaminaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UStaminaComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+                                      FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
@@ -143,7 +145,7 @@ void UStaminaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 	{
 		return;
 	}
-	
+
 	// UI(WBP_Stamina) 연동 완료로 PIE 온스크린 디버그 표시 비활성화.
 	// 필요 시 아래 블록과 헤더의 bShowDebugOnScreen 주석을 해제하면 됨.
 	//const APawn* OwnerPawn = Cast<APawn>(GetOwner());
@@ -168,4 +170,13 @@ float UStaminaComponent::GetMaxStamina() const
 bool UStaminaComponent::HasStamina(float Cost) const
 {
 	return Cost <= 0.f || GetStamina() >= Cost;
+}
+
+void UStaminaComponent::ResetStamina()
+{
+	if (!AbilitySystemComponent || !AttributeSet)
+	{
+		return;
+	}
+	AbilitySystemComponent->SetNumericAttributeBase(UCombatAttributeSet::GetStaminaAttribute(), GetMaxStamina());
 }

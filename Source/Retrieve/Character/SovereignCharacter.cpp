@@ -208,3 +208,22 @@ void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 		Payload
 	);
 }
+
+void ASovereignCharacter::Revive(const FTransform& RespawnTransform)
+{
+	Super::Revive(RespawnTransform);
+
+	if (ElementGaugeComponent)
+	{
+		ElementGaugeComponent->ClearSlot();
+	}
+	if (StaminaComponent)
+	{
+		StaminaComponent->ResetStamina();
+	}
+
+	if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_Dead);
+	}
+}

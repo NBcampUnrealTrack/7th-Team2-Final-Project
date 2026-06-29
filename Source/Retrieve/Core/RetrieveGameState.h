@@ -29,6 +29,22 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Session")
 	APawn* GetHostPawn() const;
+
+	/** 호스트 권한. 플레이어가 가장 최근에 휴식하거나 활성화한 모닥불을 기록. */
+	void SetLastCheckpointBonfire(FName BonfireId);
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Checkpoint")
+	FName GetLastCheckpointBonfireId() const { return LastCheckpointBonfireId; }
+
+	/**
+	 * 리스폰 트랜스폼을 결정: 마지막으로 휴식한 모닥불의 ArrivalPoint, 없으면 기본 시작 모닥불, 없으면 첫 번째 PlayerStart.
+	 * 항상 스폰 가능한 트랜스폼을 반환합니다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Checkpoint")
+	FTransform GetLastCheckpointOrFallback() const;
+
+	/** 호스트 권한. 미설정 시 LastCheckpointBonfireId를 기본 시작 모닥불로 시딩. */
+	void SeedDefaultCheckpointIfUnset();
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	UQuestBranchComponent* GetQuestBranchComponent() const { return QuestBranchComponent; }
@@ -62,6 +78,14 @@ public:
 protected:
 	UPROPERTY(ReplicatedUsing = OnRep_SessionState)
 	ERetrieveSessionState SessionState = ERetrieveSessionState::Loading;
+	
+	/** 호스트 권한. 첫 휴식 전까지는 NAME_None (이후 GetLastCheckpointOrFallback이 폴백) */
+	UPROPERTY(Replicated)
+	FName LastCheckpointBonfireId;
+	
+	/** 첫 휴식 전 새 게임에서 스폰/리스폰되는 모닥불. BP_RetrieveGameState에서 설정. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Checkpoint")
+	FName DefaultStartBonfireId;
 	
 	UPROPERTY(Replicated)
 	TObjectPtr<APlayerState> HostPlayerState;

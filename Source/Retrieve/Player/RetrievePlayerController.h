@@ -84,9 +84,10 @@ public:
 	void RequestNewGame();
 
 protected:
-	void HandleSessionStateChanged(ERetrieveSessionState NewState);
-	void SwapActiveWidget(ERetrieveSessionState NewState);
+	void HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState);
+	void SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState);
 	void UpdateInputMode(ERetrieveSessionState NewState);
+	bool ShouldShowLoadingCover(ERetrieveSessionState Previous, ERetrieveSessionState NewState) const;
 
 	TSubclassOf<UUserWidget> ResolveWidgetClass(ERetrieveSessionState State) const;
 
@@ -121,6 +122,10 @@ protected:
 	/** 부팅/메뉴 로딩 화면 위젯 (코스메틱). (빠른 이동용 WBP_LoadingCutscene이 아님) */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> LoadingScreenClass;
+	
+	/** 개발 편의: 새 게임/부팅 진입 시 로딩 커버 생략 (부활 커버는 항상 유지). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dev")
+	bool bSkipEntryLoadingScreen = true;
 
 	/** Persistant 레벨에 배치된 인게임 메인 메뉴 시네 카메라를 식별하는 액터 태그. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Menu")
