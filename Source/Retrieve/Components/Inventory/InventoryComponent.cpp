@@ -67,6 +67,7 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION(UInventoryComponent, ConsumableSlot5ItemId,     COND_OwnerOnly);
 	// REPNOTIFY_Always: 같은 아이템을 연속 픽업해도 OnRep가 매번 발동되도록
 	DOREPLIFETIME_CONDITION_NOTIFY(UInventoryComponent, LastAddedItemNotification, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION(UInventoryComponent, Currency, COND_OwnerOnly);
 }
 
 bool UInventoryComponent::AddItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
@@ -206,15 +207,30 @@ bool UInventoryComponent::RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag,
 			}
 		}
 
-		// 수량이 0이 된 소모품은 HUD 슬롯에서 제거
-		if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable) && !HasItem(ItemId))
+		// 수량이 0이 된 소모품/무기는 퀵슬롯에서 제거
+		if (!HasItem(ItemId))
 		{
-			for (const int32 SlotKey : ConsumableSlotKeys)
+			if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
 			{
-				if (GetSlotField(SlotKey) == ItemId)
+				for (const int32 SlotKey : ConsumableSlotKeys)
 				{
-					GetMutableSlotField(SlotKey) = NAME_None;
-					OnConsumableSlotChanged.Broadcast(SlotKey, NAME_None);
+					if (GetSlotField(SlotKey) == ItemId)
+					{
+						GetMutableSlotField(SlotKey) = NAME_None;
+						OnConsumableSlotChanged.Broadcast(SlotKey, NAME_None);
+					}
+				}
+			}
+
+			for (auto It = QuickSlots.CreateIterator(); It; ++It)
+			{
+				if (It.Value().ItemId == ItemId)
+				{
+					const int32 SlotKey = It.Key();
+					FRetrieveQuickSlotEntry EmptyEntry;
+					EmptyEntry.SlotKey = SlotKey;
+					OnQuickSlotChanged.Broadcast(SlotKey, EmptyEntry);
+					It.RemoveCurrent();
 				}
 			}
 		}
@@ -453,70 +469,12 @@ bool UInventoryComponent::UseConsumableItem(FName ConsumableItemId)
 
 bool UInventoryComponent::AssignConsumableSlot(int32 SlotKey, FName ConsumableItemId)
 {
-	if (!HasAuthorityToModify())
-	{
-		if (IsValidConsumableSlotKey(SlotKey) && HasItem(ConsumableItemId))
-		{
-			ServerAssignConsumableSlot(SlotKey, ConsumableItemId);
-			return true;
-		}
-		return false;
-	}
-
-	if (!IsValidConsumableSlotKey(SlotKey) || !HasItem(ConsumableItemId))
-	{
-		return false;
-	}
-
-	const FRetrieveItemStack* Stack = FindStack(ConsumableItemId);
-	if (!Stack || !Stack->ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
-	{
-		return false;
-	}
-
-	// 같은 소모품이 다른 슬롯에 이미 배정돼 있으면 먼저 해제
-	for (const int32 OtherSlot : ConsumableSlotKeys)
-	{
-		if (OtherSlot != SlotKey && GetSlotField(OtherSlot) == ConsumableItemId)
-		{
-			GetMutableSlotField(OtherSlot) = NAME_None;
-			OnConsumableSlotChanged.Broadcast(OtherSlot, NAME_None);
-		}
-	}
-
-	GetMutableSlotField(SlotKey) = ConsumableItemId;
-	OnConsumableSlotChanged.Broadcast(SlotKey, ConsumableItemId);
-	OnInventoryChanged.Broadcast();
-	return true;
+	return AssignQuickSlotItem(SlotKey, ConsumableItemId, RetrieveGameplayTags::Item_Consumable);
 }
 
 bool UInventoryComponent::UnassignConsumableSlot(int32 SlotKey)
 {
-	if (!HasAuthorityToModify())
-	{
-		if (IsValidConsumableSlotKey(SlotKey))
-		{
-			ServerUnassignConsumableSlot(SlotKey);
-			return true;
-		}
-		return false;
-	}
-
-	if (!IsValidConsumableSlotKey(SlotKey))
-	{
-		return false;
-	}
-
-	FName& SlotItemId = GetMutableSlotField(SlotKey);
-	if (SlotItemId.IsNone())
-	{
-		return true;
-	}
-
-	SlotItemId = NAME_None;
-	OnConsumableSlotChanged.Broadcast(SlotKey, NAME_None);
-	OnInventoryChanged.Broadcast();
-	return true;
+	return UnassignQuickSlotItem(SlotKey);
 }
 
 bool UInventoryComponent::UseConsumableSlot(int32 SlotKey)
@@ -547,6 +505,237 @@ bool UInventoryComponent::UseConsumableSlot(int32 SlotKey)
 	}
 
 	return UseConsumableItem(SlotItemId);
+}
+
+bool UInventoryComponent::AssignQuickSlotItem(int32 SlotKey, FName ItemId, FGameplayTag ItemCategoryTag)
+{
+	if (!HasAuthorityToModify())
+	{
+		if (SlotKey != INDEX_NONE && !ItemId.IsNone() && ItemCategoryTag.IsValid() && HasItem(ItemId))
+		{
+			// QuickSlots(TMap)는 복제되지 않으므로 클라이언트 로컬을 즉시 갱신(예측)하고
+			// 서버 RPC로 권위 측에도 반영한다. (슬롯 0~3은 복제 필드가 없어 이 갱신이 필수)
+			FRetrieveQuickSlotEntry PredictedEntry;
+			PredictedEntry.SlotKey = SlotKey;
+			PredictedEntry.ItemId = ItemId;
+			PredictedEntry.ItemCategoryTag = ItemCategoryTag;
+			QuickSlots.Add(SlotKey, PredictedEntry);
+			OnQuickSlotChanged.Broadcast(SlotKey, PredictedEntry);
+
+			if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable) && IsValidConsumableSlotKey(SlotKey))
+			{
+				OnConsumableSlotChanged.Broadcast(SlotKey, ItemId);
+			}
+
+			ServerAssignQuickSlotItem(SlotKey, ItemId, ItemCategoryTag);
+			return true;
+		}
+		return false;
+	}
+
+	if (SlotKey == INDEX_NONE || ItemId.IsNone() || !ItemCategoryTag.IsValid())
+	{
+		return false;
+	}
+
+	if (GetItemCount(ItemId) <= 0)
+	{
+		return false;
+	}
+
+	if (!ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon)
+		&& !ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+	{
+		return false;
+	}
+
+	// 소모품인 경우: 같은 아이템이 다른 슬롯에 있으면 먼저 해제
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+	{
+		for (auto It = QuickSlots.CreateIterator(); It; ++It)
+		{
+			if (It.Key() != SlotKey && It.Value().ItemId == ItemId
+				&& It.Value().ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+			{
+				const int32 OtherSlot = It.Key();
+				FRetrieveQuickSlotEntry EmptyEntry;
+				EmptyEntry.SlotKey = OtherSlot;
+				OnQuickSlotChanged.Broadcast(OtherSlot, EmptyEntry);
+				if (IsValidConsumableSlotKey(OtherSlot))
+				{
+					GetMutableSlotField(OtherSlot) = NAME_None;
+					OnConsumableSlotChanged.Broadcast(OtherSlot, NAME_None);
+				}
+				It.RemoveCurrent();
+			}
+		}
+		// 기존 복제 필드도 같은 아이템이면 해제
+		for (const int32 OtherSlot : ConsumableSlotKeys)
+		{
+			if (OtherSlot != SlotKey && GetSlotField(OtherSlot) == ItemId)
+			{
+				GetMutableSlotField(OtherSlot) = NAME_None;
+				OnConsumableSlotChanged.Broadcast(OtherSlot, NAME_None);
+			}
+		}
+	}
+
+	FRetrieveQuickSlotEntry NewEntry;
+	NewEntry.SlotKey = SlotKey;
+	NewEntry.ItemId = ItemId;
+	NewEntry.ItemCategoryTag = ItemCategoryTag;
+	QuickSlots.Add(SlotKey, NewEntry);
+
+	OnQuickSlotChanged.Broadcast(SlotKey, NewEntry);
+
+	// 슬롯 4&5 소모품은 복제 필드도 동기화 (기존 HUD/QuickSlotBar 호환)
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable) && IsValidConsumableSlotKey(SlotKey))
+	{
+		GetMutableSlotField(SlotKey) = ItemId;
+		OnConsumableSlotChanged.Broadcast(SlotKey, ItemId);
+	}
+
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::UnassignQuickSlotItem(int32 SlotKey)
+{
+	if (!HasAuthorityToModify())
+	{
+		if (QuickSlots.Contains(SlotKey)
+			|| (IsValidConsumableSlotKey(SlotKey) && !GetSlotField(SlotKey).IsNone()))
+		{
+			// 클라이언트 로컬 예측 갱신 후 서버에도 반영 (TMap 비복제 대응)
+			QuickSlots.Remove(SlotKey);
+
+			FRetrieveQuickSlotEntry EmptyEntry;
+			EmptyEntry.SlotKey = SlotKey;
+			OnQuickSlotChanged.Broadcast(SlotKey, EmptyEntry);
+
+			if (IsValidConsumableSlotKey(SlotKey))
+			{
+				OnConsumableSlotChanged.Broadcast(SlotKey, NAME_None);
+			}
+
+			ServerUnassignQuickSlotItem(SlotKey);
+			return true;
+		}
+		return false;
+	}
+
+	const bool bInMap = QuickSlots.Contains(SlotKey);
+	const bool bHasReplicatedSlot =
+		IsValidConsumableSlotKey(SlotKey) && !GetSlotField(SlotKey).IsNone();
+
+	if (!bInMap && !bHasReplicatedSlot)
+	{
+		return false;
+	}
+
+	QuickSlots.Remove(SlotKey);
+
+	FRetrieveQuickSlotEntry EmptyEntry;
+	EmptyEntry.SlotKey = SlotKey;
+	OnQuickSlotChanged.Broadcast(SlotKey, EmptyEntry);
+
+	if (IsValidConsumableSlotKey(SlotKey))
+	{
+		GetMutableSlotField(SlotKey) = NAME_None;
+	}
+
+	OnConsumableSlotChanged.Broadcast(SlotKey, NAME_None);
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+FRetrieveQuickSlotEntry UInventoryComponent::GetQuickSlotEntry(int32 SlotKey) const
+{
+	if (const FRetrieveQuickSlotEntry* Entry = QuickSlots.Find(SlotKey))
+	{
+		return *Entry;
+	}
+
+	// 복제 필드(슬롯 4&5)에 소모품이 있으면 엔트리 구성
+	if (IsValidConsumableSlotKey(SlotKey))
+	{
+		const FName ReplicatedItemId = GetSlotField(SlotKey);
+		if (!ReplicatedItemId.IsNone())
+		{
+			FRetrieveQuickSlotEntry Entry;
+			Entry.SlotKey = SlotKey;
+			Entry.ItemId = ReplicatedItemId;
+			Entry.ItemCategoryTag = RetrieveGameplayTags::Item_Consumable;
+			return Entry;
+		}
+	}
+
+	FRetrieveQuickSlotEntry EmptyEntry;
+	EmptyEntry.SlotKey = SlotKey;
+	return EmptyEntry;
+}
+
+int32 UInventoryComponent::GetAssignedQuickSlotKey(FName ItemId, FGameplayTag ItemCategoryTag) const
+{
+	if (ItemId.IsNone() || !ItemCategoryTag.IsValid())
+	{
+		return INDEX_NONE;
+	}
+
+	for (const TPair<int32, FRetrieveQuickSlotEntry>& Pair : QuickSlots)
+	{
+		const FRetrieveQuickSlotEntry& Entry = Pair.Value;
+		if (Entry.ItemId == ItemId && Entry.ItemCategoryTag == ItemCategoryTag)
+		{
+			return Pair.Key;
+		}
+	}
+
+	// 복제 필드 fallback (슬롯 4&5 소모품)
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+	{
+		for (const int32 SlotKey : ConsumableSlotKeys)
+		{
+			if (GetSlotField(SlotKey) == ItemId)
+			{
+				return SlotKey;
+			}
+		}
+	}
+
+	return INDEX_NONE;
+}
+
+bool UInventoryComponent::ActivateQuickSlotItem(int32 SlotKey)
+{
+	const FRetrieveQuickSlotEntry Entry = GetQuickSlotEntry(SlotKey);
+	if (!Entry.IsValid())
+	{
+		return false;
+	}
+
+	if (Entry.ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
+	{
+		return RequestEquipWeapon(Entry.ItemId);
+	}
+
+	if (Entry.ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+	{
+		return UseConsumableItem(Entry.ItemId);
+	}
+
+	return false;
+}
+
+void UInventoryComponent::ServerAssignQuickSlotItem_Implementation(
+	int32 SlotKey, FName ItemId, FGameplayTag ItemCategoryTag)
+{
+	AssignQuickSlotItem(SlotKey, ItemId, ItemCategoryTag);
+}
+
+void UInventoryComponent::ServerUnassignQuickSlotItem_Implementation(int32 SlotKey)
+{
+	UnassignQuickSlotItem(SlotKey);
 }
 
 bool UInventoryComponent::CanCraftItem(FName RecipeId) const
@@ -670,6 +859,7 @@ FRetrieveInventorySaveData UInventoryComponent::MakeInventorySaveData() const
 	SaveData.EquippedArmorSlots = EquippedArmorSlots;
 	SaveData.ConsumableSlotItemIds.Add(QuickSlotPrimaryKey, ConsumableSlot4ItemId);
 	SaveData.ConsumableSlotItemIds.Add(QuickSlotSecondaryKey, ConsumableSlot5ItemId);
+	SaveData.Currency = Currency;
 	return SaveData;
 }
 
@@ -751,10 +941,24 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 	{
 		OnEquippedArmorChanged.Broadcast(ArmorSlot.EquipmentSlotTag, ArmorSlot.ArmorItemId);
 	}
+	// 복제 필드에서 QuickSlots TMap 복원 및 브로드캐스트
+	QuickSlots.Reset();
 	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
-		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
+		const FName ItemId = GetConsumableSlotItemId(SlotKey);
+		OnConsumableSlotChanged.Broadcast(SlotKey, ItemId);
+		if (!ItemId.IsNone())
+		{
+			FRetrieveQuickSlotEntry Entry;
+			Entry.SlotKey = SlotKey;
+			Entry.ItemId = ItemId;
+			Entry.ItemCategoryTag = RetrieveGameplayTags::Item_Consumable;
+			QuickSlots.Add(SlotKey, Entry);
+			OnQuickSlotChanged.Broadcast(SlotKey, Entry);
+		}
 	}
+	Currency = SaveData.Currency;
+	OnCurrencyChanged.Broadcast(Currency);
 	return true;
 }
 
@@ -782,7 +986,26 @@ void UInventoryComponent::OnRep_ConsumableSlots()
 {
 	for (const int32 SlotKey : ConsumableSlotKeys)
 	{
-		OnConsumableSlotChanged.Broadcast(SlotKey, GetConsumableSlotItemId(SlotKey));
+		const FName ItemId = GetConsumableSlotItemId(SlotKey);
+		OnConsumableSlotChanged.Broadcast(SlotKey, ItemId);
+
+		// QuickSlots TMap 클라이언트 동기화
+		if (!ItemId.IsNone())
+		{
+			FRetrieveQuickSlotEntry Entry;
+			Entry.SlotKey = SlotKey;
+			Entry.ItemId = ItemId;
+			Entry.ItemCategoryTag = RetrieveGameplayTags::Item_Consumable;
+			QuickSlots.Add(SlotKey, Entry);
+			OnQuickSlotChanged.Broadcast(SlotKey, Entry);
+		}
+		else
+		{
+			QuickSlots.Remove(SlotKey);
+			FRetrieveQuickSlotEntry EmptyEntry;
+			EmptyEntry.SlotKey = SlotKey;
+			OnQuickSlotChanged.Broadcast(SlotKey, EmptyEntry);
+		}
 	}
 	OnInventoryChanged.Broadcast();
 }
@@ -798,6 +1021,49 @@ void UInventoryComponent::OnRep_LastAddedItem()
 			LastAddedItemNotification.ItemCategoryTag,
 			LastAddedItemNotification.Quantity);
 	}
+}
+
+// ── Currency ──────────────────────────────────────────────────────────────────
+
+bool UInventoryComponent::AddCurrency(int32 Amount)
+{
+	if (Amount <= 0) return false;
+	if (!HasAuthorityToModify())
+	{
+		ServerAddCurrency(Amount);
+		return true;
+	}
+	Currency += Amount;
+	OnCurrencyChanged.Broadcast(Currency);
+	return true;
+}
+
+bool UInventoryComponent::SpendCurrency(int32 Amount)
+{
+	if (Amount <= 0 || Currency < Amount) return false;
+	if (!HasAuthorityToModify())
+	{
+		ServerSpendCurrency(Amount);
+		return true;
+	}
+	Currency -= Amount;
+	OnCurrencyChanged.Broadcast(Currency);
+	return true;
+}
+
+void UInventoryComponent::OnRep_Currency()
+{
+	OnCurrencyChanged.Broadcast(Currency);
+}
+
+void UInventoryComponent::ServerAddCurrency_Implementation(int32 Amount)
+{
+	AddCurrency(Amount);
+}
+
+void UInventoryComponent::ServerSpendCurrency_Implementation(int32 Amount)
+{
+	SpendCurrency(Amount);
 }
 
 void UInventoryComponent::ServerRequestEquipWeapon_Implementation(FName WeaponItemId)

@@ -9,6 +9,7 @@
 class UInventoryComponent;
 class URetrieveAbilitySystemComponent;
 class UWeaponComponent;
+class URetrieveQuickSlotWheelWidget;
 class UBorder;
 class UButton;
 class UHorizontalBox;
@@ -110,6 +111,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UnequipCurrentWeapon();
 
+	/** 무기 해제 성공 시 BP가 프리뷰 액터의 PreviewWeapon(None)을 호출하도록 알린다. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Inventory")
+	void OnWeaponPreviewClearNeeded();
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool EquipSelectedArmor();
 
@@ -125,6 +130,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
 	void HideQuickSlotAssignDialog();
 
+	// ── 공용 퀵슬롯 (무기 + 소모품) ─────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
+	bool AssignSelectedItemToQuickSlot(int32 SlotKey, bool bForceReplace = false);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
+	bool UnassignSelectedQuickSlot();
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
+	bool CanAssignSelectedItemToQuickSlot() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
+	bool IsSelectedItemAssignedToQuickSlot() const;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
+	int32 GetSelectedQuickSlotKey() const;
+
+	// ── 기존 소모품 전용 (하위 호환 래퍼) ─────────────────────────────────
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory|QuickSlot")
 	bool AssignSelectedConsumableToSlot(int32 SlotKey);
 
@@ -246,6 +268,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
 	FName GetQuickSlotItemId(int32 SlotKey) const;
 
+	// QuickSlotWheel 클래스 — 에디터에서 WBP_QuickSlotWheel 지정
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|QuickSlot")
+	TSubclassOf<URetrieveQuickSlotWheelWidget> QuickSlotWheelClass;
+
+	UPROPERTY()
+	TObjectPtr<URetrieveQuickSlotWheelWidget> QuickSlotWheelInstance;
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
 	FText GetQuickSlotDisplayText(int32 SlotKey) const;
 
@@ -317,11 +346,15 @@ public:
 protected:
 	// 라이프사이클
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	// 이벤트 핸들러
 	UFUNCTION()
 	void HandleInventoryChanged();
+
+	UFUNCTION()
+	void HandleCurrencyChanged(int32 NewAmount);
 
 	UFUNCTION()
 	void HandleEquippedWeaponChanged(FName WeaponItemId);
@@ -349,6 +382,15 @@ protected:
 
 	UFUNCTION()
 	void HandleConsumableSlotChanged(int32 SlotKey, FName ItemId);
+
+	UFUNCTION()
+	void HandleQuickSlotWheelSlotClicked(int32 SlotKey);
+
+	UFUNCTION()
+	void ConfirmQuickSlotReplace();
+
+	UFUNCTION()
+	void CancelQuickSlotReplace();
 
 	UFUNCTION()
 	void HandleMaterialTabClicked();
@@ -391,6 +433,9 @@ protected:
 	TObjectPtr<UWeaponComponent> WeaponComponent;
 
 	// 위젯 바인딩 — UMG 설계 시점에 연결, 런타임 상태와 구분
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_CurrencyDisplay;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_SelectedCompare;
 
@@ -466,6 +511,19 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_CancelQuickSlotAssign;
 
+	// 교체 확인 다이얼로그 — UMG에 추가 후 BindWidgetOptional로 연결
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> Border_QuickSlotReplaceConfirm;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_ConfirmQuickSlotReplace;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_CancelQuickSlotReplace;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_QuickSlotReplaceMessage;
+
 	/** 무기 탭일 때만 표시되는 공격력 정렬 버튼 */
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_SortAttackPower;
@@ -540,9 +598,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory")
 	int32 ActiveTabIndex = 0;
 
-	// 현재 정렬 모드 (탭 전환 시 None으로 리셋됨)
+	// 현재 정렬 모드 (무기/방어구 탭은 각 전투 스탯 내림차순이 기본값)
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Sort")
-	EInventorySortMode CurrentSortMode = EInventorySortMode::None;
+	EInventorySortMode CurrentSortMode = EInventorySortMode::AttackPowerDesc;
+
+	// 교체 확인 대기 상태
+	int32 PendingReplaceSlotKey = INDEX_NONE;
+	FName PendingQuickSlotItemId = NAME_None;
+	FGameplayTag PendingQuickSlotCategoryTag;
 
 	// 무기 교체 확인 팝업을 우회할 때만 true. TGuardValue로 사용
 	bool bBypassWeaponSwapConfirm = false;
@@ -563,6 +626,14 @@ protected:
 	bool IsArmorCategory(FGameplayTag ItemCategoryTag) const;
 	void RefreshSelectedArmorDetails();
 	void UpdateEquipActionButtons();
+	// 장착/해제 버튼의 '표시 여부'는 장비 변경 잠금(CanChangeEquipment)과 무관하게 대상 존재 여부로 결정.
+	// 잠금은 버튼 활성화(SetIsEnabled)로만 반영한다.
+	bool ShouldShowEquipButton() const;
+	bool ShouldShowUnequipButton() const;
+	// 전투/회피 등 장비 변경 잠금 태그가 바뀌면 버튼 활성 상태를 재평가하기 위한 ASC 태그 이벤트 구독
+	void BindEquipLockTagEvents();
+	void UnbindEquipLockTagEvents();
+	void HandleEquipLockTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	float GetItemDefensePower(const FRetrieveItemStack& Item) const;
 	bool ShouldConfirmWeaponSwap() const;
 	void ShowWeaponSwapConfirm(bool bShow);
@@ -573,13 +644,24 @@ protected:
 	// Text_DetailState를 현재 선택 아이템 기준으로 즉시 갱신
 	void RefreshSelectedDetailState();
 	void RefreshInventoryGridLayout();
+	void OpenQuickSlotWheelForAssign();
+	void ShowQuickSlotReplaceConfirm(bool bShow);
 	void MarkInventoryTooltipsDirty();
 	void ApplyInventorySlotTooltips();
 	void ClearWidgetTooltipRecursive(UWidget* Widget) const;
 	bool ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const;
 	UWidget* CreateInventorySlotTooltip(const FRetrieveItemStack& Item);
+	void PopulateFantasyTooltipWidget(
+		UUserWidget* TooltipWidget,
+		const FRetrieveItemStack& Item,
+		const FString& BadgeText,
+		const FString& OverrideMainStat = FString(),
+		const FString& OverrideRarity = FString(),
+		int32 OverrideBasePrice = -1) const;
 	UWidget* BuildEquipmentSlotTooltipWidget(const FRetrieveItemStack& Item) const;
 	UWidget* CreateInventoryCompareTooltip(
+		UUserWidget* TooltipWidget,
+		const FRetrieveItemStack& HoveredItem,
 		const FRetrieveWeaponDataRow& CurrentWeapon,
 		const FRetrieveWeaponDataRow& HoveredWeapon);
 	void AddTooltipTextLine(class UVerticalBox* LineBox, const FString& Line, const FLinearColor& Color, bool bHeading) const;
@@ -595,7 +677,6 @@ protected:
 	FString FormatWeaponSummary(const FRetrieveWeaponDataRow& WeaponData) const;
 	FString FormatWeaponSkillList(const FRetrieveWeaponDataRow& WeaponData) const;
 	bool CanProcessSelectedItemActivation();
-	void QueueSelectedWeaponEquipRetry(FName WeaponItemId);
 	static FString GetGameplayTagLeaf(FGameplayTag Tag);
 
 	// 정렬 헬퍼
@@ -613,6 +694,10 @@ protected:
 	double LastSelectedItemActivationTime = -1.0;
 	FName LastActivatedItemId = NAME_None;
 	FGameplayTag LastActivatedItemCategoryTag;
+
+	// 장비 변경 잠금 태그 이벤트 구독 대상 ASC와 핸들 (재구독/해제용)
+	TWeakObjectPtr<URetrieveAbilitySystemComponent> BoundEquipLockASC;
+	TArray<FDelegateHandle> EquipLockTagHandles;
 
 	URetrieveAbilitySystemComponent* GetOwnerASC() const;
 };

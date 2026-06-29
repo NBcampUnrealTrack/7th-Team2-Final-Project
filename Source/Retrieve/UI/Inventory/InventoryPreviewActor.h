@@ -9,6 +9,7 @@ class UAnimMontage;
 class UArmorComponent;
 class UDataTable;
 class UInventoryComponent;
+class UMeshComponent;
 class USceneCaptureComponent2D;
 class USkeletalMeshComponent;
 
@@ -49,6 +50,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory Preview")
 	void UpdateArmorPreview();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory Preview")
+	void RefreshWeaponPreview(FName WeaponItemId);
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory Preview")
+	void ClearWeaponPreviewMeshes();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory Preview|Animation")
 	bool PlayArmorEquipMontage(FGameplayTag EquipmentSlotTag, FGameplayTag PartSlotTag);
@@ -97,6 +104,14 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
 	TArray<TObjectPtr<USkeletalMeshComponent>> ArmorMeshComponents;
 
+	// 무기 소켓 앵커: PlayerBodyMesh LeaderPose를 따르므로 Weapon_R 등 소켓이
+	// 방어구 파츠와 동일한 포즈 소스에서 평가된다. SkeletalMeshComp 독립 ABP와 무관하다.
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|Inventory Preview")
+	TObjectPtr<USkeletalMeshComponent> WeaponSocketAnchorComponent;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMeshComponent>> WeaponPreviewMeshComponents;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UInventoryComponent> BoundInventoryComponent;
 
@@ -105,6 +120,9 @@ protected:
 
 	UFUNCTION()
 	void HandleEquippedArmorChanged(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+
+	UFUNCTION()
+	void HandleEquippedWeaponChanged(FName WeaponItemId);
 
 	UInventoryComponent* ResolveInventoryComponent() const;
 	UArmorComponent* ResolveArmorComponent() const;
