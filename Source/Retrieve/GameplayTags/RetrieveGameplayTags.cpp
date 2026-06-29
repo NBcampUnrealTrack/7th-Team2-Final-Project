@@ -403,6 +403,13 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Parry
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Parry_Success, "GameplayCue.Parry.Success");
 
+	// ---- Gameplay cues: Status (지속 상태이상 — GE의 GameplayCue 컴포넌트로 Add/Remove)
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Status_Burn, "GameplayCue.Status.Burn");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Status_Cold, "GameplayCue.Status.Cold");
+
+	// ---- Gameplay cues: Combat (타격 임팩트 — 데미지 GE의 GameplayCue 컴포넌트로 실행)
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Combat_Hit, "GameplayCue.Combat.Hit");
+
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Close, "UI.VFX.Panel.Close");

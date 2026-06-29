@@ -408,6 +408,13 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Parry
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Parry_Success);
 
+	// ---- Gameplay cues: Status (지속 상태이상 — GE의 GameplayCue 컴포넌트로 Add/Remove)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_Burn);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_Cold);
+
+	// ---- Gameplay cues: Combat (타격 임팩트 — 데미지 GE의 GameplayCue 컴포넌트로 실행)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Combat_Hit);
+
 	// ---- UI VFX
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Panel_Open);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Panel_Close);
