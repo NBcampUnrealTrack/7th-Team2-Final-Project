@@ -5,27 +5,44 @@
 
 void URetrieveElementAwareWidget::NativeConstruct()
 {
-	Super::NativeConstruct();
-
+	// BP Event Construct 이전에 구독 → GetCurrentActiveElement()가 Construct 시점에 유효
 	ARetrievePlayerController* RPC = Cast<ARetrievePlayerController>(GetOwningPlayer());
 	UE_LOG(LogTemp, Warning, TEXT("[ElementAware] NativeConstruct: Widget=%s  RPC=%s"),
 		*GetName(), RPC ? *RPC->GetName() : TEXT("NULL"));
-	if (!RPC) return;
+	if (RPC)
+	{
+		UHUDViewModel* HUDVM = RPC->GetHUDViewModel();
+		UE_LOG(LogTemp, Warning, TEXT("[ElementAware] HUDVM=%s"), HUDVM ? *HUDVM->GetName() : TEXT("NULL"));
+		if (HUDVM)
+		{
+			UElementGaugeViewModel* GaugeVM = HUDVM->GetElementGauge();
+			UE_LOG(LogTemp, Warning, TEXT("[ElementAware] GaugeVM=%s"), GaugeVM ? *GaugeVM->GetName() : TEXT("NULL"));
+			if (GaugeVM)
+			{
+				BoundElementVM = GaugeVM;
+				GaugeVM->OnCurrentElementChanged.AddDynamic(this, &ThisClass::HandleElementModeChanged);
+				UE_LOG(LogTemp, Warning, TEXT("[ElementAware] Subscribed OK. CurrentElement=%s"),
+					*GaugeVM->GetCurrentElement().ToString());
+			}
+		}
+	}
 
-	UHUDViewModel* HUDVM = RPC->GetHUDViewModel();
-	UE_LOG(LogTemp, Warning, TEXT("[ElementAware] HUDVM=%s"), HUDVM ? *HUDVM->GetName() : TEXT("NULL"));
-	if (!HUDVM) return;
+	Super::NativeConstruct(); // BP Event Construct 발화 — 이때 GetCurrentActiveElement() 사용 가능
 
-	UElementGaugeViewModel* GaugeVM = HUDVM->GetElementGauge();
-	UE_LOG(LogTemp, Warning, TEXT("[ElementAware] GaugeVM=%s"), GaugeVM ? *GaugeVM->GetName() : TEXT("NULL"));
-	if (!GaugeVM) return;
+	// BP Construct 완료 후 초기 원소 dispatch
+	if (UElementGaugeViewModel* VM = BoundElementVM.Get())
+	{
+		NativeOnElementModeChanged(VM->GetCurrentElement());
+	}
+}
 
-	BoundElementVM = GaugeVM;
-	GaugeVM->OnCurrentElementChanged.AddDynamic(this, &ThisClass::HandleElementModeChanged);
-	UE_LOG(LogTemp, Warning, TEXT("[ElementAware] Subscribed OK. CurrentElement=%s"),
-		*GaugeVM->GetCurrentElement().ToString());
-
-	NativeOnElementModeChanged(GaugeVM->GetCurrentElement());
+FGameplayTag URetrieveElementAwareWidget::GetCurrentActiveElement() const
+{
+	if (const UElementGaugeViewModel* VM = BoundElementVM.Get())
+	{
+		return VM->GetCurrentElement();
+	}
+	return FGameplayTag::EmptyTag;
 }
 
 void URetrieveElementAwareWidget::NativeDestruct()

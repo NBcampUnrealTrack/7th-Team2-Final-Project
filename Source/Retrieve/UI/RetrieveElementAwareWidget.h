@@ -31,6 +31,10 @@ protected:
 	 */
 	virtual void NativeOnElementModeChanged(FGameplayTag NewElement);
 
+	/** BP Event Construct 시점에 현재 활성 원소 태그를 조회한다. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|ElementAware")
+	FGameplayTag GetCurrentActiveElement() const;
+
 private:
 	TWeakObjectPtr<UElementGaugeViewModel> BoundElementVM;
 
