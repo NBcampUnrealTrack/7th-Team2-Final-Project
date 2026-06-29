@@ -1,7 +1,6 @@
 #include "UI/VFX/RetrieveUIVFXButtonWidget.h"
 
 #include "Components/Button.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
 
 void URetrieveUIVFXButtonWidget::NativeConstruct()
 {
@@ -38,22 +37,22 @@ void URetrieveUIVFXButtonWidget::NativeDestruct()
 
 void URetrieveUIVFXButtonWidget::HandleButtonHovered()
 {
-	PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Button_Hover, ResolveButtonVFXTarget());
+	PlayButtonHoverVFX(ResolveButtonVFXTarget());
 }
 
 void URetrieveUIVFXButtonWidget::HandleButtonUnhovered()
 {
-	PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Button_Unhover, ResolveButtonVFXTarget());
+	PlayButtonUnhoverVFX(ResolveButtonVFXTarget());
 }
 
 void URetrieveUIVFXButtonWidget::HandleButtonPressed()
 {
-	PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Button_Press, ResolveButtonVFXTarget());
+	PlayButtonPressVFX(ResolveButtonVFXTarget());
 }
 
 void URetrieveUIVFXButtonWidget::HandleButtonReleased()
 {
-	PlayUIVFXOnWidget(RetrieveGameplayTags::UI_VFX_Button_Release, ResolveButtonVFXTarget());
+	PlayButtonReleaseVFX(ResolveButtonVFXTarget());
 }
 
 UWidget* URetrieveUIVFXButtonWidget::ResolveButtonVFXTarget() const

@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "UI/RetrieveElementAwareWidget.h"
+#include "UI/Sound/RetrieveUISoundTypes.h"
 #include "UI/VFX/RetrieveUIVFXTypes.h"
 #include "RetrieveUIVFXWidget.generated.h"
 
+class UButton;
 class URetrieveUIVFXProfile;
+class URetrieveUISoundPreset;
 class UWidget;
 
 USTRUCT()
@@ -45,6 +48,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI VFX")
 	TObjectPtr<UWidget> DefaultVFXTarget;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI Sound",
+		meta = (DisplayName = "Override Sound Preset"))
+	bool bOverrideSoundPreset = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI Sound",
+		meta = (EditCondition = "bOverrideSoundPreset", DisplayName = "Sound Preset Override"))
+	TObjectPtr<URetrieveUISoundPreset> SoundPresetOverride;
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|UI VFX")
 	FRetrieveUIVFXFinishedSignature OnUIVFXFinished;
 
@@ -73,8 +84,14 @@ public:
 	bool PlayTabSwitchVFX(UWidget* TargetWidget);
 
 protected:
+	friend class URetrieveUISoundButtonBinder;
+
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	void PlayUISound(ERetrieveUISoundEvent Event) const;
+	void RegisterSoundButton(UButton* Button);
 
 	UWidget* ResolveDefaultVFXTarget() const;
 	void ApplyPresetAtAlpha(UWidget* TargetWidget, const FRetrieveUIVFXPreset& Preset, float Alpha) const;
@@ -82,4 +99,7 @@ protected:
 private:
 	UPROPERTY()
 	TArray<FRetrieveActiveUIVFX> ActiveVFX;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> SoundButtonBinders;
 };
