@@ -1,6 +1,8 @@
 #include "UI/ViewModels/ConversationViewModel.h"
 
 #include "Character/LumenCharacter.h"
+#include "Components/World/RetrieveDialogueComponent.h"
+#include "Components/World/RetrieveShopComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -78,7 +80,6 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 	UQuestBranchComponent* Quest = GS ? GS->GetQuestBranchComponent() : nullptr;
 	const UDataTable* Table = GS ? GS->GetDialogueTable() : nullptr;
 
-	// TODO: 두 번째 대화형 NPC가 생기면 일반화하기. 해당 필드들을 URetrieveDialogueComponent로 이동.
 	FGameplayTag SpeakerTag;
 	if (const ALumenCharacter* Lumen = Cast<ALumenCharacter>(NPC))
 	{
@@ -87,12 +88,22 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 		Lines = Lumen->DefaultGreetingLines;
 	}
 
+	if (!SpeakerTag.IsValid())
+	{
+		if (URetrieveDialogueComponent* DialogueComp = NPC ? NPC->FindComponentByClass<URetrieveDialogueComponent>() : nullptr)
+		{
+			SpeakerTag = DialogueComp->SpeakerTag;
+			SpeakerName = DialogueComp->SpeakerDisplayName;
+			Lines = DialogueComp->DefaultGreetingLines;
+		}
+	}
+
 	if (Table && Quest && SpeakerTag.IsValid())
 	{
 		static const FString ContextString(TEXT("ConversationVM_BuildOpeningTopics"));
 		TArray<FDialogueRow*> AllRows;
 		Table->GetAllRows<FDialogueRow>(ContextString, AllRows);
-
+	
 		TArray<FDialogueRow*> Eligible;
 		for (FDialogueRow* Row : AllRows)
 		{
@@ -119,6 +130,63 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 		for (const FDialogueRow* Row : Eligible)
 		{
 			Topics.Add(FRetrieveDialogueTopic{Row->TopicId, Row->Label, true, Row->Kind});
+		}
+	}
+
+	if (NPC && NPC->FindComponentByClass<URetrieveShopComponent>())
+	{
+		Topics.RemoveAll([](const FRetrieveDialogueTopic& Topic)
+		{
+			return Topic.TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_OpenShop)
+				|| Topic.TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Buy)
+				|| Topic.TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Sell);
+		});
+
+		const auto FindShopTopicFromTable = [Table, SpeakerTag](FGameplayTag TopicId) -> const FDialogueRow*
+		{
+			if (!Table || !SpeakerTag.IsValid() || !TopicId.IsValid())
+			{
+				return nullptr;
+			}
+
+			static const FString ContextString(TEXT("ConversationVM_FindShopTopic"));
+			TArray<FDialogueRow*> AllRows;
+			Table->GetAllRows<FDialogueRow>(ContextString, AllRows);
+
+			for (const FDialogueRow* Row : AllRows)
+			{
+				if (!Row)
+				{
+					continue;
+				}
+
+				if (Row->SpeakerTag == SpeakerTag && Row->TopicId.MatchesTagExact(TopicId))
+				{
+					return Row;
+				}
+			}
+
+			return nullptr;
+		};
+
+		if (const FDialogueRow* BuyRow = FindShopTopicFromTable(RetrieveGameplayTags::Topic_ShopNPC_Buy))
+		{
+			Topics.Insert(FRetrieveDialogueTopic{
+				BuyRow->TopicId,
+				BuyRow->Label,
+				true,
+				BuyRow->Kind
+			}, 0);
+		}
+
+		if (const FDialogueRow* SellRow = FindShopTopicFromTable(RetrieveGameplayTags::Topic_ShopNPC_Sell))
+		{
+			Topics.Insert(FRetrieveDialogueTopic{
+				SellRow->TopicId,
+				SellRow->Label,
+				true,
+				SellRow->Kind
+			}, 1);
 		}
 	}
 
@@ -152,6 +220,17 @@ void UConversationViewModel::OnTopicSelected(FGameplayTag TopicId)
 		if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(PC))
 		{
 			RetrievePC->CloseConversation();
+		}
+		return;
+	}
+
+	if (TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Buy)
+		|| TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Sell))
+	{
+		if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(PC))
+		{
+			RetrievePC->OpenShopFromCurrentConversation(
+				TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_ShopNPC_Sell));
 		}
 		return;
 	}
