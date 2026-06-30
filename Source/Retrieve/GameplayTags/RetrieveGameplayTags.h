@@ -54,6 +54,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Enemy / Boss abilities
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_Attack);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_SelfDestruct);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Enemy_SpecialAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Boss_PatternAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Boss_PhaseTransition);
@@ -103,6 +104,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Groggy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Return);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_Dead);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Enemy_SelfDestructing);
 
 	// ---- Immune
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Immune_Knockback);
@@ -289,6 +291,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_WaterPillar);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_IcePillar);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_RoarKnockBack);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SpecialAttack_SummonUndeads);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Enemy_SelfDestruct);
 
 	// ---- Gameplay events: element / core / item
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Element_Unlock);

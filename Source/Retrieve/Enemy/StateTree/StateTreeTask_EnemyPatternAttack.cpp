@@ -135,6 +135,15 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 			return EStateTreeRunStatus::Failed;
 		}
 
+		// 재진입 시 이미 특수 패턴이 진행 중이면, 새로 요청하지 말고 그 패턴이 끝날 때까지 대기
+		if (InstanceData.CachedCombatComponent->IsPatternActive())
+		{
+			InstanceData.bStartAttack = true;
+			InstanceData.bObservedPatternActive = true;
+			InstanceData.TimeSinceAttackRequested = 0.f;
+			return EStateTreeRunStatus::Running;
+		}
+	
 		// 회전/턴 애니메이션만 갱신하고, 공격 발동은 막지 않는다.
 		// (combat 컴포넌트의 RequestPatternByPriority가 발동 직전 FaceTarget으로 조준하므로
 		//  여기서 8° 게이트로 막으면 전진 로코모션과 회전이 충돌해 특수공격이 영영 발동 안 될 수 있음)
@@ -203,7 +212,8 @@ void FStateTreeTask_EnemyPatternAttack::ExitState(
 	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	const bool bShouldStopPattern = !InstanceData.bObservedPatternActive;
+
+	const bool bObservedPatternActive = InstanceData.bObservedPatternActive;
 
 	InstanceData.ElapsedTime = 0.f;
 	InstanceData.TimeSinceAttackRequested = 0.f;
@@ -217,12 +227,12 @@ void FStateTreeTask_EnemyPatternAttack::ExitState(
 		return;
 	}
 
-	if (bShouldStopPattern)
+	UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>();
+
+	// 진행 중인 패턴은 절대 끊지 않는다. "요청만 하고 발동 못 한" 케이스만 정리.
+	if (!bObservedPatternActive && Combat && !Combat->IsPatternActive())
 	{
-		if (UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>())
-		{
-			Combat->StopCurrentPattern();
-		}
+		Combat->StopCurrentPattern();
 	}
 
 	if (InstanceData.bUseGroundTurnAnimation)

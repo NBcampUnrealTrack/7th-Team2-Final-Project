@@ -51,6 +51,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Enemy / Boss abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_Attack, "Ability.Enemy.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_SelfDestruct, "Ability.Enemy.SelfDestruct");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Enemy_SpecialAttack, "Ability.Enemy.SpecialAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Boss_PatternAttack, "Ability.Boss.PatternAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Boss_PhaseTransition, "Ability.Boss.PhaseTransition");
@@ -113,6 +114,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Groggy, "State.Boss.Groggy");
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Staggered, "State.Boss.Staggered");
 	UE_DEFINE_GAMEPLAY_TAG(State_Boss_Dead, "State.Boss.Dead");
+	UE_DEFINE_GAMEPLAY_TAG(State_Enemy_SelfDestructing, "State.Enemy.SelfDestructing");
 
 	// ---- Status state
 	UE_DEFINE_GAMEPLAY_TAG(State_Status_Burn, "State.Status.Burn");
@@ -285,7 +287,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_WaterPillar, "GameplayEvent.Enemy.SpecialAttack.WaterPillar");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_IcePillar, "GameplayEvent.Enemy.SpecialAttack.IcePillar");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_RoarKnockBack, "GameplayEvent.Enemy.SpecialAttack.RoarKnockBack");
-
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_SummonUndeads, "GameplayEvent.Enemy.SpecialAttack.SummonUndeads");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SelfDestruct, "GameplayEvent.Enemy.SelfDestruct");
 	// ---- Gameplay events: element / core / item
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_Unlock, "GameplayEvent.Element.Unlock");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_ModeChange, "GameplayEvent.Element.ModeChange");
