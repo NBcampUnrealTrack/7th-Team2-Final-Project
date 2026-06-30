@@ -35,8 +35,11 @@ UGA_ParryCounter::UGA_ParryCounter()
 	Tags.AddTag(RetrieveGameplayTags::Ability_Player_ParryCounter);
 	Tags.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	SetAssetTags(Tags);
-
-	ActivationRequiredTags.AddTag(RetrieveGameplayTags::State_Player_CanCounter);
+	
+	FAbilityTriggerData CounterTrigger;
+	CounterTrigger.TriggerTag = RetrieveGameplayTags::GameplayEvent_Parry_Counter;
+	CounterTrigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+	AbilityTriggers.Add(CounterTrigger);
 
 	// 공중/회피·경직·다운·사망 중 발동 차단(플레이어 액션 공통 게이트)
 	ApplyCommonActionBlocks();
@@ -95,10 +98,7 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
-
-	// 카운터 대시는 WeaponAttackDefinition의 ParrySuccessMontage를 사용한다.
-	// 패리 성공 즉시 자동 재생하지 않고, State.Player.CanCounter 상태에서 Attack 입력으로
-	// GA_ParryCounter가 실제 발동된 뒤에만 재생한다.
+	
 	UAnimMontage* Montage = ComboDefinition->ParrySuccessMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{

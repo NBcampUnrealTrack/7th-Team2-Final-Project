@@ -398,15 +398,7 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 			{
 				if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 				{
-					// 패링 성공 후 Attack 입력은 평타/GuardAttack이 아니라 ParryCounter 선택으로 소비한다.
-					// State.Player.CanCounter는 CounterWindowEffect가 부여하는 "카운터 가능" 상태다.
-					const bool bCanCounter = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_CanCounter);
-					const bool bHasParryCounter = ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_ParryCounter);
-					if (bCanCounter && bHasParryCounter)
-					{
-						ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_ParryCounter);
-						return;
-					}
+					// #통합: 카운터는 패리 성공 시 GameplayEvent.Parry.Counter로 자동 발동되므로, 평타 입력 라우팅 제거.
 
 					const bool bGuarding = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
 					const bool bHasGuardAttack = ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_GuardAttack);

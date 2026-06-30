@@ -1,6 +1,7 @@
 #include "AbilitySystem/Player/GA_JumpAttack.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
@@ -150,6 +151,13 @@ void UGA_JumpAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		Character->LandedDelegate.AddDynamic(this, &ThisClass::HandleLanded);
 		BoundLandedCharacter = Character;
 	}
+	
+	ImpactEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, RetrieveGameplayTags::GameplayEvent_Attack_Impact, nullptr, false, true);
+	if (ImpactEventTask)
+	{
+		ImpactEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
+		ImpactEventTask->ReadyForActivation();
+	}
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, CachedJumpData.SectionName, true);
 	if (!MontageTask)
@@ -170,6 +178,12 @@ void UGA_JumpAttack::ApplyLandingAoe()
 	{
 		return;
 	}
+	
+	if (bLandingAoeApplied)
+	{
+		return;
+	}
+	bLandingAoeApplied = true;
 
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
@@ -189,16 +203,25 @@ void UGA_JumpAttack::ApplyLandingAoe()
 	{
 		return;
 	}
-
+	
 	FVector Center = AvatarActor->GetActorLocation();
-	const FName Socket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
 	if (IsValid(CachedWeaponComponent))
 	{
-		if (UMeshComponent* TraceMesh = CachedWeaponComponent->GetWeaponMeshForTrace(Socket, Socket))
+		TArray<FRetrieveEquippedWeaponMesh> HitParts;
+		CachedWeaponComponent->GetHitVolumeMeshes(HitParts);
+		if (HitParts.Num() > 0 && IsValid(HitParts[0].Mesh))
 		{
-			if (TraceMesh->DoesSocketExist(Socket))
+			Center = HitParts[0].Mesh->CalcBounds(HitParts[0].Mesh->GetComponentTransform()).Origin;
+		}
+		else
+		{
+			const FName Socket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
+			if (UMeshComponent* TraceMesh = CachedWeaponComponent->GetWeaponMeshForTrace(Socket, Socket))
 			{
-				Center = TraceMesh->GetSocketLocation(Socket);
+				if (TraceMesh->DoesSocketExist(Socket))
+				{
+					Center = TraceMesh->GetSocketLocation(Socket);
+				}
 			}
 		}
 	}
@@ -358,6 +381,10 @@ void UGA_JumpAttack::RestoreGravityScale()
 
 void UGA_JumpAttack::HandleMontageCompleted()
 {
+	if (bLandingHandled && !bLandingAoeApplied)
+	{
+		ApplyLandingAoe();
+	}
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -371,6 +398,11 @@ void UGA_JumpAttack::HandleMontageCancelled()
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
+void UGA_JumpAttack::HandleImpactEvent(FGameplayEventData Payload)
+{
+	ApplyLandingAoe();
+}
+
 void UGA_JumpAttack::HandleLanded(const FHitResult& Hit)
 {
 	if (bLandingHandled)
@@ -380,7 +412,6 @@ void UGA_JumpAttack::HandleLanded(const FHitResult& Hit)
 	bLandingHandled = true;
 	
 	UnbindLanded();
-	ApplyLandingAoe();
 	RestoreGravityScale();
 	
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -393,7 +424,7 @@ void UGA_JumpAttack::HandleLanded(const FHitResult& Hit)
 		
 		ASC->CurrentMontageStop(0.1f); // Landing Section 없을 시 Fallback(Montage Stop)
 	}
-
+	ApplyLandingAoe();
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -402,6 +433,10 @@ void UGA_JumpAttack::StopRuntimeTasks()
 	if (MontageTask)
 	{
 		MontageTask->EndTask(); MontageTask = nullptr;
+	}
+	if (ImpactEventTask)
+	{
+		ImpactEventTask->EndTask(); ImpactEventTask = nullptr;
 	}
 }
 
@@ -434,6 +469,7 @@ void UGA_JumpAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 	HitActors.Reset();
 	bChargeBonusGranted = false;
 	bLandingHandled = false;
+	bLandingAoeApplied = false;
 	CachedWeaponComponent = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);

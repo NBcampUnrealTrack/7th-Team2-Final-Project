@@ -8,6 +8,7 @@
 
 class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
+class UAbilityTask_WaitGameplayEvent;
 class UGameplayEffect;
 class UWeaponComponent;
 
@@ -40,6 +41,7 @@ private:
 	UFUNCTION() void HandleMontageCompleted();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
+	UFUNCTION() void HandleImpactEvent(FGameplayEventData Payload);
 	UFUNCTION() void HandleLanded(const FHitResult& Hit);
 
 private:
@@ -63,6 +65,9 @@ private:
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ImpactEventTask;
+
+	UPROPERTY(Transient)
 	TSet<TObjectPtr<AActor>> HitActors;
 
 	bool bChargeBonusGranted = false;
@@ -74,6 +79,7 @@ private:
 	float SavedGravityScale = 1.f;
 	bool bGravityModified = false;
 	bool bLandingHandled = false;
+	bool bLandingAoeApplied = false;
 	
 	// LandedDelegate 구독 해제용
 	UPROPERTY(Transient)

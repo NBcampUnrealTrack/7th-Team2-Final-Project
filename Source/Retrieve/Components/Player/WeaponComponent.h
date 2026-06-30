@@ -38,6 +38,23 @@ struct FRetrieveEquippedWeaponPart
 	FTransform RelativeTransform = FTransform::Identity;
 };
 
+USTRUCT()
+struct FRetrieveEquippedWeaponMesh
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMeshComponent> Mesh = nullptr;
+
+	bool bGeneratesHitVolume = false;
+	bool bUseBoundsTrace = false;
+	ERetrieveBoundsTraceShape BoundsTraceShape = ERetrieveBoundsTraceShape::SweptLongAxis;
+	float BoundsRadiusScale = 1.0f;
+	float BoundsLengthPadding = 0.0f;
+	FName TraceStartSocket = NAME_None;
+	FName TraceEndSocket = NAME_None;
+};
+
 // 장착된 무기의 전투 데이터, 비주얼, 무기 전용 어빌리티를 적용한다.
 // 장착 가능 여부와 보유 검사는 InventoryComponent에서 먼저 처리한다.
 UCLASS(Blueprintable, meta = (BlueprintSpawnableComponent))
@@ -71,6 +88,10 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
 	UMeshComponent* GetWeaponMeshForTrace(FName StartSocket, FName EndSocket) const;
+	
+	void GetHitVolumeMeshes(TArray<FRetrieveEquippedWeaponMesh>& OutParts) const;
+	
+	UMeshComponent* GetEquippedMeshBySocket(FName AttachSocketName) const;
 
 	// 발검/납검 시 무기 파트들을 손/등 소켓으로 재부착한다(상태/타이밍은 호출자가 결정, 부착 연산만 담당).
 	// OnlyDrawnSocket을 지정하면 그 손 소켓(DrawnSocket)을 가진 파트만 스왑한다 — 한 몽타주에서
@@ -124,9 +145,9 @@ protected:
 
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CurrentWeaponData;
-
+	
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMeshComponent>> EquippedWeaponMeshComponents;
+	TArray<FRetrieveEquippedWeaponMesh> EquippedWeaponMeshComponents;
 
 	// 교체 중 OLD 메시. EquipWeapon이 NEW 스폰 전에 여기로 옮겨 두고, 몽타주 끝(또는 fallback)에서 파괴한다.
 	UPROPERTY(Transient)

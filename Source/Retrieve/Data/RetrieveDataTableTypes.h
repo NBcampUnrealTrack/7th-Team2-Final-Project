@@ -821,7 +821,6 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	FGameplayTag WeaponType;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element", meta = (Categories = "Element"))
 	FGameplayTag BurstElement;
-	// TODO(하민): [구버전·사용처 없음] 정확 조합 매칭용이었으나 (무기×현재 원소모드) 매칭으로 대체됨.
 	// 마지막 C++ 리더(GetMatchingBurstCombination)가 제거되어 더는 읽히지 않는다. BP 참조 확인 후 이 필드와 DT 열 삭제 권장.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Element")
 	TMap<FGameplayTag, int32> ElementPattern;
@@ -1332,6 +1331,13 @@ struct RETRIEVE_API FWeaponHeavyAttack
 	TSoftObjectPtr<USoundBase> CastSound;
 };
 
+UENUM(BlueprintType)
+enum class ERetrieveBoundsTraceShape : uint8
+{
+	SweptLongAxis,  // 최장축을 따라 구체 스윕 (검 — 기본)
+	SingleSphere,   // 바운드 중심에 구체 1개 (둥근 방패 등)
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FRetrieveWeaponAttachmentData
 {
@@ -1367,6 +1373,34 @@ struct RETRIEVE_API FRetrieveWeaponAttachmentData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	FTransform RelativeTransform = FTransform::Identity;
+
+	// ---- 공격 히트 트레이스 ----
+	// 이 파트가 공격 히트 트레이스(피해 판정)를 생성하는가
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
+	bool bGeneratesHitVolume = false;
+
+	// true=메시 바운드에서 트레이스 자동 산출 / false=소켓 기반(아래 override 또는 행 소켓)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume"))
+	bool bUseBoundsTrace = false;
+
+	// 바운드 형상: SweptLongAxis(검 — 최장축 구체 스윕) / SingleSphere(둥근 방패 — 중심 구체 1개)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume && bUseBoundsTrace"))
+	ERetrieveBoundsTraceShape BoundsTraceShape = ERetrieveBoundsTraceShape::SweptLongAxis;
+
+	// 바운드 단면(나머지 두 축 절반 중 큰 값)에 곱할 스윕 반경 배율(튜닝)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume", ClampMin = "0.0"))
+	float BoundsRadiusScale = 1.0f;
+
+	// 바운드 날 축(최장축) 양 끝에 더할 패딩(튜닝)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume"))
+	float BoundsLengthPadding = 0.0f;
+
+	// 소켓 모드용 파트 소켓(비우면 무기 행의 TraceStart/EndSocketName 사용)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume"))
+	FName TraceStartSocketNameOverride = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume"))
+	FName TraceEndSocketNameOverride = NAME_None;
 };
 
 // 무기 데이터. 보유 상태는 InventoryComponent, 실제 장착 반영은 WeaponComponent에서 처리
