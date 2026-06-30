@@ -58,14 +58,14 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 
 	// OLD 메시를 NEW 스폰과 분리해 Pending으로 옮긴다. 즉시 숨겨 NEW(노티로 등장)와 겹치지 않게 하고,
 	// 실제 파괴는 교체 몽타주 끝(또는 fallback 즉시)으로 미룬다.
-	for (UMeshComponent* OldMesh : EquippedWeaponMeshComponents)
+	for (const FRetrieveEquippedWeaponMesh& OldPart : EquippedWeaponMeshComponents)
 	{
-		if (OldMesh)
+		if (OldPart.Mesh)
 		{
-			OldMesh->SetVisibility(false, /*bPropagateToChildren=*/true);
+			OldPart.Mesh->SetVisibility(false, /*bPropagateToChildren=*/true);
+			PendingDestroyMeshComponents.Add(OldPart.Mesh);
 		}
 	}
-	PendingDestroyMeshComponents.Append(EquippedWeaponMeshComponents);
 	EquippedWeaponMeshComponents.Reset();
 	WeaponAttachParts.Reset();
 
@@ -242,11 +242,11 @@ void UWeaponComponent::ClearGrantedWeaponAbilities()
 
 void UWeaponComponent::ClearWeaponVisuals()
 {
-	for (UMeshComponent* MeshComponent : EquippedWeaponMeshComponents)
+	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 	{
-		if (MeshComponent)
+		if (Part.Mesh)
 		{
-			MeshComponent->DestroyComponent();
+			Part.Mesh->DestroyComponent();
 		}
 	}
 	EquippedWeaponMeshComponents.Reset();
@@ -255,11 +255,11 @@ void UWeaponComponent::ClearWeaponVisuals()
 
 UMeshComponent* UWeaponComponent::GetPrimaryEquippedWeaponMesh() const
 {
-	for (UMeshComponent* MeshComponent : EquippedWeaponMeshComponents)
+	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 	{
-		if (IsValid(MeshComponent))
+		if (IsValid(Part.Mesh))
 		{
-			return MeshComponent;
+			return Part.Mesh;
 		}
 	}
 	return nullptr;
@@ -269,18 +269,46 @@ UMeshComponent* UWeaponComponent::GetWeaponMeshForTrace(FName StartSocket, FName
 {
 	if (!StartSocket.IsNone() && !EndSocket.IsNone())
 	{
-		for (UMeshComponent* MeshComponent : EquippedWeaponMeshComponents)
+		for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 		{
-			if (IsValid(MeshComponent)
-				&& MeshComponent->DoesSocketExist(StartSocket)
-				&& MeshComponent->DoesSocketExist(EndSocket))
+			if (IsValid(Part.Mesh)
+				&& Part.Mesh->DoesSocketExist(StartSocket)
+				&& Part.Mesh->DoesSocketExist(EndSocket))
 			{
-				return MeshComponent;
+				return Part.Mesh;
 			}
 		}
 	}
 	
 	return GetPrimaryEquippedWeaponMesh();
+}
+
+void UWeaponComponent::GetHitVolumeMeshes(TArray<FRetrieveEquippedWeaponMesh>& OutParts) const
+{
+	OutParts.Reset();
+	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
+	{
+		if (Part.bGeneratesHitVolume && IsValid(Part.Mesh))
+		{
+			OutParts.Add(Part);
+		}
+	}
+}
+
+UMeshComponent* UWeaponComponent::GetEquippedMeshBySocket(FName AttachSocketName) const
+{
+	if (AttachSocketName.IsNone())
+	{
+		return nullptr;
+	}
+	for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
+	{
+		if (Part.DrawnSocket == AttachSocketName && IsValid(Part.Mesh))
+		{
+			return Part.Mesh;
+		}
+	}
+	return nullptr;
 }
 
 bool UWeaponComponent::HasAuthorityToModify() const
@@ -377,8 +405,16 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		{
 			WeaponMeshComponent->SetVisibility(false, /*bPropagateToChildren=*/true);
 		}
-
-		EquippedWeaponMeshComponents.Add(WeaponMeshComponent);
+		
+		FRetrieveEquippedWeaponMesh& MeshPart = EquippedWeaponMeshComponents.AddDefaulted_GetRef();
+		MeshPart.Mesh = WeaponMeshComponent;
+		MeshPart.bGeneratesHitVolume = Attachment.bGeneratesHitVolume;
+		MeshPart.bUseBoundsTrace = Attachment.bUseBoundsTrace;
+		MeshPart.BoundsTraceShape = Attachment.BoundsTraceShape;
+		MeshPart.BoundsRadiusScale = Attachment.BoundsRadiusScale;
+		MeshPart.BoundsLengthPadding = Attachment.BoundsLengthPadding;
+		MeshPart.TraceStartSocket = Attachment.TraceStartSocketNameOverride;
+		MeshPart.TraceEndSocket = Attachment.TraceEndSocketNameOverride;
 
 		// 발검/납검 소켓 스왑용 기록(손=AttachSocketName, 오프셋 보존). 등 소켓은 SetWeaponDrawn에서 레이어 맵으로 해석.
 		FRetrieveEquippedWeaponPart& Part = WeaponAttachParts.AddDefaulted_GetRef();

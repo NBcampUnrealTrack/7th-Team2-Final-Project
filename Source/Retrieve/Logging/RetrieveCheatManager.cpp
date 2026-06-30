@@ -347,28 +347,14 @@ void URetrieveCheatManager::RetrieveTestParryCounter()
 {
     UAbilitySystemComponent* ASC = GetLocalPlayerASC();
     if (!ASC) return;
-
-    // ActivationRequiredTags(State.Player.CanCounter) 충족용으로 태그를 임시 부여
-    const FGameplayTag CanCounterTag = RetrieveGameplayTags::State_Player_CanCounter;
-    const bool bAlreadyHadTag = ASC->HasMatchingGameplayTag(CanCounterTag);
-    if (!bAlreadyHadTag)
-    {
-        ASC->AddLooseGameplayTag(CanCounterTag);
-    }
-
-    FGameplayTagContainer ActivateTags;
-    ActivateTags.AddTag(RetrieveGameplayTags::Ability_Player_ParryCounter);
-    const bool bActivated = ASC->TryActivateAbilitiesByTag(ActivateTags);
-
-    // 활성화 게이트 용도로만 부여했으므로 즉시 제거
-    if (!bAlreadyHadTag)
-    {
-        ASC->RemoveLooseGameplayTag(CanCounterTag);
-    }
+	
+    FGameplayEventData Payload;
+    Payload.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Counter;
+    const int32 TriggeredCount = ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Parry_Counter, &Payload);
 
     UE_LOG(LogTemp, Display,
-        TEXT("[CheatManager] TestParryCounter → 활성화=%s (실패 시: 어빌리티셋 미등록 / 무기 미장착 / DamageEffectClass 미지정 확인. 데미지가 없으면 전방에 적 없음)"),
-        bActivated ? TEXT("성공") : TEXT("실패"));
+        TEXT("[CheatManager] TestParryCounter → 트리거수=%d (0이면: 어빌리티셋 미등록 / 무기 미장착 / 카운터 타깃 없음(SetPendingCounterTarget 필요))"),
+        TriggeredCount);
 }
 
 void URetrieveCheatManager::RetrieveTestHitReact(int32 Strength)

@@ -35,8 +35,6 @@ private:
 	void CleanupAttackWindowTags() const;
 	void ApplyStepDamage();
 	bool ResolveAttackComboVariant();
-	
-	void BuildTracePoints(TArray<FVector>& OutPoints) const;
 
 	/** 콤보 몽타주 재생 속도. CombatAttributeSet의 AttackSpeedMultiplier를 사용(원소 각성 버프 등 반영). */
 	float GetMontagePlayRate() const;
@@ -86,4 +84,6 @@ private:
 	
 	TArray<FVector> PreviousTracePoints;
 	bool bHasValidPreviousTracePoints = false;
+	
+	TArray<TArray<FVector>> PreviousTracePointsPerPart;
 };

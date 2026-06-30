@@ -14,6 +14,7 @@
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
 #include "Components/Combat/CombatStanceComponent.h"
+#include "Combat/WeaponTraceLibrary.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/WeaponAttackDefinition.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -190,6 +191,7 @@ void UGA_Attack::StartComboStep(int32 StepIndex)
 
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
+	PreviousTracePointsPerPart.Reset();
 	bHasValidPreviousTracePoints = false;
 
 	const FWeaponComboStep& StepData = CachedComboSteps[StepIndex];
@@ -261,6 +263,7 @@ void UGA_Attack::HandleImpactBeginEvent(FGameplayEventData Payload)
 {
 	// 인덱스는 재생 시점(StartComboStep)에 확정됨. 여기서는 이번 스윙의 트레이스/히트 상태만 초기화.
 	PreviousTracePoints.Reset();
+	PreviousTracePointsPerPart.Reset();
 	bHasValidPreviousTracePoints = false;
 	HitActorsThisStep.Reset();
 }
@@ -292,10 +295,14 @@ void UGA_Attack::ApplyStepDamage()
 	{
 		return;
 	}
-
-	TArray<FVector> CurrentPoints;
-	BuildTracePoints(CurrentPoints);
-	if (CurrentPoints.IsEmpty())
+	
+	TArray<FRetrieveEquippedWeaponMesh> HitParts;
+	if (IsValid(CachedWeaponComponent))
+	{
+		CachedWeaponComponent->GetHitVolumeMeshes(HitParts);
+	}
+	
+	if (HitParts.IsEmpty())
 	{
 		return;
 	}
@@ -307,48 +314,72 @@ void UGA_Attack::ApplyStepDamage()
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
-	const float TraceRadius = CachedWeaponData.TraceRadius;
-	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);
 
-	const bool bHasPrev = bHasValidPreviousTracePoints && PreviousTracePoints.Num() == CurrentPoints.Num();
-	
 	TArray<FHitResult> AllHits;
-
-	auto SweepSegment = [&](const FVector& SegStart, const FVector& SegEnd)
-	{
-		TArray<FHitResult> SegmentHits;
-		const bool bHit = World->SweepMultiByObjectType(SegmentHits, SegStart, SegEnd, FQuat::Identity, ObjectQueryParams, TraceShape, QueryParams);
-		if (bDebugDrawTrace)
-		{
-			constexpr float DebugLife = -1.0f;
-			DrawDebugLine(World, SegStart, SegEnd, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
-			DrawDebugSphere(World, SegEnd, TraceRadius, 8, bHit ? FColor::Green : FColor::Red, false, DebugLife);
-		}
-		if (bHit)
-		{
-			AllHits.Append(MoveTemp(SegmentHits));
-		}
-	};
 	
-	for (int32 i = 0; i + 1 < CurrentPoints.Num(); ++i)
+	if (!HitParts.IsEmpty())
 	{
-		SweepSegment(CurrentPoints[i], CurrentPoints[i + 1]);
-	}
-	
-	if (bHasPrev)
-	{
-		for (int32 i = 0; i < CurrentPoints.Num(); ++i)
+		PreviousTracePointsPerPart.SetNum(HitParts.Num());
+		for (int32 PartIdx = 0; PartIdx < HitParts.Num(); ++PartIdx)
 		{
-			SweepSegment(PreviousTracePoints[i], CurrentPoints[i]);
+			const FRetrieveEquippedWeaponMesh& Part = HitParts[PartIdx];
+
+			FWeaponTraceSegment Seg;
+			bool bBuilt = false;
+			if (Part.BoundsTraceShape == ERetrieveBoundsTraceShape::SingleSphere)
+			{
+				bBuilt = URetrieveWeaponTraceLibrary::BuildBoundsSphere(
+					Part.Mesh, Part.BoundsRadiusScale, Seg);
+			}
+			else
+			{
+				bBuilt = URetrieveWeaponTraceLibrary::BuildBoundsTrace(
+					Part.Mesh, Part.BoundsRadiusScale, Part.BoundsLengthPadding,
+					CachedWeaponData.TraceSegmentCount, Seg);
+			}
+
+			TArray<FVector>& PartPrev = PreviousTracePointsPerPart[PartIdx];
+			if (!bBuilt || !Seg.IsValidTrace())
+			{
+				PartPrev.Reset();
+				continue;
+			}
+
+			const FCollisionShape PartShape = FCollisionShape::MakeSphere(Seg.Radius);
+			auto SweepPart = [&](const FVector& SegStart, const FVector& SegEnd)
+			{
+				TArray<FHitResult> SegmentHits;
+				const bool bHit = World->SweepMultiByObjectType(SegmentHits, SegStart, SegEnd, FQuat::Identity, ObjectQueryParams, PartShape, QueryParams);
+				if (bDebugDrawTrace)
+				{
+					constexpr float DebugLife = -1.0f;
+					DrawDebugLine(World, SegStart, SegEnd, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
+					DrawDebugSphere(World, SegEnd, Seg.Radius, 8, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+				}
+				if (bHit)
+				{
+					AllHits.Append(MoveTemp(SegmentHits));
+				}
+			};
+
+			for (int32 i = 0; i + 1 < Seg.Points.Num(); ++i)
+			{
+				SweepPart(Seg.Points[i], Seg.Points[i + 1]);
+			}
+			if (Seg.Points.Num() == 1)
+			{
+				SweepPart(Seg.Points[0], Seg.Points[0]);
+			}
+			if (PartPrev.Num() == Seg.Points.Num())
+			{
+				for (int32 i = 0; i < Seg.Points.Num(); ++i)
+				{
+					SweepPart(PartPrev[i], Seg.Points[i]);
+				}
+			}
+			PartPrev = Seg.Points;
 		}
 	}
-	else if (CurrentPoints.Num() == 1)
-	{
-		SweepSegment(CurrentPoints[0], CurrentPoints[0]);
-	}
-
-	PreviousTracePoints = CurrentPoints;
-	bHasValidPreviousTracePoints = true;
 
 	if (AllHits.IsEmpty())
 	{
@@ -434,46 +465,6 @@ void UGA_Attack::ApplyStepDamage()
 	}
 }
 
-void UGA_Attack::BuildTracePoints(TArray<FVector>& OutPoints) const
-{
-	OutPoints.Reset();
-
-	const FName StartSocket = CachedWeaponData.TraceStartSocketName;
-	const FName EndSocket = CachedWeaponData.TraceEndSocketName;
-	
-	UMeshComponent* TraceMesh = IsValid(CachedWeaponComponent)
-		? CachedWeaponComponent->GetWeaponMeshForTrace(StartSocket, EndSocket)
-		: nullptr;
-	
-	if (IsValid(TraceMesh) && !StartSocket.IsNone() && !EndSocket.IsNone()
-		&& TraceMesh->DoesSocketExist(StartSocket) && TraceMesh->DoesSocketExist(EndSocket))
-	{
-		const FVector StartLoc = TraceMesh->GetSocketLocation(StartSocket);
-		const FVector EndLoc = TraceMesh->GetSocketLocation(EndSocket);
-		const int32 SegmentCount = FMath::Max(2, CachedWeaponData.TraceSegmentCount);
-
-		OutPoints.Reserve(SegmentCount);
-		for (int32 i = 0; i < SegmentCount; ++i)
-		{
-			const float Alpha = static_cast<float>(i) / static_cast<float>(SegmentCount - 1);
-			OutPoints.Add(FMath::Lerp(StartLoc, EndLoc, Alpha));
-		}
-		return;
-	}
-	
-	const FName SingleSocket = CachedWeaponData.TraceSocketName.IsNone() ? RetrieveWeaponSockets::Weapon_R : CachedWeaponData.TraceSocketName;
-	if (IsValid(TraceMesh) && TraceMesh->DoesSocketExist(SingleSocket))
-	{
-		OutPoints.Add(TraceMesh->GetSocketLocation(SingleSocket));
-		return;
-	}
-	
-	if (const AActor* AvatarActor = GetAvatarActorFromActorInfo())
-	{
-		OutPoints.Add(AvatarActor->GetActorLocation());
-	}
-}
-
 void UGA_Attack::HandleMontageBlendOut()
 {
 	// 콤보 전환은 ComboWindow 열림/입력 프레임에서 즉시 처리한다.
@@ -551,6 +542,7 @@ void UGA_Attack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGame
 
 	HitActorsThisStep.Reset();
 	PreviousTracePoints.Reset();
+	PreviousTracePointsPerPart.Reset();
 	bHasValidPreviousTracePoints = false;
 	CachedWeaponComponent = nullptr;
 	CachedComboSteps.Reset();

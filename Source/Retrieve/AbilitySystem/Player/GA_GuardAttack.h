@@ -94,4 +94,6 @@ private:
 
 	TArray<FVector> PreviousTracePoints;
 	bool bHasValidPreviousTracePoints = false;
+	
+	mutable float ResolvedTraceRadius = 0.f;
 };

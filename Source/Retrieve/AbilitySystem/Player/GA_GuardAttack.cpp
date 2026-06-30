@@ -8,6 +8,7 @@
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Combat/WeaponTraceLibrary.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/WeaponAttackDefinition.h"
 #include "Data/WeaponGuardAttackDefinition.h"
@@ -256,6 +257,7 @@ void UGA_GuardAttack::ApplyHitDamage()
 void UGA_GuardAttack::BuildTracePoints(TArray<FVector>& OutPoints) const
 {
 	OutPoints.Reset();
+	ResolvedTraceRadius = CachedWeaponData.TraceRadius;
 
 	switch (CachedGuardAttackData.AttackSource)
 	{
@@ -293,7 +295,15 @@ void UGA_GuardAttack::BuildWeaponTracePoints(TArray<FVector>& OutPoints) const
 	UMeshComponent* TraceMesh = IsValid(CachedWeaponComponent)
 		? CachedWeaponComponent->GetWeaponMeshForTrace(StartSocket, EndSocket)
 		: nullptr;
-
+	
+	FWeaponTraceSegment WeaponSeg;
+	if (URetrieveWeaponTraceLibrary::BuildBoundsTrace(TraceMesh, 1.0f, 0.f, FMath::Max(2, CachedWeaponData.TraceSegmentCount), WeaponSeg) && WeaponSeg.IsValidTrace())
+	{
+		OutPoints = WeaponSeg.Points;
+		ResolvedTraceRadius = WeaponSeg.Radius;
+		return;
+	}
+	
 	if (IsValid(TraceMesh) && !StartSocket.IsNone() && !EndSocket.IsNone()
 		&& TraceMesh->DoesSocketExist(StartSocket) && TraceMesh->DoesSocketExist(EndSocket))
 	{
@@ -319,6 +329,18 @@ void UGA_GuardAttack::BuildWeaponTracePoints(TArray<FVector>& OutPoints) const
 
 void UGA_GuardAttack::BuildShieldTracePoints(TArray<FVector>& OutPoints) const
 {
+	UMeshComponent* ShieldMesh = IsValid(CachedWeaponComponent)
+		? CachedWeaponComponent->GetEquippedMeshBySocket(RetrieveWeaponSockets::Shield)
+		: nullptr;
+
+	FWeaponTraceSegment ShieldSeg;
+	if (URetrieveWeaponTraceLibrary::BuildBoundsSphere(ShieldMesh, 1.0f, ShieldSeg) && ShieldSeg.IsValidTrace())
+	{
+		OutPoints = ShieldSeg.Points;
+		ResolvedTraceRadius = ShieldSeg.Radius;
+		return;
+	}
+	
 	const ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const USkeletalMeshComponent* CharacterMesh = Character ? Character->GetMesh() : nullptr;
 	if (IsValid(CharacterMesh) && CharacterMesh->DoesSocketExist(RetrieveWeaponSockets::Shield))
@@ -348,7 +370,7 @@ void UGA_GuardAttack::SweepAndApplyDamage(const TArray<FVector>& CurrentPoints)
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_GuardAttack_Impact), false, AvatarActor);
-	const float TraceRadius = CachedWeaponData.TraceRadius;
+	const float TraceRadius = ResolvedTraceRadius > 0.f ? ResolvedTraceRadius : CachedWeaponData.TraceRadius;
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(TraceRadius);
 	const bool bHasPrev = bHasValidPreviousTracePoints && PreviousTracePoints.Num() == CurrentPoints.Num();
 

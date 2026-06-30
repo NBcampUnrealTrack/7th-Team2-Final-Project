@@ -132,11 +132,6 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 	{
 		RetrieveASC->SetPendingCounterTarget(LastParriedAttacker.Get());
 	}
-
-	if (CounterWindowEffect)
-	{
-		ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, CounterWindowEffect.GetDefaultObject(), GetAbilityLevel());
-	}
 	
 	if (StaminaRestoreEffect)
 	{
@@ -160,6 +155,16 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 
 	// 적 반응 확정: 비보스=ParryStaggerEffect, 보스=BossParryStaggerEffect(약화)
 	ApplyParryStagger(LastParriedAttacker.Get());
+	
+	if (AActor* CounterAvatar = GetAvatarActorFromActorInfo())
+	{
+		FGameplayEventData CounterEvent;
+		CounterEvent.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Counter;
+		CounterEvent.Instigator = CounterAvatar;
+		CounterEvent.Target = LastParriedAttacker.Get();
+		CounterEvent.OptionalObject = LastParriedAttacker.Get();
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(CounterAvatar, RetrieveGameplayTags::GameplayEvent_Parry_Counter, CounterEvent);
+	}
 }
 
 void UGA_ParryBase::ExecuteParrySuccessCue() const
