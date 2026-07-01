@@ -2,6 +2,33 @@
 #include "Player/RetrievePlayerController.h"
 #include "UI/ViewModels/HUDViewModel.h"
 #include "UI/ViewModels/ElementGaugeViewModel.h"
+#include "UI/RetrieveUISettingsLibrary.h"
+#include "Settings/RetrieveSettingsSubsystem.h"
+#include "Blueprint/WidgetTree.h"
+
+namespace
+{
+	// 중첩된 자식 UserWidget까지 모든 애니메이션을 정지한다.
+	void StopAnimationsRecursive(UUserWidget* Root)
+	{
+		if (!Root)
+		{
+			return;
+		}
+		Root->StopAllAnimations();
+		if (!Root->WidgetTree)
+		{
+			return;
+		}
+		Root->WidgetTree->ForEachWidget([](UWidget* W)
+		{
+			if (UUserWidget* Nested = Cast<UUserWidget>(W))
+			{
+				StopAnimationsRecursive(Nested);
+			}
+		});
+	}
+}
 
 void URetrieveElementAwareWidget::NativeConstruct()
 {
@@ -34,6 +61,13 @@ void URetrieveElementAwareWidget::NativeConstruct()
 	{
 		NativeOnElementModeChanged(VM->GetCurrentElement());
 	}
+
+	// Reduce Motion: 접근성 설정 구독 + 현재 상태 즉시 적용.
+	if (URetrieveSettingsSubsystem* Subsystem = URetrieveSettingsSubsystem::Get(this))
+	{
+		Subsystem->OnSettingChanged.AddUniqueDynamic(this, &ThisClass::HandleAccessibilitySettingChanged);
+	}
+	ApplyReduceMotion();
 }
 
 FGameplayTag URetrieveElementAwareWidget::GetCurrentActiveElement() const
@@ -51,7 +85,29 @@ void URetrieveElementAwareWidget::NativeDestruct()
 	{
 		VM->OnCurrentElementChanged.RemoveDynamic(this, &ThisClass::HandleElementModeChanged);
 	}
+	if (URetrieveSettingsSubsystem* Subsystem = URetrieveSettingsSubsystem::Get(this))
+	{
+		Subsystem->OnSettingChanged.RemoveDynamic(this, &ThisClass::HandleAccessibilitySettingChanged);
+	}
 	Super::NativeDestruct();
+}
+
+void URetrieveElementAwareWidget::HandleAccessibilitySettingChanged(ERetrieveSettingsCategory Category)
+{
+	if (Category == ERetrieveSettingsCategory::Accessibility || Category == ERetrieveSettingsCategory::MAX)
+	{
+		ApplyReduceMotion();
+	}
+}
+
+void URetrieveElementAwareWidget::ApplyReduceMotion()
+{
+	// Reduce Motion이 켜져 있으면 장식 애니메이션을 정지한다(데이터 갱신은 SetPercent/SetText라 무관).
+	// 해제는 위젯 재생성 시 복원.
+	if (URetrieveUISettingsLibrary::IsReduceMotionEnabled())
+	{
+		StopAnimationsRecursive(this);
+	}
 }
 
 void URetrieveElementAwareWidget::HandleElementModeChanged(FGameplayTag NewElement)

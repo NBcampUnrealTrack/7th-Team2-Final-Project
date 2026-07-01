@@ -6,7 +6,9 @@
 
 class UButton;
 class UCanvasPanel;
+class UImage;
 class UTextBlock;
+class UTexture2D;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCraftRecipeEntryClickedSignature, FName, RecipeId);
 
@@ -17,7 +19,7 @@ class RETRIEVE_API UCraftRecipeEntryWidget : public URetrieveUIVFXWidget
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Craft")
-	void InitRecipeEntry(FName InRecipeId, const FText& InDisplayName, int32 InMaxCraftableCount);
+	void InitRecipeEntry(FName InRecipeId, const FText& InDisplayName, int32 InOwnedCount);
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Retrieve|Craft")
 	void SetSelected(bool bIsSelected);
@@ -25,6 +27,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Craft")
 	void SetDescription(const FText& InDescription);
+
+	/** 결과물 아이콘 텍스처 설정 (CraftPanel이 ItemIconTable에서 조회해 주입) */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Craft")
+	void SetIconTexture(UTexture2D* InTexture);
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Craft")
 	FName GetRecipeId() const { return NativeRecipeId; }
@@ -52,6 +58,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Select;
 
+	// 결과물 아이콘 (WBP_RecipeEntry에 추가)
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_RecipeIcon;
+
+	// 선택 시 표시되는 청색 글로우 (WBP_RecipeEntry에 추가)
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Image_SelectGlow;
+
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_RecipeName;
 
@@ -73,7 +87,7 @@ private:
 
 	FName NativeRecipeId;
 	FText DisplayName;
-	int32 MaxCraftableCount = 0;
+	int32 OwnedCount = 0;
 	bool bSelected = false;
 	bool bHovered = false;
 };

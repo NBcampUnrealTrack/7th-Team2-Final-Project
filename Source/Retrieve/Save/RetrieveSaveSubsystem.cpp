@@ -22,6 +22,10 @@
 #include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"
 #include "World/RetrieveBonfireActor.h"
+#include "Engine/SceneCapture2D.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "ImageUtils.h"
 
 void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -108,6 +112,10 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 	// 저장 시각 기록
 	SlotSave->SaveTimestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M"));
 
+	// 플레이어에게 메뉴 깜빡임을 노출하지 않기 위해 뷰포트가 아닌 별도 SceneCapture를 사용한다.
+	// 캡처 실패가 세이브 데이터 자체를 막아서는 안 되므로 실패 시 텍스트 저장은 계속 진행한다.
+	CaptureSaveThumbnail(PC, SlotSave);
+
 	const bool bSuccess = UGameplayStatics::SaveGameToSlot(SlotSave, SlotName, SaveUserIndex);
 	if (bSuccess)
 	{
@@ -120,6 +128,86 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		UE_LOG(LogTemp, Error, TEXT("[SaveSubsystem] 파일 저장 실패 — Slot=%s"), *SlotName);
 	}
 	return bSuccess;
+}
+
+bool URetrieveSaveSubsystem::CaptureSaveThumbnail(APlayerController* PC, URetrieveSaveGame* SlotSave) const
+{
+	if (!IsValid(PC) || !SlotSave || !PC->PlayerCameraManager)
+	{
+		return false;
+	}
+
+	UWorld* World = PC->GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	constexpr int32 ThumbnailWidth = 512;
+	constexpr int32 ThumbnailHeight = 288;
+
+	const FMinimalViewInfo CameraView = PC->PlayerCameraManager->GetCameraCacheView();
+
+	UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>(
+		GetTransientPackage(), NAME_None, RF_Transient);
+	RenderTarget->RenderTargetFormat = RTF_RGBA8;
+	RenderTarget->ClearColor = FLinearColor::Black;
+	RenderTarget->InitAutoFormat(ThumbnailWidth, ThumbnailHeight);
+	RenderTarget->UpdateResourceImmediate(true);
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.ObjectFlags |= RF_Transient;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ASceneCapture2D* CaptureActor = World->SpawnActor<ASceneCapture2D>(
+		CameraView.Location, CameraView.Rotation, SpawnParams);
+	if (!CaptureActor)
+	{
+		return false;
+	}
+
+	USceneCaptureComponent2D* Capture = CaptureActor->GetCaptureComponent2D();
+	Capture->TextureTarget = RenderTarget;
+	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	Capture->FOVAngle = CameraView.FOV;
+	Capture->PostProcessSettings = CameraView.PostProcessSettings;
+	Capture->PostProcessBlendWeight = CameraView.PostProcessBlendWeight;
+	Capture->bCaptureEveryFrame = false;
+	Capture->bCaptureOnMovement = false;
+	Capture->bAlwaysPersistRenderingState = true;
+	Capture->CaptureScene();
+
+	TArray<FColor> Pixels;
+	FReadSurfaceDataFlags ReadFlags(RCM_UNorm);
+	ReadFlags.SetLinearToGamma(false);
+	const bool bRead = RenderTarget->GameThread_GetRenderTargetResource()->ReadPixels(Pixels, ReadFlags);
+	CaptureActor->Destroy();
+
+	if (!bRead || Pixels.Num() != ThumbnailWidth * ThumbnailHeight)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] 저장 썸네일 픽셀 읽기 실패"));
+		return false;
+	}
+
+	// SCS_FinalColorLDR는 렌더러/포스트프로세스 조합에 따라 RGB는 정상이어도
+	// 백버퍼 알파를 0으로 반환할 수 있다. 그대로 PNG로 저장하면 UMG에서 완전히
+	// 투명하게 합성되어 검은 슬롯 배경만 보이므로 썸네일은 항상 불투명하게 만든다.
+	for (FColor& Pixel : Pixels)
+	{
+		Pixel.A = 255;
+	}
+
+	SlotSave->ScreenshotPng.Reset();
+	TArray64<uint8> CompressedPng;
+	FImageUtils::PNGCompressImageArray(
+		ThumbnailWidth, ThumbnailHeight, Pixels, CompressedPng);
+	SlotSave->ScreenshotPng.Append(CompressedPng.GetData(), static_cast<int32>(CompressedPng.Num()));
+	SlotSave->ScreenshotWidth = ThumbnailWidth;
+	SlotSave->ScreenshotHeight = ThumbnailHeight;
+
+	const bool bCaptured = !SlotSave->ScreenshotPng.IsEmpty();
+	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 저장 썸네일 캡처 %s (%d bytes)"),
+		bCaptured ? TEXT("완료") : TEXT("실패"), SlotSave->ScreenshotPng.Num());
+	return bCaptured;
 }
 
 bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerController* PC)

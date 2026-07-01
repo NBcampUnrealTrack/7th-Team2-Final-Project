@@ -8,16 +8,40 @@
 
 #include "Components/Button.h"
 #include "Components/Image.h"
-#include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/Slider.h"
-#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+
+namespace
+{
+	// 설명 첫 줄(아이템 이름)은 별도 이름 라벨과 중복되므로 제거한다.
+	FText StripLeadingNameLine(const FText& InText)
+	{
+		const FString Str = InText.ToString();
+		int32 NewlineIdx = INDEX_NONE;
+		if (Str.FindChar(TEXT('\n'), NewlineIdx))
+		{
+			return FText::FromString(Str.Mid(NewlineIdx + 1));
+		}
+		return InText;
+	}
+
+	// 첫 줄만 반환 (목록 행은 컴팩트하게 설명 한 줄만 표시)
+	FText FirstLineOnly(const FText& InText)
+	{
+		const FString Str = InText.ToString();
+		int32 NewlineIdx = INDEX_NONE;
+		if (Str.FindChar(TEXT('\n'), NewlineIdx))
+		{
+			return FText::FromString(Str.Left(NewlineIdx));
+		}
+		return InText;
+	}
+}
 
 void UCraftPanelWidget::NativeConstruct()
 {
@@ -25,12 +49,21 @@ void UCraftPanelWidget::NativeConstruct()
 	ResolveDefaultDataAssets();
 	ApplyStaticTexts();
 	BindButtonEvents();
-	WrapRecipeListInBounds();
+
 	if (ScrollBox_RecipeList)
 	{
 		ScrollBox_RecipeList->SetClipping(EWidgetClipping::ClipToBoundsAlways);
 	}
+
+	// 상세 패널은 고정 우측 컬럼으로 상시 표시
+	if (VerticalBox_CraftRoot)
+	{
+		VerticalBox_CraftRoot->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+
+	RefreshCategoryButtons();
 	RefreshRecipeList();
+	SelectFirstVisibleRecipe();
 }
 
 void UCraftPanelWidget::InitializeCraftPanel(UInventoryComponent* InInventoryComponent)
@@ -53,20 +86,46 @@ void UCraftPanelWidget::InitializeCraftPanel(UInventoryComponent* InInventoryCom
 
 	ResolveDefaultDataAssets();
 	RefreshRecipeList();
+	SelectFirstVisibleRecipe();
+}
+
+void UCraftPanelWidget::SetActiveCategory(ECraftCategory InCategory)
+{
+	if (ActiveCategory == InCategory)
+	{
+		return;
+	}
+
+	ActiveCategory = InCategory;
+	RefreshCategoryButtons();
+	RefreshRecipeList();
+	SelectFirstVisibleRecipe();
+}
+
+void UCraftPanelWidget::RefreshCategoryButtons()
+{
+	const FLinearColor SelectedTint(0.22f, 0.49f, 0.72f, 1.f);
+	const FLinearColor NormalTint(0.086f, 0.196f, 0.30f, 1.f);
+
+	auto Apply = [&](UButton* Button, ECraftCategory Category)
+	{
+		if (Button)
+		{
+			Button->SetBackgroundColor(Category == ActiveCategory ? SelectedTint : NormalTint);
+		}
+	};
+
+	Apply(Button_Cat_Consumable, ECraftCategory::Consumable);
+	Apply(Button_Cat_Buff, ECraftCategory::Buff);
+	Apply(Button_Cat_Material, ECraftCategory::Material);
+	Apply(Button_Cat_Equip, ECraftCategory::Equipment);
+	Apply(Button_Cat_Etc, ECraftCategory::Etc);
 }
 
 void UCraftPanelWidget::SelectRecipe(FName InRecipeId)
 {
 	if (!CraftRecipeTable || InRecipeId.IsNone())
 	{
-		return;
-	}
-
-	if (SelectedRecipeId == InRecipeId
-		&& VerticalBox_CraftRoot
-		&& VerticalBox_CraftRoot->GetVisibility() != ESlateVisibility::Collapsed)
-	{
-		CollapseSelectedRecipe();
 		return;
 	}
 
@@ -83,7 +142,6 @@ void UCraftPanelWidget::SelectRecipe(FName InRecipeId)
 	CraftCount = FMath::Clamp(CraftCount, 1, FMath::Max(1, MaxCraftableCount));
 
 	RefreshDetailPanel();
-	AttachDetailToSelectedRecipe();
 	RefreshRecipeEntrySelection();
 }
 
@@ -131,19 +189,61 @@ void UCraftPanelWidget::BindButtonEvents()
 		Slider_CraftCount->SetStepSize(1.f);
 	}
 
+	if (Button_CountMinus && !Button_CountMinus->OnClicked.IsBound())
+	{
+		Button_CountMinus->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCountMinusClicked);
+	}
+	if (Button_CountPlus && !Button_CountPlus->OnClicked.IsBound())
+	{
+		Button_CountPlus->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCountPlusClicked);
+	}
+	if (Button_CountMax && !Button_CountMax->OnClicked.IsBound())
+	{
+		Button_CountMax->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCountMaxClicked);
+	}
+
+	if (Button_Cat_Consumable && !Button_Cat_Consumable->OnClicked.IsBound())
+	{
+		Button_Cat_Consumable->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCatConsumableClicked);
+	}
+	if (Button_Cat_Buff && !Button_Cat_Buff->OnClicked.IsBound())
+	{
+		Button_Cat_Buff->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCatBuffClicked);
+	}
+	if (Button_Cat_Material && !Button_Cat_Material->OnClicked.IsBound())
+	{
+		Button_Cat_Material->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCatMaterialClicked);
+	}
+	if (Button_Cat_Equip && !Button_Cat_Equip->OnClicked.IsBound())
+	{
+		Button_Cat_Equip->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCatEquipClicked);
+	}
+	if (Button_Cat_Etc && !Button_Cat_Etc->OnClicked.IsBound())
+	{
+		Button_Cat_Etc->OnClicked.AddDynamic(this, &UCraftPanelWidget::HandleCatEtcClicked);
+	}
+
 	RegisterSoundButton(Button_Craft);
+	RegisterSoundButton(Button_CountMinus);
+	RegisterSoundButton(Button_CountPlus);
+	RegisterSoundButton(Button_CountMax);
+	RegisterSoundButton(Button_Cat_Consumable);
+	RegisterSoundButton(Button_Cat_Buff);
+	RegisterSoundButton(Button_Cat_Material);
+	RegisterSoundButton(Button_Cat_Equip);
+	RegisterSoundButton(Button_Cat_Etc);
 }
 
 void UCraftPanelWidget::ApplyStaticTexts()
 {
 	if (Text_CraftCountLabel)
 	{
-		Text_CraftCountLabel->SetText(NSLOCTEXT("CraftPanel", "CraftCountLabel", "Count:"));
+		Text_CraftCountLabel->SetText(NSLOCTEXT("CraftPanel", "CraftCountLabel", "제작 수량"));
 	}
 
 	if (Text_CraftButton)
 	{
-		Text_CraftButton->SetText(NSLOCTEXT("CraftPanel", "CraftButton", "Craft"));
+		Text_CraftButton->SetText(NSLOCTEXT("CraftPanel", "CraftButton", "제작하기"));
 	}
 }
 
@@ -188,64 +288,91 @@ void UCraftPanelWidget::ResolveDefaultDataAssets()
 			nullptr,
 			TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData"));
 	}
+
+	// 카테고리 필터 태그 기본값 (디자이너가 비워두면 자동 채움)
+	if (!Tag_Consumable.IsValid())
+	{
+		Tag_Consumable = FGameplayTag::RequestGameplayTag(FName("Item.Consumable"), false);
+	}
+	if (!Tag_Buff.IsValid())
+	{
+		Tag_Buff = FGameplayTag::RequestGameplayTag(FName("Item.Consumable.Buff"), false);
+	}
+	if (!Tag_Material.IsValid())
+	{
+		Tag_Material = FGameplayTag::RequestGameplayTag(FName("Item.Material"), false);
+	}
+	if (Tags_Equipment.IsEmpty())
+	{
+		const FGameplayTag WeaponTag = FGameplayTag::RequestGameplayTag(FName("Item.Weapon"), false);
+		const FGameplayTag ArmorTag = FGameplayTag::RequestGameplayTag(FName("Item.Armor"), false);
+		if (WeaponTag.IsValid())
+		{
+			Tags_Equipment.AddTag(WeaponTag);
+		}
+		if (ArmorTag.IsValid())
+		{
+			Tags_Equipment.AddTag(ArmorTag);
+		}
+	}
 }
 
-void UCraftPanelWidget::WrapRecipeListInBounds()
+bool UCraftPanelWidget::PassesCategoryFilter(const FRetrieveCraftRecipeRow& Recipe) const
 {
-	if (!ScrollBox_RecipeList || RecipeListMaxHeight <= 0.0f)
+	const FGameplayTag& Cat = Recipe.OutputItem.ItemCategoryTag;
+
+	switch (ActiveCategory)
 	{
+	case ECraftCategory::Consumable:
+		return Tag_Consumable.IsValid() && Cat.MatchesTag(Tag_Consumable);
+	case ECraftCategory::Buff:
+		return Tag_Buff.IsValid() && Cat.MatchesTag(Tag_Buff);
+	case ECraftCategory::Material:
+		return Tag_Material.IsValid() && Cat.MatchesTag(Tag_Material);
+	case ECraftCategory::Equipment:
+		return !Tags_Equipment.IsEmpty() && Cat.MatchesAny(Tags_Equipment);
+	case ECraftCategory::Etc:
+	default:
+		return !(Tag_Consumable.IsValid() && Cat.MatchesTag(Tag_Consumable))
+			&& !(Tag_Material.IsValid() && Cat.MatchesTag(Tag_Material))
+			&& !(!Tags_Equipment.IsEmpty() && Cat.MatchesAny(Tags_Equipment));
+	}
+}
+
+void UCraftPanelWidget::SelectFirstVisibleRecipe()
+{
+	if (RecipeListOrder.Num() == 0)
+	{
+		// 보이는 레시피가 없으면 상세를 비운다
+		SelectedRecipeId = NAME_None;
+		MaxCraftableCount = 0;
+		ClearMaterialRows();
+		if (Text_OutputName)
+		{
+			Text_OutputName->SetText(FText::GetEmpty());
+		}
+		if (Text_OutputDescription)
+		{
+			Text_OutputDescription->SetText(FText::GetEmpty());
+		}
+		if (Text_MaxCraftable)
+		{
+			Text_MaxCraftable->SetText(FText::GetEmpty());
+		}
+		UpdateCraftCountUI();
 		return;
 	}
 
-	if (Cast<USizeBox>(ScrollBox_RecipeList->GetParent()))
+	// 현재 선택이 보이는 목록에 있으면 유지, 아니면 첫 항목 선택
+	if (SelectedRecipeId.IsNone() || !RecipeListOrder.Contains(SelectedRecipeId))
 	{
-		return;
+		CraftCount = 1;
+		SelectRecipe(RecipeListOrder[0]);
 	}
-
-	UVerticalBox* ParentVerticalBox = Cast<UVerticalBox>(ScrollBox_RecipeList->GetParent());
-	if (!ParentVerticalBox)
+	else
 	{
-		return;
+		SelectRecipe(SelectedRecipeId);
 	}
-
-	const int32 ChildIndex = ParentVerticalBox->GetChildIndex(ScrollBox_RecipeList);
-	if (ChildIndex == INDEX_NONE)
-	{
-		return;
-	}
-
-	FMargin OriginalPadding = FMargin(0.0f);
-	EHorizontalAlignment OriginalHorizontalAlignment = HAlign_Fill;
-	EVerticalAlignment OriginalVerticalAlignment = VAlign_Fill;
-
-	if (UVerticalBoxSlot* OriginalSlot = Cast<UVerticalBoxSlot>(ScrollBox_RecipeList->Slot))
-	{
-		OriginalPadding = OriginalSlot->GetPadding();
-		OriginalHorizontalAlignment = OriginalSlot->GetHorizontalAlignment();
-		OriginalVerticalAlignment = OriginalSlot->GetVerticalAlignment();
-	}
-
-	USizeBox* RecipeListBounds = NewObject<USizeBox>(this, TEXT("SizeBox_RecipeListBounds"));
-	if (!RecipeListBounds)
-	{
-		return;
-	}
-
-	RecipeListBounds->SetMaxDesiredHeight(RecipeListMaxHeight);
-	RecipeListBounds->SetClipping(EWidgetClipping::ClipToBoundsAlways);
-
-	ScrollBox_RecipeList->RemoveFromParent();
-
-	if (UVerticalBoxSlot* BoundsSlot = Cast<UVerticalBoxSlot>(
-		ParentVerticalBox->InsertChildAt(ChildIndex, RecipeListBounds)))
-	{
-		BoundsSlot->SetPadding(OriginalPadding);
-		BoundsSlot->SetHorizontalAlignment(OriginalHorizontalAlignment);
-		BoundsSlot->SetVerticalAlignment(OriginalVerticalAlignment);
-		BoundsSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
-	}
-
-	RecipeListBounds->AddChild(ScrollBox_RecipeList);
 }
 
 void UCraftPanelWidget::RefreshRecipeList()
@@ -253,18 +380,6 @@ void UCraftPanelWidget::RefreshRecipeList()
 	if (!ScrollBox_RecipeList || !CraftRecipeTable)
 	{
 		return;
-	}
-
-	// CraftRoot가 ScrollBox 자식으로 이동된 경우 ClearChildren에 지워지므로 먼저 분리
-	const bool bCraftRootInScrollBox = VerticalBox_CraftRoot
-		&& VerticalBox_CraftRoot->GetParent() == ScrollBox_RecipeList;
-	if (bCraftRootInScrollBox)
-	{
-		VerticalBox_CraftRoot->RemoveFromParent();
-	}
-	if (VerticalBox_CraftRoot)
-	{
-		VerticalBox_CraftRoot->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	ScrollBox_RecipeList->ClearChildren();
@@ -277,17 +392,11 @@ void UCraftPanelWidget::RefreshRecipeList()
 		if (const FRetrieveCraftRecipeRow* Recipe =
 			CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(RecipeId, TEXT("CraftPanel::RefreshRecipeList"), false))
 		{
-			AddRecipeEntry(RecipeId, *Recipe);
+			if (PassesCategoryFilter(*Recipe))
+			{
+				AddRecipeEntry(RecipeId, *Recipe);
+			}
 		}
-	}
-
-	if (!SelectedRecipeId.IsNone()
-		&& CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::RefreshRecipeListSelected"), false))
-	{
-		MaxCraftableCount = InventoryComponent ? InventoryComponent->GetMaxCraftableCount(SelectedRecipeId) : 0;
-		CraftCount = FMath::Clamp(CraftCount, 1, FMath::Max(1, MaxCraftableCount));
-		RefreshDetailPanel();
-		AttachDetailToSelectedRecipe();
 	}
 }
 
@@ -305,16 +414,30 @@ void UCraftPanelWidget::AddRecipeEntry(FName RecipeId, const FRetrieveCraftRecip
 		return;
 	}
 
-	const int32 MaxCount = InventoryComponent
-		? InventoryComponent->GetMaxCraftableCount(RecipeId)
+	const int32 OwnedOutput = InventoryComponent
+		? InventoryComponent->GetItemCount(Recipe.OutputItem.ItemId)
 		: 0;
 	RecipeEntry->InitRecipeEntry(
 		RecipeId,
 		Recipe.DisplayName.IsEmpty() ? FText::FromName(RecipeId) : Recipe.DisplayName,
-		MaxCount);
-	RecipeEntry->SetDescription(URetrieveItemDescriptionHelper::BuildItemDescription(
+		OwnedOutput);
+	// 목록 행은 이름 라벨 + 설명 한 줄(스탯 제외)만 컴팩트하게 표시
+	RecipeEntry->SetDescription(FirstLineOnly(StripLeadingNameLine(URetrieveItemDescriptionHelper::BuildItemDescription(
 		Recipe.OutputItem.ItemId, Recipe.OutputItem.ItemCategoryTag,
-		ConsumableItemTable, MaterialItemTable, WeaponDataTable));
+		ConsumableItemTable, MaterialItemTable, WeaponDataTable))));
+
+	if (ItemIconTable)
+	{
+		if (const FRetrieveItemIconRow* IconRow =
+			ItemIconTable->FindRow<FRetrieveItemIconRow>(Recipe.OutputItem.ItemId, TEXT("CraftPanel::EntryIcon"), false))
+		{
+			if (UTexture2D* Tex = IconRow->IconTexture.LoadSynchronous())
+			{
+				RecipeEntry->SetIconTexture(Tex);
+			}
+		}
+	}
+
 	RecipeEntry->OnRecipeClicked.AddUniqueDynamic(this, &ThisClass::HandleRecipeEntryClicked);
 
 	RecipeEntries.Add(RecipeId, RecipeEntry);
@@ -332,50 +455,9 @@ void UCraftPanelWidget::AddRecipeEntryToList(UCraftRecipeEntryWidget* RecipeEntr
 
 	if (UScrollBoxSlot* EntrySlot = Cast<UScrollBoxSlot>(ScrollBox_RecipeList->AddChild(RecipeEntry)))
 	{
-		EntrySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		EntrySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
 		EntrySlot->SetHorizontalAlignment(HAlign_Fill);
 		EntrySlot->SetVerticalAlignment(VAlign_Top);
-	}
-}
-
-void UCraftPanelWidget::AddDetailToList()
-{
-	if (!ScrollBox_RecipeList || !VerticalBox_CraftRoot)
-	{
-		return;
-	}
-
-	if (UScrollBoxSlot* DetailSlot = Cast<UScrollBoxSlot>(ScrollBox_RecipeList->AddChild(VerticalBox_CraftRoot)))
-	{
-		DetailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
-		DetailSlot->SetHorizontalAlignment(HAlign_Fill);
-		DetailSlot->SetVerticalAlignment(VAlign_Top);
-	}
-}
-
-void UCraftPanelWidget::RebuildRecipeListLayout()
-{
-	if (!ScrollBox_RecipeList)
-	{
-		return;
-	}
-
-	if (VerticalBox_CraftRoot && VerticalBox_CraftRoot->GetParent())
-	{
-		VerticalBox_CraftRoot->RemoveFromParent();
-	}
-
-	ScrollBox_RecipeList->ClearChildren();
-
-	for (const FName& RecipeId : RecipeListOrder)
-	{
-		UCraftRecipeEntryWidget* Entry = RecipeEntries.FindRef(RecipeId);
-		AddRecipeEntryToList(Entry);
-
-		if (RecipeId == SelectedRecipeId && VerticalBox_CraftRoot)
-		{
-			AddDetailToList();
-		}
 	}
 }
 
@@ -388,33 +470,6 @@ void UCraftPanelWidget::RefreshRecipeEntrySelection()
 			Entry->SetSelected(Pair.Key == SelectedRecipeId);
 		}
 	}
-}
-
-void UCraftPanelWidget::AttachDetailToSelectedRecipe()
-{
-	if (!VerticalBox_CraftRoot || !ScrollBox_RecipeList)
-	{
-		return;
-	}
-
-	VerticalBox_CraftRoot->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-	RebuildRecipeListLayout();
-}
-
-void UCraftPanelWidget::CollapseSelectedRecipe()
-{
-	SelectedRecipeId = NAME_None;
-	MaxCraftableCount = 0;
-	CraftCount = 1;
-	ClearMaterialRows();
-
-	if (VerticalBox_CraftRoot)
-	{
-		VerticalBox_CraftRoot->SetVisibility(ESlateVisibility::Collapsed);
-	}
-
-	UpdateCraftCountUI();
-	RefreshRecipeEntrySelection();
 }
 
 void UCraftPanelWidget::RefreshDetailPanel()
@@ -450,16 +505,19 @@ void UCraftPanelWidget::RefreshDetailPanel()
 
 	if (Text_OutputDescription)
 	{
-		Text_OutputDescription->SetText(URetrieveItemDescriptionHelper::BuildItemDescription(
+		Text_OutputDescription->SetText(StripLeadingNameLine(URetrieveItemDescriptionHelper::BuildItemDescription(
 			Recipe->OutputItem.ItemId, Recipe->OutputItem.ItemCategoryTag,
-			ConsumableItemTable, MaterialItemTable, WeaponDataTable));
+			ConsumableItemTable, MaterialItemTable, WeaponDataTable)));
 	}
 
 	if (Text_MaxCraftable)
 	{
+		const int32 OwnedOutput = InventoryComponent
+			? InventoryComponent->GetItemCount(Recipe->OutputItem.ItemId)
+			: 0;
 		Text_MaxCraftable->SetText(FText::Format(
-			NSLOCTEXT("CraftPanel", "MaxCraftable", "Craftable: {0}"),
-			FText::AsNumber(MaxCraftableCount)));
+			NSLOCTEXT("CraftPanel", "OwnedOutput", "보유: {0}"),
+			FText::AsNumber(OwnedOutput)));
 	}
 
 	RefreshMaterialRows(*Recipe);
@@ -527,6 +585,58 @@ void UCraftPanelWidget::UpdateCraftCountUI()
 	{
 		Button_Craft->SetIsEnabled(CanExecuteCraft());
 	}
+
+	const bool bHasSelection = !SelectedRecipeId.IsNone();
+	if (Button_CountMinus)
+	{
+		Button_CountMinus->SetIsEnabled(bHasSelection && CraftCount > 1);
+	}
+	if (Button_CountPlus)
+	{
+		Button_CountPlus->SetIsEnabled(bHasSelection && CraftCount < MaxCraftableCount);
+	}
+	if (Button_CountMax)
+	{
+		Button_CountMax->SetIsEnabled(bHasSelection && CraftCount < MaxCraftableCount);
+	}
+}
+
+void UCraftPanelWidget::SetCraftCount(int32 NewCount)
+{
+	const int32 Clamped = FMath::Clamp(NewCount, 1, FMath::Max(1, MaxCraftableCount));
+	CraftCount = Clamped;
+
+	// 재료 행 필요 수량 갱신
+	if (!SelectedRecipeId.IsNone() && CraftRecipeTable && VerticalBox_Materials)
+	{
+		if (const FRetrieveCraftRecipeRow* Recipe =
+			CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::SetCount")))
+		{
+			for (int32 i = 0; i < VerticalBox_Materials->GetChildrenCount(); ++i)
+			{
+				if (UCraftMaterialRowWidget* Row =
+					Cast<UCraftMaterialRowWidget>(VerticalBox_Materials->GetChildAt(i)))
+				{
+					if (i < Recipe->RequiredMaterials.Num())
+					{
+						Row->InitMaterialRow(ItemIconTable, MaterialItemTable,
+							Recipe->RequiredMaterials[i].ItemId,
+							Recipe->RequiredMaterials[i].Quantity * CraftCount,
+							InventoryComponent
+								? InventoryComponent->GetItemCount(Recipe->RequiredMaterials[i].ItemId)
+								: 0);
+					}
+				}
+			}
+		}
+	}
+
+	if (Slider_CraftCount)
+	{
+		Slider_CraftCount->SetValue(static_cast<float>(CraftCount));
+	}
+
+	UpdateCraftCountUI();
 }
 
 void UCraftPanelWidget::HandleCraftButtonClicked()
@@ -536,36 +646,47 @@ void UCraftPanelWidget::HandleCraftButtonClicked()
 
 void UCraftPanelWidget::HandleSliderValueChanged(float Value)
 {
-	CraftCount = FMath::Clamp(FMath::RoundToInt(Value), 1, FMath::Max(1, MaxCraftableCount));
+	SetCraftCount(FMath::RoundToInt(Value));
+}
 
-	if (!SelectedRecipeId.IsNone() && CraftRecipeTable)
-	{
-		if (const FRetrieveCraftRecipeRow* Recipe =
-			CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::Slider")))
-		{
-			if (VerticalBox_Materials)
-			{
-				for (int32 i = 0; i < VerticalBox_Materials->GetChildrenCount(); ++i)
-				{
-					if (UCraftMaterialRowWidget* Row =
-						Cast<UCraftMaterialRowWidget>(VerticalBox_Materials->GetChildAt(i)))
-					{
-						if (i < Recipe->RequiredMaterials.Num())
-						{
-							Row->InitMaterialRow(ItemIconTable, MaterialItemTable,
-								Recipe->RequiredMaterials[i].ItemId,
-								Recipe->RequiredMaterials[i].Quantity * CraftCount,
-								InventoryComponent
-									? InventoryComponent->GetItemCount(Recipe->RequiredMaterials[i].ItemId)
-									: 0);
-						}
-					}
-				}
-			}
-		}
-	}
+void UCraftPanelWidget::HandleCountMinusClicked()
+{
+	SetCraftCount(CraftCount - 1);
+}
 
-	UpdateCraftCountUI();
+void UCraftPanelWidget::HandleCountPlusClicked()
+{
+	SetCraftCount(CraftCount + 1);
+}
+
+void UCraftPanelWidget::HandleCountMaxClicked()
+{
+	SetCraftCount(FMath::Max(1, MaxCraftableCount));
+}
+
+void UCraftPanelWidget::HandleCatConsumableClicked()
+{
+	SetActiveCategory(ECraftCategory::Consumable);
+}
+
+void UCraftPanelWidget::HandleCatBuffClicked()
+{
+	SetActiveCategory(ECraftCategory::Buff);
+}
+
+void UCraftPanelWidget::HandleCatMaterialClicked()
+{
+	SetActiveCategory(ECraftCategory::Material);
+}
+
+void UCraftPanelWidget::HandleCatEquipClicked()
+{
+	SetActiveCategory(ECraftCategory::Equipment);
+}
+
+void UCraftPanelWidget::HandleCatEtcClicked()
+{
+	SetActiveCategory(ECraftCategory::Etc);
 }
 
 void UCraftPanelWidget::HandleInventoryChanged()
@@ -574,47 +695,21 @@ void UCraftPanelWidget::HandleInventoryChanged()
 
 	if (SelectedRecipeId.IsNone() || !InventoryComponent)
 	{
+		SelectFirstVisibleRecipe();
+		return;
+	}
+
+	if (!RecipeListOrder.Contains(SelectedRecipeId))
+	{
+		SelectFirstVisibleRecipe();
 		return;
 	}
 
 	MaxCraftableCount = InventoryComponent->GetMaxCraftableCount(SelectedRecipeId);
 	CraftCount = FMath::Clamp(CraftCount, 1, FMath::Max(1, MaxCraftableCount));
 
-	if (Slider_CraftCount)
-	{
-		Slider_CraftCount->SetMaxValue(FMath::Max(1.f, static_cast<float>(MaxCraftableCount)));
-		Slider_CraftCount->SetValue(static_cast<float>(CraftCount));
-	}
-
-	if (Text_MaxCraftable)
-	{
-		Text_MaxCraftable->SetText(FText::Format(
-			NSLOCTEXT("CraftPanel", "MaxCraftable", "Craftable: {0}"),
-			FText::AsNumber(MaxCraftableCount)));
-	}
-
-	if (VerticalBox_Materials && CraftRecipeTable)
-	{
-		if (const FRetrieveCraftRecipeRow* Recipe =
-			CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::InvChanged")))
-		{
-			for (int32 i = 0; i < VerticalBox_Materials->GetChildrenCount(); ++i)
-			{
-				if (UCraftMaterialRowWidget* Row =
-					Cast<UCraftMaterialRowWidget>(VerticalBox_Materials->GetChildAt(i)))
-				{
-					if (i < Recipe->RequiredMaterials.Num())
-					{
-						const int32 Owned = InventoryComponent->GetItemCount(
-							Recipe->RequiredMaterials[i].ItemId);
-						Row->RefreshOwnedCount(Owned);
-					}
-				}
-			}
-		}
-	}
-
-	UpdateCraftCountUI();
+	RefreshDetailPanel();
+	RefreshRecipeEntrySelection();
 }
 
 void UCraftPanelWidget::HandleCraftCompleted(bool bSuccess, FName RecipeId, FName /*OutputItemId*/)

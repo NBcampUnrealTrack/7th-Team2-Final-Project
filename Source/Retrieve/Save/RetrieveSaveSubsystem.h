@@ -244,6 +244,9 @@ private:
 	bool WriteSaveToSlot(URetrieveSaveGame* SlotSave, const FString& SlotName,
 	                     APlayerController* PC, FName BonfireId);
 
+	/** 현재 플레이어 카메라와 같은 시점으로 UI 없는 16:9 PNG 썸네일을 만든다. */
+	bool CaptureSaveThumbnail(APlayerController* PC, URetrieveSaveGame* SlotSave) const;
+
 	/** 내부 공통 로드 로직. SlotName에서 읽어 플레이어에 적용 */
 	bool ReadSaveFromSlot(const FString& SlotName, APlayerController* PC);
 

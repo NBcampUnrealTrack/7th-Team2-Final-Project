@@ -52,8 +52,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Meta")
 	FString BonfireDisplayName;
 
+	/**
+	 * 저장 시점의 게임 화면 썸네일(PNG).
+	 * UI가 포함되지 않는 별도 SceneCapture로 생성하므로 저장 메뉴는 화면에서 깜빡이지 않는다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Save|Meta")
+	TArray<uint8> ScreenshotPng;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Save|Meta")
+	int32 ScreenshotWidth = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Save|Meta")
+	int32 ScreenshotHeight = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
-	int32 SaveVersion = 1;
+	int32 SaveVersion = 2;
 
 	/** 상점 판매 재구매 히스토리 (최대 20건 FIFO). 판매 시 기록, 재구매 시 제거 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
