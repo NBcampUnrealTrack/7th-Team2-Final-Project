@@ -1171,6 +1171,10 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	}
 	SetInputModeUIOnlyDuringConversation();
 	EnsureCinematicCloseListener();
+	
+	FRetrieveDialogueChangedPayload Payload;
+	Payload.bActive = true;
+	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
 }
 
 void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGameplayTag TopicId)
@@ -1233,8 +1237,11 @@ void ARetrievePlayerController::CloseConversation()
 		}
 		CinematicCloseHandle = FGameplayMessageListenerHandle();
 	}
+	
+	FRetrieveDialogueChangedPayload Payload;
+	Payload.bActive = false;
+	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
 }
-
 
 void ARetrievePlayerController::EnsureHUDViewModel()
 {

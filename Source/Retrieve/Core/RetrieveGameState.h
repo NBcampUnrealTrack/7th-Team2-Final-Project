@@ -49,11 +49,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	UQuestBranchComponent* GetQuestBranchComponent() const { return QuestBranchComponent; }
 	
-	// ---- Dialogue / Cinematic ----
+	// ---- Dialogue / Cinematic / Bark ----
 	const FRetrieveDialogueState& GetDialogueState() const { return DialogueState; }
 	const FRetrieveCinematicState& GetCinematicState() const { return CinematicState; }
 	const UDataTable* GetDialogueTable() const { return DialogueTable; }
 	const UDataTable* GetQuestTable() const { return QuestTable; }
+	const UDataTable* GetBarkTable() const { return BarkTable; }
 
 	void RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics, bool bShared = true,
 	                     bool bHoldUntilReplaced = false);
@@ -103,6 +104,10 @@ protected:
 	// --- Quest content ---
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Quest")
 	TObjectPtr<UDataTable> QuestTable;
+
+	// --- Bark content ---
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bark")
+	TObjectPtr<UDataTable> BarkTable;
 
 	UPROPERTY(ReplicatedUsing = OnRep_DialogueState)
 	FRetrieveDialogueState DialogueState;
