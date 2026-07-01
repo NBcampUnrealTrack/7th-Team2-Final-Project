@@ -5,6 +5,7 @@
 #include "RetrieveUISettingsLibrary.generated.h"
 
 class URetrieveUITheme;
+class UUserWidget;
 
 /**
  * UI 접근성 설정을 위젯이 한곳에서 읽도록 돕는 함수 라이브러리.
@@ -31,4 +32,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI Settings")
 	static bool IsReduceMotionEnabled();
+
+	/** 중첩된 자식 UserWidget 트리까지 들어가 모든 애니메이션을 정지한다(Reduce Motion 적용용). */
+	static void StopAnimationsRecursive(UUserWidget* Root);
 };
