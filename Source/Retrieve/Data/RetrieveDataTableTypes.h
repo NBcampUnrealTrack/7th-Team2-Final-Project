@@ -191,6 +191,7 @@ enum class EProjectileSpawnPattern : uint8
 	Aimed			UMETA(DisplayName="Aimed"),
 	RainFromAbove	UMETA(DisplayName="Rain From Above"),
 	RadialSpread	UMETA(DisplayName="Radial Spread"),
+	FanSpread		UMETA(DisplayName="Fan Spread"),
 	GroundPillar	UMETA(DisplayName="Ground Pillar"),
 };
 
@@ -273,6 +274,11 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 	/** 확산 마지막 투사체 속도 배율 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|Spread", meta=(ClampMin="0.0"))
 	float SpreadSpeedMultiplierMax = 1.2f;
+
+	// ---- FanSpread 파라미터 ----
+	/** 타겟 방향 기준 부채꼴 전체 각도(deg). ProjectileFireDelays 개수만큼 좌우로 나누어 발사한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile|FanSpread", meta=(ClampMin="0.0"))
+	float FanSpreadAngle = 30.f;
 
 	// ---- 반사(패링 카운터) 설정 — 에픽 투사체에서만 사용 ----
 	/** 플레이어 패링 시 카운터 타겟으로 반사되는 투사체인지 여부 */

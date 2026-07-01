@@ -645,7 +645,8 @@ void AEnemyProjectile::PlayImpactVFX(const FVector& Location, const FRotator& Ro
 		this,
 		ImpactVFX,
 		Location,
-		bForceImpactVFXWorldUpRotation ? FRotator::ZeroRotator : Rotation);
+		bForceImpactVFXWorldUpRotation ? FRotator::ZeroRotator : Rotation,
+		ImpactVFXScale);
 
 	if (VFXComp)
 	{

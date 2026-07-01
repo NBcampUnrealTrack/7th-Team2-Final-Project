@@ -289,7 +289,13 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_IcePillar, "GameplayEvent.Enemy.SpecialAttack.IcePillar");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_RoarKnockBack, "GameplayEvent.Enemy.SpecialAttack.RoarKnockBack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_SummonUndeads, "GameplayEvent.Enemy.SpecialAttack.SummonUndeads");
-	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SelfDestruct, "GameplayEvent.Enemy.SelfDestruct");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SelfDestruct, "GameplayEvent.Enemy.SelfDestruct");	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_Wave, "GameplayEvent.Enemy.SpecialAttack.Wave");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_Tornado, "GameplayEvent.Enemy.SpecialAttack.Tornado");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_FireExplosiveSlamCombo, "GameplayEvent.Enemy.SpecialAttack.FireExplosiveSlamCombo");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_WindRetreatSlash, "GameplayEvent.Enemy.SpecialAttack.WindRetreatSlash");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_WindRetreatSlashStart, "GameplayEvent.Enemy.SpecialAttack.WindRetreatSlash.Start");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Enemy_SpecialAttack_WindRetreatSlashFire, "GameplayEvent.Enemy.SpecialAttack.WindRetreatSlash.Fire");
+
 	// ---- Gameplay events: element / core / item
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_Unlock, "GameplayEvent.Element.Unlock");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_Element_ModeChange, "GameplayEvent.Element.ModeChange");
