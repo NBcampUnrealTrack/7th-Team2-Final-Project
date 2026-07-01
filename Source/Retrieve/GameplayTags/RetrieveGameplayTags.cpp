@@ -383,6 +383,7 @@ namespace RetrieveGameplayTags
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Heal_Magnitude, "Data.Heal.Magnitude");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_Strength, "Data.Knockback.Strength");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_UpwardStrength, "Data.Knockback.UpwardStrength");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_CancelTargetActions, "Data.Knockback.CancelTargetActions");

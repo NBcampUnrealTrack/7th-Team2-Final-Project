@@ -137,6 +137,8 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 	
 	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 	{
+		InstanceData.bUseDirectChaseToTarget = Enemy->ShouldUseDirectChaseToTarget();
+	
 		if (const FMonsterDataRow* Row = Enemy->GetMonsterDataRow())
 		{
 			InstanceData.AttackableRange = Row->AttackableRange;
@@ -150,6 +152,10 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.bPatrolable = Row->bPatrolable;
 			InstanceData.PatrolRange = Row->PatrolRange;
 			InstanceData.MoveAcceptableRadius = Row->MoveAcceptableRadius;
+			if (Row->bOverrideDirectChaseToTarget)
+			{
+				InstanceData.bUseDirectChaseToTarget = Row->bUseDirectChaseToTarget;
+			}
 			InstanceData.bHasAerialPhase = Enemy->ShouldUseStateTreeAerialPhase()
 				&& !Enemy->IsAerialSpecialAttackReady();
 		}
@@ -207,12 +213,12 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			
 			if (!bFreezeChaseLocation)
 			{
-				const ARetrieveEnemyCharacter* EnemyForMovement = Cast<ARetrieveEnemyCharacter>(Pawn);
+				// 플레이어에게 무조건 붙는 이동을 피하게 수정
 				const float DirectChaseRange = FMath::Max(InstanceData.AttackableRange + 35.f, 0.f);
-				if (EnemyForMovement && EnemyForMovement->ShouldUseDirectChaseToTarget())
+				if (InstanceData.bUseDirectChaseToTarget)
 				{
-					// 에픽은 단독 교전 비중이 높고 몸집이 커서 포위 슬롯을 찍으면 배회가 과하게 보인다.
-					// 타겟을 잡은 동안에는 링 위치보다 플레이어를 직접 추적해 Chase -> Attack 흐름을 우선한다.
+					// DataTable/캐릭터 기본 설정에서 직접 추적을 허용한 몬스터는 플레이어 위치를 ChaseLocation으로 사용.
+					// 직접 추적을 끈 몬스터는 전투 거리 안에서 오빗/스트레이프 위치를 사용
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
 				else if (InstanceData.DistanceToTarget > DirectChaseRange)
