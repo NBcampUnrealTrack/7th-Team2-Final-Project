@@ -6,6 +6,8 @@
 
 class USoundMix;
 class USoundClass;
+class URetrieveAudioRoutingAsset;
+class URetrieveUITheme;
 
 /**
  * 설정 시스템의 프로젝트 단위 구성(Project Settings → Game → Retrieve Settings).
@@ -42,6 +44,13 @@ public:
 	UPROPERTY(EditAnywhere, config, Category = "Audio")
 	TSoftObjectPtr<USoundClass> VoiceSoundClass;
 
+	/**
+	 * 사운드 → 채널 분류를 한곳에서 관리하는 데이터에셋.
+	 * 지정되면 런타임에 규칙대로 각 사운드의 SoundClass를 메모리에서 지정한다(에셋 미수정).
+	 */
+	UPROPERTY(EditAnywhere, config, Category = "Audio")
+	TSoftObjectPtr<URetrieveAudioRoutingAsset> AudioRouting;
+
 	/** FOV 슬라이더 범위. */
 	UPROPERTY(EditAnywhere, config, Category = "Gameplay", meta = (ClampMin = "60.0", ClampMax = "120.0"))
 	float MinFieldOfView = 70.f;
@@ -55,4 +64,12 @@ public:
 
 	UPROPERTY(EditAnywhere, config, Category = "Accessibility", meta = (ClampMin = "0.5", ClampMax = "2.0"))
 	float MaxUIScale = 1.5f;
+
+	/** 기본 UI 색상 테마. High Contrast가 꺼져 있을 때 사용. */
+	UPROPERTY(EditAnywhere, config, Category = "Accessibility")
+	TSoftObjectPtr<URetrieveUITheme> DefaultUITheme;
+
+	/** 고대비 UI 색상 테마. High Contrast가 켜져 있을 때 사용. */
+	UPROPERTY(EditAnywhere, config, Category = "Accessibility")
+	TSoftObjectPtr<URetrieveUITheme> HighContrastUITheme;
 };

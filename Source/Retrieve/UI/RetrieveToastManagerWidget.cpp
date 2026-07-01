@@ -76,14 +76,13 @@ void URetrieveToastManagerWidget::BindToInventory()
 void URetrieveToastManagerWidget::OnInventoryItemAdded(
 	FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
 {
-	// ── 토스트 클래스 로드 (최초 1회) ──────────────────────────────
-	static TSubclassOf<UUserWidget> ToastClass = nullptr;
-	if (!ToastClass)
-	{
-		ToastClass = LoadClass<UUserWidget>(
-			nullptr,
-			TEXT("/Game/Retrieve/UI/Interaction/WBP_ItemPickupToast.WBP_ItemPickupToast_C"));
-	}
+	// ── 최신 토스트 GeneratedClass 조회 ────────────────────────────
+	// 함수 로컬 static UClass 포인터는 WBP 재컴파일 시 새 GeneratedClass로
+	// 교체되지 않아, 런타임에서 애니메이션이 없는 이전 클래스를 생성할 수 있다.
+	// LoadClass는 이미 로드된 최신 클래스를 빠르게 반환하므로 매번 다시 조회한다.
+	const TSubclassOf<UUserWidget> ToastClass = LoadClass<UUserWidget>(
+		nullptr,
+		TEXT("/Game/Retrieve/UI/Interaction/WBP_ItemPickupToast.WBP_ItemPickupToast_C"));
 
 	if (!ToastClass)
 	{

@@ -1,6 +1,8 @@
 #include "Player/RetrievePlayerController.h"
 
 #include "MVVMSubsystem.h"
+#include "Settings/RetrieveSettingsSubsystem.h"
+#include "Engine/LocalPlayer.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
@@ -105,6 +107,17 @@ void ARetrievePlayerController::BeginPlay()
 	if (!World)
 	{
 		return;
+	}
+
+	// 저장된 설정 중 World/Controller 종속 항목(오디오 믹스·진동)을 이 시점에 적용한다.
+	// (전역 그래픽/감마/색맹은 서브시스템 Initialize에서 이미 적용됨)
+	if (ULocalPlayer* LP = GetLocalPlayer())
+	{
+		if (URetrieveSettingsSubsystem* SettingsSubsystem = LP->GetSubsystem<URetrieveSettingsSubsystem>())
+		{
+			SettingsSubsystem->ApplyWorldSettings(World);
+			SettingsSubsystem->ApplyControllerSettings(this);
+		}
 	}
 
 	// 상점 포커스 카메라를 미리 스폰해 전환 시점의 스폰 히치를 제거한다.
@@ -289,6 +302,19 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 {
 	Super::AcknowledgePossession(InPawn);
+
+	// Possess된 폰 기준으로 Pawn/Camera 종속 설정(FOV)과 컨트롤러 설정(진동)을 적용한다.
+	if (IsLocalController())
+	{
+		if (ULocalPlayer* LP = GetLocalPlayer())
+		{
+			if (URetrieveSettingsSubsystem* SettingsSubsystem = LP->GetSubsystem<URetrieveSettingsSubsystem>())
+			{
+				SettingsSubsystem->ApplyPawnSettings(InPawn);
+				SettingsSubsystem->ApplyControllerSettings(this);
+			}
+		}
+	}
 
 	TryBindHealthToHUD();
 	TryBindElementGaugeToHUD();
@@ -671,10 +697,9 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	NewPanel->AddToViewport(PanelZOrder);
 	CenterActiveWorldMapPanel();
 
-	FInputModeGameAndUI InputMode;
+	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(NewPanel->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
 	bShowMouseCursor = true;
 

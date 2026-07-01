@@ -27,6 +27,19 @@ public:
 
 	virtual void SetToDefaults() override;
 
+	/** 로드/저장 시 프로젝트 전용 값을 유효 범위로 보정한다(잘못된 ini 값 복구). */
+	virtual void LoadSettings(bool bForceReload = false) override;
+	virtual void SaveSettings() override;
+
+	/**
+	 * 한 카테고리의 값만 기본값으로 되돌린다(다른 카테고리는 보존).
+	 * Graphics는 해상도/스케일러빌리티 등 엔진 그래픽 + Gamma/MotionBlur만 복원한다.
+	 */
+	void ResetCategoryToDefaults(ERetrieveSettingsCategory Category);
+
+	/** 모든 프로젝트 전용 설정값을 유효 범위로 Clamp한다. */
+	void ValidateRetrieveSettings();
+
 	// ── Audio (0..1) ─────────────────────────────────────────────
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Audio")
 	float MasterVolume = 1.f;

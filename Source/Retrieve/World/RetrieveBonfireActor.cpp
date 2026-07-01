@@ -118,6 +118,7 @@ void ARetrieveBonfireActor::PostInitializeComponents()
 void ARetrieveBonfireActor::BeginPlay()
 {
 	Super::BeginPlay();
+	EnsureBonfireId();
 
 	// 화톳불은 1회성 픽업이 아니므로 절대 자기 자신을 파괴하지 않는다.
 	// 생성자 기본값은 BP 인스턴스에 저장된 값에 덮어써질 수 있으므로
@@ -134,13 +135,6 @@ void ARetrieveBonfireActor::BeginPlay()
 	}
 	ConfigurePersistentInteractionTarget();
 
-	if (BonfireId.IsNone())
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[BonfireActor] BonfireId가 비어 있음 — %s. 반드시 고유한 ID를 설정하세요."),
-			*GetName());
-	}
-
 	TryRestoreActivationFromSave();
 	ApplyBonfireVisualState();
 
@@ -149,6 +143,21 @@ void ARetrieveBonfireActor::BeginPlay()
 		World->GetTimerManager().SetTimerForNextTick(
 			FTimerDelegate::CreateUObject(this, &ARetrieveBonfireActor::HandleDeferredVisualStateSync));
 	}
+}
+
+void ARetrieveBonfireActor::EnsureBonfireId()
+{
+	if (!BonfireId.IsNone())
+	{
+		return;
+	}
+
+	// 레벨에 배치된 액터 이름은 동일 레벨 안에서 고유하며 PIE를 다시 시작해도 유지된다.
+	// 디자이너가 ID를 지정하지 않은 경우에도 저장 기능이 완전히 막히지 않도록 사용한다.
+	BonfireId = GetFName();
+	UE_LOG(LogTemp, Warning,
+		TEXT("[BonfireActor] BonfireId가 비어 있어 액터 이름으로 자동 지정: %s"),
+		*BonfireId.ToString());
 }
 
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)

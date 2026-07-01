@@ -90,6 +90,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Input", meta = (ClampMin = "0.0"))
 	float SelectedItemActivationGuardSeconds = 0.25f;
 
+	/** 그리드 슬롯에서 같은 아이템을 연속 클릭했을 때, 이 시간 안에 들어와야만 "빠른 더블클릭"으로 인정해 장착/해제를 실행한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Inventory|Input", meta = (ClampMin = "0.0"))
+	float FastDoubleClickThresholdSeconds = 0.35f;
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void InitializeInventoryPanel(UInventoryComponent* InInventoryComponent, UWeaponComponent* InWeaponComponent);
 
@@ -650,6 +654,8 @@ protected:
 	void ApplyInventorySlotTooltips();
 	void ClearWidgetTooltipRecursive(UWidget* Widget) const;
 	bool ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const;
+	// 비교 툴팁이 "현재 기준"으로 삼는 장착 아이템 ID (무기: 장착 무기, 방어구: 해당 슬롯 장착 방어구)
+	FName GetCompareReferenceItemId(const FRetrieveItemStack& Item) const;
 	UWidget* CreateInventorySlotTooltip(const FRetrieveItemStack& Item);
 	void PopulateFantasyTooltipWidget(
 		UUserWidget* TooltipWidget,
@@ -664,10 +670,17 @@ protected:
 		const FRetrieveItemStack& HoveredItem,
 		const FRetrieveWeaponDataRow& CurrentWeapon,
 		const FRetrieveWeaponDataRow& HoveredWeapon);
+	UWidget* CreateInventoryCompareTooltip(
+		UUserWidget* TooltipWidget,
+		const FRetrieveItemStack& HoveredItem,
+		const FRetrieveArmorDataRow& CurrentArmor,
+		const FRetrieveArmorDataRow& HoveredArmor);
 	void AddTooltipTextLine(class UVerticalBox* LineBox, const FString& Line, const FLinearColor& Color, bool bHeading) const;
 	void InvokeTooltipTextFunction(UUserWidget* TooltipWidget, FName FunctionName, const TArray<FString>& Values) const;
 	FString FormatWeaponTooltipBlock(const FRetrieveWeaponDataRow& WeaponData, const FString& Header) const;
 	FString BuildWeaponSwapDeltaText(const FRetrieveWeaponDataRow& CurrentWeapon, const FRetrieveWeaponDataRow& HoveredWeapon) const;
+	FString FormatArmorTooltipBlock(const FRetrieveArmorDataRow& ArmorData, const FString& Header) const;
+	FString BuildArmorSwapDeltaText(const FRetrieveArmorDataRow& CurrentArmor, const FRetrieveArmorDataRow& HoveredArmor) const;
 	void DisableLegacyTooltipRecursive(UWidget* Widget) const;
 	void SuppressBlueprintManagedTooltip();
 	bool IsWidgetOrDescendantHovered(const UWidget* Widget) const;
@@ -689,11 +702,15 @@ protected:
 	TArray<FName> AppliedTooltipItemIds;
 	TArray<FGameplayTag> AppliedTooltipCategoryTags;
 	TArray<bool> AppliedTooltipCompareFlags;
+	TArray<FName> AppliedTooltipCompareReferenceIds;
 	bool bInventoryTooltipsDirty = true;
 	FName AppliedTooltipEquippedWeaponId = NAME_None;
 	double LastSelectedItemActivationTime = -1.0;
 	FName LastActivatedItemId = NAME_None;
 	FGameplayTag LastActivatedItemCategoryTag;
+
+	// SelectAndActivateItem의 빠른 더블클릭 판정 기준 시각 (-1.0이면 대기 중인 클릭 없음)
+	double LastGridSlotClickTime = -1.0;
 
 	// 장비 변경 잠금 태그 이벤트 구독 대상 ASC와 핸들 (재구독/해제용)
 	TWeakObjectPtr<URetrieveAbilitySystemComponent> BoundEquipLockASC;
