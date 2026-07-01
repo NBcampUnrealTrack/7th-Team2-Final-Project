@@ -1,17 +1,12 @@
 #include "UI/HUD/RetrieveElementGaugeWidget.h"
 
 #include "Components/Element/ElementGaugeComponent.h"
-#include "Components/Player/WeaponComponent.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
-#include "Engine/DataTable.h"
-#include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MVVMSubsystem.h"
-#include "UObject/ConstructorHelpers.h"
 #include "View/MVVMView.h"
-#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerController.h"
 #include "UI/RetrieveElementUILibrary.h"
 #include "UI/ViewModels/ElementGaugeViewModel.h"
@@ -19,29 +14,7 @@
 
 // ─────────────────────────── NativeConstruct ─────────────────────────────────
 
-URetrieveElementGaugeWidget::URetrieveElementGaugeWidget()
-{
-	static ConstructorHelpers::FObjectFinder<UDataTable> BuffTableFinder(
-		TEXT("/Game/Retrieve/Data/Skill/DT_BuffDefinitions.DT_BuffDefinitions"));
-	if (BuffTableFinder.Succeeded())
-	{
-		BuffDefinitionTable = BuffTableFinder.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UDataTable> SkillCombinationTableFinder(
-		TEXT("/Game/Retrieve/Data/Skill/DT_SkillCombination.DT_SkillCombination"));
-	if (SkillCombinationTableFinder.Succeeded())
-	{
-		SkillCombinationTable = SkillCombinationTableFinder.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SkillIconMaterialFinder(
-		TEXT("/Game/Retrieve/UI/Materials/M_UI_SkillIcon_Masked.M_UI_SkillIcon_Masked"));
-	if (SkillIconMaterialFinder.Succeeded())
-	{
-		SkillIconMaskedMaterial = SkillIconMaterialFinder.Object;
-	}
-}
+URetrieveElementGaugeWidget::URetrieveElementGaugeWidget() = default;
 
 void URetrieveElementGaugeWidget::NativeConstruct()
 {
@@ -104,7 +77,6 @@ void URetrieveElementGaugeWidget::InitFromViewModel(UElementGaugeViewModel* Gaug
 	UpdateSlot(1, GaugeVM->GetSlot1Ratio(), GaugeVM->GetSlot1Element(), GaugeVM->GetSlot1IsFull(), /*bImmediate=*/true);
 	UpdateSlot(2, GaugeVM->GetSlot2Ratio(), GaugeVM->GetSlot2Element(), GaugeVM->GetSlot2IsFull(), /*bImmediate=*/true);
 	TriggerElementModePulse(GaugeVM->GetCurrentElement(), /*bImmediate=*/true);
-	UpdateSkillIcons();
 }
 
 // ─────────────────────────── 슬롯 갱신 ───────────────────────────────────────
@@ -117,14 +89,13 @@ void URetrieveElementGaugeWidget::HandleGaugeUpdated()
 	UpdateSlot(0, VM->GetSlot0Ratio(), VM->GetSlot0Element(), VM->GetSlot0IsFull());
 	UpdateSlot(1, VM->GetSlot1Ratio(), VM->GetSlot1Element(), VM->GetSlot1IsFull());
 	UpdateSlot(2, VM->GetSlot2Ratio(), VM->GetSlot2Element(), VM->GetSlot2IsFull());
-	UpdateSkillIcons();
 }
 
 void URetrieveElementGaugeWidget::NativeOnElementModeChanged(FGameplayTag NewElement)
 {
 	TriggerElementModePulse(NewElement, /*bImmediate=*/false);
 	// 게이지 색을 현재 원소모드로 통일 → 모드 전환 시 이미 채워진 슬롯도 새 색 MI로 갱신한다.
-	// (HandleGaugeUpdated가 UpdateSlot×3 + UpdateSkillIcons를 모두 수행)
+	// (HandleGaugeUpdated가 UpdateSlot×3을 수행)
 	HandleGaugeUpdated();
 	Super::NativeOnElementModeChanged(NewElement);
 }
@@ -306,132 +277,6 @@ void URetrieveElementGaugeWidget::SetElementIconVisualState(float PulseAlpha)
 	Image_Element->SetRenderScale(FVector2D(Scale, Scale));
 	Image_Element->SetColorAndOpacity(FLinearColor::LerpUsingHSV(FLinearColor::White, ElementModePulseColor, 0.35f + (0.45f * PulseAlpha)));
 	Image_Element->SetRenderOpacity(0.85f + (0.15f * PulseAlpha));
-}
-
-void URetrieveElementGaugeWidget::UpdateSkillIcons()
-{
-	EnsureSkillIconTables();
-
-	FRetrieveBuffUIRow AbsorbRow;
-	const UElementGaugeViewModel* VM = BoundViewModel.Get();
-	const FGameplayTag AbsorbElement = (VM && VM->GetSlot0IsFull())
-		? VM->GetSlot0Element()
-		: RetrieveGameplayTags::Element_None;
-	const FGameplayTag AbsorbUITag = URetrieveElementUILibrary::ElementToAbsorbBuffUITag(AbsorbElement);
-	const bool bHasAbsorbRow = URetrieveElementUILibrary::GetBuffUIRow(BuffDefinitionTable, AbsorbUITag, AbsorbRow);
-	if (!bHasAbsorbRow && AbsorbUITag.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[ElementGauge] Absorb icon row not found. Table=%s Tag=%s"),
-			*GetNameSafe(BuffDefinitionTable), *AbsorbUITag.ToString());
-	}
-	ApplySkillIcon(Image_AbsorbSkillIcon, AbsorbSkillIconMID, bHasAbsorbRow ? &AbsorbRow : nullptr, bHasAbsorbRow);
-
-	FRetrieveBuffUIRow BurstRow;
-	const bool bHasBurstRow = ResolveBurstBuffUIRow(BurstRow);
-	ApplySkillIcon(Image_BurstSkillIcon, BurstSkillIconMID, bHasBurstRow ? &BurstRow : nullptr, bHasBurstRow);
-}
-
-void URetrieveElementGaugeWidget::EnsureSkillIconTables()
-{
-	if (!BuffDefinitionTable)
-	{
-		BuffDefinitionTable = LoadObject<UDataTable>(
-			nullptr,
-			TEXT("/Game/Retrieve/Data/Skill/DT_BuffDefinitions.DT_BuffDefinitions"));
-	}
-
-	if (!SkillCombinationTable)
-	{
-		SkillCombinationTable = LoadObject<UDataTable>(
-			nullptr,
-			TEXT("/Game/Retrieve/Data/Skill/DT_SkillCombination.DT_SkillCombination"));
-	}
-}
-
-bool URetrieveElementGaugeWidget::ResolveBurstBuffUIRow(FRetrieveBuffUIRow& OutRow) const
-{
-	const UElementGaugeViewModel* VM = BoundViewModel.Get();
-	if (!VM || !VM->GetIsGaugeFull())
-	{
-		return false;
-	}
-
-	// 버스트 스킬은 게이지 조합이 아니라 (무기 타입 × 현재 원소모드)로 결정된다. (GA_Burst와 동일 기준)
-	const FGameplayTag CurrentElement = VM->GetCurrentElement();
-
-	FGameplayTag WeaponTypeTag;
-	if (const APawn* OwningPawn = GetOwningPlayerPawn())
-	{
-		if (const UWeaponComponent* Weapon = OwningPawn->FindComponentByClass<UWeaponComponent>())
-		{
-			WeaponTypeTag = Weapon->GetWeaponDataRef().WeaponTypeTag;
-		}
-	}
-
-	FSkillCombination Combination;
-	if (!URetrieveElementUILibrary::GetBurstCombinationByElement(SkillCombinationTable, WeaponTypeTag, CurrentElement, Combination))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[ElementGauge] Burst combination row not found. Table=%s Weapon=%s Element=%s"),
-			*GetNameSafe(SkillCombinationTable), *WeaponTypeTag.ToString(), *CurrentElement.ToString());
-		return false;
-	}
-
-	const bool bFoundRow = URetrieveElementUILibrary::GetBuffUIRow(BuffDefinitionTable, Combination.BurstUITag, OutRow);
-	if (!bFoundRow)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[ElementGauge] Burst icon row not found. Table=%s Tag=%s"),
-			*GetNameSafe(BuffDefinitionTable), *Combination.BurstUITag.ToString());
-	}
-	return bFoundRow;
-}
-
-void URetrieveElementGaugeWidget::ApplySkillIcon(UImage* Image, TObjectPtr<UMaterialInstanceDynamic>& IconMID, const FRetrieveBuffUIRow* Row, bool bEnabled)
-{
-	if (!Image)
-	{
-		return;
-	}
-
-	if (!Row || Row->Icon.IsNull())
-	{
-		Image->SetVisibility(ESlateVisibility::Collapsed);
-		Image->SetBrushFromTexture(nullptr, false);
-		IconMID = nullptr;
-		return;
-	}
-
-	UTexture2D* IconTexture = Row->Icon.LoadSynchronous();
-	if (!IconTexture)
-	{
-		Image->SetVisibility(ESlateVisibility::Collapsed);
-		Image->SetBrushFromTexture(nullptr, false);
-		IconMID = nullptr;
-		return;
-	}
-
-	if (!IconMID && SkillIconMaskedMaterial)
-	{
-		IconMID = UMaterialInstanceDynamic::Create(SkillIconMaskedMaterial, this);
-	}
-
-	if (IconMID)
-	{
-		Image->SetBrushFromMaterial(IconMID);
-		Image->SetDesiredSizeOverride(FVector2D(96.0f, 96.0f));
-
-		IconMID->SetTextureParameterValue(TEXT("IconTexture"), IconTexture);
-		IconMID->SetTextureParameterValue(TEXT("Texture"), IconTexture);
-		IconMID->SetTextureParameterValue(TEXT("SkillIcon"), IconTexture);
-		IconMID->SetTextureParameterValue(TEXT("Icon"), IconTexture);
-	}
-	else
-	{
-		Image->SetBrushFromTexture(IconTexture, false);
-	}
-
-	Image->SetColorAndOpacity(Row->TintColor);
-	Image->SetRenderOpacity(bEnabled ? 1.0f : 0.35f);
-	Image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 }
 
 UImage* URetrieveElementGaugeWidget::GetSlotImage(int32 SlotIndex) const
