@@ -6,8 +6,8 @@
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 
-const FLinearColor UCraftMaterialRowWidget::SufficientColor = FLinearColor(0.9f, 0.9f, 0.9f, 1.f);
-const FLinearColor UCraftMaterialRowWidget::InsufficientColor = FLinearColor(0.9f, 0.1f, 0.1f, 1.f);
+const FLinearColor UCraftMaterialRowWidget::SufficientColor = FLinearColor(0.49f, 0.83f, 0.40f, 1.f);
+const FLinearColor UCraftMaterialRowWidget::InsufficientColor = FLinearColor(0.88f, 0.30f, 0.26f, 1.f);
 
 void UCraftMaterialRowWidget::NativeConstruct()
 {
@@ -71,7 +71,8 @@ void UCraftMaterialRowWidget::ApplyCountColor()
 	}
 
 	Text_MatCount->SetText(FText::Format(
-		NSLOCTEXT("CraftMaterialRow", "RequiredCount", "x{0}"),
+		NSLOCTEXT("CraftMaterialRow", "OwnedRequired", "{0} / {1}"),
+		FText::AsNumber(OwnedCount),
 		FText::AsNumber(RequiredCount)));
 	Text_MatCount->SetToolTipText(FText::Format(
 		NSLOCTEXT("CraftMaterialRow", "OwnedRequiredTooltip", "Owned {0} / Required {1}"),

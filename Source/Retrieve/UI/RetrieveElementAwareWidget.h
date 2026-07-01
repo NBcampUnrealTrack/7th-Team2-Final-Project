@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "Settings/RetrieveSettingsTypes.h"
 #include "RetrieveElementAwareWidget.generated.h"
 
 class UElementGaugeViewModel;
@@ -42,4 +43,11 @@ private:
 	void HandleElementModeChanged(FGameplayTag NewElement);
 
 	void DispatchElementModeChangedToBlueprint(FGameplayTag NewElement);
+
+	/** 접근성 설정 변경 시 Reduce Motion을 다시 적용한다. */
+	UFUNCTION()
+	void HandleAccessibilitySettingChanged(ERetrieveSettingsCategory Category);
+
+	/** Reduce Motion이 켜져 있으면 이 위젯과 중첩 트리의 모든 UMG 애니메이션을 정지한다. */
+	void ApplyReduceMotion();
 };

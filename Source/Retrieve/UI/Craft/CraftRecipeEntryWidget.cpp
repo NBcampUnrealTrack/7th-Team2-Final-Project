@@ -3,7 +3,9 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 #include "InputCoreTypes.h"
 
 void UCraftRecipeEntryWidget::NativeConstruct()
@@ -76,11 +78,11 @@ void UCraftRecipeEntryWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEve
 	RefreshVisualState();
 }
 
-void UCraftRecipeEntryWidget::InitRecipeEntry(FName InRecipeId, const FText& InDisplayName, int32 InMaxCraftableCount)
+void UCraftRecipeEntryWidget::InitRecipeEntry(FName InRecipeId, const FText& InDisplayName, int32 InOwnedCount)
 {
 	NativeRecipeId = InRecipeId;
 	DisplayName = InDisplayName;
-	MaxCraftableCount = FMath::Max(0, InMaxCraftableCount);
+	OwnedCount = FMath::Max(0, InOwnedCount);
 	RefreshVisualState();
 }
 
@@ -95,6 +97,15 @@ void UCraftRecipeEntryWidget::SetDescription(const FText& InDescription)
 	if (Text_RecipeDescription)
 	{
 		Text_RecipeDescription->SetText(InDescription);
+	}
+}
+
+void UCraftRecipeEntryWidget::SetIconTexture(UTexture2D* InTexture)
+{
+	if (Image_RecipeIcon && InTexture)
+	{
+		Image_RecipeIcon->SetBrushFromTexture(InTexture, true);
+		Image_RecipeIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 }
 
@@ -119,10 +130,10 @@ void UCraftRecipeEntryWidget::RefreshVisualState()
 	if (Text_CraftableCount)
 	{
 		Text_CraftableCount->SetText(FText::Format(
-			NSLOCTEXT("CraftRecipeEntry", "CraftableCount", "x{0}"),
-			FText::AsNumber(MaxCraftableCount)));
+			NSLOCTEXT("CraftRecipeEntry", "OwnedCount", "보유: {0}"),
+			FText::AsNumber(OwnedCount)));
 		Text_CraftableCount->SetColorAndOpacity(FSlateColor(
-			MaxCraftableCount > 0
+			OwnedCount > 0
 				? FLinearColor(0.76f, 0.92f, 0.64f, 1.0f)
 				: FLinearColor(0.6f, 0.6f, 0.6f, 1.0f)));
 	}
@@ -130,5 +141,11 @@ void UCraftRecipeEntryWidget::RefreshVisualState()
 	if (Arrow)
 	{
 		Arrow->SetVisibility(bSelected ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Hidden);
+	}
+
+	if (Image_SelectGlow)
+	{
+		Image_SelectGlow->SetVisibility(
+			bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
 }
