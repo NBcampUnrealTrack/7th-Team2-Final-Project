@@ -63,7 +63,10 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	float MoveAcceptableRadius = 5.f;
-	
+
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bUseDirectChaseToTarget = false;
+
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bPatrolable = false;
 

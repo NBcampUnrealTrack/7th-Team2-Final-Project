@@ -388,6 +388,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Data
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Mul);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Heal_Magnitude);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Strength);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_UpwardStrength);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_CancelTargetActions);

@@ -597,6 +597,13 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** 이동 오차 허용 범위 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float MoveAcceptableRadius = 5.f;
+	/** 이 몬스터가 기본 직접 추적 설정을 DataTable 값으로 덮어쓸지 여부. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	bool bOverrideDirectChaseToTarget = false;
+	/** 플레이어 위치를 ChaseLocation으로 직접 사용할지 여부. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move", meta=(EditCondition="bOverrideDirectChaseToTarget"))
+	bool bUseDirectChaseToTarget = false;
+
 	/** 순찰 여부 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;
