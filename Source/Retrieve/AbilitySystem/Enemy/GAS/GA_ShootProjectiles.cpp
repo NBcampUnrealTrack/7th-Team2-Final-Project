@@ -104,7 +104,10 @@ void UGA_ShootProjectiles::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		}
 	}
 
-	ScheduleProjectiles(bHasMontage);
+	if (ShouldScheduleProjectilesOnActivate())
+	{
+		ScheduleProjectiles(bHasMontage);
+	}
 }
 
 void UGA_ShootProjectiles::EndAbility(const FGameplayAbilitySpecHandle Handle,
@@ -317,6 +320,27 @@ void UGA_ShootProjectiles::SpawnProjectile()
 			{
 				SpawnLocation = AvatarActor->GetActorLocation() + FVector(0.f, 0.f, SpawnOffset.Z);
 			}
+		}
+		break;
+
+	case EProjectileSpawnPattern::FanSpread:
+		if (CachedTargetActor)
+		{
+			FVector AimLocation = CachedTargetActor->GetActorLocation();
+
+			if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(CachedTargetActor->GetRootComponent()))
+			{
+				AimLocation = RootPrimitive->Bounds.Origin;
+			}
+
+			const FVector BaseDirection = (AimLocation - SpawnLocation).GetSafeNormal();
+			const int32 FanCount = FMath::Max(1, ActiveProjectileCount);
+			const float FanAlpha = FanCount > 1
+				? static_cast<float>(ProjectileIndex) / static_cast<float>(FanCount - 1)
+				: 0.5f;
+			const float HalfAngle = FMath::Max(0.f, ActiveProjectileConfig.FanSpreadAngle) * 0.5f;
+			const float YawOffset = FMath::Lerp(-HalfAngle, HalfAngle, FanAlpha);
+			Direction = FRotator(0.f, YawOffset, 0.f).RotateVector(BaseDirection).GetSafeNormal();
 		}
 		break;
 

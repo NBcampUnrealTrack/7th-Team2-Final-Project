@@ -141,6 +141,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Status Effect")
 	TSubclassOf<UGameplayEffect> PeriodicStatusEffectClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Status Effect", meta=(ClampMin="0.0"))
+	float PeriodicStatusDamageMultiplier = 0.1f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Post Exposure")
 	TSubclassOf<UGameplayEffect> PostExposureEffectClass;
 

@@ -141,6 +141,9 @@ protected:
 	UPROPERTY(Transient)
 	FGameplayTag EffectTag;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
+	FVector ImpactVFXScale = FVector(1.f);
+	
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> HomingTargetActor;

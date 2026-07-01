@@ -52,6 +52,7 @@ void AEnemyGroundHazard::BeginPlay()
 	CenterRadius = FMath::Clamp(CenterRadius, 0.f, MaxRadius);
 	CollisionRadiusScale = FMath::Clamp(CollisionRadiusScale, 0.f, 1.f);
 	DirectDamageInterval = FMath::Max(0.01f, DirectDamageInterval);
+	PeriodicStatusDamageMultiplier = FMath::Max(0.f, PeriodicStatusDamageMultiplier);
 	PostExposureDuration = FMath::Max(0.f, PostExposureDuration);
 	VFXBaseRadius = FMath::Max(1.f, VFXBaseRadius);
 
@@ -310,7 +311,10 @@ void AEnemyGroundHazard::ApplyPeriodicEffects()
 		}
 		if (PeriodicStatusEffectClass)
 		{
-			ApplyEffect(OtherActor, PeriodicStatusEffectClass);
+			ApplyEffect(
+				OtherActor,
+				PeriodicStatusEffectClass,
+				PeriodicStatusDamageMultiplier);
 		}
 	}
 }
@@ -410,7 +414,10 @@ void AEnemyGroundHazard::OnDamageAreaBeginOverlap(
 		ApplyContinuousPushTo(OtherActor);
 		if (PeriodicStatusEffectClass)
 		{
-			ApplyEffect(OtherActor, PeriodicStatusEffectClass);
+			ApplyEffect(
+				OtherActor,
+				PeriodicStatusEffectClass,
+				PeriodicStatusDamageMultiplier);
 		}
 	}
 }
