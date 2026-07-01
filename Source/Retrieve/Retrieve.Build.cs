@@ -40,7 +40,8 @@ public class Retrieve : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"Niagara"
+			"Niagara",
+			"AssetRegistry"
 		});
 
 		if (Target.bBuildEditor)
@@ -56,7 +57,8 @@ public class Retrieve : ModuleRules
 				"BlueprintGraph",
 				"AnimGraph",
 				"PropertyBindingUtils",
-				"StateTreeEditorModule"
+				"StateTreeEditorModule",
+				"EditorScriptingUtilities"
 			});
 		}
 
