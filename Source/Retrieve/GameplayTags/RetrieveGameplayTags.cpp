@@ -369,6 +369,11 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
+
+	// ---- Message channels: UI Bark / Dialogue suppression / System Message
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_BarkRequested, "Channel.UI.BarkRequested");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_DialogueChanged, "Channel.UI.DialogueChanged");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_SystemMessage, "Channel.UI.SystemMessage");
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
@@ -450,6 +455,7 @@ namespace RetrieveGameplayTags
 	// ---- Dialogue
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_General, "Speaker.NPC.General");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Townsfolk, "Speaker.NPC.Townsfolk");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_OpenShop, "Topic.ShopNPC.OpenShop");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_Buy, "Topic.ShopNPC.Buy");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_Sell, "Topic.ShopNPC.Sell");
@@ -459,6 +465,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FireSigil, "Topic.Lumen.FireSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WindSigil, "Topic.Lumen.WindSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WaterSigil, "Topic.Lumen.WaterSigil");
+	
+	// ---- Bark
+	UE_DEFINE_GAMEPLAY_TAG(Bark_Category_Ambient, "Bark.Category.Ambient");
+	UE_DEFINE_GAMEPLAY_TAG(Bark_Category_Tutorial, "Bark.Category.Tutorial");
 	
 	// --- Monster Types
 	UE_DEFINE_GAMEPLAY_TAG(Monster_Type_Normal, "Monster.Type.Normal");

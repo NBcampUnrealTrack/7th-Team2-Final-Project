@@ -1821,6 +1821,62 @@ struct RETRIEVE_API FDialogueRow : public FTableRowBase
 	// TODO: Channel.Quest.GuardianDefeated{element}이 발행되면 이후 해당 원소 모드 강화
 };
 
+/** DT_Bark의 한 행. 모든 Bark 대사는 코드 없이 이 테이블 행으로 작성 및 수정합니다. */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FBarkRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** 자막 스타일(DA_BarkStyle)과 스피커 컴포넌트를 매칭하는 키. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FGameplayTag SpeakerTag;
+
+	/** 자막에 표시되는 화자 이름(e.g. "루멘"). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FText SpeakerName;
+
+	/** 실제로 출력할 대사. 여러 줄을 넣으면 발동할 때마다 그중 하나를 무작위로 골라 대사에 변화를 줍니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark", meta = (MultiLine = true))
+	TArray<FText> Lines;
+
+	/** 자막이 화면에 떠 있는 시간(초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark", meta = (ClampMin = "0.5"))
+	float Duration = 4.0f;
+
+	/** 대사 분류 라벨. Bark.Category.Ambient(평상시 잡담) / Bark.Category.Tutorial(안내성). 정리 및 분류용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FGameplayTag CategoryTag;
+
+	/** 언제 발동하는가. AmbientRandom = 근처에 있을 때 평상시 무작위로 / OnQuestStep = 특정 퀘스트 스텝 완료 직후 / Manual = 트리거 볼륨, 훅, 치트가 직접 호출. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	EBarkTrigger Trigger = EBarkTrigger::AmbientRandom;
+
+	/**
+	 * 이 행을 지목하는 "이름표". Trigger에 따라 짝이 달라집니다.
+	 * - OnQuestStep: 완료되면 이 대사를 띄울 퀘스트 스텝 태그 (예: Quest.Step.FireGuardianDefeated).
+	 * - Manual: 트리거 볼륨·치트가 RequestBarkByKey로 이 행을 부를 때 쓰는 키 (예: Bark.Manual.Vista01).
+	 * - AmbientRandom: 안 씀. 비워두세요.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FGameplayTag KeyTag;
+
+	/** 발동 조건(필수). 이 스텝이 전부 완료돼 있어야 해당 대사가 뜹니다. 비워두면 조건 없음. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FGameplayTagContainer RequiredSteps;
+
+	/** 발동 조건(금지). 이 스텝 중 하나라도 완료되면 이 대사는 더 이상 뜨지 않습니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	FGameplayTagContainer ForbiddenSteps;
+
+	/** 한 게임 세션에 딱 한 번만 발동. 저장되지 않습니다. 게임을 다시 켜면 초기화됩니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	bool bPlayOnce = false;
+
+	/** (선택) 자막이 뜰 때 함께 재생할 오디오 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	TSoftObjectPtr<USoundBase> Cue;
+};
+
 // ---- 버프/디버프 UI DataTable ------------------------------------------------
 
 /**

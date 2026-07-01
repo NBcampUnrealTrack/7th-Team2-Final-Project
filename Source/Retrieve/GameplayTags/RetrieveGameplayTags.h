@@ -374,6 +374,11 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Dialogue_LineRequested);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_Changed);
+	
+	// ---- Message channels: UI Bark / Dialogue suppression / System Message
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_BarkRequested);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_DialogueChanged);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_SystemMessage);
 
 	// ---- Data
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Mul);
@@ -456,6 +461,7 @@ namespace RetrieveGameplayTags
 	// ---- Dialogue
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_Lumen);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_General);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Townsfolk);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_ShopNPC_OpenShop);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_ShopNPC_Buy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_ShopNPC_Sell);
@@ -465,6 +471,10 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_FireSigil);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WindSigil);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WaterSigil);
+	
+	// ---- Bark
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bark_Category_Ambient);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bark_Category_Tutorial);
 
 	// --- Enemy Types
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Monster_Type_Normal);

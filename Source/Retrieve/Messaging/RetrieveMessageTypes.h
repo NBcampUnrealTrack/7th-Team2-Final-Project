@@ -343,3 +343,60 @@ struct FRetrieveCinematicStatePayload
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Cinematic")
 	bool bActive = false;
 };
+
+// ---- Bark / 시스템 메시지 ------------------------------------------------
+
+/** Bark 트리거 소스. AmbientRandom = 근접 풀, OnQuestStep = 스텝 완료 직후, Manual = 볼륨/훅/치트. */
+UENUM(BlueprintType)
+enum class EBarkTrigger : uint8
+{
+	AmbientRandom,
+	OnQuestStep,
+	Manual
+};
+
+/** Channel.UI.BarkRequested 로컬 페이로드. UBarkSubsystem이 행에서 한 줄을 골라 채워 발행합니다. */
+USTRUCT(BlueprintType)
+struct FRetrieveBarkPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bark")
+	FGameplayTag SpeakerTag;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bark")
+	FText SpeakerName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bark")
+	FText Line;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bark")
+	float Duration = 4.0f;
+
+	/** (선택) Bark 메세지 자막이 뜰 때 재생할 오디오. */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bark")
+	TSoftObjectPtr<USoundBase> Cue;
+};
+
+/** Channel.UI.SystemMessage 로컬 페이로드. 튜토리얼/정보 표시용 (우상단 텍스트). */
+USTRUCT(BlueprintType)
+struct FRetrieveSystemMessagePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|System")
+	FText Text;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|System")
+	float Duration = 4.0f;
+};
+
+/** Channel.UI.DialogueChanged 로컬 페이로드. PC가 대화 열기(true)/닫기(false)에 발행. Bark를 막는 신호. */
+USTRUCT(BlueprintType)
+struct FRetrieveDialogueChangedPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Dialogue")
+	bool bActive = false;
+};

@@ -22,6 +22,7 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Bark/BarkSubsystem.h"
 
 UAbilitySystemComponent* URetrieveCheatManager::GetLocalPlayerASC() const
 {
@@ -385,4 +386,36 @@ void URetrieveCheatManager::RetrieveTestHitReact(int32 Strength)
 
     UE_LOG(LogTemp, Display, TEXT("[CheatManager] RetrieveTestHitReact(Strength=%d -> %s)"),
         Strength, *ReactTag.ToString());
+}
+
+void URetrieveCheatManager::RetrieveBark(const FString& RowName)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	if (UBarkSubsystem* Bark = World ? World->GetSubsystem<UBarkSubsystem>() : nullptr)
+	{
+		Bark->RequestBarkById(FName(*RowName));
+	}
+}
+
+void URetrieveCheatManager::RetrieveBarkKey(const FString& KeyTagName)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName(*KeyTagName), false);
+	if (UBarkSubsystem* Bark = World ? World->GetSubsystem<UBarkSubsystem>() : nullptr)
+	{
+		if (Tag.IsValid())
+		{
+			Bark->RequestBarkByKey(Tag);
+		}
+	}
+}
+
+void URetrieveCheatManager::RetrieveCinematic(int32 bActive)
+{
+	if (ARetrieveGameState* GS = GetRetrieveGameState())
+	{
+		GS->SetCinematicActive(bActive != 0);
+	}
 }

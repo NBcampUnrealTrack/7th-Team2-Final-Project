@@ -60,6 +60,15 @@ public:
 	/** 패리 없이 GA_ParryCounter 검증용 (CanCounter 태그를 임시 부여 후 발동) */
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveTestParryCounter();
+	
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveBark(const FString& RowName);
+
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveBarkKey(const FString& KeyTagName);
+
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveCinematic(int32 bActive);
 
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;
