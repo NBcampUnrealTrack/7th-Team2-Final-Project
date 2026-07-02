@@ -1,4 +1,4 @@
-﻿#include "RetrieveMainMenuWidget.h"
+#include "RetrieveMainMenuWidget.h"
 
 #include "Components/Button.h"
 #include "Kismet/KismetSystemLibrary.h"
