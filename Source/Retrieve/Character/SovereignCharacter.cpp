@@ -2,6 +2,7 @@
 
 #include "MotionWarpingComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Audio/RetrieveMusicSubsystem.h"
 #include "Camera/CameraComponent.h"
 #include "Components/Player/ArmorComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
@@ -123,6 +124,15 @@ void ASovereignCharacter::InitializeAbilitySystem()
 	if (CombatStanceComponent)
 	{
 		CombatStanceComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	// BGM은 로컬 스피커에서만 재생해야 하므로 원격 프록시는 등록하지 않는다.
+	if (IsLocallyControlled())
+	{
+		if (URetrieveMusicSubsystem* Music = GetWorld()->GetSubsystem<URetrieveMusicSubsystem>())
+		{
+			Music->RegisterPlayer(this);
+		}
 	}
 
 	// 투구 장착 테스트용 코드 (suppression 검증) — cosmetic 초기화 이후에 호출해야 한다.
