@@ -16,6 +16,7 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
+#include "Subsystems/SystemMessageSubsystem.h"
 
 #include "Components/Enemy/PatternCounterComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
@@ -417,5 +418,43 @@ void URetrieveCheatManager::RetrieveCinematic(int32 bActive)
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		GS->SetCinematicActive(bActive != 0);
+	}
+}
+
+void URetrieveCheatManager::RetrieveSystemMessage(const FString& SystemMessage)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	FRetrieveSystemMessagePayload Message;
+	Message.Text = FText::FromString(SystemMessage);
+	Message.Duration = 4.f;
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_UI_SystemMessage, Message);
+}
+
+void URetrieveCheatManager::RetrieveSystemMessageById(const FString& RowName)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	if (USystemMessageSubsystem* SystemMessageSubsystem = World ? World->GetSubsystem<USystemMessageSubsystem>() : nullptr)
+	{
+		SystemMessageSubsystem->RequestMessageById(FName(*RowName));
+	}
+}
+
+void URetrieveCheatManager::RetrieveSystemMessageKey(const FString& KeyTagName)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName(*KeyTagName), false);
+	if (USystemMessageSubsystem* SystemMessageSubsystem = World ? World->GetSubsystem<USystemMessageSubsystem>() : nullptr)
+	{
+		if (Tag.IsValid())
+		{
+			SystemMessageSubsystem->RequestMessageByKey(Tag);
+		}
 	}
 }

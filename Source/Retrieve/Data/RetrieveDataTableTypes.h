@@ -1890,6 +1890,54 @@ struct RETRIEVE_API FBarkRow : public FTableRowBase
 	TSoftObjectPtr<USoundBase> Cue;
 };
 
+/**
+ * DT_SystemMessage의 한 행 = 시스템 메시지 하나.
+ * 시스템 메시지 = 화면 우상단에 잠깐 떠오르는 텍스트 전용 안내(튜토리얼 팁, 상태 알림 등).
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FSystemMessageRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage", meta = (MultiLine = true))
+	FText Text;
+
+	/** 메시지가 화면에 떠 있는 시간(초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage", meta = (ClampMin = "0.5"))
+	float Duration = 4.0f;
+
+	/** 한 게임 세션에 딱 한 번만 발동. 저장되지 않습니다. 게임을 다시 켜면 초기화됩니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	bool bPlayOnce = false;
+
+	/**
+	 * 같은 행을 다시 표시하기까지의 최소 간격(초). e.g. 8이면 마지막 표시 후 8초 안에 또 요청돼도 무시됩니다.
+	 * 같은 힌트가 연달아 도배되는 것을 막습니다. 0이면 제한 없음.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage", meta = (ClampMin = "0.0"))
+	float MinRepeatInterval = 0.0f;
+
+	/**
+	 * 호출부가 행 이름 대신 이 태그로 메시지를 요청할 때 쓰는 키.
+	 * 여러 행이 같은 KeyTag를 공유해도 됩니다. 예를 들어 같은 힌트의 초반용/후반용 문구를 하나의 키로 묶는 식입니다.
+	 * 이때 어느 행이 뽑힐지는 Priority(그리고 서로 겹치지 않게 짠 Required/ForbiddenSteps)로 명시해야 합니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	FGameplayTag KeyTag;
+
+	/** 같은 KeyTag를 공유하는 행들 중 무엇을 고를지 정하는 우선순위. 해당 KeyTag를 쓰는 행이 하나뿐이면 기본값 0을 유지하세요. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	int32 Priority = 0;
+
+	/** 발동 조건(필수). 이 스텝이 전부 완료돼 있어야 해당 시스템 메세지가 뜹니다. 비워두면 조건 없음. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	FGameplayTagContainer RequiredSteps;
+
+	/** 발동 조건(금지). 이 스텝 중 하나라도 완료되면 이 시스템 메세지는 더 이상 뜨지 않습니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	FGameplayTagContainer ForbiddenSteps;
+};
+
 // ---- 버프/디버프 UI DataTable ------------------------------------------------
 
 /**
