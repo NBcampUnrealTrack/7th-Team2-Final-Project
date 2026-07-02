@@ -70,6 +70,15 @@ public:
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveCinematic(int32 bActive);
 
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveSystemMessage(const FString& SystemMessage);
+
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveSystemMessageById(const FString& RowName);
+
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveSystemMessageKey(const FString& KeyTagName);
+
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;
 	UPatternCounterComponent* GetLockedOnPatternCounter() const;

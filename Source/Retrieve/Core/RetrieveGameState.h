@@ -55,6 +55,7 @@ public:
 	const UDataTable* GetDialogueTable() const { return DialogueTable; }
 	const UDataTable* GetQuestTable() const { return QuestTable; }
 	const UDataTable* GetBarkTable() const { return BarkTable; }
+	const UDataTable* GetSystemMessageTable() const { return SystemMessageTable; }
 
 	void RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics, bool bShared = true,
 	                     bool bHoldUntilReplaced = false);
@@ -109,6 +110,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bark")
 	TObjectPtr<UDataTable> BarkTable;
 
+	// --- System Message content ---
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI|System")
+	TObjectPtr<UDataTable> SystemMessageTable;
+	
 	UPROPERTY(ReplicatedUsing = OnRep_DialogueState)
 	FRetrieveDialogueState DialogueState;
 
