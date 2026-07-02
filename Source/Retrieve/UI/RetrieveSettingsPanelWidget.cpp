@@ -2,8 +2,15 @@
 
 #include "Settings/RetrieveGameUserSettings.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
+#include "Settings/RetrieveSettingAvailability.h"
+#include "UI/RetrieveUISettingsLibrary.h"
+#include "UI/RetrieveUITheme.h"
+#include "UI/Settings/RetrieveSettingRowSlider.h"
+#include "UI/Settings/RetrieveSettingRowToggle.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Widget.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/Slider.h"
@@ -60,6 +67,22 @@ namespace
 		{
 			CheckBox->SetIsChecked(bChecked);
 		}
+	}
+
+	// URetrieveSettingRowToggle 위젯을 RowKey로 찾아 상태를 조용히 설정
+	void SetToggleByKey(UUserWidget* Page, const FName RowKey, const bool bValue)
+	{
+		if (!Page || !Page->WidgetTree) return;
+		Page->WidgetTree->ForEachWidget([RowKey, bValue](UWidget* W)
+		{
+			if (URetrieveSettingRowToggle* Toggle = Cast<URetrieveSettingRowToggle>(W))
+			{
+				if (Toggle->RowKey == RowKey)
+				{
+					Toggle->SetValueSilently(bValue);
+				}
+			}
+		});
 	}
 
 	int32 WrapIndex(const int32 Value, const int32 Count)
@@ -122,7 +145,62 @@ void URetrieveSettingsPanelWidget::NativeConstruct()
 	BindScreenEvents();
 	BindPageEvents();
 	ApplyRuntimeStyle();
+	ApplyOptionAvailability();
+
+	// 접근성(고대비) 등 설정 변경 시 화면 스타일을 즉시 갱신하도록 구독한다.
+	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+	{
+		Subsystem->OnSettingChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleSettingChanged);
+	}
+
+	// 화면을 연 시점의 확정값을 baseline으로 보관한다(Apply 없이 닫으면 여기로 원복).
+	if (const URetrieveGameUserSettings* S = GetUserSettings())
+	{
+		BaselineSnapshot.CaptureFrom(S);
+	}
+
 	SelectCategory(ERetrieveSettingsCategory::Graphics);
+}
+
+void URetrieveSettingsPanelWidget::NativeDestruct()
+{
+	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+	{
+		Subsystem->OnSettingChanged.RemoveDynamic(this, &URetrieveSettingsPanelWidget::HandleSettingChanged);
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(RebindWarningTimerHandle);
+	}
+
+	if (bAwaitingResolutionConfirm)
+	{
+		// 확인 없이 닫음 → 안전하게 이전 표시 모드로 복구한다(RevertResolution이 팝업도 정리).
+		RevertResolution();
+	}
+	else
+	{
+		// Apply하지 않은 프리뷰 변경을 baseline으로 원복한다(런타임만, ini는 마지막 Apply 상태 유지).
+		RevertToBaseline();
+	}
+	HideResolutionConfirmPopup();
+
+	Super::NativeDestruct();
+}
+
+void URetrieveSettingsPanelWidget::RevertToBaseline()
+{
+	URetrieveGameUserSettings* S = GetUserSettings();
+	if (!S)
+	{
+		return;
+	}
+	BaselineSnapshot.RestoreTo(S);
+	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+	{
+		Subsystem->ApplyAllSettings(/*bSaveToDisk*/ false);
+	}
 }
 
 FReply URetrieveSettingsPanelWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -269,11 +347,164 @@ void URetrieveSettingsPanelWidget::SelectCategory(const ERetrieveSettingsCategor
 
 void URetrieveSettingsPanelWidget::ApplyAndSave()
 {
-	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+	URetrieveGameUserSettings* S = GetUserSettings();
+	URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem();
+	if (!S || !Subsystem)
 	{
-		Subsystem->ApplyAllSettings(true);
+		OnSettingsApplied();
+		return;
 	}
+
+	// Apply 직전 값(원복 기준). baseline과 표시 모드가 다르면 확인 트랜잭션을 건다.
+	FRetrieveSettingsSnapshot PendingState;
+	PendingState.CaptureFrom(S);
+	const bool bDisplayModeChanged =
+		bEnableResolutionConfirm && PendingState.DiffersInDisplayMode(BaselineSnapshot);
+	if (bDisplayModeChanged)
+	{
+		PreConfirmSnapshot = BaselineSnapshot;
+	}
+
+	Subsystem->ApplyAllSettings(/*bSaveToDisk*/ true);
+
+	// 새 확정값을 baseline으로 갱신(이후 닫아도 원복되지 않음).
+	BaselineSnapshot.CaptureFrom(S);
+
+	if (bDisplayModeChanged)
+	{
+		bAwaitingResolutionConfirm = true;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ResolutionConfirmTimerHandle);
+			World->GetTimerManager().SetTimer(ResolutionConfirmTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this]() { RevertResolution(); }),
+				FMath::Max(1.f, ResolutionConfirmTimeoutSeconds), false);
+		}
+
+		// 팝업 클래스가 지정돼 있으면 C++가 직접 띄우고 배선한다. 없으면 BP 이벤트로 위임.
+		if (ResolutionConfirmPopupClass)
+		{
+			ShowResolutionConfirmPopup(ResolutionConfirmTimeoutSeconds);
+		}
+		else
+		{
+			OnResolutionConfirmRequested(ResolutionConfirmTimeoutSeconds);
+		}
+	}
+
 	OnSettingsApplied();
+}
+
+void URetrieveSettingsPanelWidget::ConfirmResolution()
+{
+	if (!bAwaitingResolutionConfirm)
+	{
+		return;
+	}
+	bAwaitingResolutionConfirm = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ResolutionConfirmTimerHandle);
+	}
+	HideResolutionConfirmPopup();
+	// Apply 단계에서 이미 저장 + baseline 갱신됨. 새 해상도를 그대로 확정한다.
+	OnResolutionConfirmResolved();
+}
+
+void URetrieveSettingsPanelWidget::RevertResolution()
+{
+	if (!bAwaitingResolutionConfirm)
+	{
+		return;
+	}
+	bAwaitingResolutionConfirm = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ResolutionConfirmTimerHandle);
+	}
+
+	if (URetrieveGameUserSettings* S = GetUserSettings())
+	{
+		// 표시 모드만 직전 값으로 복구(다른 적용값은 유지).
+		S->SetScreenResolution(PreConfirmSnapshot.Resolution);
+		S->SetFullscreenMode(static_cast<EWindowMode::Type>(PreConfirmSnapshot.WindowMode));
+		if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+		{
+			Subsystem->ApplyCategory(ERetrieveSettingsCategory::Graphics, /*bSaveToDisk*/ true);
+		}
+		BaselineSnapshot.CaptureFrom(S);
+	}
+	HideResolutionConfirmPopup();
+	RefreshCurrentPage();
+	OnResolutionConfirmResolved();
+}
+
+void URetrieveSettingsPanelWidget::ShowResolutionConfirmPopup(float TimeoutSeconds)
+{
+	if (!ResolutionConfirmPopupClass)
+	{
+		return;
+	}
+
+	HideResolutionConfirmPopup(); // 혹시 남아 있으면 정리
+
+	ActiveResolutionPopup = CreateWidget<UUserWidget>(GetOwningPlayer(), ResolutionConfirmPopupClass);
+	if (!ActiveResolutionPopup)
+	{
+		return;
+	}
+	ActiveResolutionPopup->AddToViewport(/*ZOrder*/ 1000);
+
+	// 메시지 + 버튼 배선(이름으로 찾는다 — 없으면 안전하게 무시).
+	SetText(ActiveResolutionPopup, TEXT("Txt_Message"),
+		FText::FromString(TEXT("변경된 해상도를 유지할까요?")));
+
+	if (UButton* KeepButton = FindWidget<UButton>(ActiveResolutionPopup, TEXT("Btn_Keep")))
+	{
+		KeepButton->OnClicked.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::ConfirmResolution);
+		RegisterSoundButton(KeepButton);
+	}
+	if (UButton* RevertButton = FindWidget<UButton>(ActiveResolutionPopup, TEXT("Btn_Revert")))
+	{
+		RevertButton->OnClicked.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::RevertResolution);
+		RegisterSoundButton(RevertButton);
+	}
+
+	// 카운트다운 표시: 0.25초마다 남은 시간을 갱신.
+	if (UWorld* World = GetWorld())
+	{
+		ResolutionConfirmEndTime = World->GetTimeSeconds() + FMath::Max(1.f, TimeoutSeconds);
+		UpdateResolutionCountdown();
+		World->GetTimerManager().ClearTimer(ResolutionCountdownTimerHandle);
+		World->GetTimerManager().SetTimer(ResolutionCountdownTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this]() { UpdateResolutionCountdown(); }),
+			0.25f, true);
+	}
+}
+
+void URetrieveSettingsPanelWidget::HideResolutionConfirmPopup()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ResolutionCountdownTimerHandle);
+	}
+	if (ActiveResolutionPopup)
+	{
+		ActiveResolutionPopup->RemoveFromParent();
+		ActiveResolutionPopup = nullptr;
+	}
+}
+
+void URetrieveSettingsPanelWidget::UpdateResolutionCountdown()
+{
+	if (!ActiveResolutionPopup)
+	{
+		return;
+	}
+	const UWorld* World = GetWorld();
+	const double Remaining = World ? FMath::Max(0.0, ResolutionConfirmEndTime - World->GetTimeSeconds()) : 0.0;
+	SetText(ActiveResolutionPopup, TEXT("Txt_Countdown"),
+		FText::FromString(FString::Printf(TEXT("%d초 후 자동 복구"), FMath::CeilToInt(Remaining))));
 }
 
 void URetrieveSettingsPanelWidget::ResetCurrentCategory()
@@ -324,6 +555,10 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 #define BIND_PAGE_CHECK(Category, Name, Handler) \
 	if (UCheckBox* CheckBox = FindWidget<UCheckBox>(GetPage(Category), TEXT(Name))) \
 	{ CheckBox->OnCheckStateChanged.AddUniqueDynamic(this, &ThisClass::Handler); }
+#define BIND_PAGE_TOGGLE(Category, ToggleHandler) \
+	{ UUserWidget* _P = GetPage(Category); if (_P && _P->WidgetTree) _P->WidgetTree->ForEachWidget([this](UWidget* _W) { \
+	  if (URetrieveSettingRowToggle* _T = Cast<URetrieveSettingRowToggle>(_W)) \
+	  { _T->OnRowToggleChanged.AddUniqueDynamic(this, &ThisClass::ToggleHandler); } }); }
 
 	using C = ERetrieveSettingsCategory;
 	BIND_PAGE_BUTTON(C::Graphics, "Btn_WindowMode_Prev", HandleWindowModePrev)
@@ -340,6 +575,7 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_BUTTON(C::Graphics, "Btn_Effects_Next", HandleEffectsNext)
 	BIND_PAGE_CHECK(C::Graphics, "Chk_VSync", HandleVSyncChanged)
 	BIND_PAGE_CHECK(C::Graphics, "Chk_MotionBlur", HandleMotionBlurChanged)
+	BIND_PAGE_TOGGLE(C::Graphics, HandleGraphicsToggleChanged)
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_FrameLimit", HandleFrameLimitChanged)
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_Gamma", HandleGammaChanged)
 
@@ -348,6 +584,7 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_SLIDER(C::Controls, "Sld_PadSens", HandlePadSensitivityChanged)
 	BIND_PAGE_CHECK(C::Controls, "Chk_InvertY", HandleInvertYChanged)
 	BIND_PAGE_CHECK(C::Controls, "Chk_Vibration", HandleVibrationChanged)
+	BIND_PAGE_TOGGLE(C::Controls, HandleControlsToggleChanged)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Prev", HandleLockOnPrev)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Next", HandleLockOnNext)
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Attack", HandleRebindAttack)
@@ -361,12 +598,14 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_SLIDER(C::Audio, "Sld_UI", HandleUIChanged)
 	BIND_PAGE_SLIDER(C::Audio, "Sld_Voice", HandleVoiceChanged)
 	BIND_PAGE_CHECK(C::Audio, "Chk_MuteUnfocused", HandleMuteUnfocusedChanged)
+	BIND_PAGE_TOGGLE(C::Audio, HandleAudioToggleChanged)
 
 	BIND_PAGE_BUTTON(C::Gameplay, "Btn_Language_Prev", HandleLanguagePrev)
 	BIND_PAGE_BUTTON(C::Gameplay, "Btn_Language_Next", HandleLanguageNext)
 	BIND_PAGE_CHECK(C::Gameplay, "Chk_Subtitles", HandleSubtitlesChanged)
 	BIND_PAGE_CHECK(C::Gameplay, "Chk_DamageNumbers", HandleDamageNumbersChanged)
 	BIND_PAGE_CHECK(C::Gameplay, "Chk_TutorialHints", HandleTutorialHintsChanged)
+	BIND_PAGE_TOGGLE(C::Gameplay, HandleGameplayToggleChanged)
 	BIND_PAGE_SLIDER(C::Gameplay, "Sld_SubtitleScale", HandleSubtitleScaleChanged)
 	BIND_PAGE_SLIDER(C::Gameplay, "Sld_FOV", HandleFOVChanged)
 	BIND_PAGE_SLIDER(C::Gameplay, "Sld_CameraShake", HandleCameraShakeChanged)
@@ -375,16 +614,22 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_BUTTON(C::Accessibility, "Btn_ColorBlind_Next", HandleColorBlindNext)
 	BIND_PAGE_BUTTON(C::Accessibility, "Btn_Interact_Prev", HandleInteractPrev)
 	BIND_PAGE_BUTTON(C::Accessibility, "Btn_Interact_Next", HandleInteractNext)
-	BIND_PAGE_SLIDER(C::Accessibility, "Sld_CBStrength", HandleColorBlindStrengthChanged)
-	BIND_PAGE_SLIDER(C::Accessibility, "Sld_UIScale", HandleUIScaleChanged)
-	BIND_PAGE_SLIDER(C::Accessibility, "Sld_AimAssist", HandleAimAssistChanged)
-	BIND_PAGE_SLIDER(C::Accessibility, "Sld_SubtitleBG", HandleSubtitleBackgroundChanged)
+	// 접근성 슬라이더는 WBP_SettingRow_Slider(RowKey)로 전환됨 → 아래 BindAccessibilityRows()에서 구독.
 	BIND_PAGE_CHECK(C::Accessibility, "Chk_HighContrast", HandleHighContrastChanged)
 	BIND_PAGE_CHECK(C::Accessibility, "Chk_ReduceMotion", HandleReduceMotionChanged)
+	BIND_PAGE_TOGGLE(C::Accessibility, HandleAccessibilityToggleChanged)
 
 #undef BIND_PAGE_CHECK
 #undef BIND_PAGE_SLIDER
 #undef BIND_PAGE_BUTTON
+#undef BIND_PAGE_TOGGLE
+
+	// 슬라이더 행 아키타입(Audio) 값 변경 구독.
+	BindAudioRows();
+	BindGraphicsRows();
+	BindControlsRows();
+	BindGameplayRows();
+	BindAccessibilityRows();
 }
 
 void URetrieveSettingsPanelWidget::UpdateScreenForCategory(const ERetrieveSettingsCategory Category)
@@ -394,8 +639,9 @@ void URetrieveSettingsPanelWidget::UpdateScreenForCategory(const ERetrieveSettin
 		Switcher->SetActiveWidgetIndex(static_cast<int32>(Category));
 	}
 
-	const FLinearColor DarkChip(0.12f, 0.10f, 0.07f, 0.55f);
-	const FLinearColor Gold(0.80f, 0.62f, 0.28f, 0.90f);
+	const URetrieveUITheme* Theme = URetrieveUISettingsLibrary::GetActiveUITheme();
+	const FLinearColor DarkChip = Theme ? Theme->PanelBackground : FLinearColor(0.12f, 0.10f, 0.07f, 0.55f);
+	const FLinearColor Gold = Theme ? Theme->Accent : FLinearColor(0.80f, 0.62f, 0.28f, 0.90f);
 	static const FName ButtonNames[] = {
 		TEXT("Btn_Cat_Graphics"), TEXT("Btn_Cat_Controls"), TEXT("Btn_Cat_Audio"),
 		TEXT("Btn_Cat_Gameplay"), TEXT("Btn_Cat_Accessibility")
@@ -445,8 +691,22 @@ void URetrieveSettingsPanelWidget::RefreshGraphics()
 	SetText(Page, TEXT("Val_Effects"), QualityText(S->GetVisualEffectQuality()));
 	SetChecked(Page, TEXT("Chk_VSync"), S->IsVSyncEnabled());
 	SetChecked(Page, TEXT("Chk_MotionBlur"), S->bMotionBlur);
-	SetSlider(Page, TEXT("Sld_FrameLimit"), S->GetFrameRateLimit());
-	SetSlider(Page, TEXT("Sld_Gamma"), S->GammaLevel);
+	SetToggleByKey(Page, TEXT("Graphics_VSync"), S->IsVSyncEnabled());
+	SetToggleByKey(Page, TEXT("Graphics_MotionBlur"), S->bMotionBlur);
+	// WBP_SettingRow_Slider 행은 내부 USlider가 항상 0..1 범위이므로 역매핑 후 SetValueSilently로 갱신
+	if (Page->WidgetTree)
+	{
+		Page->WidgetTree->ForEachWidget([&](UWidget* W)
+		{
+			if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+			{
+				if (Row->RowKey == TEXT("Graphics_Gamma"))
+					Row->SetValueSilently((S->GammaLevel - 1.8f) / 0.8f);
+				else if (Row->RowKey == TEXT("Graphics_FrameLimit"))
+					Row->SetValueSilently((S->GetFrameRateLimit() - 30.f) / 210.f);
+			}
+		});
+	}
 	SetText(Page, TEXT("Val_FrameLimit"), NumberText(S->GetFrameRateLimit()));
 	SetText(Page, TEXT("Val_Gamma"), NumberText(S->GammaLevel, 1));
 }
@@ -464,6 +724,8 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	SetText(Page, TEXT("Val_PadSens"), NumberText(S->GamepadSensitivityX, 1));
 	SetChecked(Page, TEXT("Chk_InvertY"), S->bInvertMouseY);
 	SetChecked(Page, TEXT("Chk_Vibration"), S->bGamepadVibration);
+	SetToggleByKey(Page, TEXT("Controls_InvertY"), S->bInvertMouseY);
+	SetToggleByKey(Page, TEXT("Controls_Vibration"), S->bGamepadVibration);
 	SetText(Page, TEXT("Val_LockOn"), FText::FromString(S->bLockOnToggleMode ? TEXT("토글") : TEXT("홀드")));
 	RefreshKeyBindings();
 }
@@ -577,12 +839,44 @@ void URetrieveSettingsPanelWidget::BeginRebind(const FName ActionAssetName, cons
 	SetKeyboardFocus();
 }
 
+static ERetrieveAudioChannel RowKeyToAudioChannel(const FName Key)
+{
+	if (Key == TEXT("Music"))    return ERetrieveAudioChannel::Music;
+	if (Key == TEXT("Sfx"))      return ERetrieveAudioChannel::Sfx;
+	if (Key == TEXT("Ambience")) return ERetrieveAudioChannel::Ambience;
+	if (Key == TEXT("UI"))       return ERetrieveAudioChannel::UI;
+	if (Key == TEXT("Voice"))    return ERetrieveAudioChannel::Voice;
+	return ERetrieveAudioChannel::Master;
+}
+
+static FText AudioRowLabel(const FName Key)
+{
+	if (Key == TEXT("Music"))    return FText::FromString(TEXT("음악"));
+	if (Key == TEXT("Sfx"))      return FText::FromString(TEXT("효과음"));
+	if (Key == TEXT("Ambience")) return FText::FromString(TEXT("환경음"));
+	if (Key == TEXT("UI"))       return FText::FromString(TEXT("UI"));
+	if (Key == TEXT("Voice"))    return FText::FromString(TEXT("음성"));
+	return FText::FromString(TEXT("마스터 볼륨"));
+}
+
+static FText AudioRowDesc(const FName Key)
+{
+	if (Key == TEXT("Music"))    return FText::FromString(TEXT("배경 음악"));
+	if (Key == TEXT("Sfx"))      return FText::FromString(TEXT("전투·UI 효과음"));
+	if (Key == TEXT("Ambience")) return FText::FromString(TEXT("환경·앰비언스"));
+	if (Key == TEXT("UI"))       return FText::FromString(TEXT("인터페이스 사운드"));
+	if (Key == TEXT("Voice"))    return FText::FromString(TEXT("음성·보이스"));
+	return FText::FromString(TEXT("전체 음량"));
+}
+
 void URetrieveSettingsPanelWidget::RefreshAudio()
 {
 	URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem();
 	URetrieveGameUserSettings* S = GetUserSettings();
 	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Audio);
 	if (!Subsystem || !S || !Page) return;
+
+	// 구(舊) 인라인 슬라이더(아직 남아 있으면) 갱신 — 아키타입 전환 후엔 자동으로 no-op.
 	struct FChannelRow { ERetrieveAudioChannel Channel; FName Slider; FName Value; };
 	static const FChannelRow Rows[] = {
 		{ERetrieveAudioChannel::Master, TEXT("Sld_Master"), TEXT("Val_Master")},
@@ -598,7 +892,214 @@ void URetrieveSettingsPanelWidget::RefreshAudio()
 		SetSlider(Page, Row.Slider, Value);
 		SetText(Page, Row.Value, PercentText(Value));
 	}
+
+	// 슬라이더 행 아키타입(URetrieveSettingRowSlider) 값 갱신.
+	if (Page->WidgetTree)
+	{
+		Page->WidgetTree->ForEachWidget([Subsystem](UWidget* W)
+		{
+			if (URetrieveSettingRowSlider* RowWidget = Cast<URetrieveSettingRowSlider>(W))
+			{
+				RowWidget->SetValueSilently(Subsystem->GetChannelVolume(RowKeyToAudioChannel(RowWidget->RowKey)));
+			}
+		});
+	}
+
 	SetChecked(Page, TEXT("Chk_MuteUnfocused"), S->bMuteWhenUnfocused);
+	SetToggleByKey(Page, TEXT("Audio_MuteUnfocused"), S->bMuteWhenUnfocused);
+}
+
+void URetrieveSettingsPanelWidget::BindAudioRows()
+{
+	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Audio);
+	if (!Page || !Page->WidgetTree)
+	{
+		return;
+	}
+	Page->WidgetTree->ForEachWidget([this](UWidget* W)
+	{
+		if (URetrieveSettingRowSlider* RowWidget = Cast<URetrieveSettingRowSlider>(W))
+		{
+			RowWidget->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleAudioRowChanged);
+			RowWidget->SetLabelTexts(AudioRowLabel(RowWidget->RowKey), AudioRowDesc(RowWidget->RowKey));
+		}
+	});
+}
+
+// ─── Graphics rows ───────────────────────────────────────────────────────────
+
+static FText GraphicsRowLabel(const FName Key)
+{
+	if (Key == TEXT("Graphics_FrameLimit")) return FText::FromString(TEXT("프레임 제한"));
+	if (Key == TEXT("Graphics_Gamma"))      return FText::FromString(TEXT("감마(밝기)"));
+	return FText::GetEmpty();
+}
+
+static FText GraphicsRowDesc(const FName Key)
+{
+	if (Key == TEXT("Graphics_FrameLimit")) return FText::FromString(TEXT("0 = 무제한"));
+	if (Key == TEXT("Graphics_Gamma"))      return FText::FromString(TEXT("화면 밝기"));
+	return FText::GetEmpty();
+}
+
+void URetrieveSettingsPanelWidget::BindGraphicsRows()
+{
+	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Graphics);
+	if (!Page || !Page->WidgetTree) return;
+	Page->WidgetTree->ForEachWidget([this](UWidget* W)
+	{
+		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+		{
+			Row->SetLabelTexts(GraphicsRowLabel(Row->RowKey), GraphicsRowDesc(Row->RowKey));
+			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleGraphicsRowChanged);
+		}
+	});
+}
+
+void URetrieveSettingsPanelWidget::HandleGraphicsRowChanged(FName RowKey, float Value)
+{
+	if (bRefreshingControls) return;
+	if      (RowKey == TEXT("Graphics_FrameLimit")) HandleFrameLimitChanged(Value);
+	else if (RowKey == TEXT("Graphics_Gamma"))      HandleGammaChanged(Value);
+}
+
+// ─── Controls rows ───────────────────────────────────────────────────────────
+
+static FText ControlsRowLabel(const FName Key)
+{
+	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("마우스 감도 X"));
+	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("마우스 감도 Y"));
+	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("게임패드 감도"));
+	return FText::GetEmpty();
+}
+
+static FText ControlsRowDesc(const FName Key)
+{
+	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("좌우 회전 감도"));
+	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("상하 회전 감도"));
+	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("스틱 회전 감도"));
+	return FText::GetEmpty();
+}
+
+void URetrieveSettingsPanelWidget::BindControlsRows()
+{
+	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Controls);
+	if (!Page || !Page->WidgetTree) return;
+	Page->WidgetTree->ForEachWidget([this](UWidget* W)
+	{
+		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+		{
+			Row->SetLabelTexts(ControlsRowLabel(Row->RowKey), ControlsRowDesc(Row->RowKey));
+			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleControlsRowChanged);
+		}
+	});
+}
+
+void URetrieveSettingsPanelWidget::HandleControlsRowChanged(FName RowKey, float Value)
+{
+	if (bRefreshingControls) return;
+	if      (RowKey == TEXT("Controls_MouseX"))   HandleMouseXChanged(Value);
+	else if (RowKey == TEXT("Controls_MouseY"))   HandleMouseYChanged(Value);
+	else if (RowKey == TEXT("Controls_PadSens")) HandlePadSensitivityChanged(Value);
+}
+
+// ─── Gameplay rows ───────────────────────────────────────────────────────────
+
+static FText GameplayRowLabel(const FName Key)
+{
+	if (Key == TEXT("Gameplay_SubtitleScale")) return FText::FromString(TEXT("자막 크기"));
+	if (Key == TEXT("Gameplay_FOV"))           return FText::FromString(TEXT("시야각(FOV)"));
+	if (Key == TEXT("Gameplay_CameraShake"))   return FText::FromString(TEXT("카메라 흔들림"));
+	return FText::GetEmpty();
+}
+
+static FText GameplayRowDesc(const FName Key)
+{
+	if (Key == TEXT("Gameplay_SubtitleScale")) return FText::FromString(TEXT("자막 글자 크기"));
+	if (Key == TEXT("Gameplay_FOV"))           return FText::FromString(TEXT("카메라 시야각"));
+	if (Key == TEXT("Gameplay_CameraShake"))   return FText::FromString(TEXT("화면 흔들림 강도"));
+	return FText::GetEmpty();
+}
+
+void URetrieveSettingsPanelWidget::BindGameplayRows()
+{
+	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Gameplay);
+	if (!Page || !Page->WidgetTree) return;
+	Page->WidgetTree->ForEachWidget([this](UWidget* W)
+	{
+		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+		{
+			Row->SetLabelTexts(GameplayRowLabel(Row->RowKey), GameplayRowDesc(Row->RowKey));
+			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleGameplayRowChanged);
+		}
+	});
+}
+
+void URetrieveSettingsPanelWidget::HandleGameplayRowChanged(FName RowKey, float Value)
+{
+	if (bRefreshingControls) return;
+	if      (RowKey == TEXT("Gameplay_SubtitleScale")) HandleSubtitleScaleChanged(Value);
+	else if (RowKey == TEXT("Gameplay_FOV"))           HandleFOVChanged(Value);
+	else if (RowKey == TEXT("Gameplay_CameraShake"))   HandleCameraShakeChanged(Value);
+}
+
+// ─── Accessibility rows ──────────────────────────────────────────────────────
+
+static FText AccessibilityRowLabel(const FName Key)
+{
+	if (Key == TEXT("Accessibility_CBStrength")) return FText::FromString(TEXT("색맹 보정 강도"));
+	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 크기"));
+	if (Key == TEXT("Accessibility_AimAssist"))  return FText::FromString(TEXT("에임 보조"));
+	if (Key == TEXT("Accessibility_SubtitleBG")) return FText::FromString(TEXT("자막 배경"));
+	return FText::GetEmpty();
+}
+
+static FText AccessibilityRowDesc(const FName Key)
+{
+	if (Key == TEXT("Accessibility_CBStrength")) return FText::FromString(TEXT("색맹 보정 세기"));
+	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 글자·요소 크기"));
+	if (Key == TEXT("Accessibility_AimAssist"))  return FText::FromString(TEXT("조준 보조 강도"));
+	if (Key == TEXT("Accessibility_SubtitleBG")) return FText::FromString(TEXT("자막 배경 불투명도"));
+	return FText::GetEmpty();
+}
+
+void URetrieveSettingsPanelWidget::BindAccessibilityRows()
+{
+	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Accessibility);
+	if (!Page || !Page->WidgetTree) return;
+	Page->WidgetTree->ForEachWidget([this](UWidget* W)
+	{
+		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+		{
+			Row->SetLabelTexts(AccessibilityRowLabel(Row->RowKey), AccessibilityRowDesc(Row->RowKey));
+			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleAccessibilityRowChanged);
+		}
+	});
+}
+
+void URetrieveSettingsPanelWidget::HandleAccessibilityRowChanged(FName RowKey, float Value)
+{
+	if (bRefreshingControls) return;
+	// WBP_SettingRow_Slider는 0..1을 준다. 각 설정의 실제 범위로 매핑 후 기존 핸들러 호출.
+	if      (RowKey == TEXT("Accessibility_CBStrength")) HandleColorBlindStrengthChanged(Value * 10.f);
+	else if (RowKey == TEXT("Accessibility_UIScale"))    HandleUIScaleChanged(0.85f + Value * 0.30f);
+	else if (RowKey == TEXT("Accessibility_AimAssist"))  HandleAimAssistChanged(Value);
+	else if (RowKey == TEXT("Accessibility_SubtitleBG")) HandleSubtitleBackgroundChanged(Value);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+void URetrieveSettingsPanelWidget::HandleAudioRowChanged(FName RowKey, float Value)
+{
+	if (bRefreshingControls)
+	{
+		return;
+	}
+	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
+	{
+		// 행 아키타입이 값 텍스트/위치는 스스로 갱신한다. 여기선 실제 볼륨만 적용.
+		Subsystem->SetChannelVolume(RowKeyToAudioChannel(RowKey), Value, true);
+	}
 }
 
 void URetrieveSettingsPanelWidget::RefreshGameplay()
@@ -610,6 +1111,9 @@ void URetrieveSettingsPanelWidget::RefreshGameplay()
 	SetChecked(Page, TEXT("Chk_Subtitles"), S->bSubtitlesEnabled);
 	SetChecked(Page, TEXT("Chk_DamageNumbers"), S->bShowDamageNumbers);
 	SetChecked(Page, TEXT("Chk_TutorialHints"), S->bTutorialHints);
+	SetToggleByKey(Page, TEXT("Gameplay_Subtitles"), S->bSubtitlesEnabled);
+	SetToggleByKey(Page, TEXT("Gameplay_DamageNumbers"), S->bShowDamageNumbers);
+	SetToggleByKey(Page, TEXT("Gameplay_TutorialHints"), S->bTutorialHints);
 	SetSlider(Page, TEXT("Sld_SubtitleScale"), S->SubtitleTextScale);
 	SetSlider(Page, TEXT("Sld_FOV"), S->FieldOfView);
 	SetSlider(Page, TEXT("Sld_CameraShake"), S->CameraShakeScale);
@@ -625,23 +1129,37 @@ void URetrieveSettingsPanelWidget::RefreshAccessibility()
 	if (!S || !Page) return;
 	SetText(Page, TEXT("Val_ColorBlind"), ColorBlindText(S->ColorBlindMode));
 	SetText(Page, TEXT("Val_Interact"), FText::FromString(S->bHoldToInteract ? TEXT("홀드") : TEXT("토글")));
-	SetSlider(Page, TEXT("Sld_CBStrength"), S->ColorBlindStrength);
-	SetSlider(Page, TEXT("Sld_UIScale"), S->UITextScale);
-	SetSlider(Page, TEXT("Sld_AimAssist"), S->AimAssistStrength);
-	SetSlider(Page, TEXT("Sld_SubtitleBG"), S->SubtitleBackgroundOpacity);
-	SetText(Page, TEXT("Val_CBStrength"), NumberText(S->ColorBlindStrength));
-	SetText(Page, TEXT("Val_UIScale"), PercentText(S->UITextScale));
-	SetText(Page, TEXT("Val_AimAssist"), PercentText(S->AimAssistStrength));
-	SetText(Page, TEXT("Val_SubtitleBG"), PercentText(S->SubtitleBackgroundOpacity));
+	// 접근성 슬라이더는 WBP_SettingRow_Slider(내부 USlider 0..1)로 전환됨 → RowKey로 찾아 정규화값 갱신.
+	if (Page->WidgetTree)
+	{
+		Page->WidgetTree->ForEachWidget([&](UWidget* W)
+		{
+			URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W);
+			if (!Row) return;
+			if      (Row->RowKey == TEXT("Accessibility_CBStrength")) Row->SetValueSilently(S->ColorBlindStrength / 10.f);
+			else if (Row->RowKey == TEXT("Accessibility_UIScale"))    Row->SetValueSilently((S->UITextScale - 0.85f) / 0.30f);
+			else if (Row->RowKey == TEXT("Accessibility_AimAssist"))  Row->SetValueSilently(S->AimAssistStrength);
+			else if (Row->RowKey == TEXT("Accessibility_SubtitleBG")) Row->SetValueSilently(S->SubtitleBackgroundOpacity);
+		});
+	}
 	SetChecked(Page, TEXT("Chk_HighContrast"), S->bHighContrastHUD);
 	SetChecked(Page, TEXT("Chk_ReduceMotion"), S->bReduceMotion);
+	SetToggleByKey(Page, TEXT("Accessibility_HighContrast"), S->bHighContrastHUD);
+	SetToggleByKey(Page, TEXT("Accessibility_ReduceMotion"), S->bReduceMotion);
 }
 
 void URetrieveSettingsPanelWidget::ApplyRuntimeStyle()
 {
-	const FLinearColor BarColor(0.30f, 0.24f, 0.12f, 1.f);
-	const FLinearColor HandleColor(0.90f, 0.74f, 0.38f, 1.f);
-	const FLinearColor DarkChip(0.12f, 0.10f, 0.07f, 0.55f);
+	// 색 스타일은 고대비 테마일 때만 코드로 덮어쓴다. 기본 테마에선 WBP 디자인을 그대로 둔다.
+	// (슬라이더 값 범위 등 '기능' 설정은 아래에서 테마와 무관하게 항상 적용한다.)
+	const bool bHighContrast = URetrieveUISettingsLibrary::IsHighContrastEnabled();
+	const URetrieveUITheme* Theme = URetrieveUISettingsLibrary::GetActiveUITheme();
+	const FLinearColor BarColor = Theme ? Theme->PanelBorder : FLinearColor(0.30f, 0.24f, 0.12f, 1.f);
+	const FLinearColor HandleColor = Theme ? Theme->SliderHandle : FLinearColor(0.90f, 0.74f, 0.38f, 1.f);
+	const FLinearColor DarkChip = Theme ? Theme->PanelBackground : FLinearColor(0.12f, 0.10f, 0.07f, 0.55f);
+	// 색 덮어쓰기(슬라이더 바/핸들, 좌우/리바인드 버튼 배경)는 고대비 테마에서만.
+	// 기본 테마에선 WBP 디자인을 유지한다.
+	if (bHighContrast)
 	for (int32 CategoryIndex = 0; CategoryIndex < static_cast<int32>(ERetrieveSettingsCategory::MAX); ++CategoryIndex)
 	{
 		UUserWidget* Page = GetPage(static_cast<ERetrieveSettingsCategory>(CategoryIndex));
@@ -689,8 +1207,53 @@ void URetrieveSettingsPanelWidget::ApplyRuntimeStyle()
 	SetRange(ERetrieveSettingsCategory::Gameplay, TEXT("Sld_SubtitleScale"), 0.5f, 2.f);
 	SetRange(ERetrieveSettingsCategory::Gameplay, TEXT("Sld_FOV"), 70.f, 110.f);
 	SetRange(ERetrieveSettingsCategory::Gameplay, TEXT("Sld_CameraShake"), 0.f, 1.f);
-	SetRange(ERetrieveSettingsCategory::Accessibility, TEXT("Sld_CBStrength"), 0.f, 10.f);
-	SetRange(ERetrieveSettingsCategory::Accessibility, TEXT("Sld_UIScale"), 0.8f, 1.5f);
+	// 접근성 CBStrength/UIScale는 WBP_SettingRow_Slider(0..1)로 전환 → 범위 매핑은 HandleAccessibilityRowChanged에서 처리.
+}
+
+void URetrieveSettingsPanelWidget::ApplyOptionAvailability()
+{
+	// 소비 구현이 없는 옵션은 행(Row_*) 전체를 Collapsed로 숨긴다.
+	// 위젯을 찾지 못하면 안전하게 무시된다(에셋 변경 없이 런타임 처리).
+	for (const RetrieveSettingAvailability::FOptionRow& Row : RetrieveSettingAvailability::GetOptionRows())
+	{
+		if (Row.bAvailable)
+		{
+			continue;
+		}
+		if (UWidget* RowWidget = FindWidget<UWidget>(GetPage(Row.Category), Row.RowWidgetName))
+		{
+			RowWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	// 섹션의 모든 행이 숨겨졌으면 헤더/구분선도 숨겨 빈 제목(예: "입력")이 남지 않게 한다.
+	for (const RetrieveSettingAvailability::FOptionSection& Sec : RetrieveSettingAvailability::GetOptionSections())
+	{
+		UUserWidget* Page = GetPage(Sec.Category);
+		if (!Page) continue;
+		bool bAnyVisible = false;
+		for (const TCHAR* RowName : Sec.RowWidgetNames)
+		{
+			UWidget* RowWidget = FindWidget<UWidget>(Page, RowName);
+			if (RowWidget && RowWidget->GetVisibility() != ESlateVisibility::Collapsed)
+			{
+				bAnyVisible = true;
+				break;
+			}
+		}
+		if (bAnyVisible) continue;
+		if (UWidget* Hdr = FindWidget<UWidget>(Page, Sec.HeaderWidgetName))
+		{
+			Hdr->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		if (Sec.DividerWidgetName)
+		{
+			if (UWidget* Div = FindWidget<UWidget>(Page, Sec.DividerWidgetName))
+			{
+				Div->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
+	}
 }
 
 void URetrieveSettingsPanelWidget::HandleGraphicsTab() { SelectCategory(ERetrieveSettingsCategory::Graphics); }
@@ -701,6 +1264,16 @@ void URetrieveSettingsPanelWidget::HandleAccessibilityTab() { SelectCategory(ERe
 void URetrieveSettingsPanelWidget::HandleApply() { ApplyAndSave(); }
 void URetrieveSettingsPanelWidget::HandleReset() { ResetCurrentCategory(); }
 void URetrieveSettingsPanelWidget::HandleClose() { RequestClose(); }
+
+void URetrieveSettingsPanelWidget::HandleSettingChanged(ERetrieveSettingsCategory Category)
+{
+	// 고대비 등 접근성 변경(또는 전체 적용) 시 화면 색상을 즉시 다시 적용한다.
+	if (Category == ERetrieveSettingsCategory::Accessibility || Category == ERetrieveSettingsCategory::MAX)
+	{
+		ApplyRuntimeStyle();
+		UpdateScreenForCategory(CurrentCategory);
+	}
+}
 
 #define APPLY_PREVIEW(Category) if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem()) Subsystem->ApplyCategory(Category, false)
 #define DEFINE_QUALITY_HANDLER(Func, Getter, Setter, Delta, ValueName) \
@@ -765,8 +1338,8 @@ DEFINE_QUALITY_HANDLER(HandleEffectsNext, GetVisualEffectQuality, SetVisualEffec
 
 void URetrieveSettingsPanelWidget::HandleVSyncChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->SetVSyncEnabled(b); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
 void URetrieveSettingsPanelWidget::HandleMotionBlurChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bMotionBlur = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
-void URetrieveSettingsPanelWidget::HandleFrameLimitChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->SetFrameRateLimit(V); SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_FrameLimit"), NumberText(V)); } }
-void URetrieveSettingsPanelWidget::HandleGammaChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->GammaLevel = V; SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Gamma"), NumberText(V, 1)); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
+void URetrieveSettingsPanelWidget::HandleFrameLimitChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { const float FPS = FMath::Lerp(30.f, 240.f, V); S->SetFrameRateLimit(FPS); SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_FrameLimit"), NumberText(FPS)); } }
+void URetrieveSettingsPanelWidget::HandleGammaChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { const float Gamma = FMath::Lerp(1.8f, 2.6f, V); S->GammaLevel = Gamma; SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Gamma"), NumberText(Gamma, 1)); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
 
 #define DEFINE_FLOAT_SETTING_HANDLER(Func, Field, Category, PageCategory, Label, Digits) \
 	void URetrieveSettingsPanelWidget::Func(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->Field = V; \
@@ -808,11 +1381,48 @@ void URetrieveSettingsPanelWidget::HandleColorBlindNext() { if (auto* S = GetUse
 void URetrieveSettingsPanelWidget::HandleInteractPrev() { HandleInteractNext(); }
 void URetrieveSettingsPanelWidget::HandleInteractNext() { if (auto* S = GetUserSettings()) { S->bHoldToInteract = !S->bHoldToInteract; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_Interact"), FText::FromString(S->bHoldToInteract ? TEXT("홀드") : TEXT("토글"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleColorBlindStrengthChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { if (auto* Subsystem = GetSettingsSubsystem()) Subsystem->SetColorBlind(S->ColorBlindMode, FMath::RoundToInt(V), true); SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_CBStrength"), NumberText(FMath::RoundToInt(V))); } }
-void URetrieveSettingsPanelWidget::HandleUIScaleChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->UITextScale = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_UIScale"), PercentText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
+void URetrieveSettingsPanelWidget::HandleUIScaleChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->UITextScale = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_UIScale"), PercentText(V)); /* UI 크기는 Apply 시에만 적용(드래그 중 화면 흔들림 방지). 여기선 값/라벨만 갱신. */ } }
 void URetrieveSettingsPanelWidget::HandleAimAssistChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->AimAssistStrength = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_AimAssist"), PercentText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleSubtitleBackgroundChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->SubtitleBackgroundOpacity = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_SubtitleBG"), PercentText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleHighContrastChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bHighContrastHUD = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleReduceMotionChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bReduceMotion = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
+
+// ── Toggle Row 핸들러 ─────────────────────────────────────────────────────────
+
+void URetrieveSettingsPanelWidget::HandleGraphicsToggleChanged(FName RowKey, bool bValue)
+{
+	if (bRefreshingControls) return;
+	if (RowKey == TEXT("Graphics_VSync"))      HandleVSyncChanged(bValue);
+	else if (RowKey == TEXT("Graphics_MotionBlur")) HandleMotionBlurChanged(bValue);
+}
+
+void URetrieveSettingsPanelWidget::HandleControlsToggleChanged(FName RowKey, bool bValue)
+{
+	if (bRefreshingControls) return;
+	if (RowKey == TEXT("Controls_InvertY"))   HandleInvertYChanged(bValue);
+	else if (RowKey == TEXT("Controls_Vibration")) HandleVibrationChanged(bValue);
+}
+
+void URetrieveSettingsPanelWidget::HandleAudioToggleChanged(FName RowKey, bool bValue)
+{
+	if (bRefreshingControls) return;
+	if (RowKey == TEXT("Audio_MuteUnfocused")) HandleMuteUnfocusedChanged(bValue);
+}
+
+void URetrieveSettingsPanelWidget::HandleGameplayToggleChanged(FName RowKey, bool bValue)
+{
+	if (bRefreshingControls) return;
+	if      (RowKey == TEXT("Gameplay_Subtitles"))      HandleSubtitlesChanged(bValue);
+	else if (RowKey == TEXT("Gameplay_DamageNumbers"))  HandleDamageNumbersChanged(bValue);
+	else if (RowKey == TEXT("Gameplay_TutorialHints"))  HandleTutorialHintsChanged(bValue);
+}
+
+void URetrieveSettingsPanelWidget::HandleAccessibilityToggleChanged(FName RowKey, bool bValue)
+{
+	if (bRefreshingControls) return;
+	if      (RowKey == TEXT("Accessibility_HighContrast")) HandleHighContrastChanged(bValue);
+	else if (RowKey == TEXT("Accessibility_ReduceMotion")) HandleReduceMotionChanged(bValue);
+}
 
 #undef DEFINE_FLOAT_SETTING_HANDLER
 #undef APPLY_PREVIEW

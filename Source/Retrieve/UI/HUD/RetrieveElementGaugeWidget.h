@@ -9,8 +9,6 @@ class UProgressBar;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UElementGaugeViewModel;
-class UDataTable;
-struct FRetrieveBuffUIRow;
 
 /**
  * WBP_ElementGauge의 부모 C++ 클래스.
@@ -60,12 +58,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> Image_Element;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UImage> Image_AbsorbSkillIcon;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UImage> Image_BurstSkillIcon;
-
 	// ─── 원소별 머티리얼 인스턴스 (BP Details에서 에셋 지정) ─────────────────
 	UPROPERTY(EditDefaultsOnly, Category = "ElementGauge|Materials")
 	TObjectPtr<UMaterialInterface> MI_Fire;
@@ -80,15 +72,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "ElementGauge|Materials")
 	TObjectPtr<UMaterialInterface> MI_Empty;
 
-	UPROPERTY(EditDefaultsOnly, Category = "ElementGauge|Skill Icons")
-	TObjectPtr<UDataTable> BuffDefinitionTable;
-
-	UPROPERTY(EditDefaultsOnly, Category = "ElementGauge|Skill Icons")
-	TObjectPtr<UDataTable> SkillCombinationTable;
-
-	UPROPERTY(EditDefaultsOnly, Category = "ElementGauge|Skill Icons")
-	TObjectPtr<UMaterialInterface> SkillIconMaskedMaterial;
-
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
@@ -101,8 +84,6 @@ private:
 
 	// ─── DMI 상태 ───────────────────────────────────────────────────────────
 	TObjectPtr<UMaterialInstanceDynamic> SlotDMIs[SlotCount];
-	TObjectPtr<UMaterialInstanceDynamic> AbsorbSkillIconMID;
-	TObjectPtr<UMaterialInstanceDynamic> BurstSkillIconMID;
 	FGameplayTag CachedElements[SlotCount];
 
 	// ─── Percent 보간 상태 ───────────────────────────────────────────────────
@@ -147,11 +128,6 @@ private:
 	void TriggerGlowPulse(int32 SlotIndex, bool bIsFullTransition);
 	void TriggerElementModePulse(FGameplayTag NewElement, bool bImmediate);
 	void SetElementIconVisualState(float PulseAlpha);
-	void EnsureSkillIconTables();
-	void UpdateSkillIcons();
-	bool ResolveBurstBuffUIRow(FRetrieveBuffUIRow& OutRow) const;
-	void ApplySkillIcon(UImage* Image, TObjectPtr<UMaterialInstanceDynamic>& IconMID, const FRetrieveBuffUIRow* Row, bool bEnabled);
-
 	UImage*              GetSlotImage(int32 SlotIndex) const;
 	UProgressBar*        GetSlotProgressBar(int32 SlotIndex) const;
 	UMaterialInterface*  GetMIForElement(const FGameplayTag& Element) const;

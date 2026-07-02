@@ -27,7 +27,7 @@ struct RETRIEVE_API FRetrieveShopItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop", meta = (Categories = "Item"))
 	FGameplayTag ItemCategoryTag;
 
-	/** 이 상점에서의 구매가. 0이면 판매 불가 (전시용) */
+	/** 이 상점에서의 구매가. 0이면 무료 구매 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop", meta = (ClampMin = "0"))
 	int32 BuyPrice = 100;
 

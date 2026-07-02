@@ -26,27 +26,6 @@ namespace
 			}
 		});
 	}
-
-	// 중첩된 자식 UserWidget까지 모든 애니메이션을 정지한다.
-	void StopAnimationsRecursive(UUserWidget* Root)
-	{
-		if (!Root)
-		{
-			return;
-		}
-		Root->StopAllAnimations();
-		if (!Root->WidgetTree)
-		{
-			return;
-		}
-		Root->WidgetTree->ForEachWidget([](UWidget* W)
-		{
-			if (UUserWidget* Nested = Cast<UUserWidget>(W))
-			{
-				StopAnimationsRecursive(Nested);
-			}
-		});
-	}
 }
 
 void URetrieveThemedBarWidget::NativeConstruct()
@@ -130,6 +109,6 @@ void URetrieveThemedBarWidget::ApplyReduceMotion()
 	// (해제는 위젯 재생성 시 자동 복원 — 접근성 설정은 게임 중 자주 토글되지 않음)
 	if (URetrieveUISettingsLibrary::IsReduceMotionEnabled())
 	{
-		StopAnimationsRecursive(this);
+		URetrieveUISettingsLibrary::StopAnimationsRecursive(this);
 	}
 }

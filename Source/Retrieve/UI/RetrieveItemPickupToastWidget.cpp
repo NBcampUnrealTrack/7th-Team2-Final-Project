@@ -7,7 +7,11 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "Animation/WidgetAnimation.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "TimerManager.h"
 
 void URetrieveItemPickupToastWidget::NativeConstruct()
 {
@@ -21,6 +25,81 @@ void URetrieveItemPickupToastWidget::NativeConstruct()
 	{
 		DefaultVFXTarget = ToastVFXTarget;
 	}
+
+	Anim_In = FindAnimationByName(TEXT("Anim_In"));
+	Anim_Out = FindAnimationByName(TEXT("Anim_Out"));
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[ToastWidget] Animation binding: Anim_In=%s Anim_Out=%s Class=%s"),
+		*GetNameSafe(Anim_In), *GetNameSafe(Anim_Out), *GetClass()->GetPathName());
+
+	if (Anim_In)
+	{
+		PlayAnimation(Anim_In);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ToastWidget] Anim_In is not bound."));
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ExitAnimationTimerHandle,
+			this,
+			&URetrieveItemPickupToastWidget::PlayExitAnimation,
+			2.0f,
+			false);
+	}
+}
+
+void URetrieveItemPickupToastWidget::NativeDestruct()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ExitAnimationTimerHandle);
+	}
+
+	Super::NativeDestruct();
+}
+
+void URetrieveItemPickupToastWidget::PlayExitAnimation()
+{
+	if (Anim_Out)
+	{
+		PlayAnimation(Anim_Out);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ToastWidget] Anim_Out is not bound."));
+	}
+}
+
+UWidgetAnimation* URetrieveItemPickupToastWidget::FindAnimationByName(FName AnimationName) const
+{
+	const FString ExpectedObjectName = AnimationName.ToString() + TEXT("_INST");
+
+	for (const UClass* CurrentClass = GetClass(); CurrentClass;
+		CurrentClass = CurrentClass->GetSuperClass())
+	{
+		const UWidgetBlueprintGeneratedClass* WidgetClass =
+			Cast<UWidgetBlueprintGeneratedClass>(CurrentClass);
+		if (!WidgetClass)
+		{
+			continue;
+		}
+
+		for (UWidgetAnimation* Animation : WidgetClass->Animations)
+		{
+			if (Animation && (Animation->GetFName() == AnimationName
+				|| Animation->GetName() == ExpectedObjectName))
+			{
+				return Animation;
+			}
+		}
+	}
+
+	return nullptr;
 }
 
 void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
@@ -38,7 +117,7 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 
 	// 위젯 트리의 Image 이름이 'ItemIcon'이라 BindWidget 멤버(ItemIconImage)와 불일치하여
 	// 자동 바인딩되지 않는다(아이콘 미표시 버그). 이름으로 직접 조회한다(프로젝트의 GetWidgetFromName 패턴).
-	UImage* IconImg = ItemIconImage ? ItemIconImage.Get() : Cast<UImage>(GetWidgetFromName(TEXT("ItemIcon")));
+	UImage* IconImg = ItemIcon ? ItemIcon.Get() : Cast<UImage>(GetWidgetFromName(TEXT("ItemIcon")));
 	if (IconImg)
 	{
 		if (UDataTable* IconDT = LoadObject<UDataTable>(

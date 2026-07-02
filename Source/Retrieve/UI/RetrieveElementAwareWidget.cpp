@@ -4,31 +4,6 @@
 #include "UI/ViewModels/ElementGaugeViewModel.h"
 #include "UI/RetrieveUISettingsLibrary.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
-#include "Blueprint/WidgetTree.h"
-
-namespace
-{
-	// 중첩된 자식 UserWidget까지 모든 애니메이션을 정지한다.
-	void StopAnimationsRecursive(UUserWidget* Root)
-	{
-		if (!Root)
-		{
-			return;
-		}
-		Root->StopAllAnimations();
-		if (!Root->WidgetTree)
-		{
-			return;
-		}
-		Root->WidgetTree->ForEachWidget([](UWidget* W)
-		{
-			if (UUserWidget* Nested = Cast<UUserWidget>(W))
-			{
-				StopAnimationsRecursive(Nested);
-			}
-		});
-	}
-}
 
 void URetrieveElementAwareWidget::NativeConstruct()
 {
@@ -106,7 +81,7 @@ void URetrieveElementAwareWidget::ApplyReduceMotion()
 	// 해제는 위젯 재생성 시 복원.
 	if (URetrieveUISettingsLibrary::IsReduceMotionEnabled())
 	{
-		StopAnimationsRecursive(this);
+		URetrieveUISettingsLibrary::StopAnimationsRecursive(this);
 	}
 }
 

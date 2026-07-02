@@ -28,6 +28,7 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Engine/Texture2D.h"
 #include "UObject/UnrealType.h"
+#include "Framework/Application/SlateApplication.h"
 
 namespace
 {
@@ -125,6 +126,13 @@ void UInventoryPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	RefreshInventoryGridLayout();
 	SuppressBlueprintManagedTooltip();
+
+	// 그리드 슬롯 툴팁(Compare/Detail)이 슬롯 밖으로 마우스가 나간 뒤에도 커서를 따라다니며
+	// 남아있는 경우에 대한 안전장치. 그리드 안의 슬롯이 하나도 호버되지 않으면 강제로 닫는다.
+	if (UniformGrid_ItemList && !IsWidgetOrDescendantHovered(UniformGrid_ItemList))
+	{
+		FSlateApplication::Get().CloseToolTip();
+	}
 }
 
 void UInventoryPanelWidget::InitializeInventoryPanel(UInventoryComponent* InInventoryComponent, UWeaponComponent* InWeaponComponent)
@@ -261,15 +269,37 @@ bool UInventoryPanelWidget::ActivateSelectedItem()
 
 bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag)
 {
-	if (!ItemId.IsNone()
-		&& SelectedItemId == ItemId
-		&& SelectedItemCategoryTag == ItemCategoryTag)
+	if (ItemId.IsNone())
 	{
+		SelectItem(ItemId, ItemCategoryTag);
+		LastGridSlotClickTime = -1.0;
+		return false;
+	}
+
+	const double CurrentTime = FPlatformTime::Seconds();
+	const bool bClickedAlreadySelectedItem =
+		SelectedItemId == ItemId
+		&& SelectedItemCategoryTag == ItemCategoryTag;
+
+	// 이전 클릭이 "같은 아이템"이면서 FastDoubleClickThresholdSeconds 안에 들어온 경우에만
+	// 진짜 더블클릭으로 인정해 장착/해제를 실행한다. 느리게 두 번 클릭한 경우는 두 번째 클릭도
+	// 그냥 선택 클릭으로만 처리해서 더블클릭 판정이 나지 않게 한다.
+	const bool bIsFastDoubleClick =
+		bClickedAlreadySelectedItem
+		&& LastGridSlotClickTime >= 0.0
+		&& (CurrentTime - LastGridSlotClickTime) <= FastDoubleClickThresholdSeconds;
+
+	if (bIsFastDoubleClick)
+	{
+		// 이번 더블클릭을 소비한다. 바로 다음에 이어지는 느린 클릭이 이 클릭과 짝지어져
+		// 또 다른 더블클릭으로 판정되는 것을 막는다.
+		LastGridSlotClickTime = -1.0;
 		return ActivateSelectedItem();
 	}
 
 	SelectItem(ItemId, ItemCategoryTag);
-	return ActivateSelectedItem();
+	LastGridSlotClickTime = CurrentTime;
+	return false;
 }
 
 bool UInventoryPanelWidget::EquipSelectedWeapon()
@@ -1824,7 +1854,8 @@ void UInventoryPanelWidget::RefreshInventoryGridLayout()
 	const bool bTooltipCacheSizeChanged =
 		AppliedTooltipItemIds.Num() != ChildCount
 		|| AppliedTooltipCategoryTags.Num() != ChildCount
-		|| AppliedTooltipCompareFlags.Num() != ChildCount;
+		|| AppliedTooltipCompareFlags.Num() != ChildCount
+		|| AppliedTooltipCompareReferenceIds.Num() != ChildCount;
 	const bool bEquippedWeaponChanged = AppliedTooltipEquippedWeaponId != EquippedWeaponId;
 
 	if (bGridAreaChanged || bInventoryTooltipsDirty || bTooltipCacheSizeChanged || bEquippedWeaponChanged)
@@ -1850,6 +1881,9 @@ void UInventoryPanelWidget::ApplyInventorySlotTooltips()
 	AppliedTooltipItemIds.SetNum(ChildCount);
 	AppliedTooltipCategoryTags.SetNum(ChildCount);
 	AppliedTooltipCompareFlags.SetNum(ChildCount);
+	AppliedTooltipCompareReferenceIds.SetNum(ChildCount);
+
+	bool bAnyUpdateDeferredDueToHover = false;
 
 	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
 	{
@@ -1860,37 +1894,59 @@ void UInventoryPanelWidget::ApplyInventorySlotTooltips()
 			continue;
 		}
 
-		ClearWidgetTooltipRecursive(Child);
+		// HoverDelay 무력화 등 레거시 BP 툴팁 억제는 네이티브 SetToolTip과 무관하므로 매 패스 안전하게 반복 적용한다.
 		DisableLegacyTooltipRecursive(Child);
 
 		if (!Items.IsValidIndex(ChildIndex))
 		{
-			Child->SetToolTip(nullptr);
+			if (AppliedTooltipItemIds[ChildIndex] != NAME_None || Child->GetToolTip() != nullptr)
+			{
+				ClearWidgetTooltipRecursive(Child);
+				Child->SetToolTip(nullptr);
+			}
 			AppliedTooltipItemIds[ChildIndex] = NAME_None;
 			AppliedTooltipCategoryTags[ChildIndex] = FGameplayTag();
 			AppliedTooltipCompareFlags[ChildIndex] = false;
+			AppliedTooltipCompareReferenceIds[ChildIndex] = NAME_None;
 			continue;
 		}
 
 		const FRetrieveItemStack& Item = Items[ChildIndex];
 		const bool bUseCompareTooltip = ShouldUseCompareTooltipForItem(Item);
+		// 비교 대상(현재 장착된 무기/방어구)이 바뀌면 아이템/카테고리/비교여부가 그대로여도
+		// 툴팁 내용(Current 스탯)이 갱신돼야 한다.
+		const FName CompareReferenceId = bUseCompareTooltip ? GetCompareReferenceItemId(Item) : NAME_None;
 		const bool bTooltipAlreadyApplied =
 			AppliedTooltipItemIds[ChildIndex] == Item.ItemId
 			&& AppliedTooltipCategoryTags[ChildIndex] == Item.ItemCategoryTag
 			&& AppliedTooltipCompareFlags[ChildIndex] == bUseCompareTooltip
+			&& AppliedTooltipCompareReferenceIds[ChildIndex] == CompareReferenceId
 			&& Child->GetToolTip() != nullptr;
 
-		if (!bTooltipAlreadyApplied)
+		if (bTooltipAlreadyApplied)
 		{
-			Child->SetToolTip(CreateInventorySlotTooltip(Item));
-			AppliedTooltipItemIds[ChildIndex] = Item.ItemId;
-			AppliedTooltipCategoryTags[ChildIndex] = Item.ItemCategoryTag;
-			AppliedTooltipCompareFlags[ChildIndex] = bUseCompareTooltip;
+			continue;
 		}
+
+		// 지금 마우스가 올라가 있는 슬롯의 툴팁을 표시 도중 교체하면 Slate 팝업이
+		// 엉뚱한 위치에 뜨거나, 안 사라지거나, 신/구 팝업이 동시에 보이는 문제가 생긴다.
+		// 호버가 끝날 때까지 이 슬롯의 갱신을 미루고 dirty 상태를 유지해 다음 패스에서 재시도한다.
+		if (IsWidgetOrDescendantHovered(Child))
+		{
+			bAnyUpdateDeferredDueToHover = true;
+			continue;
+		}
+
+		ClearWidgetTooltipRecursive(Child);
+		Child->SetToolTip(CreateInventorySlotTooltip(Item));
+		AppliedTooltipItemIds[ChildIndex] = Item.ItemId;
+		AppliedTooltipCategoryTags[ChildIndex] = Item.ItemCategoryTag;
+		AppliedTooltipCompareFlags[ChildIndex] = bUseCompareTooltip;
+		AppliedTooltipCompareReferenceIds[ChildIndex] = CompareReferenceId;
 	}
 
 	AppliedTooltipEquippedWeaponId = InventoryComponent ? InventoryComponent->GetEquippedWeaponId() : NAME_None;
-	bInventoryTooltipsDirty = false;
+	bInventoryTooltipsDirty = bAnyUpdateDeferredDueToHover;
 }
 
 void UInventoryPanelWidget::ClearWidgetTooltipRecursive(UWidget* Widget) const
@@ -2034,12 +2090,54 @@ bool UInventoryPanelWidget::IsWidgetOrDescendantHovered(const UWidget* Widget) c
 
 bool UInventoryPanelWidget::ShouldUseCompareTooltipForItem(const FRetrieveItemStack& Item) const
 {
-	return IsWeaponCategory(Item.ItemCategoryTag)
-		&& InventoryComponent
-		&& WeaponDataTable
-		&& !InventoryComponent->GetEquippedWeaponId().IsNone()
-		&& InventoryComponent->GetEquippedWeaponId() != Item.ItemId
-		&& ItemCompareTooltipWidgetClass;
+	if (!InventoryComponent || !ItemCompareTooltipWidgetClass)
+	{
+		return false;
+	}
+
+	if (IsWeaponCategory(Item.ItemCategoryTag))
+	{
+		const FName EquippedWeaponId = InventoryComponent->GetEquippedWeaponId();
+		return WeaponDataTable
+			&& !EquippedWeaponId.IsNone()
+			&& EquippedWeaponId != Item.ItemId;
+	}
+
+	if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId, TEXT("InventoryTooltip::ShouldCompareArmor"), false))
+		{
+			const FName EquippedArmorId = InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag);
+			return !EquippedArmorId.IsNone() && EquippedArmorId != Item.ItemId;
+		}
+	}
+
+	return false;
+}
+
+FName UInventoryPanelWidget::GetCompareReferenceItemId(const FRetrieveItemStack& Item) const
+{
+	if (!InventoryComponent)
+	{
+		return NAME_None;
+	}
+
+	if (IsWeaponCategory(Item.ItemCategoryTag))
+	{
+		return InventoryComponent->GetEquippedWeaponId();
+	}
+
+	if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId, TEXT("InventoryTooltip::CompareReference"), false))
+		{
+			return InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag);
+		}
+	}
+
+	return NAME_None;
 }
 
 void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
@@ -2200,7 +2298,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 		}
 	}
 
-	if (bUseCompareTooltip)
+	if (bUseCompareTooltip && IsWeaponCategory(Item.ItemCategoryTag))
 	{
 		const FRetrieveWeaponDataRow* CurrentWeapon = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(
 			InventoryComponent->GetEquippedWeaponId(),
@@ -2216,7 +2314,26 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 			return CreateInventoryCompareTooltip(TooltipWidget, Item, *CurrentWeapon, *HoveredWeapon);
 		}
 	}
-	else
+	else if (bUseCompareTooltip && IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable)
+	{
+		const FRetrieveArmorDataRow* HoveredArmor = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			Item.ItemId,
+			TEXT("InventoryTooltip::HoveredArmor"),
+			false);
+		const FRetrieveArmorDataRow* CurrentArmor = HoveredArmor
+			? ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+				InventoryComponent->GetEquippedArmorId(HoveredArmor->EquipmentSlotTag),
+				TEXT("InventoryTooltip::CurrentArmor"),
+				false)
+			: nullptr;
+
+		if (CurrentArmor && HoveredArmor)
+		{
+			return CreateInventoryCompareTooltip(TooltipWidget, Item, *CurrentArmor, *HoveredArmor);
+		}
+	}
+
+	if (!bUseCompareTooltip)
 	{
 		InvokeTooltipTextFunction(
 			TooltipWidget,
@@ -2271,6 +2388,45 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 
 	return TooltipWidget;
 
+}
+
+UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
+	UUserWidget* TooltipWidget,
+	const FRetrieveItemStack& HoveredItem,
+	const FRetrieveArmorDataRow& CurrentArmor,
+	const FRetrieveArmorDataRow& HoveredArmor)
+{
+	if (!TooltipWidget)
+	{
+		return nullptr;
+	}
+
+	const FString CurrentInfo = FormatArmorTooltipBlock(CurrentArmor, TEXT("Current"));
+	const FString HoveredInfo = FormatArmorTooltipBlock(HoveredArmor, TEXT("Selected"));
+	const FString DeltaInfo = BuildArmorSwapDeltaText(CurrentArmor, HoveredArmor);
+
+	InvokeTooltipTextFunction(
+		TooltipWidget,
+		TEXT("SetCompareInfo"),
+		{
+			CurrentInfo,
+			HoveredInfo,
+			DeltaInfo
+		});
+
+	const FString SlotName = GetGameplayTagLeaf(HoveredArmor.EquipmentSlotTag);
+
+	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("COMPARE"));
+	SetTooltipText(TooltipWidget, TEXT("Text_ItemDetails"), DeltaInfo);
+	PopulateFantasyTooltipWidget(
+		TooltipWidget,
+		HoveredItem,
+		TEXT("COMPARE"),
+		FString::Printf(TEXT("%.0f Defense"), HoveredArmor.Defense),
+		FString::Printf(TEXT("Armor %s"), *SlotName),
+		HoveredArmor.BasePrice);
+
+	return TooltipWidget;
 }
 
 UWidget* UInventoryPanelWidget::BuildEquipmentSlotTooltipWidget(const FRetrieveItemStack& Item) const
@@ -2424,10 +2580,8 @@ FString UInventoryPanelWidget::FormatWeaponTooltipBlock(
 	Lines.Add(FString::Printf(TEXT("Attack Power: %.0f"), WeaponData.AttackPower));
 	Lines.Add(FString::Printf(TEXT("Element Charge: x%.2f"), WeaponData.ElementChargeMultiplier));
 
-	if (!WeaponData.ShortDescription.IsEmpty())
-	{
-		Lines.Add(WeaponData.ShortDescription.ToString());
-	}
+	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
+	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
 
 	return FString::Join(Lines, TEXT("\n"));
 }
@@ -2464,6 +2618,42 @@ FString UInventoryPanelWidget::BuildWeaponSwapDeltaText(
 			TEXT("Element: %s -> %s"),
 			*GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag),
 			*GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)));
+	}
+
+	if (Lines.IsEmpty())
+	{
+		Lines.Add(TEXT("No stat changes"));
+	}
+
+	return FString::Join(Lines, TEXT("\n"));
+}
+
+FString UInventoryPanelWidget::FormatArmorTooltipBlock(
+	const FRetrieveArmorDataRow& ArmorData,
+	const FString& Header) const
+{
+	TArray<FString> Lines;
+	Lines.Add(Header + TEXT(":"));
+	Lines.Add(ArmorData.DisplayName.ToString());
+	Lines.Add(FString::Printf(TEXT("Slot: %s"), *GetGameplayTagLeaf(ArmorData.EquipmentSlotTag)));
+	Lines.Add(FString::Printf(TEXT("Defense: %.0f"), ArmorData.Defense));
+
+	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
+	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
+
+	return FString::Join(Lines, TEXT("\n"));
+}
+
+FString UInventoryPanelWidget::BuildArmorSwapDeltaText(
+	const FRetrieveArmorDataRow& CurrentArmor,
+	const FRetrieveArmorDataRow& HoveredArmor) const
+{
+	TArray<FString> Lines;
+
+	const float DefenseDelta = HoveredArmor.Defense - CurrentArmor.Defense;
+	if (!FMath::IsNearlyZero(DefenseDelta))
+	{
+		Lines.Add(FString::Printf(TEXT("%+.0f Defense"), DefenseDelta));
 	}
 
 	if (Lines.IsEmpty())

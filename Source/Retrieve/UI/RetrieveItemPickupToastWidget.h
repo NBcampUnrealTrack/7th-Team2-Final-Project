@@ -8,6 +8,7 @@
 class UImage;
 class UTextBlock;
 class UWidget;
+class UWidgetAnimation;
 
 /**
  * WBP_ItemPickupToast의 C++ 베이스 클래스.
@@ -41,13 +42,20 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|HUD|Animation")
+	TObjectPtr<UWidgetAnimation> Anim_In;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|HUD|Animation")
+	TObjectPtr<UWidgetAnimation> Anim_Out;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI VFX|Toast")
 	TObjectPtr<UWidget> ToastVFXTarget;
 
 	// 위젯 트리의 ItemIconImage Image에 자동 바인딩 (없으면 nullptr)
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UImage> ItemIconImage;
+	TObjectPtr<UImage> ItemIcon;
 
 	// 위젯 트리의 ItemNameText TextBlock에 자동 바인딩 (없으면 nullptr)
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -58,6 +66,12 @@ protected:
 	TObjectPtr<UTextBlock> QuantityText;
 
 private:
+	UWidgetAnimation* FindAnimationByName(FName AnimationName) const;
+
+	void PlayExitAnimation();
+
+	FTimerHandle ExitAnimationTimerHandle;
+
 	/** ItemCategoryTag를 기반으로 적절한 DataTable에서 DisplayName을 조회한다. */
 	static FText LookupItemDisplayName(FName ItemId, FGameplayTag ItemCategoryTag);
 };

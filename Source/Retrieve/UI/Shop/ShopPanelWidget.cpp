@@ -166,7 +166,9 @@ bool UShopPanelWidget::ExecuteBuy()
 		return false;
 	}
 
-	if (!InventoryComponent->SpendCurrency(TotalCost))
+	// 무료 상품은 재화를 차감할 필요가 없다. SpendCurrency(0)는 유효한 지출로
+	// 취급하지 않으므로, 양수 가격일 때만 실제 차감을 시도한다.
+	if (TotalCost > 0 && !InventoryComponent->SpendCurrency(TotalCost))
 	{
 		ShowShopDialogue(DialogueRow_BuyFail_NotEnoughMoney, INVTEXT("돈이 부족한 것 같아."));
 		return false;
@@ -886,7 +888,8 @@ void UShopPanelWidget::RefreshBuyDetail()
 	if (!Row) return;
 
 	const float Multiplier = ShopDefinition ? ShopDefinition->PriceMultiplier : 1.0f;
-	SelectedBuyPrice = FMath::Max(1, FMath::RoundToInt(Row->BuyPrice * Multiplier));
+	// 0원 상품은 무료 구매가 가능해야 한다. 잘못된 음수 값만 0으로 보정한다.
+	SelectedBuyPrice = FMath::Max(0, FMath::RoundToInt(Row->BuyPrice * Multiplier));
 
 	if (Image_ItemIcon)
 	{

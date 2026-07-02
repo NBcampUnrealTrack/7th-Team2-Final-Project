@@ -2,6 +2,8 @@
 #include "UI/RetrieveUITheme.h"
 #include "Settings/RetrieveSettingsConfig.h"
 #include "Settings/RetrieveGameUserSettings.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
 
 URetrieveUITheme* URetrieveUISettingsLibrary::GetActiveUITheme()
 {
@@ -35,4 +37,24 @@ bool URetrieveUISettingsLibrary::IsReduceMotionEnabled()
 {
 	const URetrieveGameUserSettings* S = URetrieveGameUserSettings::Get();
 	return S ? S->bReduceMotion : false;
+}
+
+void URetrieveUISettingsLibrary::StopAnimationsRecursive(UUserWidget* Root)
+{
+	if (!Root)
+	{
+		return;
+	}
+	Root->StopAllAnimations();
+	if (!Root->WidgetTree)
+	{
+		return;
+	}
+	Root->WidgetTree->ForEachWidget([](UWidget* W)
+	{
+		if (UUserWidget* Nested = Cast<UUserWidget>(W))
+		{
+			URetrieveUISettingsLibrary::StopAnimationsRecursive(Nested);
+		}
+	});
 }

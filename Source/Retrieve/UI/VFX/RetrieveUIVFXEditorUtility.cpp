@@ -28,12 +28,15 @@
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Factories/DataTableFactory.h"
+#include "Editor.h"
+#include "Subsystems/EditorAssetSubsystem.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "UI/Bonfire/BonfireMenuWidget.h"
 #include "UI/Craft/CraftMaterialRowWidget.h"
 #include "UI/Craft/CraftPanelWidget.h"
 #include "UI/Craft/CraftRecipeEntryWidget.h"
 #include "UI/HUD/RetrieveNormalMonsterHealthBarWidget.h"
+#include "UI/HUD/RetrieveElementSkillWidget.h"
 #include "Data/Interaction/RetrieveInteractionPresetProfileAsset.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintFactory.h"
@@ -721,18 +724,52 @@ void RemoveBurstPopupFromHud()
 	CompileAndDirty(BP);
 }
 
-void ConfigureElementGaugeSkillIcons()
+void RemoveElementSkillIconsFromGauge()
 {
 	UWidgetBlueprint* BP = LoadWidgetBlueprint(TEXT("/Game/Retrieve/UI/HUD/WBP_ElementGauge.WBP_ElementGauge"));
-	if (!BP || !BP->WidgetTree || !BP->WidgetTree->RootWidget)
+	if (!BP || !BP->WidgetTree)
 	{
 		return;
 	}
 
-	UPanelWidget* RootPanel = Cast<UPanelWidget>(BP->WidgetTree->RootWidget);
+	BP->Modify();
+	BP->WidgetTree->Modify();
+	// 컨테이너를 먼저 제거하면 자식 Image도 트리에서 함께 분리된다.
+	// GUID 맵은 CompileAndDirty의 EnsureWidgetVariableGuids가 최종 트리를 기준으로 정리한다.
+	const FName WidgetNames[] = {
+		TEXT("SizeBox_AbsorbSkillIcon"),
+		TEXT("SizeBox_BurstSkillIcon"),
+		TEXT("Image_AbsorbSkillIcon"),
+		TEXT("Image_BurstSkillIcon")
+	};
+	for (const FName WidgetName : WidgetNames)
+	{
+		if (UWidget* Widget = BP->WidgetTree->FindWidget(WidgetName))
+		{
+			Widget->Modify();
+			Widget->bIsVariable = false;
+			BP->WidgetTree->RemoveWidget(Widget);
+		}
+	}
+	CompileAndDirty(BP);
+}
+
+UWidgetBlueprint* ConfigureElementSkillPanel()
+{
+	UWidgetBlueprint* BP = CreateWidgetBlueprintIfMissing(
+		TEXT("/Game/Retrieve/UI/HUD"),
+		TEXT("WBP_ElementSkillPanel"),
+		URetrieveElementSkillWidget::StaticClass());
+	if (!BP || !BP->WidgetTree)
+	{
+		return nullptr;
+	}
+
+	UCanvasPanel* RootPanel = Cast<UCanvasPanel>(BP->WidgetTree->RootWidget);
 	if (!RootPanel)
 	{
-		return;
+		RootPanel = ConstructNamed<UCanvasPanel>(BP->WidgetTree, TEXT("Canvas_ElementSkills"));
+		BP->WidgetTree->RootWidget = RootPanel;
 	}
 
 	auto EnsureIcon = [BP, RootPanel](FName SizeBoxName, FName ImageName, const FVector2D& CanvasPosition)
@@ -767,16 +804,90 @@ void ConfigureElementGaugeSkillIcons()
 			SizeSlot->SetPadding(FMargin(0.0f));
 		}
 
-		if (Cast<UCanvasPanel>(RootPanel))
-		{
-			SetCanvasSlot(IconBox, FAnchors(0.5f), CanvasPosition, FVector2D(IconSize, IconSize), FVector2D(0.5f, 0.5f), 6);
-		}
+		SetCanvasSlot(IconBox, FAnchors(0.5f), CanvasPosition, FVector2D(IconSize, IconSize), FVector2D(0.5f, 0.5f), 6);
 	};
 
 	EnsureIcon(TEXT("SizeBox_AbsorbSkillIcon"), TEXT("Image_AbsorbSkillIcon"), FVector2D(-238.0f, 0.0f));
 	EnsureIcon(TEXT("SizeBox_BurstSkillIcon"), TEXT("Image_BurstSkillIcon"), FVector2D(238.0f, 0.0f));
 
 	CompileAndDirty(BP);
+	return BP;
+}
+
+void AddElementSkillPanelToHud()
+{
+	UWidgetBlueprint* HUD = LoadWidgetBlueprint(TEXT("/Game/Retrieve/UI/WBP_HUD.WBP_HUD"));
+	UClass* SkillPanelClass = LoadClass<UUserWidget>(
+		nullptr,
+		TEXT("/Game/Retrieve/UI/HUD/WBP_ElementSkillPanel.WBP_ElementSkillPanel_C"));
+	if (!HUD || !HUD->WidgetTree || !SkillPanelClass)
+	{
+		return;
+	}
+
+	UCanvasPanel* Root = Cast<UCanvasPanel>(HUD->WidgetTree->RootWidget);
+	if (!Root)
+	{
+		return;
+	}
+
+	UWidget* SkillPanel = HUD->WidgetTree->FindWidget(TEXT("WBP_ElementSkillPanel"));
+	if (!SkillPanel)
+	{
+		SkillPanel = HUD->WidgetTree->ConstructWidget<UWidget>(SkillPanelClass, TEXT("WBP_ElementSkillPanel"));
+		Root->AddChild(SkillPanel);
+	}
+	SkillPanel->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	FAnchors Anchors(0.5f);
+	FVector2D Position = FVector2D::ZeroVector;
+	FVector2D Size(572.0f, 96.0f);
+	FVector2D Alignment(0.5f, 0.5f);
+	int32 ZOrder = 1;
+	if (UWidget* Gauge = HUD->WidgetTree->FindWidget(TEXT("WBP_ElementGauge")))
+	{
+		if (const UCanvasPanelSlot* GaugeSlot = Cast<UCanvasPanelSlot>(Gauge->Slot))
+		{
+			Anchors = GaugeSlot->GetAnchors();
+			Position = GaugeSlot->GetPosition();
+			Size.X = FMath::Max(Size.X, GaugeSlot->GetSize().X);
+			Size.Y = FMath::Max(Size.Y, GaugeSlot->GetSize().Y);
+			Alignment = GaugeSlot->GetAlignment();
+			ZOrder = GaugeSlot->GetZOrder() + 1;
+		}
+	}
+	SetCanvasSlot(SkillPanel, Anchors, Position, Size, Alignment, ZOrder);
+	CompileAndDirty(HUD);
+}
+
+void SaveElementWidgetAssets(UWidgetBlueprint* SkillPanel)
+{
+	UEditorAssetSubsystem* AssetSubsystem = GEditor ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr;
+	if (!AssetSubsystem)
+	{
+		return;
+	}
+
+	if (UWidgetBlueprint* Gauge = LoadWidgetBlueprint(TEXT("/Game/Retrieve/UI/HUD/WBP_ElementGauge.WBP_ElementGauge")))
+	{
+		AssetSubsystem->SaveLoadedAsset(Gauge, false);
+	}
+	if (SkillPanel)
+	{
+		AssetSubsystem->SaveLoadedAsset(SkillPanel, false);
+	}
+	if (UWidgetBlueprint* HUD = LoadWidgetBlueprint(TEXT("/Game/Retrieve/UI/WBP_HUD.WBP_HUD")))
+	{
+		AssetSubsystem->SaveLoadedAsset(HUD, false);
+	}
+}
+
+void ConfigureSeparatedElementWidgets()
+{
+	RemoveElementSkillIconsFromGauge();
+	UWidgetBlueprint* SkillPanel = ConfigureElementSkillPanel();
+	AddElementSkillPanelToHud();
+	SaveElementWidgetAssets(SkillPanel);
 }
 
 void ConfigureBuffDefinitionIcons()
@@ -1177,7 +1288,7 @@ bool URetrieveUIVFXEditorUtility::ConfigureEditorWorkGuide0612Assets()
 	AddTextToNormalMonsterHealthBar();
 	AddBuffStackCount();
 	RemoveBurstPopupFromHud();
-	ConfigureElementGaugeSkillIcons();
+	ConfigureSeparatedElementWidgets();
 	ConfigureBuffDefinitionIcons();
 	ReplaceBonfireCraftPanel();
 
@@ -1218,8 +1329,8 @@ bool URetrieveUIVFXEditorUtility::ReplaceBonfireCraftPanelOnly()
 bool URetrieveUIVFXEditorUtility::FixElementGaugeSkillIconFrames()
 {
 #if WITH_EDITOR
-	ConfigureElementGaugeSkillIcons();
-	UE_LOG(LogTemp, Log, TEXT("[Retrieve|ElementGauge] Skill icon frames configured."));
+	ConfigureSeparatedElementWidgets();
+	UE_LOG(LogTemp, Log, TEXT("[Retrieve|ElementGauge] Gauge and skill panel separated."));
 	return true;
 #else
 	UE_LOG(LogTemp, Warning, TEXT("[Retrieve|ElementGauge] Editor-only icon frame configuration is unavailable in non-editor builds."));

@@ -90,6 +90,8 @@ public:
 	TObjectPtr<UNiagaraSystem> FireVFXSystem;
 
 private:
+	void EnsureBonfireId();
+
 	UFUNCTION()
 	void HandleInteractionApplied(AActor* InteractionInstigator);
 
