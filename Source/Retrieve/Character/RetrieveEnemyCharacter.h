@@ -20,6 +20,7 @@ class UHitReactionComponent;
 class URetrieveHitReactionProfile;
 class UAnimMontage;
 class URetrieveMapIconComponent;
+class URetrieveOverlayStackComponent;
 
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDataRow;
@@ -169,7 +170,11 @@ protected:
 	/** 피격 반응 consumer */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UHitReactionComponent> HitReactionComponent;
-
+	
+	/** 상태이상·파훼 표시 등 오버레이 머티리얼 슬롯 단일 관리 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<URetrieveOverlayStackComponent> OverlayStackComponent;
+	
 	/** 적별로 할당하는 피격 반응 프로파일 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Combat")
 	TObjectPtr<URetrieveHitReactionProfile> HitReactionProfile;

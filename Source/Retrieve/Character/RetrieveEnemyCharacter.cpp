@@ -25,6 +25,7 @@
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Components/Enemy/BossHPBarComponent.h"
 #include "Components/Combat/HitReactionComponent.h"
+#include "Components/RetrieveOverlayStackComponent.h"
 #include "Combat/RetrieveHitReactionProfile.h"
 #include "Player/RetrievePlayerController.h"
 #include "Components/World/RetrieveMapIconComponent.h"
@@ -45,7 +46,8 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	NormalHealthBarComponent->SetupAttachment(GetRootComponent());
 	NormalHealthBarComponent->SetRelativeLocation(FVector(0.f, 0.f, 120.f));
 	HitReactionComponent = CreateDefaultSubobject<UHitReactionComponent>(TEXT("HitReactionComponent"));
-
+	OverlayStackComponent = CreateDefaultSubobject<URetrieveOverlayStackComponent>(TEXT("OverlayStackComponent"));
+	
 	// 미니맵·나침반 마커 등록. 기본 Enemy 타입(보스 서브클래스에서 Boss로 변경).
 	MapIconComponent = CreateDefaultSubobject<URetrieveMapIconComponent>(TEXT("MapIconComponent"));
 	MapIconComponent->IconType = ERetrieveMapIconType::Enemy;

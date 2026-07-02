@@ -25,6 +25,7 @@ public:
 protected:
 	virtual void OnSpecialAttackActivated() override;
 	virtual void OnSpecialAttackEnded() override;
+	virtual void OnProjectileSpawned(AEnemyProjectile* Projectile, AActor* AvatarActor) override;
 	virtual float AdjustProjectileFireDelay(float FireDelay, int32 ProjectileIndex) const override;
 	virtual bool ShouldScheduleProjectilesOnActivate() const override { return false; }
 	virtual bool UsesProjectileCompletionGuard() const override { return true; }
@@ -55,6 +56,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Wind Retreat Slash|Movement", meta=(AllowPrivateAccess="true", ClampMin="0.001"))
 	float RetreatTickInterval = 0.016f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Wind Retreat Slash|Projectile", meta=(AllowPrivateAccess="true", ClampMin="0.0"))
+	float ProjectileDamageMultiplier = 1.f;
 
 	FTimerHandle RetreatTimerHandle;
 
