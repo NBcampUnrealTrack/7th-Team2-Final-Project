@@ -25,6 +25,7 @@ class UMotionWarpingComponent;
 class URetrieveCameraWaterProbeComponent;
 class UCombatStanceComponent;
 class UCounterTimeDilationComponent;
+class UNavigationInvokerComponent;
 
 UCLASS()
 class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
@@ -91,6 +92,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UCounterTimeDilationComponent> CounterTimeDilationComponent;
+
+	/** 플레이어 주변에서만 navmesh 타일이 생성/제거되도록 하는 내비게이션 인보커. */
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Navigation")
+	TObjectPtr<UNavigationInvokerComponent> NavigationInvoker;
 
 	/** 커스텀 스켈레톤 비주얼. 메인 메시(ALS 골격)의 포즈를 Retarget Pose From Mesh ABP로 따라감. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Retrieve|Components")

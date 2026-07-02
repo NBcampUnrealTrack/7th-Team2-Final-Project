@@ -1,6 +1,7 @@
 #include "Character/SovereignCharacter.h"
 
 #include "MotionWarpingComponent.h"
+#include "NavigationInvokerComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Audio/RetrieveMusicSubsystem.h"
 #include "Camera/CameraComponent.h"
@@ -73,6 +74,12 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
 	SwimDetectionComponent = CreateDefaultSubobject<USwimDetectionComponent>(TEXT("SwimDetectionComponent"));
 	CounterTimeDilationComponent = CreateDefaultSubobject<UCounterTimeDilationComponent>(TEXT("CounterTimeDilationComponent"));
+
+	// 내비게이션 인보커: 플레이어 주변 타일만 런타임 생성/제거.
+	// (Project Settings의 bGenerateNavigationOnlyAroundNavigationInvokers=true +
+	//  레벨 RecastNavMesh의 Runtime Generation=Dynamic 조합에서 동작. OnRegister 시 자동 등록됨)
+	NavigationInvoker = CreateDefaultSubobject<UNavigationInvokerComponent>(TEXT("NavigationInvoker"));
+	NavigationInvoker->SetGenerationRadii(3000.f, 4000.f); // 생성 30m / 제거 40m — Details/BP에서 튜닝 가능
 
 	CameraSpringArm = CreateDefaultSubobject<URetrieveCameraBoom>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
