@@ -131,6 +131,11 @@ void UPatternCounterComponent::OpenCounterWindow(float WindowDuration)
 
 	bWindowOpen = true;
 
+	if (URetrieveAbilitySystemComponent* ASC = GetASC())
+	{
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Status_Vulnerable);
+	}
+	
 	const float Duration = WindowDuration > 0.f ? WindowDuration : DefaultWindowDuration;
 	GetWorld()->GetTimerManager().SetTimer(
 		WindowTimerHandle,
@@ -143,6 +148,12 @@ void UPatternCounterComponent::OpenCounterWindow(float WindowDuration)
 void UPatternCounterComponent::CloseCounterWindow()
 {
 	bWindowOpen = false;
+	
+	if (URetrieveAbilitySystemComponent* ASC = GetASC())
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Status_Vulnerable);
+	}
+	
 	GetWorld()->GetTimerManager().ClearTimer(WindowTimerHandle);
 }
 
@@ -168,7 +179,7 @@ void UPatternCounterComponent::TryCounter(FGameplayTag ActionTag, FGameplayTag E
 
 void UPatternCounterComponent::OnWindowExpired()
 {
-	bWindowOpen = false;
+	CloseCounterWindow();
 }
 
 void UPatternCounterComponent::ApplyCounterResult(AActor* Instigator)

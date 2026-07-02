@@ -27,7 +27,7 @@ AEnemyProjectile::AEnemyProjectile()
 	CollisionSphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	CollisionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	CollisionSphere->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	CollisionSphere->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	CollisionSphere->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
 	CollisionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	CollisionSphere->SetGenerateOverlapEvents(true);
 	CollisionSphere->SetCanEverAffectNavigation(false);
@@ -282,7 +282,7 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 	{
 		return;
 	}
-
+	
 	IAbilitySystemInterface* TargetInterface = Cast<IAbilitySystemInterface>(OtherActor);
 	UAbilitySystemComponent* TargetASC = TargetInterface ? TargetInterface->GetAbilitySystemComponent() : nullptr;
 	if (!TargetASC)
@@ -313,6 +313,15 @@ void AEnemyProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 
 void AEnemyProjectile::OnProjectileStopped(const FHitResult& ImpactResult)
 {
+	UE_LOG(LogTemp, Warning,
+		TEXT("[EnemyProjectile] Stopped. Self=%s Owner=%s HitActor=%s HitComp=%s bStartPenetrating=%d Location=%s"),
+		*GetNameSafe(this),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(ImpactResult.GetActor()),
+		*GetNameSafe(ImpactResult.GetComponent()),
+		ImpactResult.bStartPenetrating ? 1 : 0,
+		*GetActorLocation().ToCompactString());
+	
 	const FVector ImpactLocation = ImpactResult.bBlockingHit
 		? FVector(ImpactResult.ImpactPoint)
 		: GetActorLocation();
@@ -341,7 +350,12 @@ bool AEnemyProjectile::IsIgnoredActor(const AActor* OtherActor) const
 	{
 		return true;
 	}
-
+	
+	if (OtherActor->IsA<AEnemyProjectile>())
+	{
+		return true;
+	}
+	
 	if (const APawn* InstigatorPawn = GetInstigator())
 	{
 		if (OtherActor == InstigatorPawn->GetController())

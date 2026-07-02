@@ -143,6 +143,18 @@ void UGA_Enemy_WindRetreatSlash::OnSpecialAttackEnded()
 	Super::OnSpecialAttackEnded();
 }
 
+void UGA_Enemy_WindRetreatSlash::OnProjectileSpawned(AEnemyProjectile* Projectile, AActor* AvatarActor)
+{
+	Super::OnProjectileSpawned(Projectile, AvatarActor);
+
+	if (!Projectile)
+	{
+		return;
+	}
+
+	Projectile->SetDamageMultiplier(ProjectileDamageMultiplier);
+}
+
 float UGA_Enemy_WindRetreatSlash::AdjustProjectileFireDelay(const float FireDelay, const int32 ProjectileIndex) const
 {
 	return FMath::Max(0.f, FireDelay);
