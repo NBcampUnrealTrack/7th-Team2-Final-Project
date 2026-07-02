@@ -9,6 +9,8 @@
 #include "RetrieveArenaBlockActor.generated.h"
 
 class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
+class UPrimitiveComponent;
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDiedPayload;
 
@@ -39,12 +41,31 @@ class RETRIEVE_API ARetrieveArenaBlockActor : public AActor
 public:
 	ARetrieveArenaBlockActor();
 
+	/** 피격 링 연출 트리거. 결계 히트를 감지한 쪽(무기 트레이스 등)에서 히트 월드 좌표로 호출. */
+	UFUNCTION(BlueprintCallable, Category="Boss Arena")
+	void TriggerHitRipple(const FVector& HitWorldLocation);
+
+	/** 결계 활성화(잠금) 순간. BP에서 활성화 사운드 + 유지 루프 시작에 사용. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Boss Arena|FX")
+	void OnArenaActivated();
+
+	/** 결계에 무언가 닿은 순간(쿨다운 통과 시). BP에서 히트 사운드 재생에 사용. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Boss Arena|FX")
+	void OnArenaHit(const FVector& HitLocation);
+
+	/** 결계 해제(보스 처치) 순간. BP에서 유지 루프 정지 + 해제 사운드에 사용. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Boss Arena|FX")
+	void OnArenaDeactivated();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	void LockArena();
 	void UnlockArena();
+
+	/** 디졸브 종료 후 실제로 메시를 숨김 (UnlockArena 타이머 콜백) */
+	void HideBarrier();
 
 private:
 	/** 보스가 플레이어를 처음 인지한 순간 → 결계 잠금 */
@@ -56,6 +77,11 @@ private:
 	/** 메시지에 실려 온 액터/위치가 이 아레나의 보스인지 판별 */
 	bool IsArenaBoss(const AActor* Actor, const FVector& Location) const;
 
+	/** 결계에 무언가 부딪히면(플레이어/적/무기 충돌) 그 지점에 피격 링 */
+	UFUNCTION()
+	void OnBarrierHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+		FVector NormalImpulse, const FHitResult& Hit);
+
 protected:
 	/** 이 아레나가 감시할 보스 클래스 (스포너가 런타임에 스폰하므로 클래스로 판별) */
 	UPROPERTY(EditAnywhere, Category="Boss Arena")
@@ -64,6 +90,14 @@ protected:
 	/** 같은 클래스 보스가 여러 구역에 있을 때 구분용. 아레나 중심 기준 반경(cm), 0이면 거리 체크 안 함 */
 	UPROPERTY(EditAnywhere, Category="Boss Arena", meta=(ClampMin="0.0"))
 	float ArenaRadius = 0.f;
+
+	/** 피격 링 최소 간격(초). 결계에 밀착했을 때 링이 매 프레임 재시작되는 것 방지 */
+	UPROPERTY(EditAnywhere, Category="Boss Arena", meta=(ClampMin="0.0"))
+	float RippleCooldown = 0.3f;
+
+	/** 결계 소멸(디졸브) 지속시간(초). 보스 처치 시 이 시간에 걸쳐 사라진 뒤 숨김. */
+	UPROPERTY(EditAnywhere, Category="Boss Arena", meta=(ClampMin="0.0"))
+	float UnlockDuration = 0.6f;
 
 	UPROPERTY(VisibleAnywhere, Category="Boss Arena")
 	TObjectPtr<USceneComponent> Root;
@@ -75,6 +109,19 @@ protected:
 private:
 	FGameplayMessageListenerHandle SpottedHandle;
 	FGameplayMessageListenerHandle DiedHandle;
+
+	/** 디졸브 종료 후 숨김 타이머 */
+	FTimerHandle HideTimerHandle;
+
+	/** 결계FX 런타임 파라미터(LockTime/HitLocation/HitTime) 제어용 MID */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BarrierMID;
+
+	/** 마지막 피격 링 시각 (RippleCooldown 스로틀용) */
+	float LastRippleTime = -1000.f;
+
+	/** 현재 활성화(잠금) 상태 — 중복 활성화/해제 이벤트 방지 */
+	bool bIsLocked = false;
 
 	/** 보스 처치 후 재진입 방지 */
 	bool bCleared = false;
