@@ -135,6 +135,7 @@ namespace RetrieveGameplayTags
 	// ---- Attack type
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type, "Attack.Type");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Normal, "Attack.Type.Normal");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Environmental, "Attack.Type.Environmental");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Heavy, "Attack.Type.Heavy");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_BossHeavy, "Attack.Type.BossHeavy");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Type_Unblockable, "Attack.Type.Unblockable");
@@ -389,6 +390,7 @@ namespace RetrieveGameplayTags
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Fall, "Data.Damage.Fall");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Heal_Magnitude, "Data.Heal.Magnitude");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_Strength, "Data.Knockback.Strength");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Knockback_UpwardStrength, "Data.Knockback.UpwardStrength");

@@ -1,4 +1,4 @@
-﻿#include "Enemy/SpawnerBase.h"
+#include "Enemy/SpawnerBase.h"
 
 #include "Character/RetrievePawnData.h"
 #include "Engine/World.h"
@@ -37,10 +37,11 @@ void ASpawnerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	SpawnSphereComp->OnComponentBeginOverlap.AddDynamic(
+	// 스트리밍 재-BeginPlay 시 중복 바인딩 ensure 방지: AddUnique + EndPlay에서 해제
+	SpawnSphereComp->OnComponentBeginOverlap.AddUniqueDynamic(
 		this, &ASpawnerBase::OnSpawnSphereBeginOverlap);
 
-	DespawnSphereComp->OnComponentEndOverlap.AddDynamic(
+	DespawnSphereComp->OnComponentEndOverlap.AddUniqueDynamic(
 		this, &ASpawnerBase::OnDespawnSphereEndOverlap);
 
 	if (RespawnTimerHandles.Num() != SpawnList.Num())
@@ -77,6 +78,15 @@ void ASpawnerBase::BeginPlay()
 
 void ASpawnerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (SpawnSphereComp)
+	{
+		SpawnSphereComp->OnComponentBeginOverlap.RemoveDynamic(this, &ASpawnerBase::OnSpawnSphereBeginOverlap);
+	}
+	if (DespawnSphereComp)
+	{
+		DespawnSphereComp->OnComponentEndOverlap.RemoveDynamic(this, &ASpawnerBase::OnDespawnSphereEndOverlap);
+	}
+
 	for (FTimerHandle& Handle : RespawnTimerHandles)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(Handle);

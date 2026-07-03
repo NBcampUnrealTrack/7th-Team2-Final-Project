@@ -1,4 +1,4 @@
-﻿#include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffectExtension.h"
@@ -249,6 +249,12 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Boss_PhaseTransition))
 	{
 		return 0.f;
+	}
+
+	// 환경 데미지(낙하 등)는 방어/가드/패리 무시 — 순수 데미지.
+	if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Environmental))
+	{
+		return RawDamage;
 	}
 
 	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();

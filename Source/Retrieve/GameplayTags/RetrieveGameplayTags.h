@@ -141,6 +141,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_BossHeavy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Unblockable);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Parryable);
+	// 환경 데미지(낙하 등). 방어/가드/패리 무시 마커.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Type_Environmental);
 
 	// ---- Attack property
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property);
@@ -396,6 +398,8 @@ namespace RetrieveGameplayTags
 
 	// ---- Data
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Mul);
+	// 낙하 데미지 SetByCaller magnitude 전달용.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Fall);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Heal_Magnitude);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Strength);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_UpwardStrength);
