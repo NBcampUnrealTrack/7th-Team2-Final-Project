@@ -219,6 +219,21 @@ void URetrieveUIVFXWidget::PlayUISound(ERetrieveUISoundEvent Event) const
 	}
 }
 
+bool URetrieveUIVFXWidget::PlayContextUISound(
+	FGameplayTag ContextTag,
+	ERetrieveUISoundEvent FallbackEvent) const
+{
+	if (const UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (const URetrieveUISoundSubsystem* SoundSubsystem = GameInstance->GetSubsystem<URetrieveUISoundSubsystem>())
+		{
+			return SoundSubsystem->PlayContextUISound(this, ContextTag, FallbackEvent);
+		}
+	}
+
+	return false;
+}
+
 void URetrieveUIVFXWidget::RegisterSoundButton(UButton* Button)
 {
 	if (!Button)

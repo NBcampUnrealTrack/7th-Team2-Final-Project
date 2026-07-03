@@ -6,6 +6,7 @@
 #include "World/RetrieveBonfireActor.h"
 #include "Save/RetrieveSaveSubsystem.h"
 #include "Player/RetrievePlayerController.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Blueprint/UserWidget.h"
@@ -24,6 +25,16 @@
 #include "Fonts/FontMeasure.h"
 #include "HAL/PlatformTime.h"
 #include "Data/RetrieveMapConfigDataAsset.h"
+
+FGameplayTag URetrieveWorldMapWidget::GetPanelOpenSoundContext() const
+{
+	return RetrieveGameplayTags::UI_Sound_WorldMap_Open;
+}
+
+FGameplayTag URetrieveWorldMapWidget::GetPanelCloseSoundContext() const
+{
+	return RetrieveGameplayTags::UI_Sound_WorldMap_Close;
+}
 
 // ---------- 초기화 ----------
 

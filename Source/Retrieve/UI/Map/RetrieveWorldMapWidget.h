@@ -50,6 +50,12 @@ class RETRIEVE_API URetrieveWorldMapWidget : public URetrieveGamePanelWidget
 public:
 	URetrieveWorldMapWidget(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+protected:
+	virtual FGameplayTag GetPanelOpenSoundContext() const override;
+	virtual FGameplayTag GetPanelCloseSoundContext() const override;
+
+public:
+
 	// 탑뷰 베이크 텍스처 (UV 규약: U=동쪽, V=0=북쪽)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
 	TObjectPtr<UTexture2D> BakedMapTexture;

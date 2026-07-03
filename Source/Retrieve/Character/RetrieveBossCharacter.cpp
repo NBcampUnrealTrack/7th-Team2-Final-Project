@@ -49,10 +49,16 @@ void ARetrieveBossCharacter::InitializeComponents()
 void ARetrieveBossCharacter::HandleDeathStarted(AActor* OwningActor)
 {
 	ARetrieveCombatCharacter::HandleDeathStarted(OwningActor);
-	
+
 	if (OwnedASC)
 	{
 		OwnedASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
+	}
+
+	// ARetrieveEnemyCharacter::HandleDeathStarted를 거치지 않으므로 여기서도 직접 처리.
+	if (MapIconComponent)
+	{
+		MapIconComponent->bShowOnMinimap = false;
 	}
 
 	if (!HasAuthority())

@@ -2,12 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/Map/RetrieveMinimapTypes.h"
 #include "RetrieveMinimapWidget.generated.h"
 
 class UImage;
 class UBorder;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UTexture;
 class URetrieveMapSubsystem;
 class URetrieveMapIconRegistry;
 class URetrieveMapIconComponent;
@@ -89,6 +91,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Bonfire")
 	FLinearColor BonfireInactiveColor = FLinearColor(0.5f, 0.5f, 0.5f, 0.8f);
 
+	// bIsDepleted인 아이콘(예: 이미 개봉한 상자)에 곱해지는 틴트. 원본 색상 위에 곱연산.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
+	FLinearColor DepletedIconTint = FLinearColor(0.5f, 0.5f, 0.5f, 0.5f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Frame", meta=(ClampMin="0.1", ClampMax="1.0"))
 	float MapCircleRadiusRatio = 0.435f;
 
@@ -143,7 +149,10 @@ private:
 	// UpdateMinimapMaterial에서 SetTextureParameterValue를 매 틱 호출하지 않도록
 	// 마지막으로 설정한 텍스처를 기억한다.
 	UPROPERTY()
-	TObjectPtr<UTexture2D> CachedMIDTexture;
+	TObjectPtr<UTexture> CachedMIDTexture;
+
+	UPROPERTY(Transient)
+	FRetrieveMinimapContext ActiveContext;
 
 	void UpdateMinimapMaterial(URetrieveMapSubsystem* MapSub, const FVector& PlayerLocation);
 
@@ -152,6 +161,12 @@ private:
 		int32& LayerId,
 		const FGeometry& AllottedGeometry,
 		float CameraYaw
+	) const;
+
+	void DrawBlackCircularMap(
+		FSlateWindowElementList& OutDrawElements,
+		int32& LayerId,
+		const FGeometry& AllottedGeometry
 	) const;
 
 	void DrawImageBrush(
@@ -180,7 +195,8 @@ private:
 		const FVector& PlayerWorld,
 		const FVector2D& Center,
 		const FVector2D& WidgetSize,
-		float CameraYaw
+		float CameraYaw,
+		float EffectiveViewWorldRadius
 	) const;
 
 	FVector2D Rotate2D(const FVector2D& V, float Degrees) const;

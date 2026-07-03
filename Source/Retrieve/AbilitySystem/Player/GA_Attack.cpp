@@ -13,6 +13,8 @@
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
 #include "Character/RetrieveAlsCharacter.h"
+#include "Collision/RetrieveCollisionChannels.h"
+#include "Combat/RetrieveAttackHitLibrary.h"
 #include "Components/Combat/CombatStanceComponent.h"
 #include "Combat/WeaponTraceLibrary.h"
 #include "Components/Player/WeaponComponent.h"
@@ -313,6 +315,7 @@ void UGA_Attack::ApplyStepDamage()
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	ObjectQueryParams.AddObjectTypesToQuery(RetrieveCollisionChannels::Gatherable);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GA_Attack_Impact), false, AvatarActor);
 
 	TArray<FHitResult> AllHits;
@@ -408,6 +411,15 @@ void UGA_Attack::ApplyStepDamage()
 		}
 
 		if (bAlreadyHitThisStep) continue;
+
+		const bool bHandledAsWorldTarget = URetrieveAttackHitLibrary::TryNotifyAttackHitReceiver(
+			TargetActor, AvatarActor, Hit, RetrieveGameplayTags::Attack_Type_Normal, ResolveCurrentElementTag());
+
+		if (bHandledAsWorldTarget)
+		{
+			HitActorsThisStep.Add(TargetActor);
+			continue;
+		}
 
 		if (TargetASC)
 		{

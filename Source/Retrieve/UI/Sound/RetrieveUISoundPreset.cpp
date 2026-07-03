@@ -24,3 +24,8 @@ USoundBase* URetrieveUISoundPreset::GetSoundForEvent(ERetrieveUISoundEvent Event
 		return nullptr;
 	}
 }
+
+const FRetrieveUIContextSound* URetrieveUISoundPreset::FindContextSound(FGameplayTag ContextTag) const
+{
+	return ContextTag.IsValid() ? ContextSounds.Find(ContextTag) : nullptr;
+}
