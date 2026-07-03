@@ -124,6 +124,7 @@ protected:
 	/** GAS 태그 → ALS 상태 자동 동기화 핸들러 (RegisterGameplayTagEvent에 바인딩) */
 	virtual void OnSprintTagChanged(const FGameplayTag Tag, int32 NewCount);
 	virtual void OnCrouchTagChanged(const FGameplayTag Tag, int32 NewCount);
+	virtual void OnAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
 	virtual void OnLockOnTagChanged(const FGameplayTag Tag, int32 NewCount);
 
 	/** ALS LocomotionAction 변화 → GAS State 태그 미러링 (Rolling→Dodging 등) */

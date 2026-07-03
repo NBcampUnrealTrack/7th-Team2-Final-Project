@@ -6,6 +6,32 @@
 #include "RetrieveCameraBoom.generated.h"
 
 
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveCameraBoomProfile
+{
+	GENERATED_BODY()
+
+	// 스프링암 목표 길이. 실제 카메라 거리는 충돌 보정 후 짧아질 수 있으므로,
+	// 이 값은 "원래 의도한 카메라 거리"로만 다룬다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Camera")
+	float TargetArmLength = 300.f;
+
+	// 카메라 컴포넌트의 RelativeLocation 오프셋.
+	// SpringArm의 SocketOffset을 바꾸면 프로브/충돌 계산에도 영향을 줄 수 있으므로,
+	// 전투 시점 보정은 자식 카메라 위치에서 처리한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Camera")
+	FVector CameraRelativeOffset = FVector::ZeroVector;
+
+	// TargetArmLength로 보간하는 속도. 클수록 빠르게 목표 줌에 도달한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Camera", meta=(ClampMin="0.1"))
+	float ArmBlendSpeed = 10.f;
+
+	// CameraRelativeOffset으로 보간하는 속도. 클수록 빠르게 목표 숄더 위치에 도달한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Camera", meta=(ClampMin="0.1"))
+	float OffsetBlendSpeed = 8.f;
+};
+
+
 UCLASS(ClassGroup = "Retrieve", meta=(BlueprintSpawnableComponent))
 class RETRIEVE_API URetrieveCameraBoom : public USpringArmComponent
 {
@@ -13,6 +39,14 @@ class RETRIEVE_API URetrieveCameraBoom : public USpringArmComponent
 
 public:
 	void AddZoomInput(float AxisValue);
+
+	// 어빌리티/연출 등 외부 시스템이 일시적으로 카메라 구도를 바꾸는 진입점.
+	// 동일 ID로 다시 호출하면 현재 override를 갱신하고, 다른 ID로 호출하면 새 override가 우선한다.
+	void SetCameraBoomProfileOverride(FName OverrideId, const FRetrieveCameraBoomProfile& Profile);
+
+	// SetCameraBoomProfileOverride로 등록한 구도를 해제한다.
+	// 현재 활성 override와 ID가 다르면 무시해서, 늦게 끝난 어빌리티가 다른 구도를 지우지 않게 한다.
+	void ClearCameraBoomProfileOverride(FName OverrideId);
 
 protected:
 	// 스프링암이 충돌/지연 계산을 끝낸 직후 호출됨
@@ -56,11 +90,32 @@ protected:
 
 private:
 	bool IsOwnerLockedOn() const;
+	void CacheReturnCameraProfileIfNeeded();
+	float GetCurrentDesiredArmLength() const;
+	FVector GetDefaultCameraRelativeOffset() const;
+	float GetResolvedArmTargetLength() const;
+	float GetResolvedArmBlendSpeed() const;
+	FVector GetResolvedCameraRelativeOffset() const;
+	float GetResolvedCameraOffsetBlendSpeed() const;
+	void ClearReturnCameraProfileIfRestored();
 
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> ChildCamera;
 
 	float DesiredArmLength = -1.f;
+
+	// 외부 override를 해제했을 때 돌아갈 기준 구도.
+	// BowAim처럼 일시적인 구도는 플레이어 줌 상태를 덮어쓰면 안 되므로,
+	// override 진입 직전의 목표 거리/오프셋을 저장해 두고 해제 시 그 값으로 보간한다.
+	bool bHasReturnCameraProfile = false;
+	FRetrieveCameraBoomProfile ReturnCameraProfile;
+
+	// 현재 활성화된 외부 카메라 구도.
+	// 지금은 단일 슬롯만 둔다. 락온은 이 슬롯보다 우선순위가 높고,
+	// 여러 어빌리티가 동시에 구도를 잡아야 할 때만 스택/우선순위 구조로 확장한다.
+	bool bHasCameraProfileOverride = false;
+	FName ActiveCameraProfileOverrideId = NAME_None;
+	FRetrieveCameraBoomProfile ActiveCameraProfileOverride;
 
 	// 트레이스 미스 시 빈틈 메우기용 직전 수면Z / 미스 지속 시간
 	float LastWaterSurfaceZ = 0.f;

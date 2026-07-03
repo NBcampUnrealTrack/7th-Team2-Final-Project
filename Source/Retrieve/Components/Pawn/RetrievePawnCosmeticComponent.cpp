@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Character/Cosmetics/RetrieveAlsAnimInstance.h"
 #include "Character/Cosmetics/RetrieveCosmeticData.h"
 #include "Character/Cosmetics/RetrieveModularMeshTypes.h"
 #include "Components/Player/WeaponComponent.h"
@@ -113,6 +114,17 @@ void URetrievePawnCosmeticComponent::SetWeaponTypeTag(FGameplayTag NewWeaponType
 
 	CurrentWeaponTypeTag = Resolved;
 	CosmeticTags.AddTag(Resolved);
+
+	if (const ACharacter* Character = Cast<ACharacter>(GetOwner()))
+	{
+		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+		{
+			if (URetrieveAlsAnimInstance* AnimInstance = Cast<URetrieveAlsAnimInstance>(Mesh->GetAnimInstance()))
+			{
+				AnimInstance->SetWeaponTypeTag(CurrentWeaponTypeTag);
+			}
+		}
+	}
 }
 
 void URetrievePawnCosmeticComponent::OnElementModeChanged(const FGameplayEventData* Payload)

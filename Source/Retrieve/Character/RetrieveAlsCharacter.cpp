@@ -202,6 +202,11 @@ void ARetrieveAlsCharacter::OnAbilitySystemReady()
 	   .AddUObject(this, &ARetrieveAlsCharacter::OnCrouchTagChanged);
 
 	ASC->RegisterGameplayTagEvent(
+			RetrieveGameplayTags::State_Player_Aiming,
+			EGameplayTagEventType::NewOrRemoved)
+	   .AddUObject(this, &ARetrieveAlsCharacter::OnAimingTagChanged);
+
+	ASC->RegisterGameplayTagEvent(
 			RetrieveGameplayTags::LockOn_Active,
 			EGameplayTagEventType::NewOrRemoved)
 	   .AddUObject(this, &ARetrieveAlsCharacter::OnLockOnTagChanged);
@@ -234,6 +239,11 @@ void ARetrieveAlsCharacter::OnSprintTagChanged(const FGameplayTag Tag, int32 New
 void ARetrieveAlsCharacter::OnCrouchTagChanged(const FGameplayTag Tag, int32 NewCount)
 {
 	SetDesiredStance(NewCount > 0 ? AlsStanceTags::Crouching : AlsStanceTags::Standing);
+}
+
+void ARetrieveAlsCharacter::OnAimingTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	SetDesiredAiming(NewCount > 0);
 }
 
 void ARetrieveAlsCharacter::OnLockOnTagChanged(const FGameplayTag Tag, int32 NewCount)

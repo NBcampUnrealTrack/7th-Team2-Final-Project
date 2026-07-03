@@ -43,6 +43,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_SprintAttack, "Ability.Player.SprintAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_ParryCounter, "Ability.Player.ParryCounter");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_BowShot, "Ability.Player.BowShot");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_BowAim, "Ability.Player.BowAim");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_StanceTransition, "Ability.Player.StanceTransition");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_EquipTransition, "Ability.Player.EquipTransition");
 
@@ -80,6 +81,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_ForcedKnockback, "State.Player.ForcedKnockback");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Sprinting, "State.Player.Sprinting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Aiming, "State.Player.Aiming");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_BowShot_Empowered, "State.Player.BowShot.Empowered");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming, "State.Player.Swimming");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming_UnderWater, "State.Player.Swimming.UnderWater");
 	
@@ -358,6 +361,8 @@ namespace RetrieveGameplayTags
 
 	// ---- Message channels: UI Skill popup
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_SkillActivated, "Channel.UI.SkillActivated");
+
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Bow_Charge, "Channel.Bow.Charge");	
 
 	// ---- Message channels: Quest
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Quest_GuardianDefeated, "Channel.Quest.GuardianDefeated");
