@@ -21,7 +21,10 @@
 #include "UObject/UnrealType.h"
 #include "GameFramework/Pawn.h"
 #include "UI/Craft/CraftPanelWidget.h"
+#include "UI/Craft/RetrieveTimedActionWidget.h"
+#include "UI/Craft/CraftResultPopupWidget.h"
 #include "World/RetrieveBonfireActor.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "EngineUtils.h"
 
 namespace
@@ -223,6 +226,37 @@ void UBonfireMenuWidget::HandleSaveButtonClicked()
 	PerformSelectedSlotSave();
 }
 
+void UBonfireMenuWidget::ShowTimedAction(float Duration, const FText& ActionText, FSimpleDelegate OnComplete)
+{
+	if (URetrieveTimedActionWidget* TimedWidget =
+		Cast<URetrieveTimedActionWidget>(GetWidgetFromName(TEXT("TimedActionWidget"))))
+	{
+		TimedWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		TimedWidget->StartTimedAction(Duration, ActionText, MoveTemp(OnComplete));
+		return;
+	}
+
+	// 연출 위젯을 못 찾으면 즉시 완료 처리(폴백)
+	OnComplete.ExecuteIfBound();
+}
+
+void UBonfireMenuWidget::HideTimedAction()
+{
+	if (UWidget* TimedWidget = GetWidgetFromName(TEXT("TimedActionWidget")))
+	{
+		TimedWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UBonfireMenuWidget::ShowCraftResult(bool bSuccess, UTexture2D* Icon)
+{
+	if (UCraftResultPopupWidget* ResultPopup =
+		Cast<UCraftResultPopupWidget>(GetWidgetFromName(TEXT("CraftResultPopupWidget"))))
+	{
+		ResultPopup->ShowResult(bSuccess, Icon);
+	}
+}
+
 void UBonfireMenuWidget::HandleConfirmOverwriteClicked()
 {
 	PerformSelectedSlotSave();
@@ -382,6 +416,10 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 		return;
 	}
 
+	const bool bSelectionChanged =
+		LastAppliedSelectedSlotIndex != INDEX_NONE
+		&& SelectedSlotIndex != LastAppliedSelectedSlotIndex;
+
 	for (int32 ChildIndex = 0; ChildIndex < EntryCount; ++ChildIndex)
 	{
 		UUserWidget* Entry = Cast<UUserWidget>(SaveSlots->GetChildAt(ChildIndex));
@@ -405,6 +443,10 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 
 	LastAppliedSelectedSlotIndex = SelectedSlotIndex;
 	LastAppliedSlotEntryCount = EntryCount;
+	if (bSelectionChanged)
+	{
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Bonfire_SaveEntrySelect, ERetrieveUISoundEvent::TabSwitch);
+	}
 }
 
 int32 UBonfireMenuWidget::ResolveSlotIndex(const UUserWidget* EntryWidget, int32 FallbackSlotIndex)

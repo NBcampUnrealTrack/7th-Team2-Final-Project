@@ -214,6 +214,9 @@ private:
 	bool PassesCategoryFilter(const FRetrieveCraftRecipeRow& Recipe) const;
 	void SelectFirstVisibleRecipe();
 	void RefreshCategoryButtons();
+	void ApplyCraftButtonEnabledStyle(bool bEnabled);
+	void BeginTimedCraft();
+	void HandleTimedCraftComplete();
 
 	UFUNCTION()
 	void HandleCraftButtonClicked();
@@ -267,4 +270,14 @@ private:
 	FName SelectedRecipeId;
 	int32 CraftCount = 1;
 	int32 MaxCraftableCount = 0;
+	bool bSelectedRecipeIsEnhancement = false;
+
+	// ── 타임드 제작 진행 상태 ───────────────────────────────────────────────
+	bool bIsCrafting = false;
+	FName PendingRecipeId;
+	int32 PendingCraftCount = 0;
+	ECraftCategory PendingCraftCategory = ECraftCategory::Consumable;
+
+	static const FLinearColor CraftButtonEnabledColor;
+	static const FLinearColor CraftButtonDisabledColor;
 };

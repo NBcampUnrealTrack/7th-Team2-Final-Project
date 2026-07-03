@@ -9,6 +9,8 @@
 #include "Components/SphereComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
 #include "Components/Enemy/BossHPBarComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/RetrieveMessageTypes.h"
 
 ASpawnerBase::ASpawnerBase()
 {
@@ -56,6 +58,21 @@ void ASpawnerBase::BeginPlay()
 			break;
 		}
 	}
+
+	if (UWorld* World = GetWorld())
+	{
+		RestListenerHandle = UGameplayMessageSubsystem::Get(World)
+			.RegisterListener<FRetrievePlayerRestedPayload>(
+				RetrieveGameplayTags::Channel_Player_Rested,
+				[WeakThis = TWeakObjectPtr<ASpawnerBase>(this)]
+				(FGameplayTag, const FRetrievePlayerRestedPayload&)
+				{
+					if (ASpawnerBase* Spawner = WeakThis.Get())
+					{
+						Spawner->ForceRespawnAllDeadEntries();
+					}
+				});
+	}
 }
 
 void ASpawnerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -63,6 +80,11 @@ void ASpawnerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	for (FTimerHandle& Handle : RespawnTimerHandles)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(Handle);
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(RestListenerHandle);
 	}
 
 	DespawnAll();
@@ -212,16 +234,6 @@ void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 		return;
 	}
 
-	if (!IsPositionHidden(SpawnLocation))
-	{
-		// 아직 시야에 보임 → 이 에너미만 재시도
-		FTimerDelegate Del;
-		Del.BindUObject(this, &ASpawnerBase::TryRespawnEntry, EntryIndex);
-		GetWorld()->GetTimerManager().SetTimer(
-			RespawnTimerHandles[EntryIndex], Del, 0.5f, false);
-		return;
-	}
-
 	const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
 	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 	{
@@ -238,73 +250,8 @@ void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 	}
 }
 
-/*
-void ASpawnerBase::TryRespawn()
-{
-	UE_LOG(LogTemp, Warning, TEXT("[Spawner] TryRespawn - EntryPawns=%d"), EntryPawns.Num());
-	if (!bAllowRespawn)
-	{
-		return;
-	}
-
-	// 사망 엔트리 중 시야에 노출된 위치가 있으면 재시도
-	for (int32 i = 0; i < SpawnList.Num(); ++i)
-	{
-		APawn* Pawn = EntryPawns[i].Get();
-		if (!Pawn)
-		{
-			continue;
-		}
-
-		URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
-		if (!HealthComp || !HealthComp->IsDeadOrDying())
-		{
-			continue;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[Spawner] Entry[%d] - Pawn=%s, IsDead=%d, IsHidden=%d"),
-			i, *GetNameSafe(Pawn),
-			HealthComp ? HealthComp->IsDeadOrDying() : -1,
-			Pawn ? IsPositionHidden(SpawnList[i].SpawnPoint->GetActorLocation()) : -1);
-
-		if (!IsPositionHidden(SpawnList[i].SpawnPoint->GetActorLocation()))
-		{
-			GetWorld()->GetTimerManager().SetTimer(
-				RespawnTimerHandle, this, &ASpawnerBase::TryRespawn, 0.5f, false);
-			return;
-		}
-	}
-
-	// 전체 사망 위치 hidden → 리스폰 실행
-	for (int32 i = 0; i < SpawnList.Num(); ++i)
-	{
-		APawn* Pawn = EntryPawns[i].Get();
-		if (!Pawn)
-		{
-			continue;
-		}
-
-		URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
-		if (!HealthComp || !HealthComp->IsDeadOrDying())
-		{
-			continue;
-		}
-
-		const FTransform SpawnTransform(GetActorRotation(), SpawnList[i].SpawnPoint->GetActorLocation());
-		if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
-		{
-			Enemy->ActivateEnemy(SpawnTransform, true);
-
-			SpawnedPawns.Add(Pawn);
-		}
-	}
-
-	bIsSpawned = true;
-}
-*/
-
 // ──────────────────────────────────────────────
-//  내부: 거리 체크 / 시야 판정
+//  내부: 거리 체크
 // ──────────────────────────────────────────────
 bool ASpawnerBase::TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) const
 {
@@ -328,36 +275,6 @@ bool ASpawnerBase::TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) c
 	return false;
 }
 
-bool ASpawnerBase::IsPositionHidden(const FVector& WorldPos) const
-{
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
-	if (!PlayerPawn)
-	{
-		return false;
-	}
-
-	// 후방 부인지 체크
-	const FVector ToPos = (WorldPos - PlayerPawn->GetActorLocation()).GetSafeNormal();
-	if (FVector::DotProduct(PlayerPawn->GetActorForwardVector(), ToPos) < 0.f)
-	{
-		return true;
-	}
-
-	// 전방이더라도 지형·벽 차폐 확인
-	FHitResult Hit;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(PlayerPawn);
-
-	GetWorld()->LineTraceSingleByChannel(
-		Hit,
-		PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 60.f),
-		WorldPos,
-		ECC_Visibility, Params);
-
-	return Hit.bBlockingHit;
-}
-
 bool ASpawnerBase::IsTriggerActor(const AActor* OtherActor) const
 {
 	if (!OtherActor)
@@ -374,10 +291,45 @@ bool ASpawnerBase::IsTriggerActor(const AActor* OtherActor) const
 	return PC && OtherActor == PC->GetPawn();
 }
 
+bool ASpawnerBase::IsPlayerInRange() const
+{
+	if (!DespawnSphereComp)
+	{
+		return false;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	DespawnSphereComp->GetOverlappingActors(OverlappingActors);
+	for (AActor* Actor : OverlappingActors)
+	{
+		if (IsTriggerActor(Actor))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void ASpawnerBase::OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (bIsSpawned || !IsTriggerActor(OtherActor))
+	if (!IsTriggerActor(OtherActor))
+	{
+		return;
+	}
+
+	// 플레이어가 다시 범위 안으로 들어왔다면, 대기 중이던 리스폰 타이머는 취소한다
+	// (눈앞에서 갑자기 몬스터가 팝인하는 것을 방지).
+	if (UWorld* World = GetWorld())
+	{
+		for (FTimerHandle& Handle : RespawnTimerHandles)
+		{
+			World->GetTimerManager().ClearTimer(Handle);
+		}
+	}
+
+	if (bIsSpawned)
 	{
 		return;
 	}
@@ -388,18 +340,82 @@ void ASpawnerBase::OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp
 void ASpawnerBase::OnDespawnSphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Spawner] DespawnEndOverlap - bIsSpawned=%d, SpawnedNum=%d, bAllowRespawn=%d"),
-		bIsSpawned, SpawnedPawns.Num(), bAllowRespawn);
-
-	if (!bIsSpawned || !IsTriggerActor(OtherActor))
+	if (!IsTriggerActor(OtherActor))
 	{
 		return;
 	}
 
-	bool bHasAlivePawn = false;
-	for (const TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
+	if (bIsSpawned)
 	{
-		APawn* Pawn = WeakPawn.Get();
+		bool bHasAlivePawn = false;
+		for (const TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
+		{
+			APawn* Pawn = WeakPawn.Get();
+			if (!Pawn)
+			{
+				continue;
+			}
+
+			URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
+			if (!HealthComp || !HealthComp->IsDeadOrDying())
+			{
+				bHasAlivePawn = true;
+				break;
+			}
+		}
+
+		if (bHasAlivePawn)
+		{
+			DespawnAll();
+		}
+	}
+
+	// 플레이어가 범위를 완전히 벗어남 → 사망한 엔트리들의 리스폰 카운트를 시작한다.
+	StartPendingRespawnTimers();
+}
+
+void ASpawnerBase::OnEnemyDeath(AActor* Actor)
+{
+	SpawnedPawns.RemoveAll([Actor](const TWeakObjectPtr<APawn>& W)
+		{
+			return W.Get() == Actor;
+		});
+
+	if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
+	{
+		BossHPBar->Hide();
+	}
+
+	if (!bAllowRespawn)
+	{
+		return;
+	}
+
+	// 사망 시점에 이미 플레이어가 범위 밖이라면(예: DoT로 인한 지연 사망) 다음 EndOverlap을
+	// 기대할 수 없으므로 즉시 리스폰 카운트를 시작한다. 범위 안이라면 나중에
+	// OnDespawnSphereEndOverlap에서 시작한다.
+	if (!IsPlayerInRange())
+	{
+		StartPendingRespawnTimers();
+	}
+}
+
+void ASpawnerBase::StartPendingRespawnTimers()
+{
+	if (!bAllowRespawn)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < EntryPawns.Num(); ++i)
+	{
+		APawn* Pawn = EntryPawns[i].Get();
 		if (!Pawn)
 		{
 			continue;
@@ -408,49 +424,36 @@ void ASpawnerBase::OnDespawnSphereEndOverlap(UPrimitiveComponent* OverlappedComp
 		URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
 		if (!HealthComp || !HealthComp->IsDeadOrDying())
 		{
-			bHasAlivePawn = true;
-			break;
+			continue;
 		}
-	}
 
-	if (bHasAlivePawn)
-	{
-		DespawnAll();
+		if (World->GetTimerManager().IsTimerActive(RespawnTimerHandles[i]))
+		{
+			continue;
+		}
+
+		FTimerDelegate Del;
+		Del.BindUObject(this, &ASpawnerBase::TryRespawnEntry, i);
+		World->GetTimerManager().SetTimer(RespawnTimerHandles[i], Del, RespawnDelay, false);
 	}
 }
 
-void ASpawnerBase::OnEnemyDeath(AActor* Actor)
+void ASpawnerBase::ForceRespawnAllDeadEntries()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Spawner] OnEnemyDeath - Before Remove: SpawnedPawns=%d"), SpawnedPawns.Num());
-
-	SpawnedPawns.RemoveAll([Actor](const TWeakObjectPtr<APawn>& W)
-		{
-			return W.Get() == Actor;
-		});
-
 	if (!bAllowRespawn)
 	{
-		if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
-		{
-			BossHPBar->Hide();
-		}
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
 		return;
 	}
 
 	for (int32 i = 0; i < EntryPawns.Num(); ++i)
 	{
-		if (EntryPawns[i].Get() == Actor)
-		{
-			if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
-			{
-				BossHPBar->Hide();
-			}
-
-			FTimerDelegate Del;
-			Del.BindUObject(this, &ASpawnerBase::TryRespawnEntry, i);
-			GetWorld()->GetTimerManager().SetTimer(
-				RespawnTimerHandles[i], Del, RespawnDelay, false);
-			break;
-		}
+		World->GetTimerManager().ClearTimer(RespawnTimerHandles[i]);
+		TryRespawnEntry(i);
 	}
 }
