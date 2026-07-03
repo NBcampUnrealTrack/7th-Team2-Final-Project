@@ -75,9 +75,12 @@ protected:
 	// 레티클 앵커 기준점(0~1). (0.5,0.5)면 소켓 지점에 정중앙 정렬(몸 기준 고정)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
 	FVector2D ReticlePivot = FVector2D(0.5f, 0.5f);
-	// 캡슐 최상단 기준 부착 오프셋(cm). Z를 올리면 머리 위로 더. 캡슐 없으면 소켓 기준으로 적용
+	// 캡슐 세로 기준점: 0=바닥, 0.5=중심, 1=상단
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ReticleCapsuleHeightRatio = 0.5f;
+	// 기준점 위에 추가할 부착 오프셋(cm). 캡슐 없으면 소켓 기준으로 적용
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
-	FVector ReticleAttachOffset = FVector(0.f, 0.f, 30.f);
+	FVector ReticleAttachOffset = FVector(0.f, 0.f, 0.f);
 	// BeginPlay에서 Owner Actor에 런타임 생성/부착되는 하위 기능 컴포넌트
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnComponent> LockOnComp;

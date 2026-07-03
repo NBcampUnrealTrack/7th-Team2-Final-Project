@@ -212,9 +212,11 @@ void UCombatReactionComponent::AttachReticleToTarget(AActor* Target)
 		{
 			ReticleWidgetComp->AttachToComponent(
 				Capsule, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-			const float CapsuleTopZ = Capsule->GetScaledCapsuleHalfHeight();
+			// 0=바닥, 0.5=중심, 1=상단 → 캡슐 로컬 Z (+ 추가 오프셋)
+			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+			const float RatioZ = (ReticleCapsuleHeightRatio * 2.f - 1.f) * HalfHeight;
 			ReticleWidgetComp->SetRelativeLocation(
-				FVector(ReticleAttachOffset.X, ReticleAttachOffset.Y, CapsuleTopZ + ReticleAttachOffset.Z));
+				FVector(ReticleAttachOffset.X, ReticleAttachOffset.Y, RatioZ + ReticleAttachOffset.Z));
 			return;
 		}
 	}
