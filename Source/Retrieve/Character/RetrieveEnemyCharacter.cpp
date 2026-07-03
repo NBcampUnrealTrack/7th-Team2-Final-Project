@@ -352,7 +352,13 @@ void ARetrieveEnemyCharacter::HandleDeathStarted(AActor* OwningActor)
 	{
 		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
 	}
-	
+
+	// 사망 즉시 미니맵 아이콘 제거 — 리스폰 시 ActivateEnemy()에서 다시 켜짐.
+	if (MapIconComponent)
+	{
+		MapIconComponent->bShowOnMinimap = false;
+	}
+
 	if (!HasAuthority())
 	{
 		return;
@@ -431,6 +437,14 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 {
 	ResetAerialSpecialPhase();
 
+	// HandleDeathStarted()에서 붙인 사망 태그를 여기서 반드시 제거한다.
+	// 안 지우면 몸은 리스폰돼도 GAS가 여전히 "사망" 상태로 보고 공격/이동 어빌리티가
+	// 차단되어 제자리에 얼어붙은(T포즈) 것처럼 보인다.
+	if (UAbilitySystemComponent* ASC = OwnedASC)
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
+	}
+
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetSimulatePhysics(false);
@@ -495,7 +509,13 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 			HealthComponent->ResetHealth();
 		}
 	}
-	
+
+	// 활성화(최초 스폰/리스폰 공통) — 미니맵 아이콘 복원.
+	if (MapIconComponent)
+	{
+		MapIconComponent->bShowOnMinimap = true;
+	}
+
 	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
 	{
 		AI->Reactivate();
