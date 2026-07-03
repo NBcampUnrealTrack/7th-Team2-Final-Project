@@ -31,7 +31,8 @@ void ARetrieveArenaBlockActor::BeginPlay()
 	BarrierMID = Barrier->CreateDynamicMaterialInstance(0);
 
 	// 결계에 부딪히는 충돌 → 피격 링 트리거
-	Barrier->OnComponentHit.AddDynamic(this, &ARetrieveArenaBlockActor::OnBarrierHit);
+	// (스트리밍 재-BeginPlay 시 중복 바인딩 ensure 방지: AddUnique + EndPlay에서 해제)
+	Barrier->OnComponentHit.AddUniqueDynamic(this, &ARetrieveArenaBlockActor::OnBarrierHit);
 
 	UnlockArena();
 
@@ -48,6 +49,11 @@ void ARetrieveArenaBlockActor::BeginPlay()
 
 void ARetrieveArenaBlockActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (Barrier)
+	{
+		Barrier->OnComponentHit.RemoveDynamic(this, &ARetrieveArenaBlockActor::OnBarrierHit);
+	}
+
 	UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(this);
 
 	if (SpottedHandle.IsValid())

@@ -2,6 +2,7 @@
 #include "RetrieveAlsCharacter.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
 #include "Components/Pawn/RetrieveCharacterMovementComponent.h"
@@ -10,7 +11,9 @@
 #include "Field/FieldSystemObjects.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Logging/RetrieveLogChannels.h"
 #include "Settings/AlsCharacterSettings.h"
 #include "Settings/RetrieveSwimSettings.h"
 #include "Utility/AlsGameplayTags.h"
@@ -356,6 +359,13 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 	const bool bLanding = GetLocomotionMode() == AlsLocomotionModeTags::Grounded
 		&& PreviousLocomotionMode == AlsLocomotionModeTags::InAir;
 
+	if (bLanding)
+	{
+		// 착지 순간 하강 속도(양수 변환). ALS 낙법 판정과 동일 시점/소스(LocomotionState.Velocity.Z).
+		const float FallSpeed = -LocomotionState.Velocity.Z;
+		HandleLandingImpact(FallSpeed);
+	}
+
 	if (bLanding && bSuppressLandingRoll && Settings)
 	{
 		const bool bPrev = Settings->Rolling.bStartRollingOnLand;
@@ -368,6 +378,73 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 	}
 
 	Super::NotifyLocomotionModeChanged(PreviousLocomotionMode);
+}
+
+void ARetrieveAlsCharacter::HandleLandingImpact(float FallSpeed)
+{
+	// 깊은 물(수영=MOVE_Flying)은 Grounded 착지가 안 떠서 이 함수 자체가 안 불린다 → 물 가드 불필요.
+	// 얕은 물(Wade=Walking)은 땅처럼 낙하 데미지가 들어간다(의도).
+	if (FallSpeed < FallDamageStartSpeed)
+	{
+		return; // 착지/낙법은 ALS 기본에 위임
+	}
+
+	// leap attack 등 의도된 착지(GA가 착지 전에 SetSuppressLandingRoll을 예약)는 자체 몽타주가
+	// 착지 연출을 소유한다. 진입 시점에 이미 켜져 있으면 그 경우 → Landing 몽타주만 스킵(겹침 방지).
+	// 낙하 데미지는 그대로 적용한다(높은 곳 leap attack이면 죽어야 하므로).
+	const bool bIntendedLanding = bSuppressLandingRoll;
+
+	// 낙법 실패 구간: 낙법 억제 + 낙하 데미지
+	SetSuppressLandingRoll(true);
+	ApplyFallDamage(FallSpeed);
+
+	// 데미지로 죽지 않았고 의도된 착지가 아니면 낙법 실패 착지 몽타주(비틀거림/경직).
+	// 죽었으면(HP<=0) GA_Die가 사망 Ragdoll을 소유하므로 여기선 스킵한다.
+	if (HasAuthority() && !bIntendedLanding)
+	{
+		const URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+		const float Health = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetHealthAttribute()) : 0.f;
+		if (Health > 0.f && LandingFailMontage)
+		{
+			PlayAnimMontage(LandingFailMontage);
+		}
+	}
+
+	UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Impact FallSpeed=%.0f (threshold=%.0f)"),
+		FallSpeed, FallDamageStartSpeed);
+}
+
+void ARetrieveAlsCharacter::ApplyFallDamage(float FallSpeed)
+{
+	if (!HasAuthority())
+	{
+		return; // Health는 서버 권위 — 서버에서만 적용
+	}
+
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (!ASC || !FallDamageEffect)
+	{
+		return;
+	}
+
+	// 곡선(방식 B): 임계 초과분에 비례. 즉사 라인 없음 — 데미지가 현재 HP를 넘으면 사망.
+	const float Damage = (FallSpeed - FallDamageStartSpeed) * FallDamageScale;
+	if (Damage <= 0.f)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	Context.AddInstigator(this, this);
+
+	const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(FallDamageEffect, 1.f, Context);
+	if (Spec.IsValid())
+	{
+		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Fall, Damage);
+		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Damage=%.1f (FallSpeed=%.0f)"), Damage, FallSpeed);
+	}
 }
 
 void ARetrieveAlsCharacter::TurnYawTowardActor(AActor* Target, float InterpSpeed)

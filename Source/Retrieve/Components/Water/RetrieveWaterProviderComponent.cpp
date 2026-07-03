@@ -25,8 +25,9 @@ void URetrieveWaterProviderComponent::BeginPlay()
 
 	if (WaterTriggerBox)
 	{
-		WaterTriggerBox->OnComponentBeginOverlap.AddDynamic(this, &URetrieveWaterProviderComponent::HandleBeginOverlap);
-		WaterTriggerBox->OnComponentEndOverlap.AddDynamic(this, &URetrieveWaterProviderComponent::HandleEndOverlap);
+		// 스트리밍 재-BeginPlay 시 중복 바인딩 ensure 방지: AddUnique + EndPlay에서 해제
+		WaterTriggerBox->OnComponentBeginOverlap.AddUniqueDynamic(this, &URetrieveWaterProviderComponent::HandleBeginOverlap);
+		WaterTriggerBox->OnComponentEndOverlap.AddUniqueDynamic(this, &URetrieveWaterProviderComponent::HandleEndOverlap);
 	}
 
 	// 수면 = 태그된 메시 컴포넌트의 Z (박스와 분리 — 강 스플라인 메시 등 확장점).
@@ -38,6 +39,16 @@ void URetrieveWaterProviderComponent::BeginPlay()
 			break;
 		}
 	}
+}
+
+void URetrieveWaterProviderComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (WaterTriggerBox)
+	{
+		WaterTriggerBox->OnComponentBeginOverlap.RemoveDynamic(this, &URetrieveWaterProviderComponent::HandleBeginOverlap);
+		WaterTriggerBox->OnComponentEndOverlap.RemoveDynamic(this, &URetrieveWaterProviderComponent::HandleEndOverlap);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void URetrieveWaterProviderComponent::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

@@ -9,6 +9,8 @@ class UAbilitySystemComponent;
 class URetrieveAbilitySystemComponent;
 class URetrievePawnExtensionComponent;
 class URetrievePawnData;
+class UAnimMontage;
+class UGameplayEffect;
 class USpringArmComponent;
 
 /**
@@ -142,12 +144,34 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Pawn")
 	TObjectPtr<const URetrievePawnData> DefaultPawnData;
 
+	/** 낙하 데미지가 시작되는 하강속도(cm/s). 이 아래는 낙법/착지. Step 5에서 Settings로 이전 예정. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
+	float FallDamageStartSpeed = 1400.f;
+
+	/** 낙하 데미지 곡선 기울기. Damage = (FallSpeed - FallDamageStartSpeed) * Scale. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
+	float FallDamageScale = 0.2f;
+
+	/** IncomingDamage에 SetByCaller(Data.Damage.Fall)로 낙하 데미지를 싣는 GE. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
+	TSubclassOf<UGameplayEffect> FallDamageEffect;
+
+	/** 낙법 실패 착지(피해 구간, 죽지 않음) 시 재생할 몽타주. 미할당이면 재생 생략. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
+	TObjectPtr<UAnimMontage> LandingFailMontage;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<URetrievePawnExtensionComponent> PawnExtensionComponent;
 
 	// 수영 회전 튜너블은 URetrieveSwimSettings(Project Settings > Retrieve > Swim)로 이전됨.
 
 private:
+	/** 착지 순간 하강속도로 낙사/경직 판정. 피해 구간이면 낙법 억제 + 낙하 데미지(Step 2). */
+	void HandleLandingImpact(float FallSpeed);
+
+	/** FallSpeed→데미지 환산 후 GE_FallDamage를 self-apply. 서버 권위. */
+	void ApplyFallDamage(float FallSpeed);
+
 	void RefreshSwimmingRotation(float DeltaTime);
 	
 	/** PostInitializeComponents에서 캡슐 디폴트 HalfHeight 캐싱. Crouch 보정용. */
