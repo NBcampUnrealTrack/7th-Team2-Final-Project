@@ -9,6 +9,8 @@
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class UMeshComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
 class UProjectileMovementComponent;
 class USphereComponent;
 class UStaticMeshComponent;
@@ -28,6 +30,13 @@ struct FRetrieveProjectileSpawnParams
 	FGameplayTag ElementTag;
 	TSubclassOf<UGameplayEffect> ElementStatusEffect;
 	FGameplayTag ChargeBonusEventTag;
+
+	// ---- 조준 / 낙차 ----
+	// 조준 지점(카메라 트레이스 히트). bHasAimPoint가 true면 이 지점으로 직선 조준한다.
+	FVector AimPointLocation = FVector::ZeroVector;
+	bool bHasAimPoint = false;
+	// 0이면 직선 비행(스태프 강공 등). >0이면 중력 낙차(활). 클수록 빨리 떨어진다.
+	float GravityScaleOverride = 0.f;
 };
 
 /**
@@ -83,7 +92,15 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;
-	
+
+	// 비행 트레일 VFX. TrailVFX가 설정돼 있으면 BeginPlay에서 이 컴포넌트에 붙여 재생한다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile|VFX", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraComponent> TrailVFXComponent;
+
+	// 화살 꼬리 트레일 Niagara. 비워두면 트레일 없음(선택). BP/에셋에서 지정.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|VFX")
+	TObjectPtr<UNiagaraSystem> TrailVFX;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 

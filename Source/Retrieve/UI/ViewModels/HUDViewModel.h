@@ -8,6 +8,7 @@ class UQuestTrackerViewModel;
 class UElementGaugeViewModel;
 class UBossStatusViewModel;
 class UPlayerStatusViewModel;
+class UReticleViewModel;
 
 /**
  * HUD 루트 ViewModel. 패널별 자식 VM을 UPROPERTY로 소유하여, HUD 위젯 인스턴스와 수명을 공유합니다.
@@ -33,6 +34,9 @@ public:
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
 	UQuestTrackerViewModel* GetQuestTracker() const { return QuestTracker; }
 
+	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
+	UReticleViewModel* GetReticle() const { return Reticle; }
+
 private:
 	UPROPERTY()
 	TObjectPtr<UPlayerStatusViewModel> PlayerStatus;
@@ -45,4 +49,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UQuestTrackerViewModel> QuestTracker;
+
+	UPROPERTY()
+	TObjectPtr<UReticleViewModel> Reticle;
 };

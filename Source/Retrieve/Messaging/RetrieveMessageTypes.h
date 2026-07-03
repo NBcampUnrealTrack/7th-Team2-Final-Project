@@ -96,6 +96,35 @@ struct FRetrieveDamageDealtPayload
 	FGameplayTag TargetEventTag;
 };
 
+// ---- 활 차징 ------------------------------------------------------
+UENUM(BlueprintType)
+enum class ERetrieveBowChargePhase : uint8
+{
+	Started, // 차징 시작 (조준 유지 + 좌 클릭 홀드 진입)
+	Cancelled, // 조준 해제 등으로 차징 취소 (발사 없음)
+	Released // 발사
+};
+
+/** Channel.Bow.Charge 로컬 페이로드. GA_BowShot이 차징 상태 변화를 발행, WBP_Reticle이 구독. */
+USTRUCT(BlueprintType)
+struct FRetrieveBowChargePayload
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bow")
+	TObjectPtr<AActor> Instigator = nullptr;
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bow")
+	ERetrieveBowChargePhase Phase = ERetrieveBowChargePhase::Started;
+	
+	// 풀 차징까지 걸리는 시간 초, 위젯이 0 -> 1 애님 길이로 사용
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Bow")
+	float MaxChargeTime = 0.f;
+	
+	// Released 시점의 실제 차징 비율(0~1), 발사 피드백 용
+	float ChargeRatio = 0.f;
+};
+
 // ---- 루멘 ---------------------------------------------------------
 
 /** 루멘 Follow/Positioning 모드. 호스트만 쓸 수 있습니다. ULumenFollowComponent에서 Replicate 됩니다. */

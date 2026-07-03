@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AlsAnimationInstance.h"
 #include "GameplayEffectTypes.h"
+#include "GameplayTagContainer.h"
 
 #include "RetrieveAlsAnimInstance.generated.h"
 
@@ -25,6 +26,15 @@ class RETRIEVE_API URetrieveAlsAnimInstance : public UAlsAnimationInstance
 public:
 	/** ASC가 준비된 시점에 PropertyMap을 바인딩. 두 경로 어느 쪽에서 호출돼도 안전. */
 	virtual void InitializeWithAbilitySystem(UAbilitySystemComponent* ASC);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Weapon", Transient)
+	FGameplayTag WeaponTypeTag;
+
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon",
+		Meta = (BlueprintThreadSafe, ReturnDisplayName = "Weapon Type Tag"))
+	const FGameplayTag& GetWeaponTypeTag() const { return WeaponTypeTag; }
+
+	void SetWeaponTypeTag(const FGameplayTag& NewWeaponTypeTag);
 
 	// 스탠스 접근자. C++는 '선언'만 하고 구현은 자식 ABP가 담당한다(= 프로퍼티 맵이 채운 BP 변수를 반환).
 	// 레이어 ABP 상태기가 GetRetrieveParent로 '캐스트 없이' thread-safe 호출 → 클래스가 달라도 BP 값을 읽는다.

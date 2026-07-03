@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -29,6 +30,18 @@ void URetrieveAlsAnimInstance::NativeInitializeAnimation()
 		}
 		// ASC가 아직 없으면 (PS 리플리케이션 지연 등) 경로 B에서 처리됨.
 	}
+
+	if (!WeaponTypeTag.IsValid())
+	{
+		SetWeaponTypeTag(RetrieveGameplayTags::Weapon_Type_Unarmed);
+	}
+}
+
+void URetrieveAlsAnimInstance::SetWeaponTypeTag(const FGameplayTag& NewWeaponTypeTag)
+{
+	WeaponTypeTag = NewWeaponTypeTag.IsValid()
+		? NewWeaponTypeTag
+		: RetrieveGameplayTags::Weapon_Type_Unarmed;
 }
 
 #if WITH_EDITOR

@@ -4,6 +4,7 @@
 #include "ElementGaugeViewModel.h"
 #include "PlayerStatusViewModel.h"
 #include "QuestTrackerViewModel.h"
+#include "ReticleViewModel.h"
 
 UHUDViewModel::UHUDViewModel()
 {
@@ -11,4 +12,5 @@ UHUDViewModel::UHUDViewModel()
 	ElementGauge = CreateDefaultSubobject<UElementGaugeViewModel>(TEXT("ElementGauge"));
 	BossStatus = CreateDefaultSubobject<UBossStatusViewModel>(TEXT("BossStatus"));
 	QuestTracker = CreateDefaultSubobject<UQuestTrackerViewModel>(TEXT("QuestTracker"));
+	Reticle = CreateDefaultSubobject<UReticleViewModel>(TEXT("Reticle"));
 }

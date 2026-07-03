@@ -15,6 +15,48 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "NiagaraComponent.h"
+
+namespace
+{
+	// 조준점 P를 포물선으로 통과하도록 발사 방향을 구한다. (상용 활/투척 조준 표준)
+	// 발사각 theta에 대한 2차방정식을 풀어 각을 얻는다. 사거리 밖이면 false.
+	bool SolveBallisticArc(const FVector& M, const FVector& P, float v, float g, FVector& OutDirection)
+	{
+		if (v <= 0.f || g <= 0.f)
+		{
+			return false;
+		}
+
+		// 1. 머즐에서 목표까지 수평거리(dx), 높이차(dz)로 분해
+		const FVector Delta = P - M;
+		const FVector Horizontal(Delta.X, Delta.Y, 0.f);
+		const float dx = Horizontal.Size();
+		const float dz = Delta.Z;
+		if (dx < KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		// 2. tan(theta)에 대한 2차식  a*T^2 - dx*T + (dz+a) = 0  의 계수 a, 판별식
+		const float a = (g * dx * dx) / (2.f * v * v);
+		const float Discriminant = dx * dx - 4.f * a * (dz + a);
+		if (Discriminant < 0.f)
+		{
+			return false; // 사거리 밖: 이 속도로는 P에 못 닿음
+		}
+
+		// 3. 저각 해로 발사각 theta 계산
+		const float TanTheta = (dx - FMath::Sqrt(Discriminant)) / (2.f * a);
+		const float Theta = FMath::Atan(TanTheta);
+
+		// 4. 수평 성분 + 수직 성분 합쳐 발사 방향
+		const FVector Velocity = Horizontal.GetSafeNormal() * (v * FMath::Cos(Theta))
+		                       + FVector::UpVector * (v * FMath::Sin(Theta));
+		OutDirection = Velocity.GetSafeNormal();
+		return !OutDirection.IsNearlyZero();
+	}
+}
 
 AStaffProjectile::AStaffProjectile()
 {
@@ -44,6 +86,11 @@ AStaffProjectile::AStaffProjectile()
 	ProjectileMovement->MaxSpeed = 1800.f;
 	ProjectileMovement->ProjectileGravityScale = 0.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
+
+	// 비행 트레일 슬롯. 에셋(TrailVFX)이 있으면 BeginPlay에서 재생. 없으면 조용히 무시.
+	TrailVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TrailVFXComponent"));
+	TrailVFXComponent->SetupAttachment(CollisionSphere);
+	TrailVFXComponent->SetAutoActivate(false);
 }
 
 void AStaffProjectile::Launch(const FVector& Direction, float Speed)
@@ -111,9 +158,29 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 		}
 	}
 
-	// 발사 방향: 조준 타겟(중심 Bounds) → 없으면 컨트롤 회전 전방
+	// 발사 방향: 조준점 탄도해(아크) -> 오토락 타겟 -> 컨트롤 회전 전방
 	FVector Direction = AvatarActor->GetActorForwardVector();
-	if (IsValid(AimTarget))
+	if (Params.bHasAimPoint && Params.GravityScaleOverride > 0.f)
+	{
+		// 조준점 A를 아크로 통과하는 발사각 계산 → 착탄이 크로스헤어와 일치(숄더 시차 자동 해소).
+		const float GravityMag = FMath::Abs(World->GetGravityZ()) * Params.GravityScaleOverride;
+		FVector BallisticDir;
+		if (SolveBallisticArc(SpawnLocation, Params.AimPointLocation, Params.Speed, GravityMag, BallisticDir))
+		{
+			Direction = BallisticDir;
+		}
+		else
+		{
+			// 사거리 밖: A로 직선 조준(도달 못 하고 짧게 떨어짐 = 임계사거리 초과).
+			Direction = (Params.AimPointLocation - SpawnLocation).GetSafeNormal();
+		}
+	}
+	else if (Params.bHasAimPoint)
+	{
+		// 중력 0(직선): 조준점으로 직선.
+		Direction = (Params.AimPointLocation - SpawnLocation).GetSafeNormal();
+	}
+	else if (IsValid(AimTarget))
 	{
 		FVector AimLocation = AimTarget->GetActorLocation();
 		if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(AimTarget->GetRootComponent()))
@@ -146,6 +213,15 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 	Projectile->ConfigureAttack(SourceASC, AvatarActor, Params.DamageMultiplier, Params.HitReactType,
 		Params.AttackTypeTag, Params.ElementTag, Params.ElementStatusEffect, Params.ChargeBonusEventTag);
 	Projectile->Launch(Direction, Params.Speed);
+
+	// 낙차 적용: 활 화살만(스태프 강공 등은 0이라 직선 유지).
+	// Launch가 MaxSpeed를 발사속도로 고정하므로 반드시 Launch 뒤에 처리한다.
+	// MaxSpeed=0(무제한)으로 풀어야 중력이 낙하를 가속한다(고정 시 등속 clamp로 낙차가 뭉개짐).
+	if (Params.GravityScaleOverride > 0.f && Projectile->ProjectileMovement)
+	{
+		Projectile->ProjectileMovement->ProjectileGravityScale = Params.GravityScaleOverride;
+		Projectile->ProjectileMovement->MaxSpeed = 0.f;
+	}
 	return Projectile;
 }
 
@@ -161,6 +237,13 @@ void AStaffProjectile::BeginPlay()
 	if (ProjectileMovement)
 	{
 		ProjectileMovement->OnProjectileStop.AddDynamic(this, &AStaffProjectile::OnProjectileStopped);
+	}
+
+	// 트레일 에셋이 지정돼 있으면 붙여서 재생.
+	if (TrailVFX && TrailVFXComponent)
+	{
+		TrailVFXComponent->SetAsset(TrailVFX);
+		TrailVFXComponent->Activate(true);
 	}
 }
 

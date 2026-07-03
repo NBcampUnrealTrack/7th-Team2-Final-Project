@@ -631,7 +631,10 @@ bool ULockOnComponent::ShouldSuppressLockOn() const
 	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
 	if (IsValid(ASC))
 	{
-		 return ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming);
+		 return 
+			ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming)
+			|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Cinematic)
+			|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Aiming);
 		// 나중에 Cinematic/Dead 등 다른 억제 조건도 여기에 OR로 추가 가능
 	}
 	

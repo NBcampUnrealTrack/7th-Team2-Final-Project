@@ -1298,6 +1298,9 @@ void ARetrievePlayerController::EnsureHUDViewModel()
 	View->SetViewModel(TEXT("ElementGauge"), HUDViewModelInstance->GetElementGauge());
 	View->SetViewModel(TEXT("BossStatus"), HUDViewModelInstance->GetBossStatus());
 
+	// 레티클은 URetrieveReticleWidget이 자체 NativeConstruct에서 VM 주입 + 소스 바인딩을
+	// 직접 처리한다 (WBP_HUD에 루트 MVVM 뷰가 없어 상단 주입이 닿지 않으므로 QuestTracker 방식).
+
 	// QuestTracker는 URetrieveQuestTrackerWidget이 자체 NativeConstruct에서 VM 주입 + 시드를
 	// 직접 처리한다 (WBP_HUD에 루트 MVVM 뷰가 없어 상단 주입이 닿지 않으므로 ElementGauge 방식).
 
