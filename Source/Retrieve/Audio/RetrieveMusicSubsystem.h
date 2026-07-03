@@ -22,8 +22,8 @@ struct FRetrieveSessionStatePayload;
  * 전투 BGM 판정:
  *  - 진입: Channel.Enemy.PlayerSpotted (로컬 플레이어가 대상일 때) — 나를 포착한 몬스터를 교전 집합에 추가.
  *          공격/무기 장착만으로는 진입하지 않는다.
- *  - 이탈: 교전 집합이 비는 순간. 폴링으로 죽었거나(State.Enemy.Dead) 추적을 포기한(State.Enemy.Chase 없음)
- *          몬스터를 걷어내 "나를 추적 중인 몬스터가 하나도 없을 때" 기본 BGM으로 복귀한다.
+ *  - 이탈: 교전 집합이 비는 순간. 폴링으로 죽음(Dead)/비활성(Idle)/추적 포기 복귀(Return) 상태인
+ *          몬스터를 걷어내 "교전 중인 몬스터가 하나도 없을 때" 기본 BGM으로 복귀한다.
  *
  * 지역(존): RetrieveMusicZoneVolume이 진입 시 자기 트랙 세트를 넘긴다.
  *  - bUseCombatMusic=false: 전투 여부와 무관하게 ZoneBGM만 (성 지역 등).

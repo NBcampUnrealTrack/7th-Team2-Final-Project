@@ -210,10 +210,13 @@ void URetrieveMusicSubsystem::PollEngagement()
 		{
 			if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy))
 			{
-				// 살아있고(!Dead) 여전히 나를 추적(Chase) 중이어야 "전투 중"으로 센다.
+				// 죽음(Dead)/비활성(Idle)/추적 포기 후 복귀(Return)면 교전 종료로 본다.
+				// 그 외(추적·공격·특수공격·피격·경직·그로기 등)는 모두 "교전 중"으로 유지한다.
+				// Chase는 '추적 이동' 중에만 켜지므로(근접 공격·피격 중엔 꺼짐) Chase 단독 판정은 오판을 부른다.
 				bStillEngaged =
 					!ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Dead) &&
-					ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Chase);
+					!ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Idle) &&
+					!ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Return);
 			}
 		}
 
