@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "UI/RetrieveElementAwareWidget.h"
 #include "UI/Sound/RetrieveUISoundTypes.h"
 #include "UI/VFX/RetrieveUIVFXTypes.h"
@@ -82,6 +83,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI VFX|Common")
 	bool PlayTabSwitchVFX(UWidget* TargetWidget);
+
+	/** Plays an action-specific preset entry and falls back to a role sound when it is unassigned. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI Sound", meta = (Categories = "UI.Sound"))
+	bool PlayContextUISound(FGameplayTag ContextTag, ERetrieveUISoundEvent FallbackEvent) const;
 
 protected:
 	friend class URetrieveUISoundButtonBinder;

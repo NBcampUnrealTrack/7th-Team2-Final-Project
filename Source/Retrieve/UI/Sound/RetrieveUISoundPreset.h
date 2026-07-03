@@ -2,10 +2,26 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "UI/Sound/RetrieveUISoundTypes.h"
 #include "RetrieveUISoundPreset.generated.h"
 
 class USoundBase;
+
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveUIContextSound
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase> Sound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float VolumeMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "0.5", ClampMax = "2.0"))
+	float PitchMultiplier = 1.0f;
+};
 
 UCLASS(BlueprintType)
 class RETRIEVE_API URetrieveUISoundPreset : public UDataAsset
@@ -38,5 +54,11 @@ public:
 		meta = (ClampMin = 0.0f, ClampMax = 2.0f))
 	float VolumeMultiplier = 1.0f;
 
+	/** Optional action-specific sounds layered on top of the role-based defaults. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound|Context",
+		meta = (Categories = "UI.Sound"))
+	TMap<FGameplayTag, FRetrieveUIContextSound> ContextSounds;
+
 	USoundBase* GetSoundForEvent(ERetrieveUISoundEvent Event) const;
+	const FRetrieveUIContextSound* FindContextSound(FGameplayTag ContextTag) const;
 };

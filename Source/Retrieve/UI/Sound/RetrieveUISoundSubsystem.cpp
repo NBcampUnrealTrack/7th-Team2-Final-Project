@@ -96,3 +96,47 @@ void URetrieveUISoundSubsystem::PlayUISound(
 	const float Volume = FMath::Max(0.0f, Preset->VolumeMultiplier);
 	UGameplayStatics::PlaySound2D(Widget, Sound, Volume);
 }
+
+bool URetrieveUISoundSubsystem::PlayContextUISound(
+	const URetrieveUIVFXWidget* Widget,
+	FGameplayTag ContextTag,
+	ERetrieveUISoundEvent FallbackEvent) const
+{
+	if (!Widget)
+	{
+		return false;
+	}
+
+	const URetrieveUISoundPreset* Preset = ResolvePreset(Widget);
+	if (!Preset)
+	{
+		return false;
+	}
+
+	const URetrieveUISoundPreset* ContextPreset = Preset;
+	const FRetrieveUIContextSound* ContextSound = ContextPreset->FindContextSound(ContextTag);
+	if (!ContextSound && ActiveRegistry && ActiveRegistry->FallbackPreset && ActiveRegistry->FallbackPreset != Preset)
+	{
+		ContextPreset = ActiveRegistry->FallbackPreset;
+		ContextSound = ContextPreset->FindContextSound(ContextTag);
+	}
+
+	if (ContextSound)
+	{
+		if (ContextSound->Sound)
+		{
+			const float Volume = FMath::Max(0.0f, ContextPreset->VolumeMultiplier * ContextSound->VolumeMultiplier);
+			const float Pitch = FMath::Max(0.01f, ContextSound->PitchMultiplier);
+			UGameplayStatics::PlaySound2D(Widget, ContextSound->Sound, Volume, Pitch);
+			return true;
+		}
+	}
+
+	if (USoundBase* FallbackSound = Preset->GetSoundForEvent(FallbackEvent))
+	{
+		UGameplayStatics::PlaySound2D(Widget, FallbackSound, FMath::Max(0.0f, Preset->VolumeMultiplier));
+		return true;
+	}
+
+	return false;
+}

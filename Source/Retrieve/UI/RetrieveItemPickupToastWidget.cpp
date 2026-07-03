@@ -26,16 +26,16 @@ void URetrieveItemPickupToastWidget::NativeConstruct()
 		DefaultVFXTarget = ToastVFXTarget;
 	}
 
-	Anim_In = FindAnimationByName(TEXT("Anim_In"));
-	Anim_Out = FindAnimationByName(TEXT("Anim_Out"));
+	BoundAnim_In = FindAnimationByName(TEXT("Anim_In"));
+	BoundAnim_Out = FindAnimationByName(TEXT("Anim_Out"));
 
 	UE_LOG(LogTemp, Log,
 		TEXT("[ToastWidget] Animation binding: Anim_In=%s Anim_Out=%s Class=%s"),
-		*GetNameSafe(Anim_In), *GetNameSafe(Anim_Out), *GetClass()->GetPathName());
+		*GetNameSafe(BoundAnim_In), *GetNameSafe(BoundAnim_Out), *GetClass()->GetPathName());
 
-	if (Anim_In)
+	if (BoundAnim_In)
 	{
-		PlayAnimation(Anim_In);
+		PlayAnimation(BoundAnim_In);
 	}
 	else
 	{
@@ -65,9 +65,9 @@ void URetrieveItemPickupToastWidget::NativeDestruct()
 
 void URetrieveItemPickupToastWidget::PlayExitAnimation()
 {
-	if (Anim_Out)
+	if (BoundAnim_Out)
 	{
-		PlayAnimation(Anim_Out);
+		PlayAnimation(BoundAnim_Out);
 	}
 	else
 	{

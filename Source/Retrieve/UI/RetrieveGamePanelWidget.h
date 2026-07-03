@@ -39,4 +39,6 @@ public:
 
 protected:
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FGameplayTag GetPanelOpenSoundContext() const { return FGameplayTag(); }
+	virtual FGameplayTag GetPanelCloseSoundContext() const { return FGameplayTag(); }
 };

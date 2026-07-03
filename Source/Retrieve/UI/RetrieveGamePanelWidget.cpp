@@ -16,13 +16,29 @@ void URetrieveGamePanelWidget::RequestClose()
 
 bool URetrieveGamePanelWidget::PlayPanelOpenVFX()
 {
-	PlayUISound(ERetrieveUISoundEvent::PanelOpen);
+	const FGameplayTag ContextTag = GetPanelOpenSoundContext();
+	if (ContextTag.IsValid())
+	{
+		PlayContextUISound(ContextTag, ERetrieveUISoundEvent::PanelOpen);
+	}
+	else
+	{
+		PlayUISound(ERetrieveUISoundEvent::PanelOpen);
+	}
 	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Open);
 }
 
 bool URetrieveGamePanelWidget::PlayPanelCloseVFX()
 {
-	PlayUISound(ERetrieveUISoundEvent::PanelClose);
+	const FGameplayTag ContextTag = GetPanelCloseSoundContext();
+	if (ContextTag.IsValid())
+	{
+		PlayContextUISound(ContextTag, ERetrieveUISoundEvent::PanelClose);
+	}
+	else
+	{
+		PlayUISound(ERetrieveUISoundEvent::PanelClose);
+	}
 	return PlayUIVFX(RetrieveGameplayTags::UI_VFX_Panel_Close, true);
 }
 

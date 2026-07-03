@@ -44,11 +44,15 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
+	// 이름을 WBP의 애니메이션 트랙(Anim_In/Anim_Out)과 동일하게 두면 UMG 블루프린트 컴파일러가
+	// "Internal Compiler Error: Tried to create a property ... already exists" 로 컴파일에 실패한다.
+	// (BindWidgetAnim 메타 없이도 UMG 컴파일러는 동일 이름의 애니메이션 프로퍼티를 매번 새로 생성 시도함)
+	// 그래서 C++ 멤버 이름은 다르게 두고, FindAnimationByName 조회 문자열만 "Anim_In"/"Anim_Out"으로 유지한다.
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|HUD|Animation")
-	TObjectPtr<UWidgetAnimation> Anim_In;
+	TObjectPtr<UWidgetAnimation> BoundAnim_In;
 
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|HUD|Animation")
-	TObjectPtr<UWidgetAnimation> Anim_Out;
+	TObjectPtr<UWidgetAnimation> BoundAnim_Out;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI VFX|Toast")
 	TObjectPtr<UWidget> ToastVFXTarget;

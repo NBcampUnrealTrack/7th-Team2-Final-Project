@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "UI/Sound/RetrieveUISoundTypes.h"
 #include "RetrieveUISoundSubsystem.generated.h"
@@ -25,6 +26,10 @@ public:
 	const URetrieveUISoundPreset* ResolvePreset(const URetrieveUIVFXWidget* Widget) const;
 
 	void PlayUISound(const URetrieveUIVFXWidget* Widget, ERetrieveUISoundEvent Event) const;
+	bool PlayContextUISound(
+		const URetrieveUIVFXWidget* Widget,
+		FGameplayTag ContextTag,
+		ERetrieveUISoundEvent FallbackEvent) const;
 
 private:
 	UPROPERTY()
