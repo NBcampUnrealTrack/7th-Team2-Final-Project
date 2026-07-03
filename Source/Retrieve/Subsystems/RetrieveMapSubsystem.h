@@ -4,8 +4,11 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "TimerManager.h"
 #include "Data/RetrieveMapIconRegistry.h"
+#include "UI/Map/RetrieveMinimapTypes.h"
 #include "RetrieveMapSubsystem.generated.h"
 
+class ARetrieveIndoorMapCaptureActor;
+class ARetrieveMinimapAreaVolume;
 class URetrieveMapIconComponent;
 class UTexture2D;
 class URetrieveMapConfigDataAsset;
@@ -244,6 +247,18 @@ public:
 	 */
 	float GetZoom(float ViewWorldRadius) const;
 
+	/** Register/unregister spatial indoor minimap overrides as WP cells stream. */
+	void RegisterMinimapArea(ARetrieveMinimapAreaVolume* Area);
+	void UnregisterMinimapArea(ARetrieveMinimapAreaVolume* Area);
+
+	/** Returns the highest-priority indoor context at this location, or the outdoor map context. */
+	FRetrieveMinimapContext ResolveMinimapContext(
+		const FVector& WorldLocation,
+		float OutdoorViewWorldRadius = 3000.0f) const;
+
+	/** Queues one shared render-target capture for a live indoor area. */
+	void RequestIndoorCapture(ARetrieveMinimapAreaVolume* Area);
+
 	/** 현재 감지된 바운드를 Output Log에 출력 (BP에서 호출 가능) */
 	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
 	void DebugPrintBounds() const;
@@ -277,6 +292,12 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<URetrieveMapIconComponent>> Icons;
+
+	UPROPERTY()
+	TArray<TObjectPtr<ARetrieveMinimapAreaVolume>> MinimapAreas;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ARetrieveIndoorMapCaptureActor> IndoorCaptureActor;
 
 	/** 월드맵 전용 영구 스냅샷 배열 */
 	UPROPERTY()

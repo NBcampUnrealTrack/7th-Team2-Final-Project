@@ -25,6 +25,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	bool bShowOnMinimap = true;
 
+	// true면 미니맵에서 회색조 등 "비활성화" 상태로 그려짐 (예: 이미 개봉한 상자).
+	// bShowOnMinimap과 별개 — 아이콘 자체는 계속 보이되 시각적으로만 흐려짐.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
+	bool bIsDepleted = false;
+
 	// 월드맵에 표시할 위치 이름 (비어 있으면 레이블 미표시)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	FText MapLabel;

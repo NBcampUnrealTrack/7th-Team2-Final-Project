@@ -13,12 +13,13 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Rendering/DrawElements.h"
 #include "SlateMaterialBrush.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Styling/CoreStyle.h"
 #include "Data/RetrieveMapConfigDataAsset.h"
 
 namespace
 {
-	static UTexture2D* ResolveMinimapTexture(const URetrieveMinimapWidget* Widget, const URetrieveMapSubsystem* MapSub)
+	static UTexture* ResolveMinimapTexture(const URetrieveMinimapWidget* Widget, const URetrieveMapSubsystem* MapSub)
 	{
 		if (!Widget)
 		{
@@ -99,7 +100,7 @@ void URetrieveMinimapWidget::NativeConstruct()
 
 	Image_Minimap->SetBrushFromMaterial(MinimapMID);
 
-	UTexture2D* InitTex = ResolveMinimapTexture(this, MapSub);
+	UTexture* InitTex = ResolveMinimapTexture(this, MapSub);
 	if (InitTex)
 	{
 		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), InitTex);
@@ -274,8 +275,20 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	// Subsystem 초기화 순서가 늦는 경우에도 여기에서 한 번 더 보장한다.
 	MapSub->EnsureMapConfigLoaded();
 	
-	const FVector2D PlayerUV = MapSub->WorldToUV(PlayerLocation);
-	const float Zoom = MapSub->GetZoom(ViewWorldRadius);
+	ActiveContext = MapSub->ResolveMinimapContext(PlayerLocation, ViewWorldRadius);
+	if (ActiveContext.DisplayMode == ERetrieveMinimapDisplayMode::WorldMap && BakedMapTexture)
+	{
+		ActiveContext.Texture = BakedMapTexture;
+	}
+
+	if (ActiveContext.DisplayMode == ERetrieveMinimapDisplayMode::LiveRenderTarget &&
+		!ActiveContext.Texture && ActiveContext.SourceArea)
+	{
+		MapSub->RequestIndoorCapture(ActiveContext.SourceArea);
+	}
+
+	const FVector2D PlayerUV = ActiveContext.WorldToUV(PlayerLocation);
+	const float Zoom = ActiveContext.GetZoom();
 
 	MinimapMID->SetVectorParameterValue(
 		TEXT("CenterUV"),
@@ -283,13 +296,41 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 	);
 	MinimapMID->SetScalarParameterValue(TEXT("Zoom"), Zoom);
 
-	UTexture2D* ActiveTexture = ResolveMinimapTexture(this, MapSub);
+	UTexture* ActiveTexture = ActiveContext.Texture;
+	if (!ActiveTexture && ActiveContext.DisplayMode == ERetrieveMinimapDisplayMode::WorldMap)
+	{
+		ActiveTexture = ResolveMinimapTexture(this, MapSub);
+	}
 	if (ActiveTexture && ActiveTexture != CachedMIDTexture)
 	{
 		MinimapMID->SetTextureParameterValue(TEXT("MapTexture"), ActiveTexture);
 		CachedMIDTexture = ActiveTexture;
 	}
 
+}
+
+void URetrieveMinimapWidget::DrawBlackCircularMap(
+	FSlateWindowElementList& OutDrawElements,
+	int32& LayerId,
+	const FGeometry& AllottedGeometry
+) const
+{
+	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
+	const FVector2D Center = WidgetSize * 0.5f;
+	const float Radius = FMath::Min(WidgetSize.X, WidgetSize.Y) * MapCircleRadiusRatio;
+	const FVector2D Diameter(Radius * 2.0f, Radius * 2.0f);
+	const FVector2D Position = Center - Diameter * 0.5f;
+	const FSlateRoundedBoxBrush BlackBrush(FLinearColor::Black, FVector4(Radius));
+
+	FSlateDrawElement::MakeBox(
+		OutDrawElements,
+		++LayerId,
+		AllottedGeometry.ToPaintGeometry(
+			FVector2f(Diameter),
+			FSlateLayoutTransform(FVector2f(Position))),
+		&BlackBrush,
+		ESlateDrawEffect::None,
+		FLinearColor::White);
 }
 
 void URetrieveMinimapWidget::DrawCircularMap(
@@ -410,7 +451,23 @@ int32 URetrieveMinimapWidget::NativePaint(
 		MapSub->EnsureMapConfigLoaded();
 	}
 
-	DrawCircularMap(OutDrawElements, CurrentLayer, AllottedGeometry, CameraYaw);
+	FRetrieveMinimapContext PaintContext = ActiveContext;
+	if (MapSub)
+	{
+		PaintContext = MapSub->ResolveMinimapContext(PlayerLoc, ViewWorldRadius);
+	}
+	const bool bDrawBlack = PaintContext.DisplayMode == ERetrieveMinimapDisplayMode::Black ||
+		((PaintContext.DisplayMode == ERetrieveMinimapDisplayMode::BakedTexture ||
+		  PaintContext.DisplayMode == ERetrieveMinimapDisplayMode::LiveRenderTarget) &&
+		 !PaintContext.HasDrawableTexture());
+	if (bDrawBlack)
+	{
+		DrawBlackCircularMap(OutDrawElements, CurrentLayer, AllottedGeometry);
+	}
+	else
+	{
+		DrawCircularMap(OutDrawElements, CurrentLayer, AllottedGeometry, CameraYaw);
+	}
 
 	CurrentLayer = Super::NativePaint(
 		Args, AllottedGeometry, MyCullingRect, OutDrawElements,
@@ -423,7 +480,7 @@ int32 URetrieveMinimapWidget::NativePaint(
 	OutDrawElements.PushClip(ClipZone);
 
 	// 에너미/아이콘 마커 (라이브 MapIconComponent) — 원형 반경 안으로 컬링.
-	if (World && MapSub && MapSub->HasValidBounds())
+	if (World && MapSub && MapSub->HasValidBounds() && PaintContext.bShowIcons)
 	{
 		for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
 		{
@@ -433,13 +490,15 @@ int32 URetrieveMinimapWidget::NativePaint(
 			}
 
 			const FVector IconWorld = Icon->GetOwner()->GetActorLocation();
-			if (FVector::Dist2D(PlayerLoc, IconWorld) > ViewWorldRadius)
+			if (!PaintContext.ContainsZ(IconWorld.Z) ||
+				FVector::Dist2D(PlayerLoc, IconWorld) > PaintContext.ViewWorldRadius)
 			{
 				continue;
 			}
 
 			const FVector2D IconPos = WorldToLocal(
-				IconWorld, PlayerLoc, Center, WidgetSize, CameraYaw
+				IconWorld, PlayerLoc, Center, WidgetSize, CameraYaw,
+				PaintContext.ViewWorldRadius
 			);
 
 			if (FVector2D::Distance(IconPos, Center) > MiniMapRadius)
@@ -452,12 +511,18 @@ int32 URetrieveMinimapWidget::NativePaint(
 	}
 
 	// 사용자 웨이포인트 마커 — 원형 반경 안으로 컬링.
-	if (MapSub)
+	if (MapSub && PaintContext.bShowWaypoints)
 	{
 		for (const FUserWaypoint& WP : MapSub->GetUserWaypoints())
 		{
+			if (!PaintContext.ContainsZ(WP.WorldLocation.Z))
+			{
+				continue;
+			}
+
 			const FVector2D WpPos = WorldToLocal(
-				WP.WorldLocation, PlayerLoc, Center, WidgetSize, CameraYaw
+				WP.WorldLocation, PlayerLoc, Center, WidgetSize, CameraYaw,
+				PaintContext.ViewWorldRadius
 			);
 
 			if (FVector2D::Distance(WpPos, Center) > MiniMapRadius)
@@ -490,6 +555,7 @@ int32 URetrieveMinimapWidget::NativePaint(
 	}
 
 	// 플레이어 마커 (항상 중앙, NorthUp 모드에서 카메라 방향으로 회전).
+	if (PaintContext.bShowPlayerMarker)
 	{
 		const float MarkerRot = (RotationMode == ERetrieveMinimapRotationMode::NorthUp) ? CameraYaw : 0.0f;
 
@@ -554,10 +620,11 @@ FVector2D URetrieveMinimapWidget::WorldToLocal(
 	const FVector& PlayerWorld,
 	const FVector2D& Center,
 	const FVector2D& WidgetSize,
-	float CameraYaw
+	float CameraYaw,
+	float EffectiveViewWorldRadius
 ) const
 {
-	const float InvDiameter = 1.0f / FMath::Max(ViewWorldRadius * 2.0f, 1.0f);
+	const float InvDiameter = 1.0f / FMath::Max(EffectiveViewWorldRadius * 2.0f, 1.0f);
 
 	FVector2D ScreenDelta(
 		 (TargetWorld.Y - PlayerWorld.Y) * WidgetSize.X * InvDiameter,
@@ -602,6 +669,11 @@ void URetrieveMinimapWidget::DrawIcon(
 	{
 		const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(Icon->GetOwner());
 		Color = (Bonfire && Bonfire->IsActivated()) ? BonfireActivatedColor : BonfireInactiveColor;
+	}
+
+	if (Icon->bIsDepleted)
+	{
+		Color *= DepletedIconTint;
 	}
 
 	const FVector2D IconSz(Size, Size);

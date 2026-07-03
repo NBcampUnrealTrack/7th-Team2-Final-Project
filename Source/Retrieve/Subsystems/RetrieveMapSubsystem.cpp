@@ -1,6 +1,8 @@
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapConfigDataAsset.h"
+#include "World/RetrieveIndoorMapCaptureActor.h"
+#include "World/RetrieveMinimapAreaVolume.h"
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -521,4 +523,85 @@ void URetrieveMapSubsystem::UnregisterIcon(URetrieveMapIconComponent* Icon)
 {
 	Icons.Remove(Icon);
 	// 스냅샷은 제거하지 않음 — 언로드 후에도 월드맵에 아이콘이 유지되어야 함
+}
+
+void URetrieveMapSubsystem::RegisterMinimapArea(ARetrieveMinimapAreaVolume* Area)
+{
+	if (IsValid(Area))
+	{
+		MinimapAreas.AddUnique(Area);
+	}
+}
+
+void URetrieveMapSubsystem::UnregisterMinimapArea(ARetrieveMinimapAreaVolume* Area)
+{
+	MinimapAreas.Remove(Area);
+}
+
+FRetrieveMinimapContext URetrieveMapSubsystem::ResolveMinimapContext(
+	const FVector& WorldLocation,
+	float OutdoorViewWorldRadius) const
+{
+	ARetrieveMinimapAreaVolume* BestArea = nullptr;
+	int32 BestPriority = MIN_int32;
+	float BestVolume = BIG_NUMBER;
+
+	for (ARetrieveMinimapAreaVolume* Area : MinimapAreas)
+	{
+		if (!IsValid(Area) || !Area->ContainsLocation(WorldLocation))
+		{
+			continue;
+		}
+
+		const FBox AreaBox = Area->GetAreaBox();
+		const FVector Size = AreaBox.IsValid ? AreaBox.GetSize() : FVector(BIG_NUMBER);
+		const float Volume = Size.X * Size.Y * Size.Z;
+		if (!BestArea || Area->Priority > BestPriority ||
+			(Area->Priority == BestPriority && Volume < BestVolume))
+		{
+			BestArea = Area;
+			BestPriority = Area->Priority;
+			BestVolume = Volume;
+		}
+	}
+
+	if (BestArea)
+	{
+		return BestArea->BuildContext();
+	}
+
+	FRetrieveMinimapContext OutdoorContext;
+	OutdoorContext.DisplayMode = ERetrieveMinimapDisplayMode::WorldMap;
+	OutdoorContext.Texture = BakedMapTexture;
+	OutdoorContext.MapExtentXY = FVector2D(
+		FMath::Max(MapExtentXY.X, 1.0f),
+		FMath::Max(MapExtentXY.Y, 1.0f));
+	OutdoorContext.MapCenter = MapOrigin + OutdoorContext.MapExtentXY * 0.5f;
+	OutdoorContext.ViewWorldRadius = FMath::Max(OutdoorViewWorldRadius, 1.0f);
+	return OutdoorContext;
+}
+
+void URetrieveMapSubsystem::RequestIndoorCapture(ARetrieveMinimapAreaVolume* Area)
+{
+	if (!IsValid(Area))
+	{
+		return;
+	}
+
+	if (!IsValid(IndoorCaptureActor))
+	{
+		if (UWorld* World = GetWorld())
+		{
+			for (TActorIterator<ARetrieveIndoorMapCaptureActor> It(World); It; ++It)
+			{
+				IndoorCaptureActor = *It;
+				break;
+			}
+		}
+	}
+
+	if (IsValid(IndoorCaptureActor))
+	{
+		IndoorCaptureActor->RequestCapture(Area);
+	}
 }
