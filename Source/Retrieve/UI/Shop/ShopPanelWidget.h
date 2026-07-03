@@ -436,6 +436,8 @@ private:
 		FName        ItemId;
 		FGameplayTag CategoryTag;
 		int32        Quantity = 0;
+		// 같은 아이템이 여러 슬롯에 나뉘어 있을 때 정확히 이 슬롯을 판매하기 위한 식별자.
+		int32        SlotInstanceId = -1;
 	};
 	TArray<FSellSlotCache>              CurrentSellSlots;
 	TArray<TObjectPtr<UShopSellSlotWidget>> SellSlotWidgets;

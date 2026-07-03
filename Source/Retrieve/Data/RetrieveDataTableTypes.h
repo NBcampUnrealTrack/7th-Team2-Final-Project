@@ -933,6 +933,10 @@ struct RETRIEVE_API FRetrieveItemStack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item", meta = (ClampMin = "0"))
 	int32 Quantity = 1;
+
+	// 무기/방어구 전용: 같은 ItemId라도 슬롯을 구분하기 위한 고유 식별자. 소모품/재료는 사용 안 함(INDEX_NONE).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
+	int32 SlotInstanceId = INDEX_NONE;
 };
 
 USTRUCT(BlueprintType)
@@ -945,6 +949,10 @@ struct RETRIEVE_API FRetrieveEquippedArmorEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Armor")
 	FName ArmorItemId = NAME_None;
+
+	// 장착된 정확한 인벤토리 슬롯(FRetrieveItemStack::SlotInstanceId)을 기억해 UI가 그 슬롯만 하이라이트할 수 있게 한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Armor")
+	int32 SlotInstanceId = INDEX_NONE;
 };
 
 // SaveGame 복원용 인벤토리 스냅샷
@@ -968,6 +976,10 @@ struct RETRIEVE_API FRetrieveInventorySaveData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	FName EquippedWeaponId = NAME_None;
 
+	// 장착된 정확한 슬롯 복원용. FRetrieveItemStack::SlotInstanceId와 매칭.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	int32 EquippedWeaponSlotInstanceId = INDEX_NONE;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	TArray<FRetrieveEquippedArmorEntry> EquippedArmorSlots;
 
@@ -976,6 +988,10 @@ struct RETRIEVE_API FRetrieveInventorySaveData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	int32 Currency = 0;
+
+	// 다음에 무기/방어구를 새로 획득할 때 부여할 SlotInstanceId. 불러온 슬롯들과 겹치지 않도록 이어서 사용.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	int32 NextSlotInstanceId = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -1485,6 +1501,14 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Economy", meta = (ClampMin = "0"))
 	int32 BasePrice = 500;
+
+	// 강화 단계. 0 = 기본(미강화), 1~10 = +1~+10 강화 무기.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Enhancement", meta = (ClampMin = "0", ClampMax = "10"))
+	int32 EnhancementLevel = 0;
+
+	// 강화 체인의 +0 원본 무기 ItemId. EnhancementLevel이 0이면 비워둔다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Enhancement")
+	FName BaseWeaponId = NAME_None;
 };
 
 // 방어구 데이터. 복제는 RowName을 사용하고, 외형은 VisualData를 로컬에서 재구성한다.
@@ -1667,6 +1691,19 @@ struct RETRIEVE_API FRetrieveCraftRecipeRow : public FTableRowBase
 	// 해당 태그를 보유한 경우에만 레시피 표시
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft")
 	FGameplayTagContainer RequiredProgressTags;
+
+	// 제작 소요 시간(초). TimedAction 위젯 재생 길이로 사용된다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft", meta = (ClampMin = "0.0"))
+	float CraftDuration = 3.0f;
+
+	// 제작 성공 확률(0~1). 1.0이면 항상 성공(확률 UI 숨김). 장비 강화 레시피에서만 1.0 미만 사용.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SuccessChance = 1.0f;
+
+	// 장비 강화 전용: 강화 대상(이전 단계) 장비. RequiredMaterials와 달리 "성공 시에만" 소모되고
+	// 실패하면 보존된다. ItemId가 None이면 일반 레시피(강화 아님).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Craft|Enhancement")
+	FRetrieveItemStack UpgradeTargetItem;
 };
 
 // UI 아이콘 조회용 테이블. RowName은 ItemId와 동일하게 사용

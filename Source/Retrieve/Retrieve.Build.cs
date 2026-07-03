@@ -41,7 +41,8 @@ public class Retrieve : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"Niagara",
-			"AssetRegistry"
+			"AssetRegistry",
+			"GeometryCollectionEngine"
 		});
 
 		if (Target.bBuildEditor)

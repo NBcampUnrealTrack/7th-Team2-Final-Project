@@ -232,6 +232,7 @@ namespace RetrieveGameplayTags
 	
 	// ---- ALS Locomotion Actions
 	UE_DEFINE_GAMEPLAY_TAG(LocomotionAction_Attack, "Als.LocomotionAction.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(LocomotionAction_Interacting, "Als.LocomotionAction.Interacting");
 	
 	// ---- Gameplay events: combat
 	UE_DEFINE_GAMEPLAY_TAG(GameplayEvent_ComboFinisher, "GameplayEvent.Combo.Finisher");
@@ -441,6 +442,16 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Press, "UI.VFX.Button.Press");
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Button_Release, "UI.VFX.Button.Release");
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Tab_Switch, "UI.VFX.Tab.Switch");
+
+	// ---- Contextual UI sound
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Inventory_Equip, "UI.Sound.Inventory.Equip");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Inventory_Unequip, "UI.Sound.Inventory.Unequip");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Inventory_UseConsumable, "UI.Sound.Inventory.UseConsumable");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Bonfire_SaveEntrySelect, "UI.Sound.Bonfire.SaveEntrySelect");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Craft_Consumable, "UI.Sound.Craft.Consumable");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_Craft_Equipment, "UI.Sound.Craft.Equipment");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_WorldMap_Open, "UI.Sound.WorldMap.Open");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Sound_WorldMap_Close, "UI.Sound.WorldMap.Close");
 	
 	// ---- Quest steps
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_Awakening, "Quest.Step.Awakening");

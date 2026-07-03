@@ -234,6 +234,9 @@ namespace RetrieveGameplayTags
 
 	// ---- ALS Locomotion Actions (Retrieve 확장)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(LocomotionAction_Attack);
+	// 상호작용(모닥불, 상자 열기 등) 풀바디 몽타주 재생 중 ALS 회전/스탠스 로직을 잠그기 위한 태그.
+	// 몽타주에 UAlsAnimNotifyState_SetLocomotionAction으로 붙여서 사용한다.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(LocomotionAction_Interacting);
 
 	// ---- Gameplay events: combat
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ComboFinisher);
@@ -447,6 +450,16 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Button_Press);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Button_Release);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_VFX_Tab_Switch);
+
+	// ---- Contextual UI sound
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Inventory_Equip);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Inventory_Unequip);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Inventory_UseConsumable);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Bonfire_SaveEntrySelect);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Craft_Consumable);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_Craft_Equipment);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_WorldMap_Open);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Sound_WorldMap_Close);
 
 	// ---- Quest steps
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_Awakening);

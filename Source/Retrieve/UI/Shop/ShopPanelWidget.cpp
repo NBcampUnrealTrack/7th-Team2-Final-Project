@@ -221,9 +221,10 @@ void UShopPanelWidget::RefreshSellGrid(FGameplayTag CategoryTag)
 		if (Stack.Quantity <= 0) continue;
 
 		FSellSlotCache Cache;
-		Cache.ItemId      = Stack.ItemId;
-		Cache.CategoryTag = Stack.ItemCategoryTag;
-		Cache.Quantity    = Stack.Quantity;
+		Cache.ItemId         = Stack.ItemId;
+		Cache.CategoryTag    = Stack.ItemCategoryTag;
+		Cache.Quantity       = Stack.Quantity;
+		Cache.SlotInstanceId = Stack.SlotInstanceId;
 		const int32 SlotIdx = CurrentSellSlots.Num();
 		CurrentSellSlots.Add(Cache);
 
@@ -427,7 +428,7 @@ bool UShopPanelWidget::ExecuteSellSelected()
 		const FSellSlotCache& S = CurrentSellSlots[Idx];
 
 		const int32 Price = CalcSellPrice(S.ItemId, S.CategoryTag) * S.Quantity;
-		if (InventoryComponent->RemoveItem(S.ItemId, S.CategoryTag, S.Quantity))
+		if (InventoryComponent->RemoveItem(S.ItemId, S.CategoryTag, S.Quantity, S.SlotInstanceId))
 		{
 			InventoryComponent->AddCurrency(Price);
 			PushRepurchaseRecord(S.ItemId, S.CategoryTag, S.Quantity, Price);
