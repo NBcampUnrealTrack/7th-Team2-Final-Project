@@ -19,7 +19,8 @@ void UCraftMaterialRowWidget::InitMaterialRow(
 	UDataTable* InMatTable,
 	FName InItemId,
 	int32 InRequired,
-	int32 InOwned)
+	int32 InOwned,
+	UDataTable* InWeaponTable)
 {
 	IconTable = InIconTable;
 	MatTable = InMatTable;
@@ -40,13 +41,17 @@ void UCraftMaterialRowWidget::InitMaterialRow(
 	}
 
 	FText MaterialName = FText::FromName(NativeItemId);
-	if (Text_MatName && MatTable)
+	if (const FRetrieveMaterialItemRow* MatRow = MatTable
+		? MatTable->FindRow<FRetrieveMaterialItemRow>(NativeItemId, TEXT("CraftMaterialRow"), false)
+		: nullptr)
 	{
-		if (const FRetrieveMaterialItemRow* MatRow =
-			MatTable->FindRow<FRetrieveMaterialItemRow>(NativeItemId, TEXT("CraftMaterialRow")))
-		{
-			MaterialName = MatRow->DisplayName;
-		}
+		MaterialName = MatRow->DisplayName;
+	}
+	else if (const FRetrieveWeaponDataRow* WeaponRow = InWeaponTable
+		? InWeaponTable->FindRow<FRetrieveWeaponDataRow>(NativeItemId, TEXT("CraftMaterialRow"), false)
+		: nullptr)
+	{
+		MaterialName = WeaponRow->DisplayName;
 	}
 	if (Text_MatName)
 	{

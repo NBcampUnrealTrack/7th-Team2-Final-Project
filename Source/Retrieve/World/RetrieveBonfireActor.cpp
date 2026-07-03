@@ -3,12 +3,17 @@
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
+#include "Components/Player/StaminaComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "NiagaraFunctionLibrary.h"
+#include "GameFramework/Character.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Player/RetrievePlayerController.h"
 #include "Save/RetrieveSaveSubsystem.h"
 #include "UI/Bonfire/BonfireMenuWidget.h"
@@ -72,6 +77,19 @@ ARetrieveBonfireActor::ARetrieveBonfireActor()
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[BonfireActor] NS_Fire_01 에셋을 찾지 못함 — 경로 확인 필요"));
+	}
+
+	// 휴식 시 캐릭터 몸 주변에 재생할 회복 VFX 기본값.
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> HealVFXFinder(
+		TEXT("/Game/External/PolygonParticleFX/Particles/NS_Heal_02"));
+	if (HealVFXFinder.Succeeded())
+	{
+		HealVFXSystem = HealVFXFinder.Object;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BonfireActor] NS_Heal_02 에셋을 찾지 못함 — 경로 확인 필요"));
 	}
 
 	// 감지/프롬프트 컴포넌트(Manager_InteractionTarget BP)를 "InteractionTarget" 이름으로 생성.
@@ -163,7 +181,31 @@ void ARetrieveBonfireActor::EnsureBonfireId()
 void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigator)
 {
 	ActivateBonfire();
-	
+
+	// 휴식 = 체력·스태미나 풀 회복. InteractionInstigator는 Pawn 또는 PlayerController로 전달될 수 있다.
+	APawn* RestingPawn = Cast<APawn>(InteractionInstigator);
+	if (!RestingPawn)
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(InteractionInstigator))
+		{
+			RestingPawn = PC->GetPawn();
+		}
+	}
+	if (RestingPawn)
+	{
+		if (URetrieveHealthComponent* HealthComp = RestingPawn->FindComponentByClass<URetrieveHealthComponent>())
+		{
+			HealthComp->ResetHealth();
+		}
+		if (UStaminaComponent* StaminaComp = RestingPawn->FindComponentByClass<UStaminaComponent>())
+		{
+			StaminaComp->ResetStamina();
+		}
+
+		// 회복됐다는 시각적 피드백 — 캐릭터 몸 주변에 회복 VFX 재생.
+		PlayHealVFXOnPawn(RestingPawn);
+	}
+
 	// 이 모닥불을 리스폰 체크포인트로 기록(호스트 권한. OnApplied는 호스트 전용), 이미 불이 켜진 모닥불에 재휴식해도 갱신됨.
 	if (UWorld* World = GetWorld())
 	{
@@ -204,6 +246,63 @@ void ARetrieveBonfireActor::HandleInteractionApplied(AActor* InteractionInstigat
 	else
 	{
 		TryOpenBonfireMenu(InteractionInstigator);
+	}
+}
+
+void ARetrieveBonfireActor::PlayHealVFXOnPawn(APawn* Pawn) const
+{
+	if (!HealVFXSystem || !Pawn)
+	{
+		return;
+	}
+
+	USceneComponent* AttachTarget = Pawn->GetRootComponent();
+	if (const ACharacter* Character = Cast<ACharacter>(Pawn))
+	{
+		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+		{
+			AttachTarget = Mesh;
+		}
+	}
+	if (!AttachTarget)
+	{
+		return;
+	}
+
+	UNiagaraComponent* HealVFXComp = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		HealVFXSystem,
+		AttachTarget,
+		NAME_None,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		EAttachLocation::SnapToTarget,
+		/*bAutoDestroy*/ true);
+
+	if (!HealVFXComp)
+	{
+		return;
+	}
+
+	HealVFXComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HealVFXComp->SetGenerateOverlapEvents(false);
+
+	// SpawnRate 기반 이미터가 EmitterState 설정에 따라 무한 루프될 수 있으므로,
+	// 일정 시간 뒤 강제로 Deactivate하여 새 파티클 생성을 멈춘다(기존 파티클은 자연 소멸).
+	if (UWorld* World = GetWorld())
+	{
+		TWeakObjectPtr<UNiagaraComponent> WeakHealVFXComp = HealVFXComp;
+		FTimerHandle HealVFXStopTimer;
+		World->GetTimerManager().SetTimer(
+			HealVFXStopTimer,
+			FTimerDelegate::CreateLambda([WeakHealVFXComp]()
+			{
+				if (WeakHealVFXComp.IsValid())
+				{
+					WeakHealVFXComp->Deactivate();
+				}
+			}),
+			HealVFXDuration,
+			false);
 	}
 }
 

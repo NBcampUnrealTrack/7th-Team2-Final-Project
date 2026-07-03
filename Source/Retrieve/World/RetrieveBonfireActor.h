@@ -89,7 +89,20 @@ public:
 		meta = (DisplayName = "불꽃 VFX System"))
 	TObjectPtr<UNiagaraSystem> FireVFXSystem;
 
+	/** 휴식(체력/스태미나 회복) 시 캐릭터 몸 주변에 재생되는 회복 VFX. BP에서 교체 가능. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Bonfire|VFX",
+		meta = (DisplayName = "회복 VFX System"))
+	TObjectPtr<UNiagaraSystem> HealVFXSystem;
+
+	/** 회복 VFX가 SpawnRate 기반으로 무한 루프되는 경우를 대비한 강제 정지 시간(초). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Bonfire|VFX",
+		meta = (DisplayName = "회복 VFX 지속시간"))
+	float HealVFXDuration = 2.5f;
+
 private:
+	/** RestingPawn 몸 주변에 회복 VFX를 부착 재생한다. */
+	void PlayHealVFXOnPawn(APawn* Pawn) const;
+
 	void EnsureBonfireId();
 
 	UFUNCTION()

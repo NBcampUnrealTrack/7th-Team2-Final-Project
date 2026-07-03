@@ -11,6 +11,7 @@ class UWidget;
 class UTexture2D;
 class UUserWidget;
 class URetrieveSaveSubsystem;
+class URetrieveTimedActionWidget;
 
 /**
  * 모닥불 메뉴 위젯의 C++ 기반 클래스.
@@ -31,6 +32,15 @@ public:
 	/** 활성 탭 시각 갱신 (true=저장 탭 활성). BP 탭 클릭에서도 호출 가능 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Bonfire")
 	void SetActiveTab(bool bSaveActive);
+
+	/** WBP에 내장된 TimedActionWidget(Panel_ConfirmOverwrite와 동일한 패턴)을 표시하고 재생한다. */
+	void ShowTimedAction(float Duration, const FText& ActionText, FSimpleDelegate OnComplete);
+
+	/** TimedActionWidget을 숨긴다. */
+	void HideTimedAction();
+
+	/** WBP에 내장된 CraftResultPopupWidget에 강화 성공/실패 결과를 표시한다. */
+	void ShowCraftResult(bool bSuccess, UTexture2D* Icon);
 
 	// ── 탭 색상 (에디터에서 조정 가능, 재빌드 불필요) ──
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Bonfire|Tab")

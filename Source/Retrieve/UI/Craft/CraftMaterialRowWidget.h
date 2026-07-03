@@ -28,6 +28,8 @@ public:
 	 * @param InItemId     재료 아이템 ID
 	 * @param InRequired   레시피 요구 수량
 	 * @param InOwned      현재 보유 수량
+	 * @param InWeaponTable FRetrieveWeaponDataRow rows DataTable — 강화 대상 장비처럼 InMatTable에 없는
+	 *                      아이템의 이름을 조회할 때 사용(생략 가능)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Craft")
 	void InitMaterialRow(
@@ -35,7 +37,8 @@ public:
 		UDataTable* InMatTable,
 		FName InItemId,
 		int32 InRequired,
-		int32 InOwned);
+		int32 InOwned,
+		UDataTable* InWeaponTable = nullptr);
 
 	/** 보유량만 갱신 (재료 획득/사용 후 호출) */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Craft")

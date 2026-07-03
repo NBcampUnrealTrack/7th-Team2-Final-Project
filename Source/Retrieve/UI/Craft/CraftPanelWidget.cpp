@@ -1,11 +1,14 @@
 #include "UI/Craft/CraftPanelWidget.h"
 
+#include "UI/Bonfire/BonfireMenuWidget.h"
 #include "UI/Craft/CraftMaterialRowWidget.h"
 #include "UI/Craft/CraftRecipeEntryWidget.h"
 #include "UI/RetrieveItemDescriptionHelper.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
@@ -15,6 +18,9 @@
 #include "Components/VerticalBox.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+
+const FLinearColor UCraftPanelWidget::CraftButtonEnabledColor(1.0f, 0.87f, 0.45f, 1.0f);
+const FLinearColor UCraftPanelWidget::CraftButtonDisabledColor(0.5f, 0.5f, 0.5f, 0.6f);
 
 namespace
 {
@@ -139,7 +145,10 @@ void UCraftPanelWidget::SelectRecipe(FName InRecipeId)
 
 	SelectedRecipeId = InRecipeId;
 	MaxCraftableCount = InventoryComponent ? InventoryComponent->GetMaxCraftableCount(InRecipeId) : 0;
-	CraftCount = FMath::Clamp(CraftCount, 1, FMath::Max(1, MaxCraftableCount));
+	bSelectedRecipeIsEnhancement = !Recipe->UpgradeTargetItem.ItemId.IsNone();
+	CraftCount = bSelectedRecipeIsEnhancement
+		? FMath::Min(1, FMath::Max(0, MaxCraftableCount))
+		: FMath::Clamp(CraftCount, 1, FMath::Max(1, MaxCraftableCount));
 
 	RefreshDetailPanel();
 	RefreshRecipeEntrySelection();
@@ -147,7 +156,8 @@ void UCraftPanelWidget::SelectRecipe(FName InRecipeId)
 
 bool UCraftPanelWidget::CanExecuteCraft() const
 {
-	return InventoryComponent
+	return !bIsCrafting
+		&& InventoryComponent
 		&& !SelectedRecipeId.IsNone()
 		&& MaxCraftableCount >= CraftCount
 		&& CraftCount >= 1;
@@ -160,17 +170,76 @@ bool UCraftPanelWidget::ExecuteCraft()
 		return false;
 	}
 
-	bool bAllSuccess = true;
-	for (int32 i = 0; i < CraftCount; ++i)
+	BeginTimedCraft();
+	return true;
+}
+
+void UCraftPanelWidget::BeginTimedCraft()
+{
+	const FRetrieveCraftRecipeRow* Recipe = CraftRecipeTable
+		? CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::BeginTimedCraft"))
+		: nullptr;
+	if (!Recipe)
 	{
-		if (!InventoryComponent->CraftItem(SelectedRecipeId))
+		return;
+	}
+
+	bIsCrafting = true;
+	PendingRecipeId = SelectedRecipeId;
+	PendingCraftCount = CraftCount;
+	PendingCraftCategory = ActiveCategory;
+	UpdateCraftCountUI();
+
+	// TimedActionWidget은 별도로 띄우지 않고 WBP_BonfireMenu에 내장된 인스턴스를 사용한다
+	// (Panel_ConfirmOverwrite와 동일한 패턴 — AddToViewport로는 항상 부모 캔버스 전체 크기로 늘어났다).
+	if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
+	{
+		FSimpleDelegate OnComplete;
+		OnComplete.BindUObject(this, &ThisClass::HandleTimedCraftComplete);
+		BonfireMenu->ShowTimedAction(Recipe->CraftDuration, Recipe->DisplayName, OnComplete);
+	}
+	else
+	{
+		// BonfireMenu를 못 찾으면 즉시 완료 처리(폴백)
+		HandleTimedCraftComplete();
+	}
+}
+
+void UCraftPanelWidget::HandleTimedCraftComplete()
+{
+	if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
+	{
+		BonfireMenu->HideTimedAction();
+	}
+
+	const int32 CountToCraft = PendingCraftCount;
+	bool bCraftedAny = false;
+	if (InventoryComponent)
+	{
+		for (int32 i = 0; i < CountToCraft; ++i)
 		{
-			bAllSuccess = false;
-			break;
+			if (!InventoryComponent->CraftItem(PendingRecipeId))
+			{
+				break;
+			}
+			bCraftedAny = true;
 		}
 	}
 
-	return bAllSuccess;
+	if (bCraftedAny)
+	{
+		if (PendingCraftCategory == ECraftCategory::Consumable || PendingCraftCategory == ECraftCategory::Buff)
+		{
+			PlayContextUISound(RetrieveGameplayTags::UI_Sound_Craft_Consumable, ERetrieveUISoundEvent::Release);
+		}
+		else if (PendingCraftCategory == ECraftCategory::Equipment)
+		{
+			PlayContextUISound(RetrieveGameplayTags::UI_Sound_Craft_Equipment, ERetrieveUISoundEvent::Release);
+		}
+	}
+
+	bIsCrafting = false;
+	UpdateCraftCountUI();
 }
 
 void UCraftPanelWidget::BindButtonEvents()
@@ -346,6 +415,7 @@ void UCraftPanelWidget::SelectFirstVisibleRecipe()
 		// 보이는 레시피가 없으면 상세를 비운다
 		SelectedRecipeId = NAME_None;
 		MaxCraftableCount = 0;
+		bSelectedRecipeIsEnhancement = false;
 		ClearMaterialRows();
 		if (Text_OutputName)
 		{
@@ -541,6 +611,22 @@ void UCraftPanelWidget::RefreshMaterialRows(const FRetrieveCraftRecipeRow& Recip
 		return;
 	}
 
+	// 강화 레시피는 "무엇을 강화하는지" 보여주기 위해 원본 장비를 재료 목록 맨 위에 표시한다.
+	// (RequiredMaterials와 달리 소모 여부는 성공/실패에 따라 InventoryComponent::CraftItem이 처리한다)
+	if (!Recipe.UpgradeTargetItem.ItemId.IsNone())
+	{
+		if (UCraftMaterialRowWidget* UpgradeRow = CreateWidget<UCraftMaterialRowWidget>(
+			GetOwningPlayer(), MaterialRowWidgetClass))
+		{
+			const int32 Owned = InventoryComponent
+				? InventoryComponent->GetItemCount(Recipe.UpgradeTargetItem.ItemId)
+				: 0;
+			UpgradeRow->InitMaterialRow(ItemIconTable, MaterialItemTable, Recipe.UpgradeTargetItem.ItemId,
+				Recipe.UpgradeTargetItem.Quantity, Owned, WeaponDataTable);
+			VerticalBox_Materials->AddChild(UpgradeRow);
+		}
+	}
+
 	for (const FRetrieveItemStack& Material : Recipe.RequiredMaterials)
 	{
 		if (Material.ItemId.IsNone())
@@ -560,9 +646,26 @@ void UCraftPanelWidget::RefreshMaterialRows(const FRetrieveCraftRecipeRow& Recip
 			: 0;
 
 		Row->InitMaterialRow(ItemIconTable, MaterialItemTable, Material.ItemId,
-			Material.Quantity * CraftCount, Owned);
+			Material.Quantity * CraftCount, Owned, WeaponDataTable);
 
 		VerticalBox_Materials->AddChild(Row);
+	}
+
+	// 강화 확률은 재료 목록과 제작 수량 사이에 표시한다(VerticalBox_Materials의 마지막 줄).
+	if (Recipe.SuccessChance < 1.0f)
+	{
+		if (UTextBlock* SuccessChanceText = WidgetTree
+			? WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass())
+			: nullptr)
+		{
+			const int32 SuccessPercent = FMath::RoundToInt(Recipe.SuccessChance * 100.0f);
+			SuccessChanceText->SetText(FText::Format(
+				NSLOCTEXT("CraftPanel", "SuccessChance", "성공 확률: {0}%"),
+				FText::AsNumber(SuccessPercent)));
+			SuccessChanceText->SetColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.78f, 0.95f, 1.0f)));
+			SuccessChanceText->SetJustification(ETextJustify::Center);
+			VerticalBox_Materials->AddChild(SuccessChanceText);
+		}
 	}
 }
 
@@ -581,12 +684,15 @@ void UCraftPanelWidget::UpdateCraftCountUI()
 		Text_CraftCount->SetText(FText::AsNumber(CraftCount));
 	}
 
+	const bool bCanCraft = CanExecuteCraft();
 	if (Button_Craft)
 	{
-		Button_Craft->SetIsEnabled(CanExecuteCraft());
+		Button_Craft->SetIsEnabled(bCanCraft);
 	}
+	ApplyCraftButtonEnabledStyle(bCanCraft);
 
-	const bool bHasSelection = !SelectedRecipeId.IsNone();
+	// 장비 강화 레시피는 1회 1개 단위로만 진행하므로 수량 스테퍼를 잠근다.
+	const bool bHasSelection = !SelectedRecipeId.IsNone() && !bSelectedRecipeIsEnhancement;
 	if (Button_CountMinus)
 	{
 		Button_CountMinus->SetIsEnabled(bHasSelection && CraftCount > 1);
@@ -601,6 +707,15 @@ void UCraftPanelWidget::UpdateCraftCountUI()
 	}
 }
 
+void UCraftPanelWidget::ApplyCraftButtonEnabledStyle(bool bEnabled)
+{
+	if (Text_CraftButton)
+	{
+		Text_CraftButton->SetColorAndOpacity(FSlateColor(
+			bEnabled ? CraftButtonEnabledColor : CraftButtonDisabledColor));
+	}
+}
+
 void UCraftPanelWidget::SetCraftCount(int32 NewCount)
 {
 	const int32 Clamped = FMath::Clamp(NewCount, 1, FMath::Max(1, MaxCraftableCount));
@@ -612,22 +727,8 @@ void UCraftPanelWidget::SetCraftCount(int32 NewCount)
 		if (const FRetrieveCraftRecipeRow* Recipe =
 			CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(SelectedRecipeId, TEXT("CraftPanel::SetCount")))
 		{
-			for (int32 i = 0; i < VerticalBox_Materials->GetChildrenCount(); ++i)
-			{
-				if (UCraftMaterialRowWidget* Row =
-					Cast<UCraftMaterialRowWidget>(VerticalBox_Materials->GetChildAt(i)))
-				{
-					if (i < Recipe->RequiredMaterials.Num())
-					{
-						Row->InitMaterialRow(ItemIconTable, MaterialItemTable,
-							Recipe->RequiredMaterials[i].ItemId,
-							Recipe->RequiredMaterials[i].Quantity * CraftCount,
-							InventoryComponent
-								? InventoryComponent->GetItemCount(Recipe->RequiredMaterials[i].ItemId)
-								: 0);
-					}
-				}
-			}
+			// 강화 대상 행/성공 확률 표시까지 함께 있어 인덱스 기반 패치는 어긋나기 쉬우므로 전체를 다시 그린다.
+			RefreshMaterialRows(*Recipe);
 		}
 	}
 
@@ -716,6 +817,22 @@ void UCraftPanelWidget::HandleCraftCompleted(bool bSuccess, FName RecipeId, FNam
 {
 	OnCrafted.Broadcast(RecipeId, bSuccess);
 	HandleInventoryChanged();
+
+	// 강화 레시피(확률제)만 성공/실패 팝업을 띄운다. 일반 제작은 조용히 갱신한다.
+	const FRetrieveCraftRecipeRow* Recipe = CraftRecipeTable
+		? CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(RecipeId, TEXT("CraftPanel::HandleCraftCompleted"))
+		: nullptr;
+	if (Recipe && Recipe->SuccessChance < 1.0f)
+	{
+		if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
+		{
+			const TCHAR* IconPath = bSuccess
+				? TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Inventory/T_ICON_FantasyWarrior_Inventory_Swords01_Underlay.T_ICON_FantasyWarrior_Inventory_Swords01_Underlay")
+				: TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Status/T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke.T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke");
+			UTexture2D* ResultIcon = LoadObject<UTexture2D>(nullptr, IconPath);
+			BonfireMenu->ShowCraftResult(bSuccess, ResultIcon);
+		}
+	}
 }
 
 void UCraftPanelWidget::HandleRecipeEntryClicked(FName RecipeId)

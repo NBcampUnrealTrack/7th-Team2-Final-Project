@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "SpawnerBase.generated.h"
 
 class URetrievePawnData;
@@ -29,9 +30,12 @@ struct FSpawnEntry
 /**
  * 거리 기반 스폰/디스폰과 리스폰 로직의 기반 클래스.
  *
- * - 거리 체크(CheckDistance)는 1.5s 타이머로 폴링한다.
- * - 전원 사망 감지는 파생 클래스에서 NotifyPawnDied()를 호출해 위임한다.
- * - 리스폰은 플레이어 시야 이탈 확인(IsSpawnLocationHidden) 후 SpawnAll을 실행한다.
+ * - 스폰/디스폰은 SpawnSphere(진입)·DespawnSphere(이탈) 콜리전으로 판정한다.
+ * - 사망한 엔트리는 즉시 타이머를 걸지 않고, 플레이어가 DespawnSphere 밖으로
+ *   나가는 시점부터 RespawnDelay를 카운트한다(거리 기준 리스폰).
+ * - 카운트 도중 플레이어가 SpawnSphere 안으로 재진입하면 타이머를 취소한다.
+ * - 화톳불 휴식(Channel.Player.Rested) 브로드캐스트를 받으면 거리 조건과 무관하게
+ *   사망한 모든 엔트리를 즉시 리스폰한다.
  *
  * 랜덤 배치 등 확장은 SpawnAll을 override해 구현한다.
  */
@@ -49,14 +53,21 @@ protected:
 
 	virtual void SpawnAll();
 	virtual void DespawnAll();
-	// virtual void TryRespawn();
 	void TryRespawnEntry(int32 EntryIndex);
 
 private:
 	bool TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) const;
-	bool IsPositionHidden(const FVector& WorldPos) const;
 	bool IsTriggerActor(const AActor* OtherActor) const;
-	
+
+	/** 트리거 액터(플레이어)가 현재 DespawnSphere 범위 안에 있는지. */
+	bool IsPlayerInRange() const;
+
+	/** 플레이어가 DespawnSphere 밖으로 나간 사망 엔트리들에 대해 RespawnDelay 타이머를 시작한다. */
+	void StartPendingRespawnTimers();
+
+	/** 화톳불 휴식 브로드캐스트 수신 시, 사망한 모든 엔트리를 거리 조건 없이 즉시 리스폰한다. */
+	void ForceRespawnAllDeadEntries();
+
 	UFUNCTION()
 	void OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp,
 		AActor* OtherActor, UPrimitiveComponent* OtherComp,
@@ -103,7 +114,9 @@ protected:
 	TArray<TWeakObjectPtr<APawn>> EntryPawns;
 	
 private:
-	TArray<FTimerHandle> RespawnTimerHandles; 
+	TArray<FTimerHandle> RespawnTimerHandles;
+
+	FGameplayMessageListenerHandle RestListenerHandle;
 
 	bool bIsSpawned = false;
 };
