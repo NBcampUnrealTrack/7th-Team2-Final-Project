@@ -13,6 +13,7 @@
 #include "Character/RetrievePawnData.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
@@ -203,12 +204,13 @@ void UInventoryPanelWidget::RefreshInventoryList()
 	RefreshInventoryView(true);
 }
 
-void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTag)
+void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 SlotInstanceId)
 {
-	UE_LOG(LogTemp, Log, TEXT("[SelectItem] ItemId=%s CategoryTag=%s"), *ItemId.ToString(), *ItemCategoryTag.ToString());
+	UE_LOG(LogTemp, Log, TEXT("[SelectItem] ItemId=%s CategoryTag=%s SlotInstanceId=%d"), *ItemId.ToString(), *ItemCategoryTag.ToString(), SlotInstanceId);
 	if (!ItemId.IsNone()
 		&& SelectedItemId == ItemId
-		&& SelectedItemCategoryTag == ItemCategoryTag)
+		&& SelectedItemCategoryTag == ItemCategoryTag
+		&& SelectedSlotInstanceId == SlotInstanceId)
 	{
 		// 클릭 BP가 선택과 활성화를 별도 단계로 처리한다. 여기서 다시 활성화하면
 		// 한 번의 재클릭으로 장착/해제 함수가 중복 호출되어 더블클릭이 불안정해진다.
@@ -217,6 +219,7 @@ void UInventoryPanelWidget::SelectItem(FName ItemId, FGameplayTag ItemCategoryTa
 
 	SelectedItemId = ItemId;
 	SelectedItemCategoryTag = ItemCategoryTag;
+	SelectedSlotInstanceId = SlotInstanceId;
 	ShowWeaponSwapConfirm(false);
 	HideQuickSlotAssignDialog();
 	RefreshWeaponComparisonText();
@@ -267,11 +270,11 @@ bool UInventoryPanelWidget::ActivateSelectedItem()
 	return false;
 }
 
-bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag)
+bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 SlotInstanceId)
 {
 	if (ItemId.IsNone())
 	{
-		SelectItem(ItemId, ItemCategoryTag);
+		SelectItem(ItemId, ItemCategoryTag, SlotInstanceId);
 		LastGridSlotClickTime = -1.0;
 		return false;
 	}
@@ -279,7 +282,8 @@ bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag Ite
 	const double CurrentTime = FPlatformTime::Seconds();
 	const bool bClickedAlreadySelectedItem =
 		SelectedItemId == ItemId
-		&& SelectedItemCategoryTag == ItemCategoryTag;
+		&& SelectedItemCategoryTag == ItemCategoryTag
+		&& SelectedSlotInstanceId == SlotInstanceId;
 
 	// 이전 클릭이 "같은 아이템"이면서 FastDoubleClickThresholdSeconds 안에 들어온 경우에만
 	// 진짜 더블클릭으로 인정해 장착/해제를 실행한다. 느리게 두 번 클릭한 경우는 두 번째 클릭도
@@ -297,7 +301,7 @@ bool UInventoryPanelWidget::SelectAndActivateItem(FName ItemId, FGameplayTag Ite
 		return ActivateSelectedItem();
 	}
 
-	SelectItem(ItemId, ItemCategoryTag);
+	SelectItem(ItemId, ItemCategoryTag, SlotInstanceId);
 	LastGridSlotClickTime = CurrentTime;
 	return false;
 }
@@ -328,7 +332,7 @@ bool UInventoryPanelWidget::EquipSelectedWeapon()
 
 	ShowWeaponSwapConfirm(false);
 
-	const bool bEquipped = InventoryComponent->RequestEquipWeapon(SelectedItemId);
+	const bool bEquipped = InventoryComponent->RequestEquipWeapon(SelectedItemId, SelectedSlotInstanceId);
 	if (bEquipped)
 	{
 		// RequestEquipWeapon이 OnEquippedWeaponChanged/OnInventoryChanged를 발동시켜
@@ -338,6 +342,7 @@ bool UInventoryPanelWidget::EquipSelectedWeapon()
 		MarkInventoryTooltipsDirty();
 		RefreshWeaponComparisonText();
 		UpdateEquipActionButtons();
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Inventory_Equip, ERetrieveUISoundEvent::Release);
 	}
 	return bEquipped;
 }
@@ -369,6 +374,7 @@ bool UInventoryPanelWidget::UnequipCurrentWeapon()
 		RefreshWeaponComparisonText();
 		UpdateEquipActionButtons();
 		OnWeaponPreviewClearNeeded();
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Inventory_Unequip, ERetrieveUISoundEvent::Release);
 	}
 	return bUnequipped;
 }
@@ -395,7 +401,7 @@ bool UInventoryPanelWidget::EquipSelectedArmor()
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[EquipArmor] requesting equip — SlotTag=%s ItemId=%s"), *ArmorData.EquipmentSlotTag.ToString(), *SelectedItemId.ToString());
-	const bool bEquipped = InventoryComponent->RequestEquipArmor(ArmorData.EquipmentSlotTag, SelectedItemId);
+	const bool bEquipped = InventoryComponent->RequestEquipArmor(ArmorData.EquipmentSlotTag, SelectedItemId, SelectedSlotInstanceId);
 	UE_LOG(LogTemp, Log, TEXT("[EquipArmor] RequestEquipArmor result=%d"), bEquipped ? 1 : 0);
 	if (bEquipped)
 	{
@@ -405,6 +411,7 @@ bool UInventoryPanelWidget::EquipSelectedArmor()
 		RefreshSelectedArmorDetails();
 		OnInventoryListChanged.Broadcast();
 		UpdateEquipActionButtons();
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Inventory_Equip, ERetrieveUISoundEvent::Release);
 	}
 	return bEquipped;
 }
@@ -436,6 +443,7 @@ bool UInventoryPanelWidget::UnequipSelectedArmor()
 		RefreshSelectedArmorDetails();
 		OnInventoryListChanged.Broadcast();
 		UpdateEquipActionButtons();
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Inventory_Unequip, ERetrieveUISoundEvent::Release);
 	}
 	return bUnequipped;
 }
@@ -468,6 +476,7 @@ bool UInventoryPanelWidget::UseSelectedConsumable()
 			OnSelectedItemChanged.Broadcast(UsedItemId, UsedCategoryTag);
 		}
 		OnInventoryListChanged.Broadcast();
+		PlayContextUISound(RetrieveGameplayTags::UI_Sound_Inventory_UseConsumable, ERetrieveUISoundEvent::Release);
 	}
 	return bUsed;
 }
@@ -512,28 +521,47 @@ TArray<FRetrieveItemStack> UInventoryPanelWidget::GetCurrentItems() const
 
 bool UInventoryPanelWidget::IsSelectedWeaponEquipped() const
 {
-	return IsWeaponItemEquipped(SelectedItemId) && IsWeaponCategory(SelectedItemCategoryTag);
+	return IsWeaponCategory(SelectedItemCategoryTag)
+		&& IsWeaponItemEquipped(SelectedItemId, SelectedSlotInstanceId);
 }
 
-bool UInventoryPanelWidget::IsItemSelected(FName ItemId) const
+bool UInventoryPanelWidget::IsItemSelected(FName ItemId, int32 SlotInstanceId) const
 {
-	return !ItemId.IsNone() && SelectedItemId == ItemId;
+	return !ItemId.IsNone()
+		&& SelectedItemId == ItemId
+		&& SelectedSlotInstanceId == SlotInstanceId;
 }
 
-bool UInventoryPanelWidget::IsWeaponItemEquipped(FName WeaponItemId) const
+bool UInventoryPanelWidget::IsWeaponItemEquipped(FName WeaponItemId, int32 SlotInstanceId) const
 {
-	return InventoryComponent
-		&& !WeaponItemId.IsNone()
-		&& InventoryComponent->GetEquippedWeaponId() == WeaponItemId;
+	if (!InventoryComponent
+		|| WeaponItemId.IsNone()
+		|| SlotInstanceId == INDEX_NONE
+		|| InventoryComponent->GetEquippedWeaponId() != WeaponItemId)
+	{
+		return false;
+	}
+	return InventoryComponent->GetEquippedWeaponSlotInstanceId() == SlotInstanceId;
 }
 
-bool UInventoryPanelWidget::IsArmorItemEquipped(FName ArmorItemId) const
+bool UInventoryPanelWidget::IsArmorItemEquipped(FName ArmorItemId, int32 SlotInstanceId) const
 {
-	if (!InventoryComponent || ArmorItemId.IsNone() || !ArmorDataTable) return false;
+	if (!InventoryComponent || ArmorItemId.IsNone() || SlotInstanceId == INDEX_NONE || !ArmorDataTable) return false;
 	const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
 		ArmorItemId, TEXT("UInventoryPanelWidget::IsArmorItemEquipped"));
 	if (!Row) return false;
-	return InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) == ArmorItemId;
+	if (InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) != ArmorItemId)
+	{
+		return false;
+	}
+	for (const FRetrieveEquippedArmorEntry& EquippedSlot : InventoryComponent->GetEquippedArmorSlots())
+	{
+		if (EquippedSlot.EquipmentSlotTag == Row->EquipmentSlotTag)
+		{
+			return EquippedSlot.SlotInstanceId == SlotInstanceId;
+		}
+	}
+	return false;
 }
 
 bool UInventoryPanelWidget::CanEquipSelectedWeapon() const
@@ -717,24 +745,8 @@ bool UInventoryPanelWidget::GetSelectedArmorData(FRetrieveArmorDataRow& OutArmor
 
 bool UInventoryPanelWidget::IsSelectedArmorEquipped() const
 {
-	if (!InventoryComponent || SelectedItemId.IsNone() || !IsArmorCategory(SelectedItemCategoryTag))
-	{
-		return false;
-	}
-
-	if (!ArmorDataTable)
-	{
-		return false;
-	}
-
-	const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
-		SelectedItemId, TEXT("UInventoryPanelWidget::IsSelectedArmorEquipped"));
-	if (!Row)
-	{
-		return false;
-	}
-
-	return InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) == SelectedItemId;
+	return IsArmorCategory(SelectedItemCategoryTag)
+		&& IsArmorItemEquipped(SelectedItemId, SelectedSlotInstanceId);
 }
 
 bool UInventoryPanelWidget::CanEquipSelectedArmor() const
@@ -897,7 +909,9 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 
 	if (IsWeaponCategory(ItemCategoryTag))
 	{
-		ContextLines.Add(IsWeaponItemEquipped(ItemId) ? TEXT("Equipped") : TEXT("In storage"));
+		const bool bSameWeaponTypeEquipped = InventoryComponent
+			&& InventoryComponent->GetEquippedWeaponId() == ItemId;
+		ContextLines.Add(bSameWeaponTypeEquipped ? TEXT("Equipped") : TEXT("In storage"));
 	}
 	else if (IsConsumableCategory(ItemCategoryTag) && ConsumableItemTable)
 	{
@@ -1395,6 +1409,7 @@ void UInventoryPanelWidget::ClearSelection()
 {
 	SelectedItemId = NAME_None;
 	SelectedItemCategoryTag = FGameplayTag();
+	SelectedSlotInstanceId = INDEX_NONE;
 	ShowWeaponSwapConfirm(false);
 	HideQuickSlotAssignDialog();
 	ShowQuickSlotReplaceConfirm(false);
@@ -1455,7 +1470,16 @@ void UInventoryPanelWidget::SelectEquipmentSlot(FGameplayTag EquipmentSlotTag)
 		{
 			OpenTab(3);
 		}
-		SelectItem(EquippedArmorId, ArmorTabCategoryTag);
+		int32 EquippedSlotInstanceId = INDEX_NONE;
+		for (const FRetrieveEquippedArmorEntry& EquippedSlot : InventoryComponent->GetEquippedArmorSlots())
+		{
+			if (EquippedSlot.EquipmentSlotTag == EquipmentSlotTag)
+			{
+				EquippedSlotInstanceId = EquippedSlot.SlotInstanceId;
+				break;
+			}
+		}
+		SelectItem(EquippedArmorId, ArmorTabCategoryTag, EquippedSlotInstanceId);
 		return;
 	}
 
@@ -2283,7 +2307,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 	TooltipWidget->SetToolTip(nullptr);
 
 	FString BadgeText;
-	if (IsWeaponCategory(Item.ItemCategoryTag) && IsWeaponItemEquipped(Item.ItemId))
+	if (IsWeaponCategory(Item.ItemCategoryTag) && IsWeaponItemEquipped(Item.ItemId, Item.SlotInstanceId))
 	{
 		BadgeText = TEXT("EQUIPPED");
 	}
@@ -2291,7 +2315,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 	{
 		if (const FRetrieveArmorDataRow* ArmorRow = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(Item.ItemId, TEXT("InventoryTooltip::ArmorBadge")))
 		{
-			if (InventoryComponent->GetEquippedArmorId(ArmorRow->EquipmentSlotTag) == Item.ItemId)
+			if (IsArmorItemEquipped(Item.ItemId, Item.SlotInstanceId))
 			{
 				BadgeText = TEXT("EQUIPPED");
 			}
@@ -2830,7 +2854,8 @@ bool UInventoryPanelWidget::CanProcessSelectedItemActivation()
 	const double CurrentTime = FPlatformTime::Seconds();
 	const bool bSameActivation =
 		LastActivatedItemId == SelectedItemId &&
-		LastActivatedItemCategoryTag == SelectedItemCategoryTag;
+		LastActivatedItemCategoryTag == SelectedItemCategoryTag &&
+		LastActivatedSlotInstanceId == SelectedSlotInstanceId;
 
 	if (bSameActivation
 		&& LastSelectedItemActivationTime >= 0.0
@@ -2842,6 +2867,7 @@ bool UInventoryPanelWidget::CanProcessSelectedItemActivation()
 	LastSelectedItemActivationTime = CurrentTime;
 	LastActivatedItemId = SelectedItemId;
 	LastActivatedItemCategoryTag = SelectedItemCategoryTag;
+	LastActivatedSlotInstanceId = SelectedSlotInstanceId;
 	return true;
 }
 
@@ -3375,7 +3401,8 @@ void UInventoryPanelWidget::HandleSlotWeaponClicked()
 	if (!WeaponId.IsNone())
 	{
 		OpenTab(0);
-		SelectItem(WeaponId, RetrieveGameplayTags::Item_Weapon);
+		SelectItem(WeaponId, RetrieveGameplayTags::Item_Weapon,
+			InventoryComponent->GetEquippedWeaponSlotInstanceId());
 	}
 	else
 	{

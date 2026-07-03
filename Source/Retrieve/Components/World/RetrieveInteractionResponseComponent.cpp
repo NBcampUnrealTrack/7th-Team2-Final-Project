@@ -8,6 +8,9 @@
 #include "Data/Interaction/RetrieveLootTableAsset.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Components/Inventory/InventoryComponent.h"
+#include "Components/World/RetrieveMapIconComponent.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Blueprint/UserWidget.h"
@@ -161,6 +164,112 @@ void URetrieveInteractionResponseComponent::BeginPlay()
 	if (bAutoBindInteractionManager)
 	{
 		TryAutoBindInteractionManager();
+	}
+
+	if (bReopenAfterRests)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			RestListenerHandle = UGameplayMessageSubsystem::Get(World)
+				.RegisterListener<FRetrievePlayerRestedPayload>(
+					RetrieveGameplayTags::Channel_Player_Rested,
+					[WeakThis = TWeakObjectPtr<URetrieveInteractionResponseComponent>(this)]
+					(FGameplayTag, const FRetrievePlayerRestedPayload&)
+					{
+						if (URetrieveInteractionResponseComponent* Comp = WeakThis.Get())
+						{
+							Comp->HandlePlayerRested();
+						}
+					});
+		}
+	}
+}
+
+void URetrieveInteractionResponseComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(RestListenerHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void URetrieveInteractionResponseComponent::BeginDepletedState()
+{
+	bIsDepleted = true;
+	RestsRemaining = FMath::Max(1, RestsUntilReopen);
+
+	if (AActor* OwnerActor = GetOwner())
+	{
+		if (URetrieveMapIconComponent* MapIcon = OwnerActor->FindComponentByClass<URetrieveMapIconComponent>())
+		{
+			MapIcon->bIsDepleted = true;
+		}
+	}
+}
+
+void URetrieveInteractionResponseComponent::HandlePlayerRested()
+{
+	if (!bIsDepleted)
+	{
+		return;
+	}
+
+	if (--RestsRemaining > 0)
+	{
+		return;
+	}
+
+	bIsDepleted = false;
+
+	if (AActor* OwnerActor = GetOwner())
+	{
+		if (URetrieveMapIconComponent* MapIcon = OwnerActor->FindComponentByClass<URetrieveMapIconComponent>())
+		{
+			MapIcon->bIsDepleted = false;
+		}
+	}
+
+	OnReopened.Broadcast();
+}
+
+void URetrieveInteractionResponseComponent::ForcePersistentInteractionManager(UActorComponent* ManagerComp) const
+{
+	if (!ManagerComp)
+	{
+		return;
+	}
+
+	UClass* ManagerClass = ManagerComp->GetClass();
+	bool bFinishMethodConfigured = false;
+
+	if (FByteProperty* ByteProp =
+		FindFProperty<FByteProperty>(ManagerClass, FName(TEXT("FinishMethod"))))
+	{
+		ByteProp->SetPropertyValue_InContainer(ManagerComp, ReopenFinishMethodValue);
+		bFinishMethodConfigured = true;
+	}
+	else if (FEnumProperty* EnumProp =
+		FindFProperty<FEnumProperty>(ManagerClass, FName(TEXT("FinishMethod"))))
+	{
+		EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(
+			EnumProp->ContainerPtrToValuePtr<void>(ManagerComp),
+			static_cast<int64>(ReopenFinishMethodValue));
+		bFinishMethodConfigured = true;
+	}
+
+	if (FFloatProperty* DurationProp =
+		FindFProperty<FFloatProperty>(ManagerClass, FName(TEXT("ReactivationDuration"))))
+	{
+		DurationProp->SetPropertyValue_InContainer(ManagerComp, 0.0f);
+	}
+
+	if (AActor* OwnerActor = GetOwner())
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[Retrieve|Interaction] %s: bReopenAfterRests - Manager_InteractionTarget FinishMethod %s"),
+			*OwnerActor->GetName(),
+			bFinishMethodConfigured ? TEXT("forced to reactivating value") : TEXT("property not found"));
 	}
 }
 
@@ -797,6 +906,13 @@ void URetrieveInteractionResponseComponent::TryAutoBindInteractionManager()
 		return;
 	}
 
+	CachedInteractionManagerComp = TargetComp;
+
+	if (bReopenAfterRests)
+	{
+		ForcePersistentInteractionManager(TargetComp);
+	}
+
 	// TypeAsset ?ㅼ젙??Manager???곸슜
 	if (GetEffectivePresetData() || Preset || GetEffectiveTypeAsset() || !PromptTextOverride.IsEmpty() || PromptIconOverride)
 	{
@@ -864,7 +980,11 @@ void URetrieveInteractionResponseComponent::TryAutoBindInteractionManager()
 
 void URetrieveInteractionResponseComponent::HandleInteractionManagerBegin(APawn* InteractorPawn)
 {
-
+	if (InteractorPawn && ShouldPlayMontageDuringInteraction())
+	{
+		// 상자 뚜껑/보상 로직이 시작되기 전에 캐릭터 상호작용 몽타주를 먼저 재생한다.
+		TryPlayInteractionAnim(InteractorPawn);
+	}
 }
 
 void URetrieveInteractionResponseComponent::HandleInteractionManagerUpdated(APawn* InteractorPawn, float Progress)
@@ -883,6 +1003,17 @@ void URetrieveInteractionResponseComponent::HandleInteractionManagerEnd(uint8 Re
 
 	// 而ㅼ뒪? ?꾨＼?꾪듃 ?④린湲?(?깃났/痍⑥냼/?ㅽ뙣 臾닿?)
 
+
+	if (InteractorPawn && ShouldPlayMontageDuringInteraction())
+	{
+		// 성공이면 이 호출 다음에 보상 적용과 BP 뚜껑 오픈 이벤트가 실행된다.
+		// 취소/실패일 때도 Begin에서 시작한 몽타주가 남지 않도록 정지한다.
+		Multicast_StopInteractionAnim(
+			InteractorPawn,
+			GetEffectiveMontage(),
+			GetEffectiveVisualMeshMontage(),
+			0.1f);
+	}
 
 	if (Result != SuccessResultValue)
 	{
@@ -925,6 +1056,12 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor || !OwnerActor->HasAuthority() || !InteractionInstigator)
+	{
+		return;
+	}
+
+	// 이미 열려서 재오픈 대기 중이면 결과를 다시 적용하지 않는다.
+	if (bReopenAfterRests && bIsDepleted)
 	{
 		return;
 	}
@@ -1036,7 +1173,11 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 	}
 
 	// 2) ?좊땲硫붿씠?? TypeAsset 紐쏀?二??ъ깮 + BP override ?대깽??
-	TryPlayInteractionAnim(InteractionInstigator);
+	// OpenChest는 Begin에서 이미 재생했고, End에서 뚜껑 로직 전에 정지했다.
+	if (!ShouldPlayMontageDuringInteraction())
+	{
+		TryPlayInteractionAnim(InteractionInstigator);
+	}
 
 	// 3) ?붾쾭洹?硫붿떆吏
 	if (bShowDebugMessageOnApply && GEngine)
@@ -1058,6 +1199,10 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 	if (bDestroyOwnerOnApplied)
 	{
 		OwnerActor->SetLifeSpan(0.1f);
+	}
+	else if (bReopenAfterRests)
+	{
+		BeginDepletedState();
 	}
 }
 
@@ -1125,7 +1270,13 @@ void URetrieveInteractionResponseComponent::Multicast_PlayInteractionAnim_Implem
 			{
 				continue;
 			}
-			if (Mesh->GetSkeletalMeshAsset()->GetSkeleton() != TargetSkeleton)
+			USkeleton* MeshSkeleton = Mesh->GetSkeletalMeshAsset()->GetSkeleton();
+			// 정확히 같은 스켈레톤이 아니어도 UE5 Compatible Skeleton으로 등록되어 있으면 재생 허용.
+			// (인벤토리 프리뷰의 Montage_Play는 엔진 기본 호환성 검사를 타므로 이미 이렇게 동작 중 - 여기도 동일하게 맞춘다)
+			// IsCompatibleForEditor는 이름과 달리 ENGINE_API 런타임 함수로, "InSkeleton으로 만든 애니메이션을
+			// 이 스켈레톤에서 재생 가능한가"를 판정한다.
+			if (MeshSkeleton != TargetSkeleton
+				&& !(MeshSkeleton && MeshSkeleton->IsCompatibleForEditor(TargetSkeleton)))
 			{
 				continue;
 			}
@@ -1141,11 +1292,85 @@ void URetrieveInteractionResponseComponent::Multicast_PlayInteractionAnim_Implem
 			return;
 		}
 
+		// 정확히 일치/호환 스켈레톤을 못 찾았어도 포기하지 않는다.
+		// UAnimInstance::Montage_Play는 스켈레톤 일치 여부를 검사하지 않고(엔진 소스 AnimInstance.cpp의
+		// Montage_PlayInternal은 둘 다 non-null인지만 확인), 본 매핑은 이름 기반으로 평가 시점에 처리된다.
+		// 인벤토리 프리뷰의 방어구 장착 몽타주(AM_EquipChest 등, Synty 스켈레톤)도 이 방식 그대로
+		// Character->GetMesh()의 AnimInstance에 직접 Montage_Play해서 정상 작동한다 - 여기서도 동일하게
+		// 메인 메시에 바로 재생을 시도한다.
+		if (USkeletalMeshComponent* MainMesh = Character->GetMesh())
+		{
+			if (UAnimInstance* AnimInst = MainMesh->GetAnimInstance())
+			{
+				AnimInst->Montage_Play(MontageToPlay, PlayRate);
+				UE_LOG(LogTemp, Log,
+					TEXT("[Retrieve|Interaction] %s: Montage '%s' on main mesh '%s' (Rate=%.2f, skeleton fallback)"),
+					*GetOwner()->GetName(), *MontageToPlay->GetName(), *MainMesh->GetName(), PlayRate);
+				return;
+			}
+		}
+
 		UE_LOG(LogTemp, Warning,
-			TEXT("[Retrieve|Interaction] %s: No matching skeleton found for montage '%s'"),
+			TEXT("[Retrieve|Interaction] %s: No AnimInstance available to play montage '%s'"),
 			*GetOwner()->GetName(), *MontageToPlay->GetName());
 	};
 
 	PlayOnMatchingSkeleton(Montage);
 	PlayOnMatchingSkeleton(VisualMontage);
+}
+
+void URetrieveInteractionResponseComponent::Multicast_StopInteractionAnim_Implementation(
+	AActor* Instigator, UAnimMontage* Montage, UAnimMontage* VisualMontage, float BlendOutTime)
+{
+	ACharacter* Character = Cast<ACharacter>(Instigator);
+	if (!Character)
+	{
+		return;
+	}
+
+	TSet<UAnimMontage*> MontagesToStop;
+	if (Montage)
+	{
+		MontagesToStop.Add(Montage);
+	}
+	if (VisualMontage)
+	{
+		MontagesToStop.Add(VisualMontage);
+	}
+
+	TArray<USkeletalMeshComponent*> Meshes;
+	Character->GetComponents<USkeletalMeshComponent>(Meshes);
+	for (USkeletalMeshComponent* Mesh : Meshes)
+	{
+		UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+		if (!AnimInstance)
+		{
+			continue;
+		}
+
+		for (UAnimMontage* MontageToStop : MontagesToStop)
+		{
+			if (AnimInstance->Montage_IsPlaying(MontageToStop))
+			{
+				AnimInstance->Montage_Stop(FMath::Max(0.0f, BlendOutTime), MontageToStop);
+			}
+		}
+	}
+}
+
+bool URetrieveInteractionResponseComponent::ShouldPlayMontageDuringInteraction() const
+{
+	static const FName OpenChestPresetId(TEXT("OpenChest"));
+	if (PresetId == OpenChestPresetId)
+	{
+		return true;
+	}
+
+	const auto IsOpenChestMontage = [](const UAnimMontage* Montage)
+	{
+		return Montage && Montage->GetName().StartsWith(TEXT("AM_OpenChest"));
+	};
+
+	return IsOpenChestMontage(GetEffectiveMontage())
+		|| IsOpenChestMontage(GetEffectiveVisualMeshMontage());
 }

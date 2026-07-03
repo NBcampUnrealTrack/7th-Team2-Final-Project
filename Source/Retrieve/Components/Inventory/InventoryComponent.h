@@ -73,8 +73,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool AddItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity = 1);
 
+	// SlotInstanceId(-1=미지정) 지정 시 정확히 그 슬롯 하나만 제거(예: 상점에서 선택한 슬롯 판매).
+	// 미지정 시 배열 뒤에서부터 ItemId가 일치하는 슬롯을 필요한 수량만큼 소모(기존 동작).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
-	bool RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity = 1);
+	bool RemoveItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity = 1, int32 SlotInstanceId = -1);
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool HasItem(FName ItemId, int32 Quantity = 1) const;
@@ -91,16 +93,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool CanChangeEquipment() const;
 
+	// SlotInstanceId: 더블클릭/선택한 정확한 인벤토리 슬롯(FRetrieveItemStack::SlotInstanceId).
+	// 같은 무기가 여러 슬롯에 있을 때 어느 슬롯을 장착했는지 UI가 하이라이트할 수 있도록 기록만 한다.
+	// 실제 장착 판정(HasItem)은 ItemId 기준이라 생략(INDEX_NONE) 가능.
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
-	bool RequestEquipWeapon(FName WeaponItemId);
+	bool RequestEquipWeapon(FName WeaponItemId, int32 SlotInstanceId = -1);
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool RequestUnequipWeapon();
 
 	// Armor UI 진입점: 위젯은 ArmorComponent를 직접 호출하지 말고 이 함수만 호출한다.
 	// 내부에서 보유/상태 검사 후 UArmorComponent::EquipArmor로 위임한다.
+	// SlotInstanceId: RequestEquipWeapon과 동일한 목적(정확한 슬롯 하이라이트용).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
-	bool RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+	bool RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId, int32 SlotInstanceId = -1);
 
 	// Armor UI 진입점: 위젯은 ArmorComponent를 직접 호출하지 말고 이 함수만 호출한다.
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
@@ -172,6 +178,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FName GetEquippedWeaponId() const { return EquippedWeaponId; }
 
+	// 장착된 정확한 인벤토리 슬롯. 같은 무기가 여러 슬롯에 있을 때 UI가 그중 하나만 하이라이트하는 데 사용.
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	int32 GetEquippedWeaponSlotInstanceId() const { return EquippedWeaponSlotInstanceId; }
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	FName GetEquippedArmorId(FGameplayTag EquipmentSlotTag) const;
 
@@ -239,6 +249,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedWeaponId, Category = "Retrieve|Inventory")
 	FName EquippedWeaponId = NAME_None;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedWeaponId, Category = "Retrieve|Inventory")
+	int32 EquippedWeaponSlotInstanceId = INDEX_NONE;
+
+	// 무기/방어구 슬롯에 부여할 다음 고유 ID. 세이브 데이터로 복원되어 이어서 사용된다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Inventory")
+	int32 NextSlotInstanceId = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedArmorSlots, Category = "Retrieve|Inventory")
 	TArray<FRetrieveEquippedArmorEntry> EquippedArmorSlots;
 
@@ -280,13 +297,13 @@ protected:
 	void OnRep_Currency();
 
 	UFUNCTION(Server, Reliable)
-	void ServerRequestEquipWeapon(FName WeaponItemId);
+	void ServerRequestEquipWeapon(FName WeaponItemId, int32 SlotInstanceId);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestUnequipWeapon();
 
 	UFUNCTION(Server, Reliable)
-	void ServerRequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId);
+	void ServerRequestEquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId, int32 SlotInstanceId);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestUnequipArmor(FGameplayTag EquipmentSlotTag);

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "RetrieveInteractionResponseComponent.generated.h"
 
 class URetrieveInteractionResultAsset;
@@ -16,6 +17,9 @@ class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FRetrieveOnInteractionAppliedSignature, AActor*, InteractionInstigator);
+
+/** bReopenAfterRests 대기가 끝나 다시 상호작용 가능해졌을 때 브로드캐스트. BP에서 뚜껑 닫힘 등 비주얼 복원에 사용. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrieveOnInteractionReopenedSignature);
 
 /**
  * 상호작용 결과를 받아 적용하는 응답 컴포넌트.
@@ -206,6 +210,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction")
 	bool bDestroyOwnerOnApplied = false;
 
+	// ── 휴식 기반 재오픈 (상자 등 순환 재사용 오브젝트용) ─────────────────────
+	/** true면 결과 적용 후 즉시 재적용을 막고, 모닥불 휴식 RestsUntilReopen회 후 다시 상호작용 가능해진다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Respawn")
+	bool bReopenAfterRests = false;
+
+	/** bReopenAfterRests가 true일 때, 몇 번의 모닥불 휴식 후 다시 열 수 있는 상태로 돌아가는지. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Respawn",
+		meta = (EditCondition = "bReopenAfterRests", ClampMin = "1"))
+	int32 RestsUntilReopen = 3;
+
+	/** 현재 결과 재적용 대기 중(이미 열려서 비활성)인지. 런타임 상태. */
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Interaction|Respawn")
+	bool bIsDepleted = false;
+
+	/**
+	 * bReopenAfterRests가 true일 때 Manager_InteractionTarget에 강제 적용할 FinishMethod 값.
+	 * 기본 3 = "Reactivate After Duration On Completed" — Destroy/Deactivate 계열이 설정돼 있어도
+	 * 액터가 파괴/영구비활성되지 않고 항상 재상호작용 가능하도록 강제한다.
+	 * 실제 재사용 가능 여부(로직상 게이트)는 bIsDepleted가 담당한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Respawn",
+		meta = (EditCondition = "bReopenAfterRests"))
+	uint8 ReopenFinishMethodValue = 3;
+
 	/** true면 결과 적용 시 화면 디버그 메시지 출력 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Debug")
 	bool bShowDebugMessageOnApply = true;
@@ -214,6 +242,10 @@ public:
 	/** 결과 적용 후 BP가 후처리(이펙트/사운드 등)할 수 있는 델리게이트 */
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Interaction")
 	FRetrieveOnInteractionAppliedSignature OnApplied;
+
+	/** bReopenAfterRests 대기(휴식 카운트)가 끝나 다시 상호작용 가능해졌을 때 브로드캐스트 */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Interaction|Respawn")
+	FRetrieveOnInteractionReopenedSignature OnReopened;
 
 	// ── InteractionManager 자동 바인딩 ─────────────────────────────────────
 	/**
@@ -289,6 +321,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/**
 	 * Manager_InteractionTarget.OnInteractionBegin 자동 바인딩 핸들러.
@@ -336,16 +369,36 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_PlayInteractionAnim(AActor* Instigator, UAnimMontage* Montage, float PlayRate, UAnimMontage* VisualMontage);
 
+	/** 상호작용 종료 시 해당 캐릭터에서 재생 중인 상호작용 몽타주를 정지한다. */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_StopInteractionAnim(AActor* Instigator, UAnimMontage* Montage, UAnimMontage* VisualMontage, float BlendOutTime);
+
 	/** BP가 액터별 애니메이션을 override하고 싶을 때 사용 (서버에서 호출됨) */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Interaction|Animation")
 	void OnPlayInteractionAnim(AActor* InteractionInstigator);
 
 private:
+	/** 결과 적용 후 bReopenAfterRests면 비활성 상태로 전환 + MapIconComponent에 전파 */
+	void BeginDepletedState();
+
+	/** Channel.Player.Rested 수신 핸들러 — 카운트다운 후 재오픈 처리 */
+	void HandlePlayerRested();
+
+	FGameplayMessageListenerHandle RestListenerHandle;
+	int32 RestsRemaining = 0;
+	TWeakObjectPtr<UActorComponent> CachedInteractionManagerComp;
+
+	/** bReopenAfterRests용 — Manager_InteractionTarget의 FinishMethod/ReactivationDuration을 강제 재설정 */
+	void ForcePersistentInteractionManager(UActorComponent* ManagerComp) const;
+
 	const struct FRetrieveInteractionPresetData* GetEffectivePresetData() const;
 	FText GetEffectiveDisplayText() const;
 	bool GetEffectiveHoldInteraction() const;
 	float GetEffectiveHoldDuration() const;
 	float GetEffectiveMontagePlayRate() const;
+
+	/** OpenChest처럼 결과 적용 전 상호작용 구간 동안 몽타주를 재생해야 하는 프리셋인지 확인한다. */
+	bool ShouldPlayMontageDuringInteraction() const;
 	UTexture2D* GetEffectivePromptIcon() const;
 	FLinearColor GetEffectivePromptAccentColor() const;
 	FName GetEffectiveMgrPropIcon() const;

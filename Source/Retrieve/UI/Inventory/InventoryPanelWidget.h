@@ -100,14 +100,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	void RefreshInventoryList();
 
+	// SlotInstanceId: 클릭한 정확한 슬롯(FRetrieveItemStack::SlotInstanceId). 그리드 슬롯 위젯이 자신의 아이템 스택에서
+	// 값을 그대로 전달해야 한다 — 생략(INDEX_NONE) 시 장착해도 어느 슬롯인지 하이라이트할 수 없다.
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
-	void SelectItem(FName ItemId, FGameplayTag ItemCategoryTag);
+	void SelectItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 SlotInstanceId = -1);
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool ActivateSelectedItem();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
-	bool SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag);
+	bool SelectAndActivateItem(FName ItemId, FGameplayTag ItemCategoryTag, int32 SlotInstanceId = -1);
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool EquipSelectedWeapon();
@@ -243,13 +245,15 @@ public:
 	bool IsSelectedWeaponEquipped() const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
-	bool IsItemSelected(FName ItemId) const;
+	bool IsItemSelected(FName ItemId, int32 SlotInstanceId = -1) const;
+
+	// 장비는 ItemId와 SlotInstanceId가 모두 일치할 때만 장착 슬롯으로 판정한다.
+	// INDEX_NONE은 실제 슬롯을 특정하지 못한 상태이므로 장착 표시를 하지 않는다.
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
+	bool IsWeaponItemEquipped(FName WeaponItemId, int32 SlotInstanceId = -1) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
-	bool IsWeaponItemEquipped(FName WeaponItemId) const;
-
-	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
-	bool IsArmorItemEquipped(FName ArmorItemId) const;
+	bool IsArmorItemEquipped(FName ArmorItemId, int32 SlotInstanceId = -1) const;
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool CanEquipSelectedWeapon() const;
@@ -596,6 +600,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory")
 	FName SelectedItemId = NAME_None;
 
+	// 같은 무기/방어구가 여러 슬롯에 있을 때 정확히 어느 슬롯을 선택/더블클릭했는지 기록 (FRetrieveItemStack::SlotInstanceId).
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory")
+	int32 SelectedSlotInstanceId = INDEX_NONE;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory", meta = (Categories = "Item"))
 	FGameplayTag SelectedItemCategoryTag;
 
@@ -708,6 +716,7 @@ protected:
 	double LastSelectedItemActivationTime = -1.0;
 	FName LastActivatedItemId = NAME_None;
 	FGameplayTag LastActivatedItemCategoryTag;
+	int32 LastActivatedSlotInstanceId = INDEX_NONE;
 
 	// SelectAndActivateItem의 빠른 더블클릭 판정 기준 시각 (-1.0이면 대기 중인 클릭 없음)
 	double LastGridSlotClickTime = -1.0;
