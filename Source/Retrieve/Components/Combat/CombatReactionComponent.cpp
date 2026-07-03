@@ -8,6 +8,10 @@
 #include "../LockOn/LockOnCameraRig.h"
 #include "../LockOn/LockOnComponent.h"
 #include "../LockOn/LockOnTargetHighlighter.h"
+#include "Components/WidgetComponent.h"
+#include "GameFramework/Character.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 UCombatReactionComponent::UCombatReactionComponent()
 {
@@ -98,6 +102,12 @@ void UCombatReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		LockOnHighlighter = nullptr;
 	}
 
+	if (IsValid(ReticleWidgetComp))
+	{
+		ReticleWidgetComp->DestroyComponent();
+		ReticleWidgetComp = nullptr;
+	}
+
 	if (IsValid(HitReactionComp))
 	{
 		HitReactionComp->DestroyComponent();
@@ -145,11 +155,90 @@ void UCombatReactionComponent::HandleLockOnTargetChanged(AActor* NewTarget)
 	{
 		LockOnCameraRigComp->StartTracking(NewTarget);
 		LockOnHighlighter->Apply(NewTarget);
+		EnsureReticleComp();
+		AttachReticleToTarget(NewTarget);
+		if (IsValid(ReticleWidgetComp))
+		{
+			ReticleWidgetComp->SetVisibility(true);
+		}
 	}
 	else
 	{
 		LockOnCameraRigComp->StopTracking();
 		LockOnHighlighter->Clear();
+		if (IsValid(ReticleWidgetComp))
+		{
+			ReticleWidgetComp->SetVisibility(false);
+			ReticleWidgetComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		}
 	}
 	OnLockOnTargetChanged.Broadcast(NewTarget);
+}
+
+// 레티클 위젯 컴포넌트 lazy 생성(스크린 공간 — 렌더 파이프라인이 위치 처리, 지터 없음)
+void UCombatReactionComponent::EnsureReticleComp()
+{
+	if (IsValid(ReticleWidgetComp) || IsValid(ReticleWidgetClass) == false)
+	{
+		return;
+	}
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) == false)
+	{
+		return;
+	}
+	ReticleWidgetComp = NewObject<UWidgetComponent>(Owner);
+	ReticleWidgetComp->SetWidgetSpace(EWidgetSpace::Screen);
+	ReticleWidgetComp->SetWidgetClass(ReticleWidgetClass);
+	ReticleWidgetComp->SetDrawSize(ReticleDrawSize);
+	ReticleWidgetComp->SetPivot(ReticlePivot);   // 스크린 픽셀 기준 오프셋(거리 무관)
+	ReticleWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ReticleWidgetComp->SetVisibility(false);
+	ReticleWidgetComp->RegisterComponent();
+}
+
+// 캡슐 최상단 기준으로 스냅(애니메이션 자세에 안 흔들림). 캡슐 없으면 소켓/바운드 폴백
+void UCombatReactionComponent::AttachReticleToTarget(AActor* Target)
+{
+	if (IsValid(ReticleWidgetComp) == false || IsValid(Target) == false)
+	{
+		return;
+	}
+
+	// 1순위: 캐릭터 캡슐 최상단 + 오프셋 (Z축은 월드 수직 유지 → 자세 무관 안정)
+	if (const ACharacter* Char = Cast<ACharacter>(Target))
+	{
+		if (UCapsuleComponent* Capsule = Char->GetCapsuleComponent())
+		{
+			ReticleWidgetComp->AttachToComponent(
+				Capsule, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			const float CapsuleTopZ = Capsule->GetScaledCapsuleHalfHeight();
+			ReticleWidgetComp->SetRelativeLocation(
+				FVector(ReticleAttachOffset.X, ReticleAttachOffset.Y, CapsuleTopZ + ReticleAttachOffset.Z));
+			return;
+		}
+	}
+
+	// 폴백: 캡슐 없는 타겟 → 스켈레탈 메시 소켓, 없으면 바운드 중심
+	USkeletalMeshComponent* Mesh = Target->FindComponentByClass<USkeletalMeshComponent>();
+	USceneComponent* AttachParent = Mesh ? static_cast<USceneComponent*>(Mesh) : Target->GetRootComponent();
+	if (IsValid(AttachParent) == false)
+	{
+		return;
+	}
+	const FName Socket = (Mesh && Mesh->DoesSocketExist(LockOnSocketName)) ? LockOnSocketName : NAME_None;
+
+	ReticleWidgetComp->AttachToComponent(
+		AttachParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+
+	if (Socket.IsNone())
+	{
+		FVector Origin, Extent;
+		Target->GetActorBounds(true, Origin, Extent);
+		ReticleWidgetComp->SetWorldLocation(Origin);
+	}
+	else
+	{
+		ReticleWidgetComp->SetRelativeLocation(ReticleAttachOffset);
+	}
 }

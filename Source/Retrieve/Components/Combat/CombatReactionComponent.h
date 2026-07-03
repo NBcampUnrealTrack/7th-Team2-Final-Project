@@ -11,6 +11,8 @@ class ULockOnConfig;
 class ULockOnCameraConfig;
 class UHitReactionComponent;
 class URetrieveHitReactionProfile;
+class UUserWidget;
+class UWidgetComponent;
 
 // class UCombatFeedbackComponent // TODO: 추가 예정
 
@@ -61,6 +63,21 @@ protected:
 	// LockOnCameraRig 전용 카메라 추적/오프셋 파라미터
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|Config")
 	TObjectPtr<ULockOnCameraConfig> LockOnCameraConfig;
+	// 락온 레티클 WBP(HUD_Reticle_Crosshair_05 등). 미지정 시 외곽선만 동작
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
+	TSubclassOf<UUserWidget> ReticleWidgetClass;
+	// 타겟 몸통 중앙 소켓 이름. 없으면 바운드 중심으로 폴백
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
+	FName LockOnSocketName = TEXT("LockOnSocket");
+	// 레티클 스크린 공간 그리기 크기(픽셀)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
+	FVector2D ReticleDrawSize = FVector2D(64.f, 64.f);
+	// 레티클 앵커 기준점(0~1). (0.5,0.5)면 소켓 지점에 정중앙 정렬(몸 기준 고정)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
+	FVector2D ReticlePivot = FVector2D(0.5f, 0.5f);
+	// 캡슐 최상단 기준 부착 오프셋(cm). Z를 올리면 머리 위로 더. 캡슐 없으면 소켓 기준으로 적용
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|CombatReaction|LockOn|Reticle")
+	FVector ReticleAttachOffset = FVector(0.f, 0.f, 30.f);
 	// BeginPlay에서 Owner Actor에 런타임 생성/부착되는 하위 기능 컴포넌트
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Retrieve|CombatReaction|SubComponents")
 	TObjectPtr<ULockOnComponent> LockOnComp;
@@ -82,4 +99,11 @@ protected:
 private:
 	UFUNCTION()
 	void HandleLockOnTargetChanged(AActor* NewTarget);
+	// 레티클 위젯 컴포넌트 lazy 생성(스크린 공간)
+	void EnsureReticleComp();
+	// 타겟의 LockOnSocket에 스냅(없으면 메시에 붙인 뒤 바운드 중심으로 올림)
+	void AttachReticleToTarget(AActor* Target);
+	// 타겟에 어태치되는 레티클 위젯 컴포넌트
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetComponent> ReticleWidgetComp;
 };
