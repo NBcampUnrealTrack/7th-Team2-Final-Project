@@ -25,6 +25,7 @@
 *.la
 *.a
 *.lib
+!Plugins/GameAnalytics/Source/ThirdParty/GA-SDK-CPP/lib/Win64/GameAnalytics.lib
 
 # Executables
 *.exe
