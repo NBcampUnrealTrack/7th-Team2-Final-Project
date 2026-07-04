@@ -1,5 +1,6 @@
 #include "UI/HUD/RetrieveHotBarWidget.h"
 
+#include "Components/ProgressBar.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/Player/StaminaComponent.h"
 #include "GameFramework/Pawn.h"
@@ -11,6 +12,8 @@ void URetrieveHotBarWidget::NativeConstruct()
 
 	HealthBarWidget = Cast<UUserWidget>(GetWidgetFromName(TEXT("HUD_HPBar")));
 	StaminaBarWidget = Cast<UUserWidget>(GetWidgetFromName(TEXT("HUD_MPBar")));
+	HealthContainerWidget = Cast<UUserWidget>(GetWidgetFromName(TEXT("HUD_HPContainer")));
+	StaminaContainerWidget = Cast<UUserWidget>(GetWidgetFromName(TEXT("HUD_MPContainer")));
 
 	TryBindToOwningPawn();
 	RefreshAllBars();
@@ -21,6 +24,8 @@ void URetrieveHotBarWidget::NativeDestruct()
 	UnbindFromComponents();
 	HealthBarWidget = nullptr;
 	StaminaBarWidget = nullptr;
+	HealthContainerWidget = nullptr;
+	StaminaContainerWidget = nullptr;
 
 	Super::NativeDestruct();
 }
@@ -100,7 +105,7 @@ void URetrieveHotBarWidget::RefreshHealthBar()
 {
 	if (HealthComponent)
 	{
-		UpdateFantasyBar(HealthBarWidget, HealthComponent->GetHealth(), HealthComponent->GetMaxHealth());
+		ApplyHealth(HealthComponent->GetHealth(), HealthComponent->GetMaxHealth());
 	}
 }
 
@@ -108,25 +113,37 @@ void URetrieveHotBarWidget::RefreshStaminaBar()
 {
 	if (StaminaComponent)
 	{
-		UpdateFantasyBar(StaminaBarWidget, StaminaComponent->GetStamina(), StaminaComponent->GetMaxStamina());
+		ApplyStamina(StaminaComponent->GetStamina(), StaminaComponent->GetMaxStamina());
 	}
+}
+
+void URetrieveHotBarWidget::ApplyHealth(float Current, float Max)
+{
+	UpdateFantasyBar(HealthBarWidget, Current, Max);
+	const float Fraction = Max > 0.f ? Current / Max : 0.f;
+	SetProgressBarPercent(HealthContainerWidget, TEXT("BAR_Health"), Fraction);
+}
+
+void URetrieveHotBarWidget::ApplyStamina(float Current, float Max)
+{
+	UpdateFantasyBar(StaminaBarWidget, Current, Max);
+	const float Fraction = Max > 0.f ? Current / Max : 0.f;
+	SetProgressBarPercent(StaminaContainerWidget, TEXT("BAR_Health"), Fraction);
 }
 
 void URetrieveHotBarWidget::HandleHealthChanged(float NewHealth)
 {
-	const float MaxHealth = HealthComponent ? HealthComponent->GetMaxHealth() : 0.0f;
-	UpdateFantasyBar(HealthBarWidget, NewHealth, MaxHealth);
+	ApplyHealth(NewHealth, HealthComponent ? HealthComponent->GetMaxHealth() : 0.f);
 }
 
 void URetrieveHotBarWidget::HandleMaxHealthChanged(float NewMaxHealth)
 {
-	const float Health = HealthComponent ? HealthComponent->GetHealth() : 0.0f;
-	UpdateFantasyBar(HealthBarWidget, Health, NewMaxHealth);
+	ApplyHealth(HealthComponent ? HealthComponent->GetHealth() : 0.f, NewMaxHealth);
 }
 
 void URetrieveHotBarWidget::HandleStaminaChanged(float NewStamina, float MaxStamina)
 {
-	UpdateFantasyBar(StaminaBarWidget, NewStamina, MaxStamina);
+	ApplyStamina(NewStamina, MaxStamina);
 }
 
 void URetrieveHotBarWidget::UpdateFantasyBar(UUserWidget* BarWidget, float CurrentValue, float MaxValue)
@@ -173,5 +190,19 @@ bool URetrieveHotBarWidget::CallNoArgFunction(UObject* Object, FName FunctionNam
 		return true;
 	}
 
+	return false;
+}
+
+bool URetrieveHotBarWidget::SetProgressBarPercent(UUserWidget* Container, FName ProgressBarName, float Percent)
+{
+	if (!Container)
+	{
+		return false;
+	}
+	if (UProgressBar* Bar = Cast<UProgressBar>(Container->GetWidgetFromName(ProgressBarName)))
+	{
+		Bar->SetPercent(FMath::Clamp(Percent, 0.f, 1.f));
+		return true;
+	}
 	return false;
 }

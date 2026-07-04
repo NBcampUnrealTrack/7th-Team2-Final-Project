@@ -12,10 +12,12 @@ void URetrieveLoadingScreenWidget::PlayFadeOutAndRemove()
 	else
 	{
 		RemoveFromParent();
+		OnRemoved.Broadcast();
 	}
 }
 
 void URetrieveLoadingScreenWidget::HandleFadeOutFinished()
 {
 	RemoveFromParent();
+	OnRemoved.Broadcast();
 }

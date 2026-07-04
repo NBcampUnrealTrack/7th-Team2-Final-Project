@@ -21,10 +21,10 @@
 #include "UI/HUD/RetrieveQuickSlotWheelWidget.h"
 #include "UI/Shop/ShopPanelWidget.h"
 #include "Engine/Engine.h"
-#include "Engine/GameViewportClient.h"
 #include "Shop/RetrieveShopDefinitionAsset.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "Components/World/RetrieveShopComponent.h"
+#include "Quest/QuestBranchComponent.h"
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
@@ -366,7 +366,8 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
 {
-	if (ShouldShowLoadingCover(Previous, NewState))
+	const bool bShouldCover = ShouldShowLoadingCover(Previous, NewState);
+	if (bShouldCover)
 	{
 		ShowLoadingScreen();
 	}
@@ -452,9 +453,19 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 
 	case ERetrieveSessionState::InGame:
 		{
-			FInputModeGameOnly Mode;
-			SetInputMode(Mode);
-			bShowMouseCursor = false;
+			if (bLoadingCoverActive)
+			{
+				FInputModeUIOnly Mode;
+				Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+				SetInputMode(Mode);
+				bShowMouseCursor = false;
+			}
+			else
+			{
+				FInputModeGameOnly Mode;
+				SetInputMode(Mode);
+				bShowMouseCursor = false;
+			}
 			break;
 		}
 
@@ -544,6 +555,10 @@ void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState 
 				HideLoadingScreen();
 			}
 		}
+		else
+		{
+			BroadcastRevealGate(false);
+		}
 		break;
 
 	default:
@@ -621,6 +636,8 @@ void ARetrievePlayerController::ShowLoadingScreen()
 
 	// HUD (0), 토스트 (10), 패널 (50) 위의 ZOrder
 	ActiveLoadingScreen->AddToViewport(100);
+	bLoadingCoverActive = true;
+	BroadcastRevealGate(true); // 토스트/메시지 억제
 
 	// InGame에 도달하지 못했을 때 플레이어가 화면에 갇히지 않도록 함
 	if (UWorld* World = GetWorld())
@@ -643,13 +660,49 @@ void ARetrievePlayerController::HideLoadingScreen()
 	{
 		if (URetrieveLoadingScreenWidget* LS = Cast<URetrieveLoadingScreenWidget>(ActiveLoadingScreen))
 		{
+			LS->OnRemoved.AddDynamic(this, &ARetrievePlayerController::HandleLoadingScreenRemoved);
 			LS->PlayFadeOutAndRemove();
+			if (UWorld* FadeWorld = GetWorld())
+			{
+				FadeWorld->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
+					&ARetrievePlayerController::HandleLoadingScreenRemoved, LoadingScreenSafetySeconds, false);
+			}
 		}
 		else
 		{
 			ActiveLoadingScreen->RemoveFromParent();
+			HandleLoadingScreenRemoved();
 		}
 		ActiveLoadingScreen = nullptr;
+	}
+	else
+	{
+		HandleLoadingScreenRemoved();
+	}
+	
+	BroadcastRevealGate(false); // 커버 사라짐: 버퍼링된 위젯 표시, 오프닝 타임라인 시작
+}
+
+void ARetrievePlayerController::HandleLoadingScreenRemoved()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LoadingScreenTimerHandle);
+	}
+	bLoadingCoverActive = false;
+	if (const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+	{
+		UpdateInputMode(GS->GetSessionState());
+	}
+}
+
+void ARetrievePlayerController::BroadcastRevealGate(bool bBlocked)
+{
+	if (UWorld* World = GetWorld())
+	{
+		FRetrieveRevealGatePayload Message;
+		Message.bBlocked = bBlocked;
+		UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_UI_RevealGate, Message);
 	}
 }
 
@@ -1261,6 +1314,18 @@ void ARetrievePlayerController::CloseConversation()
 		if (URetrieveDialogueComponent* DC = CurrentDialogueNPC->FindComponentByClass<URetrieveDialogueComponent>())
 		{
 			DC->ReturnToIdle();
+
+			// TODO: Stage 1 한정 로직. 추후 삭제 및 수정할것.
+			if (HasAuthority() && DC->CompleteStepOnConversationEnd.IsValid())
+			{
+				if (ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+				{
+					if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+					{
+						Quest->CompleteStep(DC->CompleteStepOnConversationEnd);
+					}
+				}
+			}
 		}
 	}
 	CurrentDialogueNPC = nullptr;

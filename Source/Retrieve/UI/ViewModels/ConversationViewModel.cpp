@@ -85,7 +85,11 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 	{
 		SpeakerTag = Lumen->SpeakerTag;
 		SpeakerName = Lumen->DisplayName;
-		Lines = Lumen->DefaultGreetingLines;
+		// 1회성 첫 만남 인사말: 게이트 스텝이 유효하고 아직 완료되지 않았을 때만 IntroLines를 우선 재생.
+		const bool bUseIntro = Lumen->IntroLines.Num() > 0
+			&& Lumen->IntroSeenStep.IsValid()
+			&& Quest && !Quest->IsStepCompleted(Lumen->IntroSeenStep);
+		Lines = bUseIntro ? Lumen->IntroLines : Lumen->DefaultGreetingLines;
 	}
 
 	if (!SpeakerTag.IsValid())

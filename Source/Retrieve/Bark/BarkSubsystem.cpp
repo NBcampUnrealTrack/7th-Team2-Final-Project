@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Audio/RetrieveMusicSubsystem.h"
 #include "BarkSpeakerComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -268,6 +269,15 @@ bool UBarkSubsystem::IsLocalPlayerInCombat() const
 	{
 		return false;
 	}
+
+	if (const URetrieveMusicSubsystem* Music = World->GetSubsystem<URetrieveMusicSubsystem>())
+	{
+		if (Music->IsCombatActive())
+		{
+			return true;
+		}
+	}
+
 	for (const ULocalPlayer* LocalPlayer : GameInstance->GetLocalPlayers())
 	{
 		const APlayerController* PC = LocalPlayer ? LocalPlayer->GetPlayerController(World) : nullptr;

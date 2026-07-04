@@ -34,7 +34,10 @@ struct FLumenContextEvalInstanceData
 	/** 위협 스캔 쓰로틀링용 누적 타이머 */
 	UPROPERTY()
 	float TimeSinceThreatScan = 0.f;
-	
+
+	UPROPERTY()
+	bool bHostEngaged = false;
+
 
 	UPROPERTY()
 	TWeakObjectPtr<ULumenFollowComponent> CachedFollowComp = nullptr;
@@ -57,6 +60,9 @@ struct RETRIEVE_API FLumenContextEvaluator : public FStateTreeEvaluatorCommonBas
 
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float ThreatScanInterval = 0.2f;
+
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
+	float HostCombatRadius = 3500.f;
 
 private:
 	TStateTreeExternalDataHandle<AAIController> AIControllerHandle;

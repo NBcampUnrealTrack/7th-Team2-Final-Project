@@ -54,20 +54,21 @@ void FLumenContextEvaluator::Tick(FStateTreeExecutionContext& Context, const flo
 		InstanceData.DistanceToHost = FVector::Distance(Host->GetActorLocation(), Pawn->GetActorLocation());
 
 		// 호스트의 전투 여부. 루멘은 ASC가 없으므로 호스트 PlayerState의 Sovereign ASC에서 읽는다.
-		bool bInCombat = false;
+		bool bStanceCombat = false;
 		if (const IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Host))
 		{
 			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
 			{
-				bInCombat = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Combat);
+				bStanceCombat = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Combat);
 			}
 		}
-		InstanceData.bHostInCombat = bInCombat;
+		InstanceData.bHostInCombat = bStanceCombat || InstanceData.bHostEngaged;
 	}
 	else
 	{
 		InstanceData.DistanceToHost = 0.f;
 		InstanceData.bHostInCombat = false;
+		InstanceData.bHostEngaged = false;
 	}
 
 	// ---- 플레이어가 Wait 토글을 켰는지 수집
@@ -81,6 +82,7 @@ void FLumenContextEvaluator::Tick(FStateTreeExecutionContext& Context, const flo
 		InstanceData.TimeSinceThreatScan = 0.f;
 
 		bool bThreatNear = false;
+		bool bHostEngaged = false;
 		if (AAIController* AIController = Context.GetExternalDataPtr(AIControllerHandle))
 		{
 			if (const IGenericTeamAgentInterface* TeamAgent = Cast<IGenericTeamAgentInterface>(AIController))
@@ -88,7 +90,8 @@ void FLumenContextEvaluator::Tick(FStateTreeExecutionContext& Context, const flo
 				if (World)
 				{
 					const FVector Origin = Pawn->GetActorLocation();
-					const float RadiusSq = FMath::Square(ThreatNearRadius);
+					const float ThreatRadiusSq = FMath::Square(ThreatNearRadius);
+					const float HostRadiusSq = FMath::Square(HostCombatRadius);
 					for (TActorIterator<APawn> It(World); It; ++It)
 					{
 						APawn* Other = *It;
@@ -96,13 +99,30 @@ void FLumenContextEvaluator::Tick(FStateTreeExecutionContext& Context, const flo
 						{
 							continue;
 						}
-						if (FVector::DistSquared(Origin, Other->GetActorLocation()) > RadiusSq)
+						if (TeamAgent->GetTeamAttitudeTowards(*Other) != ETeamAttitude::Hostile)
 						{
 							continue;
 						}
-						if (TeamAgent->GetTeamAttitudeTowards(*Other) == ETeamAttitude::Hostile)
+						if (!bThreatNear && FVector::DistSquared(Origin, Other->GetActorLocation()) <= ThreatRadiusSq)
 						{
 							bThreatNear = true;
+						}
+						if (!bHostEngaged && Host
+							&& FVector::DistSquared(Host->GetActorLocation(), Other->GetActorLocation()) <= HostRadiusSq)
+						{
+							if (const IAbilitySystemInterface* EnemyASI = Cast<IAbilitySystemInterface>(Other))
+							{
+								if (UAbilitySystemComponent* EnemyASC = EnemyASI->GetAbilitySystemComponent())
+								{
+									bHostEngaged =
+										!EnemyASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Dead)
+										&& !EnemyASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Idle)
+										&& !EnemyASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Return);
+								}
+							}
+						}
+						if (bThreatNear && bHostEngaged)
+						{
 							break;
 						}
 					}
@@ -110,5 +130,6 @@ void FLumenContextEvaluator::Tick(FStateTreeExecutionContext& Context, const flo
 			}
 		}
 		InstanceData.bThreatNear = bThreatNear;
+		InstanceData.bHostEngaged = bHostEngaged;
 	}
 }

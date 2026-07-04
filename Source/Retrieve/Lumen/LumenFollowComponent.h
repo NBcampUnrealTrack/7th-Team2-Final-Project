@@ -43,7 +43,10 @@ public:
 	void SetModeFromStateTree(EFollowMode NewMode);
 	EFollowMode GetMode() const { return Mode; }
 	bool IsWaitRequested() const { return bWaitRequested; }
-	
+
+	UFUNCTION(BlueprintPure, Category = "Lumen|Combat")
+	bool IsCowering() const { return Mode == EFollowMode::RetreatCombat; }
+
 	// ---- EQS 안전지대 ----
 	void RequestSafeSpotQuery();
 	bool HasValidSafeSpot() const { return bSafeSpotValid; }

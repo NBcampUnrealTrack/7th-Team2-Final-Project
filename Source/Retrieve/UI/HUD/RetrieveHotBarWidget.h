@@ -30,12 +30,18 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> StaminaBarWidget;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> HealthContainerWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<URetrieveHealthComponent> HealthComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaminaComponent> StaminaComponent;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> StaminaContainerWidget;
 
 	TWeakObjectPtr<APawn> BoundPawn;
 
@@ -44,6 +50,9 @@ private:
 	void RefreshAllBars();
 	void RefreshHealthBar();
 	void RefreshStaminaBar();
+	
+	void ApplyHealth(float Current, float Max);
+	void ApplyStamina(float Current, float Max);
 
 	UFUNCTION()
 	void HandleHealthChanged(float NewHealth);
@@ -57,4 +66,5 @@ private:
 	static void UpdateFantasyBar(UUserWidget* BarWidget, float CurrentValue, float MaxValue);
 	static bool SetIntegerProperty(UObject* Object, FName PropertyName, int32 Value);
 	static bool CallNoArgFunction(UObject* Object, FName FunctionName);
+	static bool SetProgressBarPercent(UUserWidget* Container, FName ProgressBarName, float Percent);
 };
