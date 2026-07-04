@@ -42,7 +42,10 @@ public class Retrieve : ModuleRules
 		{
 			"Niagara",
 			"AssetRegistry",
-			"GeometryCollectionEngine"
+			"GeometryCollectionEngine",
+			"Analytics",
+			"GameAnalytics",
+			"RenderCore"
 		});
 
 		if (Target.bBuildEditor)
