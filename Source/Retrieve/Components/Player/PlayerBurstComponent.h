@@ -31,6 +31,9 @@ public:
     // 공용 진입점: 임의의 공격 실행 spec으로 실행 시작(강공 등도 사용)
     void BeginAttackExecution(const FAttackExecutionSpec& Spec);
 
+    // 공중 버스트 착지 슬램: 중심 반경 내 적에게 AoE 데미지 + (보스 제외 옵션) 방사 넉백. GA_Burst가 착지 시 호출
+    void ApplyLandingImpact(const FVector& Center, float Radius, float DamageMultiplier, bool bUseKnockback, const FRetrieveKnockbackParams& Knockback, bool bExcludeBoss);
+
 private:
     // AttackType별 분기
     void DoCleaveHit(const FBurstHitInstance& Hit, int32 HitIndex);
@@ -38,6 +41,9 @@ private:
     void DoWorldActorHit(const FBurstHitInstance& Hit, int32 HitIndex);
     void DoDashHit(const FBurstHitInstance& Hit, int32 HitIndex);
     void DoAoEHit(const FBurstHitInstance& Hit, int32 HitIndex);
+    void DoConeHit(const FBurstHitInstance& Hit, int32 HitIndex);
+    // 지속 범위(소용돌이/장판): 시전자 중심 반경 안의 적에게 주기 데미지 + 매 프레임 방사 넉백.
+    void DoAreaContinuousHit(const FBurstHitInstance& Hit, int32 HitIndex);
 
     // HitSource → 월드 좌표
     FVector ResolveSourceLocation(const FBurstHitInstance& Hit) const;
@@ -97,4 +103,7 @@ private:
 
     // Dash 중복 발사 방지 (HitIndex별 1회 발사)
     TArray<bool>    PerHitDashLaunched;
+
+    // AreaContinuous 전용: HitIndex별 (대상 → 마지막 데미지 시각). 적별 재적용 간격 판정용.
+    TArray<TMap<TWeakObjectPtr<AActor>, double>> PerHitLastHitTime;
 };

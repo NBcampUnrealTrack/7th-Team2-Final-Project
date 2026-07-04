@@ -9,6 +9,7 @@
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "Animation/RetrieveWeaponSockets.h"
@@ -298,13 +299,17 @@ void UGA_Attack::ApplyStepDamage()
 		return;
 	}
 	
+	const bool bStepUsesCone = CachedComboSteps.IsValidIndex(CurrentComboIndex) && CachedComboSteps[CurrentComboIndex].bUseCone;
+	const bool bStepWeaponTrace = !CachedComboSteps.IsValidIndex(CurrentComboIndex) || CachedComboSteps[CurrentComboIndex].bWeaponTrace;
+
 	TArray<FRetrieveEquippedWeaponMesh> HitParts;
-	if (IsValid(CachedWeaponComponent))
+	if (bStepWeaponTrace && IsValid(CachedWeaponComponent))
 	{
 		CachedWeaponComponent->GetHitVolumeMeshes(HitParts);
 	}
-	
-	if (HitParts.IsEmpty())
+
+	// 무기(블레이드) 트레이스도 콘도 없으면 판정할 게 없다.
+	if (HitParts.IsEmpty() && !bStepUsesCone)
 	{
 		return;
 	}
@@ -381,6 +386,47 @@ void UGA_Attack::ApplyStepDamage()
 				}
 			}
 			PartPrev = Seg.Points;
+		}
+	}
+
+	// 콘 스텝: 블레이드 판정에 더해 전방 부채꼴 안 적을 추가.
+	if (CachedComboSteps.IsValidIndex(CurrentComboIndex) && CachedComboSteps[CurrentComboIndex].bUseCone)
+	{
+		const FWeaponComboStep& ConeStep = CachedComboSteps[CurrentComboIndex];
+		if (ConeStep.ConeRadius > 0.f)
+		{
+			const FVector ConeOrigin = AvatarActor->GetActorLocation();
+			const FVector ConeFwd = AvatarActor->GetActorForwardVector().GetSafeNormal2D();
+			const float ConeCos = FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(ConeStep.ConeHalfAngleDeg, 0.f, 180.f)));
+
+			TArray<FOverlapResult> ConeOverlaps;
+			World->OverlapMultiByObjectType(ConeOverlaps, ConeOrigin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(ConeStep.ConeRadius), QueryParams);
+			if (bDebugDrawTrace)
+			{
+				const FVector EdgeL = ConeFwd.RotateAngleAxis(ConeStep.ConeHalfAngleDeg, FVector::UpVector);
+				const FVector EdgeR = ConeFwd.RotateAngleAxis(-ConeStep.ConeHalfAngleDeg, FVector::UpVector);
+				DrawDebugSphere(World, ConeOrigin, ConeStep.ConeRadius, 16, FColor::Cyan, false, 1.5f);
+				DrawDebugLine(World, ConeOrigin, ConeOrigin + ConeFwd * ConeStep.ConeRadius, FColor::Green, false, 1.5f, 0, 2.f);
+				DrawDebugLine(World, ConeOrigin, ConeOrigin + EdgeL * ConeStep.ConeRadius, FColor::Yellow, false, 1.5f, 0, 2.f);
+				DrawDebugLine(World, ConeOrigin, ConeOrigin + EdgeR * ConeStep.ConeRadius, FColor::Yellow, false, 1.5f, 0, 2.f);
+				UE_LOG(LogRetrieveCombat, Warning, TEXT("[GA_Attack] Cone step=%d Overlaps=%d Fwd=%s"),
+					CurrentComboIndex, ConeOverlaps.Num(), *ConeFwd.ToCompactString());
+			}
+			for (const FOverlapResult& Ov : ConeOverlaps)
+			{
+				AActor* ConeTarget = Ov.GetActor();
+				if (!IsValid(ConeTarget) || ConeTarget == AvatarActor) continue;
+				const FVector ToTarget = (ConeTarget->GetActorLocation() - ConeOrigin).GetSafeNormal2D();
+				if (!ConeFwd.IsNearlyZero() && FVector::DotProduct(ConeFwd, ToTarget) < ConeCos) continue;
+				// GetActor()가 유효하도록 HitObjectHandle 명시(UE5).
+				FHitResult ConeHit(ForceInit);
+				ConeHit.HitObjectHandle = FActorInstanceHandle(ConeTarget);
+				ConeHit.ImpactPoint = ConeTarget->GetActorLocation();
+				ConeHit.Location = ConeTarget->GetActorLocation();
+				ConeHit.ImpactNormal = FVector::UpVector;
+				ConeHit.bBlockingHit = true;
+				AllHits.Add(ConeHit);
+			}
 		}
 	}
 

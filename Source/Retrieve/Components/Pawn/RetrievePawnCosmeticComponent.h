@@ -16,6 +16,7 @@ class UAbilitySystemComponent;
 class UMaterialInterface;
 class USkeletalMesh;
 class USkeletalMeshComponent;
+class UNiagaraComponent;
 
 USTRUCT()
 struct FRetrieveSpawnedEquipmentVisuals
@@ -64,6 +65,8 @@ private:
 
 	void ApplyCosmeticLayer();
 	void ApplyVisualLayout();
+	// 스태프 왼손 원소 VFX: 현재 무기(Staff)+원소에 맞는 Niagara로 스왑. 무기/원소 변경 시 호출.
+	void RefreshHandVFX();
 
 	// 기본 바디 파츠 (레이아웃당 1회 생성, 장비 변화로 destroy하지 않고 visibility로만 제어)
 	void ApplyDefaultBodyPartSet(const URetrieveModularPartSet* PartSet);
@@ -112,4 +115,8 @@ private:
 	FGameplayTag CurrentWeaponTypeTag;
 	FGameplayTag CurrentElementTag;
 	FGameplayTagContainer CosmeticTags;
+
+	// 현재 왼손에 부착된 원소 VFX(원소/무기 변경 시 스왑).
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> SpawnedHandVFX;
 };

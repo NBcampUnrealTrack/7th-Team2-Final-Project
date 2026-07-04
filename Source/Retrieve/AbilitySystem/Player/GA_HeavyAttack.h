@@ -10,6 +10,7 @@ class UAbilityTask_PlayMontageAndWait;
 class UAnimMontage;
 class UWeaponComponent;
 class UPlayerBurstComponent;
+class AStaffProjectile;
 
 /**
  * 통합 강공격 — 현재 원소의 Heavy variant를 무기 공격 자산(UWeaponAttackDefinition)에서 resolve해 타입별 실행
@@ -35,6 +36,8 @@ private:
 	void RunProjectilePath();
 	void ScheduleProjectiles();
 	void SpawnProjectile();
+	// 단일 투사체 스폰. 스폰된 투사체 반환(실패 시 nullptr). 레거시/다중오프셋(얼음창) 공용.
+	AStaffProjectile* SpawnOneProjectile(FVector SpawnOffset, bool bAddOffsetToSocketBase, float LaunchDelay);
 	AActor* ResolveAimTarget() const;
 
 	void PlayMontageThenEnd();

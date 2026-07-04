@@ -1,11 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "GameplayTagContainer.h"
 #include "AbilitySystem/RetrieveGameplayAbility.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "GA_Burst.generated.h"
 
 struct FSkillCombination;
+class ACharacter;
 class UAbilityTask_PlayMontageAndWait;
 class UPlayerBurstComponent;
 
@@ -49,9 +52,12 @@ private:
 	UFUNCTION() void HandleMontageBlendOut();
 	UFUNCTION() void HandleMontageInterrupted();
 	UFUNCTION() void HandleMontageCancelled();
+	UFUNCTION() void HandleLanded(const FHitResult& Hit);
 
 	// MontageTask 종료 + BurstComponent 정리. EndAbility/CancelAbility 공용.
 	void CleanupBurst();
+	// LandedDelegate 구독 해제
+	void UnbindLanded();
 
 	// 스킬 타입별 시전 잠금(이동/회전) 적용/해제
 	void ApplyCastLockTags(const FSkillCombination* Combo);
@@ -69,4 +75,16 @@ private:
 	TObjectPtr<UPlayerBurstComponent> CachedBurstComp;
 	
 	FGameplayTagContainer AppliedCastLockTags;
+
+	// ---- Landing Impact (bDoLandingImpact 버스트: 낙법/래그돌 억제 + 착지섹션 점프 + AoE/넉백) ----
+	UPROPERTY(Transient)
+	TWeakObjectPtr<ACharacter> BoundLandedCharacter;
+	bool bLandingImpactEnabled = false;
+	bool bLandingHandled = false;
+	FName CachedLandingSection = NAME_None;
+	float CachedLandingRadius = 0.f;
+	float CachedLandingDamageMul = 1.f;
+	bool bCachedUseLandingKnockback = false;
+	bool bCachedExcludeBoss = true;
+	FRetrieveKnockbackParams CachedLandingKnockback;
 };

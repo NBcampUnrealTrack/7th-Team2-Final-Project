@@ -16,6 +16,7 @@
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "NiagaraComponent.h"
+#include "TimerManager.h"
 
 namespace
 {
@@ -105,6 +106,42 @@ void AStaffProjectile::Launch(const FVector& Direction, float Speed)
 	ProjectileMovement->Velocity = Direction.GetSafeNormal() * Speed;
 }
 
+void AStaffProjectile::ArmDelayedLaunch(const FVector& Direction, float Speed, float Delay)
+{
+	// 발사 전까지 Velocity 0으로 두면 PMC가 움직이지 않아 스폰 위치에 떠 있는다(중력 0 가정). Delay 후 저장된 방향으로 발사.
+	PendingLaunchDirection = Direction;
+	PendingLaunchSpeed = Speed;
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->Velocity = FVector::ZeroVector;
+		ProjectileMovement->InitialSpeed = 0.f;
+	}
+
+	UWorld* World = GetWorld();
+	if (World && Delay > 0.f)
+	{
+		World->GetTimerManager().SetTimer(LaunchDelayTimerHandle, this, &AStaffProjectile::HandleDelayedLaunch, Delay, false);
+	}
+	else
+	{
+		HandleDelayedLaunch();
+	}
+}
+
+void AStaffProjectile::HandleDelayedLaunch()
+{
+	Launch(PendingLaunchDirection, PendingLaunchSpeed);
+}
+
+void AStaffProjectile::IgnoreOtherProjectile(AStaffProjectile* Other)
+{
+	if (IsValid(Other) && Other != this && CollisionSphere)
+	{
+		// 이동 스윕에서 형제 투사체를 건너뛴다(블로킹/오버랩 모두 무시).
+		CollisionSphere->IgnoreActorWhenMoving(Other, true);
+	}
+}
+
 void AStaffProjectile::ConfigureAttack(
 	UAbilitySystemComponent* InSourceASC,
 	AActor* InInstigatorActor,
@@ -135,15 +172,15 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 
 	// 스폰 위치: 무기 메시 소켓 → 캐릭터 메시 소켓 → 액터+오프셋
 	FVector SpawnLocation = AvatarActor->GetActorLocation() + AvatarActor->GetActorRotation().RotateVector(Params.SpawnOffset);
-	bool bResolvedSocket = false;
+	bool bUsedSocket = false;
 	if (!Params.SpawnSocketName.IsNone())
 	{
 		if (WeaponMesh && WeaponMesh->DoesSocketExist(Params.SpawnSocketName))
 		{
 			SpawnLocation = WeaponMesh->GetSocketLocation(Params.SpawnSocketName);
-			bResolvedSocket = true;
+			bUsedSocket = true;
 		}
-		if (!bResolvedSocket)
+		if (!bUsedSocket)
 		{
 			if (const ACharacter* Char = Cast<ACharacter>(AvatarActor))
 			{
@@ -152,15 +189,26 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 					if (CharMesh->DoesSocketExist(Params.SpawnSocketName))
 					{
 						SpawnLocation = CharMesh->GetSocketLocation(Params.SpawnSocketName);
+						bUsedSocket = true;
 					}
 				}
 			}
 		}
+		// 다중 오프셋(얼음창 좌/상/우) 모드: 소켓을 앵커로 두고 그 위에 오프셋을 가산.
+		if (bUsedSocket && Params.bAddOffsetToSocketBase)
+		{
+			SpawnLocation += AvatarActor->GetActorRotation().RotateVector(Params.SpawnOffset);
+		}
 	}
 
-	// 발사 방향: 조준점 탄도해(아크) -> 오토락 타겟 -> 컨트롤 회전 전방
+	// 발사 방향: (액터 정면 강제) -> 조준점 탄도해(아크) -> 오토락 타겟 -> 컨트롤 회전 전방
 	FVector Direction = AvatarActor->GetActorForwardVector();
-	if (Params.bHasAimPoint && Params.GravityScaleOverride > 0.f)
+	if (Params.bUseActorForward)
+	{
+		// 캐릭터 정면으로 직진(Water Heavy 얼음창 등).
+		Direction = AvatarActor->GetActorForwardVector();
+	}
+	else if (Params.bHasAimPoint && Params.GravityScaleOverride > 0.f)
 	{
 		// 조준점 A를 아크로 통과하는 발사각 계산 → 착탄이 크로스헤어와 일치(숄더 시차 자동 해소).
 		const float GravityMag = FMath::Abs(World->GetGravityZ()) * Params.GravityScaleOverride;
@@ -212,7 +260,15 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 
 	Projectile->ConfigureAttack(SourceASC, AvatarActor, Params.DamageMultiplier, Params.HitReactType,
 		Params.AttackTypeTag, Params.ElementTag, Params.ElementStatusEffect, Params.ChargeBonusEventTag);
-	Projectile->Launch(Direction, Params.Speed);
+	if (Params.LaunchDelay > 0.f)
+	{
+		// 스폰 후 잠깐 떠 있다 발사(얼음창 맺힘→발사 연출).
+		Projectile->ArmDelayedLaunch(Direction, Params.Speed, Params.LaunchDelay);
+	}
+	else
+	{
+		Projectile->Launch(Direction, Params.Speed);
+	}
 
 	// 낙차 적용: 활 화살만(스태프 강공 등은 0이라 직선 유지).
 	// Launch가 MaxSpeed를 발사속도로 고정하므로 반드시 Launch 뒤에 처리한다.

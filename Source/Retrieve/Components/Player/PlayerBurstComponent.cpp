@@ -9,6 +9,7 @@
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
@@ -43,9 +44,16 @@ void UPlayerBurstComponent::BeginBurstSkill(const FSkillCombination* Row)
 	Spec.ProjectileClass      = Row->ProjectileClass;
 	Spec.WorldSpawnActorClass = Row->WorldSpawnActorClass;
 	Spec.WorldSpawnDistance   = Row->WorldSpawnDistance;
-	Spec.DashDistance         = Row->DashDistance;
-	Spec.DashLaunchDuration   = Row->DashLaunchDuration;
+	Spec.bWorldSnapToGround     = Row->bWorldSnapToGround;
+	Spec.WorldSpawnHeightOffset = Row->WorldSpawnHeightOffset;
+	Spec.WorldActorRadius       = Row->WorldActorRadius;
 	Spec.AoeRadius            = Row->AoeRadius;
+	Spec.ConeRadius           = Row->ConeRadius;
+	Spec.ConeHalfAngleDeg     = Row->ConeHalfAngleDeg;
+	Spec.ContinuousDamageInterval          = Row->ContinuousDamageInterval;
+	Spec.bUseContinuousKnockback           = Row->bUseContinuousKnockback;
+	Spec.ContinuousKnockback               = Row->ContinuousKnockback;
+	Spec.bExcludeBossFromContinuousKnockback = Row->bExcludeBossFromContinuousKnockback;
 	Spec.HitSequence          = Row->HitSequence;
 
 	BeginAttackExecution(Spec);
@@ -65,6 +73,7 @@ void UPlayerBurstComponent::EndBurstSkill()
 	PerHitHasPrevious.Reset();
 	PerHitProjectileSpawned.Reset();
 	PerHitDashLaunched.Reset();
+	PerHitLastHitTime.Reset();
 }
 
 void UPlayerBurstComponent::BeginAttackExecution(const FAttackExecutionSpec& Spec)
@@ -79,6 +88,7 @@ void UPlayerBurstComponent::BeginAttackExecution(const FAttackExecutionSpec& Spe
 	PerHitHasPrevious.SetNum(HitCount);
 	PerHitProjectileSpawned.SetNum(HitCount);
 	PerHitDashLaunched.SetNum(HitCount);
+	PerHitLastHitTime.SetNum(HitCount);
 	for (int32 Index = 0; Index < HitCount; ++Index)
 	{
 		PerHitHitActors[Index].Reset();
@@ -86,6 +96,7 @@ void UPlayerBurstComponent::BeginAttackExecution(const FAttackExecutionSpec& Spe
 		PerHitHasPrevious[Index] = false;
 		PerHitProjectileSpawned[Index] = false;
 		PerHitDashLaunched[Index] = false;
+		PerHitLastHitTime[Index].Reset();
 	}
 
 	UE_LOG(LogRetrieveCombat, Log,
@@ -123,6 +134,8 @@ void UPlayerBurstComponent::OnBurstHit(int32 HitIndex)
 	case EAttackExecutionType::Projectile:   DoProjectileHit(Hit, HitIndex); break;
 	case EAttackExecutionType::Dash:         DoDashHit(Hit, HitIndex); break;
 	case EAttackExecutionType::AreaOfEffect: DoAoEHit(Hit, HitIndex); break;
+	case EAttackExecutionType::Cone:         DoConeHit(Hit, HitIndex); break;
+	case EAttackExecutionType::AreaContinuous: DoAreaContinuousHit(Hit, HitIndex); break;
 	default: break;
 	}
 }
@@ -522,8 +535,23 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 			UWorld* World = Owner->GetWorld();
 			if (IsValid(World))
 			{
-				const FVector SpawnLocation = Owner->GetActorLocation()
+				FVector SpawnLocation = Owner->GetActorLocation()
 					+ Owner->GetActorForwardVector() * ActiveSpec.WorldSpawnDistance;
+
+				// 전방 지점 아래 지면을 찾아 착지 지점을 정렬한 뒤, 그 위 HeightOffset 높이에서 스폰
+				if (ActiveSpec.bWorldSnapToGround)
+				{
+					FHitResult GroundHit;
+					const FVector TraceStart = SpawnLocation + FVector(0.f, 0.f, 500.f);
+					const FVector TraceEnd = SpawnLocation - FVector(0.f, 0.f, 5000.f);
+					FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(BurstWorldActorGroundSnap), false, Owner);
+					if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, GroundParams))
+					{
+						SpawnLocation.Z = GroundHit.ImpactPoint.Z;
+					}
+				}
+				SpawnLocation.Z += ActiveSpec.WorldSpawnHeightOffset;
+
 				const FRotator SpawnRotation = Owner->GetActorRotation();
 				const FTransform SpawnTransform(SpawnRotation, SpawnLocation);
 
@@ -552,8 +580,9 @@ void UPlayerBurstComponent::DoWorldActorHit(const FBurstHitInstance& Hit, int32 
 		}
 	}
 
-	// 매 HitIndex 마다 sweep + 데미지 적용
-	SweepAndApply(Hit, ResolveSourceLocation(Hit), WorldActorRadius, HitIndex);
+	// 반경: 데이터(WorldActorRadius) 우선, 0이면 컴포넌트 기본
+	const float WActorR = (bHasActiveSpec && ActiveSpec.WorldActorRadius > 0.f) ? ActiveSpec.WorldActorRadius : WorldActorRadius;
+	SweepAndApply(Hit, ResolveSourceLocation(Hit), WActorR, HitIndex);
 }
 
 void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitIndex)
@@ -567,21 +596,30 @@ void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitInd
 		}
 
 		ACharacter* Character = Cast<ACharacter>(GetOwner());
-		const float DashDistance = bHasActiveSpec ? ActiveSpec.DashDistance : 0.f;
-		const float DashLaunchDuration = bHasActiveSpec ? ActiveSpec.DashLaunchDuration : 0.f;
-		if (IsValid(Character) && DashDistance > 0.f && DashLaunchDuration > 0.f)
+
+		const bool bPerHitDash = Hit.bOverrideDashMotion;
+		const float DashDistance = bPerHitDash ? Hit.DashForwardDistance : (bHasActiveSpec ? ActiveSpec.DashDistance : 0.f);
+		const float DashLaunchDuration = bPerHitDash ? Hit.DashLaunchDuration : (bHasActiveSpec ? ActiveSpec.DashLaunchDuration : 0.f);
+		const float DashUpwardSpeed = bPerHitDash ? Hit.DashUpwardSpeed : (bHasActiveSpec ? ActiveSpec.DashUpwardSpeed : 0.f);
+		const bool bHasUpward = !FMath::IsNearlyZero(DashUpwardSpeed);
+		const bool bHasForward = !FMath::IsNearlyZero(DashDistance);
+		if (IsValid(Character) && DashLaunchDuration > 0.f && (bHasForward || bHasUpward))
 		{
 			FVector Forward = Character->GetActorForwardVector();
 			Forward.Z = 0.f;
 			Forward = Forward.GetSafeNormal();
-			if (!Forward.IsNearlyZero())
+
+			const float HorizontalSpeed = DashDistance / DashLaunchDuration;
+			FVector LaunchVelocity = Forward * HorizontalSpeed;
+			LaunchVelocity.Z += DashUpwardSpeed;
+
+			if (!LaunchVelocity.IsNearlyZero())
 			{
-				const float LaunchSpeed = DashDistance / DashLaunchDuration;
-				URetrieveKnockbackLibrary::LaunchSelf(Character, Forward, LaunchSpeed, /*bOverrideXY=*/true, /*bOverrideZ=*/false);
+				URetrieveKnockbackLibrary::LaunchSelf(Character, LaunchVelocity.GetSafeNormal(), LaunchVelocity.Size(), /*bOverrideXY=*/true, /*bOverrideZ=*/bHasUpward);
 
 				UE_LOG(LogRetrieveCombat, Log,
-					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, DashDistance=%.1f, LaunchSpeed=%.1f"),
-					HitIndex, DashDistance, LaunchSpeed);
+					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, Dash=%.1f, Up=%.1f, Speed=%.1f"),
+					HitIndex, DashDistance, DashUpwardSpeed, LaunchVelocity.Size());
 			}
 		}
 	}
@@ -593,4 +631,212 @@ void UPlayerBurstComponent::DoAoEHit(const FBurstHitInstance& Hit, int32 HitInde
 {
 	const float Radius = bHasActiveSpec ? ActiveSpec.AoeRadius : 0.f;
 	SweepAndApply(Hit, ResolveSourceLocation(Hit), Radius, HitIndex);
+}
+
+void UPlayerBurstComponent::DoConeHit(const FBurstHitInstance& Hit, int32 HitIndex)
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
+
+	const float Radius = ActiveSpec.ConeRadius;
+	if (Radius <= 0.f) return;
+
+	UWorld* World = Owner->GetWorld();
+	if (!IsValid(World)) return;
+
+	const FVector Origin = Owner->GetActorLocation();
+	const FVector Forward = Owner->GetActorForwardVector().GetSafeNormal2D();
+	const float CosHalf = FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(ActiveSpec.ConeHalfAngleDeg, 0.f, 180.f)));
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerBurst_ConeHit), false, Owner);
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Origin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(Radius), QueryParams);
+
+	if (bDebugDrawTrace)
+	{
+		const FVector EdgeL = Forward.RotateAngleAxis(ActiveSpec.ConeHalfAngleDeg, FVector::UpVector);
+		const FVector EdgeR = Forward.RotateAngleAxis(-ActiveSpec.ConeHalfAngleDeg, FVector::UpVector);
+		DrawDebugSphere(World, Origin, Radius, 16, FColor::Cyan, false, 1.5f);
+		DrawDebugLine(World, Origin, Origin + Forward * Radius, FColor::Green, false, 1.5f, 0, 2.f);
+		DrawDebugLine(World, Origin, Origin + EdgeL * Radius, FColor::Yellow, false, 1.5f, 0, 2.f);
+		DrawDebugLine(World, Origin, Origin + EdgeR * Radius, FColor::Yellow, false, 1.5f, 0, 2.f);
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[Burst] DoConeHit HitIndex=%d Radius=%.0f Half=%.0f Overlaps=%d DmgGE=%s"),
+			HitIndex, Radius, ActiveSpec.ConeHalfAngleDeg, Overlaps.Num(), *GetNameSafe(ActiveSpec.DamageEffect));
+	}
+	if (Overlaps.IsEmpty()) return;
+
+	// HitIndex별 1회 히트(중복 방지)
+	TSet<TObjectPtr<AActor>>* HitSet = PerHitHitActors.IsValidIndex(HitIndex) ? &PerHitHitActors[HitIndex] : nullptr;
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Target = Overlap.GetActor();
+		if (!IsValid(Target) || Target == Owner) continue;
+		if (HitSet && HitSet->Contains(Target)) continue;
+
+		// 전방 부채꼴(수평) 각도 안만
+		const FVector ToTarget = (Target->GetActorLocation() - Origin).GetSafeNormal2D();
+		if (!Forward.IsNearlyZero() && FVector::DotProduct(Forward, ToTarget) < CosHalf) continue;
+
+		FHitResult HitResult;
+		HitResult.ImpactPoint = Target->GetActorLocation();
+		ApplyHitToTarget(Target, Hit, HitResult);
+
+		if (HitSet)
+		{
+			HitSet->Add(Target);
+		}
+	}
+}
+
+void UPlayerBurstComponent::DoAreaContinuousHit(const FBurstHitInstance& Hit, int32 HitIndex)
+{
+	// 지속 범위(소용돌이): 노티 구간 동안 매 프레임 호출.
+	//  - 데미지: 적별 ContinuousDamageInterval 간격 재적용(첫 진입 즉시 1틱).
+	//  - 넉백: 매 프레임 중심→바깥 방사. GE 방향성 넉백은 억제하고 방사로만 민다.
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
+
+	const float Radius = ActiveSpec.AoeRadius;
+	if (Radius <= 0.f) return;
+
+	UWorld* World = Owner->GetWorld();
+	if (!IsValid(World)) return;
+
+	const FVector Center = Owner->GetActorLocation();
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerBurst_AreaContinuous), false, Owner);
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(Radius), QueryParams);
+
+	if (bDebugDrawTrace)
+	{
+		DrawDebugSphere(World, Center, Radius, 24, Overlaps.Num() > 0 ? FColor::Cyan : FColor::Blue, false, -1.f);
+	}
+	if (Overlaps.IsEmpty()) return;
+
+	const double Now = World->GetTimeSeconds();
+	const float Interval = FMath::Max(0.f, ActiveSpec.ContinuousDamageInterval);
+	TMap<TWeakObjectPtr<AActor>, double>* TimeMap = PerHitLastHitTime.IsValidIndex(HitIndex) ? &PerHitLastHitTime[HitIndex] : nullptr;
+
+	// 방사 넉백을 단일 소스로 두기 위해 데미지 틱에서는 GE 넉백을 끈다(이중 넉백 방지).
+	FBurstHitInstance DamageHit = Hit;
+	DamageHit.KnockbackStrength = 0.f;
+	DamageHit.KnockbackUpwardStrength = 0.f;
+
+	TArray<ACharacter*> KnockbackTargets;
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Target = Overlap.GetActor();
+		if (!IsValid(Target) || Target == Owner) continue;
+
+		// 적별 간격 데미지: 첫 진입 즉시 1틱, 이후 Interval 경과 시마다 재적용.
+		bool bApplyDamage = true;
+		if (TimeMap && Interval > 0.f)
+		{
+			if (const double* Last = TimeMap->Find(Target))
+			{
+				bApplyDamage = (Now - *Last) >= Interval;
+			}
+		}
+		if (bApplyDamage)
+		{
+			FHitResult HitResult;
+			HitResult.ImpactPoint = Target->GetActorLocation();
+			ApplyHitToTarget(Target, DamageHit, HitResult);
+			if (TimeMap)
+			{
+				TimeMap->Add(Target, Now);
+			}
+		}
+
+		// 방사 넉백 대상 수집(보스 제외 옵션). 데미지 틱과 무관하게 매 프레임 지속 밀어내기.
+		if (ActiveSpec.bUseContinuousKnockback)
+		{
+			const UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+			const bool bIsBoss = TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+			if (!(ActiveSpec.bExcludeBossFromContinuousKnockback && bIsBoss))
+			{
+				if (ACharacter* HitChar = Cast<ACharacter>(Target))
+				{
+					KnockbackTargets.Add(HitChar);
+				}
+			}
+		}
+	}
+
+	if (ActiveSpec.bUseContinuousKnockback && KnockbackTargets.Num() > 0)
+	{
+		URetrieveKnockbackLibrary::ApplyRadialKnockbackToTargets(Center, Radius, KnockbackTargets, ActiveSpec.ContinuousKnockback);
+	}
+}
+
+void UPlayerBurstComponent::ApplyLandingImpact(const FVector& Center, float Radius, float DamageMultiplier, bool bUseKnockback, const FRetrieveKnockbackParams& Knockback, bool bExcludeBoss)
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
+	if (Radius <= 0.f) return;
+
+	UWorld* World = Owner->GetWorld();
+	if (!IsValid(World)) return;
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerBurst_LandingImpact), false, Owner);
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(Radius), QueryParams);
+
+	if (bDebugDrawTrace)
+	{
+		DrawDebugSphere(World, Center, Radius, 16, Overlaps.Num() > 0 ? FColor::Green : FColor::Orange, false, 2.f);
+	}
+	if (Overlaps.IsEmpty()) return;
+
+	// 착지 슬램 합성 타격(데미지/태그/VFX는 ApplyHitToTarget이 처리)
+	FBurstHitInstance LandingHit;
+	LandingHit.DamageMultiplier = DamageMultiplier;
+	LandingHit.HitSource = EBurstHitSource::Body;
+
+	TSet<TObjectPtr<AActor>> HitOnce;
+	TArray<ACharacter*> KnockbackTargets;
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Target = Overlap.GetActor();
+		if (!IsValid(Target) || Target == Owner || HitOnce.Contains(Target)) continue;
+		HitOnce.Add(Target);
+
+		FHitResult HitResult;
+		HitResult.ImpactPoint = Target->GetActorLocation();
+		ApplyHitToTarget(Target, LandingHit, HitResult);
+
+		if (bUseKnockback)
+		{
+			// 보스는 넉백 제외(옵션)
+			const UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+			const bool bIsBoss = TargetASC && TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+			if (!(bExcludeBoss && bIsBoss))
+			{
+				if (ACharacter* HitChar = Cast<ACharacter>(Target))
+				{
+					KnockbackTargets.Add(HitChar);
+				}
+			}
+		}
+	}
+
+	if (bUseKnockback && KnockbackTargets.Num() > 0)
+	{
+		URetrieveKnockbackLibrary::ApplyRadialKnockbackToTargets(Center, Radius, KnockbackTargets, Knockback);
+	}
 }

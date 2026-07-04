@@ -10,6 +10,9 @@
 #include "Components/Player/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerState.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 
 URetrievePawnCosmeticComponent::URetrievePawnCosmeticComponent(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -218,6 +221,52 @@ void URetrievePawnCosmeticComponent::RefreshCosmeticState()
 {
 	ApplyCosmeticLayer();
 	ApplyVisualLayout();
+	RefreshHandVFX();
+}
+
+void URetrievePawnCosmeticComponent::RefreshHandVFX()
+{
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	USkeletalMeshComponent* Mesh = IsValid(Character) ? Character->GetMesh() : nullptr;
+
+	// 원하는 VFX: Staff 장착 + 현재 원소에 매핑된 Niagara가 있을 때만.
+	UNiagaraSystem* DesiredVFX = nullptr;
+	if (IsValid(CosmeticData) && IsValid(Mesh)
+		&& CurrentWeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff
+		&& CurrentElementTag.IsValid())
+	{
+		if (const TSoftObjectPtr<UNiagaraSystem>* Found = CosmeticData->HandVFXByElement.Find(CurrentElementTag))
+		{
+			DesiredVFX = Found->LoadSynchronous();
+		}
+	}
+
+	// 같은 시스템이면 유지.
+	UNiagaraSystem* CurrentVFX = IsValid(SpawnedHandVFX) ? SpawnedHandVFX->GetAsset() : nullptr;
+	if (DesiredVFX == CurrentVFX)
+	{
+		return;
+	}
+
+	// 교체: 기존 제거 후 새 원소 VFX 부착.
+	if (IsValid(SpawnedHandVFX))
+	{
+		SpawnedHandVFX->DestroyComponent();
+		SpawnedHandVFX = nullptr;
+	}
+	if (DesiredVFX && IsValid(Mesh))
+	{
+		if (!Mesh->DoesSocketExist(CosmeticData->HandVFXSocket))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Cosmetic] HandVFX 소켓 '%s'이 캐릭터 메시에 없음 → 루트에 붙어 하반신을 덮음. 스켈레톤에 소켓 추가 필요."),
+				*CosmeticData->HandVFXSocket.ToString());
+		}
+		SpawnedHandVFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			DesiredVFX, Mesh, CosmeticData->HandVFXSocket,
+			FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, /*bAutoDestroy=*/false);
+	}
 }
 
 void URetrievePawnCosmeticComponent::ApplyCosmeticLayer()

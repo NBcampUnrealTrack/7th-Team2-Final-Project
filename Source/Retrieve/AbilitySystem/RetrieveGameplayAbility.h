@@ -113,6 +113,9 @@ protected:
 	// 플레이어 액션 공통 발동 게이트: 회피/경직/다운/사망 차단(+선택적으로 공중 차단)
 	void ApplyCommonActionBlocks(bool bBlockAirborne = true);
 
+	// 돌진 이동기: 자기 캡슐이 적(Pawn)을 통과(true)/막음(false). 벽(WorldStatic/Dynamic) 충돌은 유지.
+	void SetAvatarPawnCollisionIgnored(bool bIgnore) const;
+
 private:
 	void TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& AbilitySpec) const;
 	// LocomotionAction 차단 중에도, 현재 캔슬 윈도우가 이 어빌리티의 입력 intent를 허용하면 true(차단 무시 = 캔슬 우선).

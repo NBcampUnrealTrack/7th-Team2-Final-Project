@@ -3,6 +3,8 @@
 #include "Components/SceneComponent.h"
 #include "Curves/CurveFloat.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 
 ABurstWorldActorBase::ABurstWorldActorBase()
 {
@@ -19,11 +21,13 @@ void ABurstWorldActorBase::BeginPlay()
 	// 수명/파괴는 Tick 에서 관리(LifeTime 도달 → 가라앉기 → Destroy).
 	// SetLifeSpan 으로 즉시 파괴하지 않는다.
 
-	// 스폰된 위치를 목표로, 그 위/아래에서 시작
+	// 스폰된 위치를 목표로, 그 위/아래(+수평 오프셋)에서 시작.
 	TargetLocation = GetActorLocation();
-	StartLocation = TargetLocation + FVector(0.f, 0.f, SpawnHeightOffset);
+	// 로컬 오프셋(X전후/Y좌우/Z상하) → 수평값 있으면 대각선 낙하.
+	const FVector LocalStartOffset(SpawnHorizontalOffset.X, SpawnHorizontalOffset.Y, SpawnHeightOffset);
+	StartLocation = TargetLocation + GetActorRotation().RotateVector(LocalStartOffset);
 
-	if (MoveDuration > 0.f && !FMath::IsNearlyZero(SpawnHeightOffset))
+	if (MoveDuration > 0.f && !LocalStartOffset.IsNearlyZero())
 	{
 		SetActorLocation(StartLocation);
 		MoveElapsed = 0.f;
@@ -31,9 +35,10 @@ void ABurstWorldActorBase::BeginPlay()
 	}
 	else
 	{
-		// 모션 없음 → 즉시 목표 위치
+		// 모션 없음 → 즉시 목표 위치 + 임팩트
 		SetActorLocation(TargetLocation);
 		bMoving = false;
+		SpawnImpactVFX();
 	}
 }
 
@@ -60,6 +65,7 @@ void ABurstWorldActorBase::Tick(float DeltaTime)
 		{
 			SetActorLocation(TargetLocation);
 			bMoving = false;
+			SpawnImpactVFX(); // 지면 도착 = 임팩트 이펙트(버섯구름 등)
 		}
 	}
 
@@ -88,6 +94,20 @@ void ABurstWorldActorBase::Tick(float DeltaTime)
 	if (!bMoving && LifeTime > 0.f && LifeElapsed >= LifeTime)
 	{
 		BeginSink();
+	}
+}
+
+void ABurstWorldActorBase::SpawnImpactVFX()
+{
+	if (bImpactSpawned)
+	{
+		return;
+	}
+	bImpactSpawned = true;
+
+	if (UNiagaraSystem* VFX = ImpactVFX.LoadSynchronous())
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), VFX, TargetLocation);
 	}
 }
 

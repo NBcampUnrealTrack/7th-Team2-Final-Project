@@ -91,7 +91,7 @@ void UAnimNotifyState_RetrieveAttackWarp::ResolveAndRegisterWarpTarget(
 	// 카메라 fallback(GetWarpAimDirection)을 여기 쓰면 무입력에도 정면으로 강제 회전하는 버그가 생긴다.
 	// → 회전 워프는 raw 이동 입력만 사용. (콘 타겟 검색의 카메라 fallback은 위에서 그대로 유지)
 	const FVector InputDir = SourceChar->GetLastMovementInputVector().GetSafeNormal2D();
-	if (bPlayerControlled && !InputDir.IsNearlyZero())
+	if (bRotateToInputWhenNoTarget && bPlayerControlled && !InputDir.IsNearlyZero())
 	{
 		const FVector WarpLocation = SourceChar->GetActorLocation() + InputDir * DashDistance;
 		MotionWarpingComp->AddOrUpdateWarpTargetFromTransform(WarpName, FTransform(InputDir.Rotation(), WarpLocation));
