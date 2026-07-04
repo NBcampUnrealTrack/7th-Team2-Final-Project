@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Components/AudioComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Combat/RetrieveKnockbackLibrary.h"
@@ -12,8 +13,10 @@
 #include "GenericTeamAgentInterface.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 AEnemyProjectile::AEnemyProjectile()
@@ -44,6 +47,10 @@ AEnemyProjectile::AEnemyProjectile()
 	FlightVFXComponent->SetAutoActivate(false);
 	FlightVFXComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FlightVFXComponent->SetCanEverAffectNavigation(false);
+
+	FlightSFXComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("FlightSFXComponent"));
+	FlightSFXComponent->SetupAttachment(CollisionSphere);
+	FlightSFXComponent->SetAutoActivate(false);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = CollisionSphere;
@@ -234,6 +241,12 @@ void AEnemyProjectile::BeginPlay()
 			AttachedVFXComp->SetGenerateOverlapEvents(false);
 			AttachedVFXComp->SetCanEverAffectNavigation(false);
 		}
+	}
+
+	if (FlightSFXComponent && FlightSFX)
+	{
+		FlightSFXComponent->SetSound(FlightSFX);
+		FlightSFXComponent->Play();
 	}
 }
 
@@ -650,7 +663,17 @@ void AEnemyProjectile::ApplyStatusEffectInRadius(const FVector& Origin)
 
 void AEnemyProjectile::PlayImpactVFX(const FVector& Location, const FRotator& Rotation)
 {
-	if (!ImpactVFX || !GetWorld())
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	if (ImpactSFX)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, ImpactSFX, Location);
+	}
+
+	if (!ImpactVFX)
 	{
 		return;
 	}

@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "EnemyGroundHazard.generated.h"
 
+class UAudioComponent;
 class UDecalComponent;
 class UGameplayEffect;
 class UMaterialInstanceDynamic;
@@ -11,6 +12,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UPrimitiveComponent;
 class USceneComponent;
+class USoundBase;
 class USphereComponent;
 class ACharacter;
 
@@ -94,6 +96,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
 	TObjectPtr<UNiagaraComponent> ExpandingVFXComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyGroundHazard|Audio")
+	TObjectPtr<UAudioComponent> LoopSFXComponent;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Timing", meta=(ClampMin="0.0"))
 	float WarningDuration = 1.f;
 
@@ -167,6 +172,15 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Visual")
 	bool bScaleVFXWithRadius = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Audio")
+	TObjectPtr<USoundBase> LoopSFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Audio")
+	TObjectPtr<USoundBase> SpawnSFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyGroundHazard|Audio")
+	TObjectPtr<USoundBase> FadeOutSFX;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="EnemyGroundHazard|State")
 	EEnemyGroundHazardPhase CurrentPhase = EEnemyGroundHazardPhase::Warning;

@@ -10,8 +10,10 @@
 #include "GameFramework/Character.h"
 #include "GenericTeamAgentInterface.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 AEnemyPillar::AEnemyPillar()
@@ -202,6 +204,10 @@ void AEnemyPillar::EnterPhase(EEnemyPillarPhase NewPhase)
 				EndVFXSystem,
 				PillarRoot->GetComponentLocation(),
 				PillarRoot->GetComponentRotation());
+		}
+		if (IceBreakSFX && PillarRoot)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, IceBreakSFX, PillarRoot->GetComponentLocation());
 		}
 		ApplyPostExposureEffectToTrackedActors();
 		Destroy();

@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "EnemyWaveHazard.generated.h"
 
+class UAudioComponent;
 class UBoxComponent;
 class UGameplayEffect;
 class UNiagaraComponent;
@@ -42,6 +43,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyWaveHazard|Visual")
 	TObjectPtr<UNiagaraComponent> WaveVFXComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyWaveHazard|Audio")
+	TObjectPtr<UAudioComponent> WaveSFXComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyWaveHazard|Movement", meta=(ClampMin="0.0"))
 	float MoveSpeed = 900.f;

@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "EnemyTornadoHazard.generated.h"
 
+class UAudioComponent;
 class UCapsuleComponent;
 class UGameplayEffect;
 class UNiagaraComponent;
@@ -43,6 +44,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyTornadoHazard|Visual")
 	TObjectPtr<UNiagaraComponent> TornadoVFXComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyTornadoHazard|Audio")
+	TObjectPtr<UAudioComponent> TornadoSFXComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyTornadoHazard|Movement")
 	bool bTrackTarget = false;
