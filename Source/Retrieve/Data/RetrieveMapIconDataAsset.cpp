@@ -32,6 +32,10 @@ void URetrieveMapIconDataAsset::RefreshFromLevel()
 		Entry.IconType      = IconComp->IconType;
 		Entry.MapLabel      = IconComp->MapLabel;
 		Entry.bShowLabel    = IconComp->bShowLabelOnWorldMap;
+		Entry.bOverrideIcon   = IconComp->bOverrideIcon;
+		Entry.OverrideTexture = IconComp->OverrideTexture;
+		Entry.OverrideColor   = IconComp->OverrideColor;
+		Entry.OverrideSize    = IconComp->OverrideSize;
 
 		if (const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(Actor))
 		{

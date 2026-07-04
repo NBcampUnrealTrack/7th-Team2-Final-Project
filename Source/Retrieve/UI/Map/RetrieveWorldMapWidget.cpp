@@ -537,13 +537,25 @@ int32 URetrieveWorldMapWidget::NativePaint(
 				Snap.OverrideColor    = bIsActivated ? BonfireActivatedColor : BonfireInactiveColor;
 				Snap.OverrideSize     = Row.IconSize;
 			}
+			// 그 외 타입: 액터의 MapIconComponent에서 구운 개별 오버라이드 반영
+			else if (Entry.bOverrideIcon)
+			{
+				Snap.bOverrideIcon    = true;
+				Snap.OverrideTexture  = Entry.OverrideTexture;
+				Snap.OverrideColor    = Entry.OverrideColor;
+				Snap.OverrideSize     = Entry.OverrideSize;
+			}
 
 			DrawWorldIcon(OutDrawElements, CurrentLayer, AllottedGeometry, Snap, IconScreen);
 
 			if (!Entry.MapLabel.IsEmpty() && Entry.bShowLabel)
 			{
 				float IconHalfSize = 8.0f;
-				if (IconRegistry)
+				if (Snap.bOverrideIcon)
+				{
+					IconHalfSize = Snap.OverrideSize * 0.5f;
+				}
+				else if (IconRegistry)
 				{
 					IconHalfSize = IconRegistry->FindRow(Entry.IconType).IconSize * 0.5f;
 				}
