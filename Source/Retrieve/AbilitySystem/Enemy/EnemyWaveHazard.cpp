@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
@@ -32,6 +33,10 @@ AEnemyWaveHazard::AEnemyWaveHazard()
 	WaveVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("WaveVFXComponent"));
 	WaveVFXComponent->SetupAttachment(EffectArea);
 	WaveVFXComponent->SetAutoActivate(true);
+
+	WaveSFXComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("WaveSFXComponent"));
+	WaveSFXComponent->SetupAttachment(EffectArea);
+	WaveSFXComponent->SetAutoActivate(true);
 }
 
 void AEnemyWaveHazard::BeginPlay()

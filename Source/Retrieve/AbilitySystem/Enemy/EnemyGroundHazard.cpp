@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Components/AudioComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
@@ -9,8 +10,10 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "NiagaraComponent.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "GameFramework/RootMotionSource.h"
 
@@ -41,6 +44,10 @@ AEnemyGroundHazard::AEnemyGroundHazard()
 	ExpandingVFXComponent->SetupAttachment(SceneRoot);
 	ExpandingVFXComponent->SetAutoActivate(false);
 	ExpandingVFXComponent->SetHiddenInGame(true);
+
+	LoopSFXComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("LoopSFXComponent"));
+	LoopSFXComponent->SetupAttachment(SceneRoot);
+	LoopSFXComponent->SetAutoActivate(false);
 }
 
 void AEnemyGroundHazard::BeginPlay()
@@ -95,6 +102,10 @@ void AEnemyGroundHazard::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		ExpandingVFXComponent->DeactivateImmediate();
 	}
+	if (LoopSFXComponent)
+	{
+		LoopSFXComponent->Stop();
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -138,6 +149,33 @@ void AEnemyGroundHazard::EnterPhase(EEnemyGroundHazardPhase NewPhase)
 			ExpandingVFXComponent->Deactivate();
 			ExpandingVFXComponent->SetHiddenInGame(true);
 		}
+	}
+
+	if (LoopSFXComponent)
+	{
+		const bool bShouldSFXBeActive = CurrentPhase == EEnemyGroundHazardPhase::Expanding
+			|| CurrentPhase == EEnemyGroundHazardPhase::Active;
+		if (bShouldSFXBeActive && LoopSFX)
+		{
+			if (!LoopSFXComponent->IsPlaying())
+			{
+				LoopSFXComponent->SetSound(LoopSFX);
+				LoopSFXComponent->Play();
+			}
+		}
+		else
+		{
+			LoopSFXComponent->FadeOut(0.3f, 0.f);
+		}
+	}
+
+	if (NewPhase == EEnemyGroundHazardPhase::Expanding && SpawnSFX)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, SpawnSFX, GetActorLocation());
+	}
+	else if (NewPhase == EEnemyGroundHazardPhase::Finished && FadeOutSFX)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, FadeOutSFX, GetActorLocation());
 	}
 
 	if (!bDamageEnabled)

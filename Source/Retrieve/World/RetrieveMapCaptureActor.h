@@ -70,6 +70,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|MapCapture|Quality", meta=(EditCondition="!bCaptureUnlit"))
 	float CaptureSkyLightIntensity = 1.5f;
 
+	/**
+	 * 슈퍼샘플링 배수. 1보다 크면 (최종 해상도 × 배수) 크기의 임시 렌더타겟에 캡처한 뒤
+	 * 박스필터로 최종 해상도로 다운샘플링해 BakedMapTexture에 반영한다 — 앤티에일리어싱 효과.
+	 * 임시 렌더타겟은 캡처 직후 해제되므로 최종 텍스처 용량/런타임 메모리에는 영향이 없다.
+	 * 1이면 슈퍼샘플링 없이 기존 방식대로 캡처.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|MapCapture|Quality", meta=(ClampMin="1", ClampMax="8"))
+	int32 SuperSampleFactor = 4;
+
 #if WITH_EDITOR
 	UFUNCTION(CallInEditor, Category="Retrieve|MapCapture")
 	void RefreshMapAll();
@@ -88,5 +97,11 @@ private:
 	 * 강제했다가 같은 프레임 내에서 즉시 복원한다 → 레벨 시간대와 무관하게 일관된 음영.
 	 */
 	void CaptureSceneWithCleanLighting();
+
+	/**
+	 * SuperSampleFactor > 1이면 임시 고해상도 렌더타겟에 캡처 후 박스필터로 다운샘플링해
+	 * MapConfig->BakedMapTexture에 직접 반영한다(앤티에일리어싱). 1이면 RenderTarget에 바로 캡처.
+	 */
+	void CaptureWithSupersampling();
 #endif
 };

@@ -45,9 +45,35 @@
 #include "Kismet/GameplayStatics.h"
 #include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "View/MVVMView.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
+	/** owner에서 이름이 "InteractionTarget"인 컴포넌트를 찾아 InteractionEnabled를 reflection으로 토글한다.
+	 *  상점 UI를 닫을 때 URetrieveShopComponent::OpenShop()에서 꺼둔 상호작용 프롬프트를 복원하는 데 사용된다. */
+	void SetInteractionTargetEnabled(AActor* Owner, bool bEnabled)
+	{
+		if (!Owner)
+		{
+			return;
+		}
+
+		TArray<UActorComponent*> Comps;
+		Owner->GetComponents(Comps);
+		for (UActorComponent* Comp : Comps)
+		{
+			if (Comp && Comp->GetFName() == TEXT("InteractionTarget"))
+			{
+				if (FBoolProperty* EnabledProp =
+					FindFProperty<FBoolProperty>(Comp->GetClass(), TEXT("InteractionEnabled")))
+				{
+					EnabledProp->SetPropertyValue_InContainer(Comp, bEnabled);
+				}
+				break;
+			}
+		}
+	}
+
 	UWidget* FindBossBarWidget(UUserWidget* TopLevelWidget)
 	{
 		if (!TopLevelWidget)
@@ -784,6 +810,7 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	if (bRemovingShopPanel)
 	{
 		bCanReturnToShopConversation = false;
+		SetInteractionTargetEnabled(CurrentShopNPC, true);
 		CurrentShopNPC = nullptr;
 	}
 }
@@ -1492,6 +1519,10 @@ void ARetrievePlayerController::OpenShopFromCurrentConversation(bool bOpenSellTa
 	AActor* ShopNPC = CurrentDialogueNPC;
 	CurrentShopNPC = ShopNPC;
 	bCanReturnToShopConversation = true;
+
+	// 상점 패널이 열려있는 동안 이 NPC의 상호작용 프롬프트를 숨긴다.
+	// (실제 상점 진입 경로가 URetrieveShopComponent::OpenShop()이 아니라 대화 커맨드를 거치므로 여기서 처리)
+	SetInteractionTargetEnabled(ShopNPC, false);
 
 	CloseConversation();
 	OpenShopPanel(ShopPanelWidgetClass, ShopDef);

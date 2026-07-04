@@ -7,10 +7,12 @@
 #include "EnemyProjectile.generated.h"
 
 class UAbilitySystemComponent;
+class UAudioComponent;
 class UGameplayEffect;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UProjectileMovementComponent;
+class USoundBase;
 class USphereComponent;
 class UStaticMeshComponent;
 
@@ -105,6 +107,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyProjectile|VFX", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNiagaraComponent> FlightVFXComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyProjectile|SFX", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UAudioComponent> FlightSFXComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="EnemyProjectile", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;
 
@@ -113,6 +118,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
 	TObjectPtr<UNiagaraSystem> ImpactVFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|SFX")
+	TObjectPtr<USoundBase> FlightSFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|SFX")
+	TObjectPtr<USoundBase> ImpactSFX;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyProjectile|VFX")
 	bool bForceImpactVFXWorldUpRotation = false;

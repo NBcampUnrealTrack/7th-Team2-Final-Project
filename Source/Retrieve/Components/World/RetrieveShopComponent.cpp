@@ -3,8 +3,38 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Shop/RetrieveShopDefinitionAsset.h"
 #include "Engine/DataTable.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Math/UnrealMathUtility.h"
+#include "UObject/UnrealType.h"
+
+namespace
+{
+	/** owner에서 이름이 "InteractionTarget"인 컴포넌트를 찾아 InteractionEnabled를 reflection으로 토글한다.
+	 *  상점 UI가 열려있는 동안 이 NPC의 상호작용 프롬프트를 숨기고, 닫히면 복원하는 데 사용된다. */
+	void SetInteractionTargetEnabled(AActor* Owner, bool bEnabled)
+	{
+		if (!Owner)
+		{
+			return;
+		}
+
+		TArray<UActorComponent*> Comps;
+		Owner->GetComponents(Comps);
+		for (UActorComponent* Comp : Comps)
+		{
+			if (Comp && Comp->GetFName() == TEXT("InteractionTarget"))
+			{
+				if (FBoolProperty* EnabledProp =
+					FindFProperty<FBoolProperty>(Comp->GetClass(), TEXT("InteractionEnabled")))
+				{
+					EnabledProp->SetPropertyValue_InContainer(Comp, bEnabled);
+				}
+				break;
+			}
+		}
+	}
+}
 
 URetrieveShopComponent::URetrieveShopComponent()
 {
@@ -82,6 +112,9 @@ void URetrieveShopComponent::OpenShop(AActor* InstigatorActor)
 	{
 		PC = InstigatorActor ? InstigatorActor->GetWorld()->GetFirstPlayerController() : nullptr;
 	}
+
+	// 상점 UI가 열려있는 동안 이 NPC의 상호작용 프롬프트를 숨긴다 (닫힐 때 PlayerController가 복원).
+	SetInteractionTargetEnabled(GetOwner(), false);
 
 	OnShopOpenRequested.Broadcast(ShopDefinition, PC);
 }

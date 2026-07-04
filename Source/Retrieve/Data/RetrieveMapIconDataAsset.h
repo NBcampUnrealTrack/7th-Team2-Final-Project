@@ -29,6 +29,19 @@ struct FRetrieveMapIconEntry
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon")
 	bool bShowLabel = true;
 
+	// true면 IconRegistry 대신 아래 오버라이드 값을 직접 사용 (컴포넌트의 bOverrideIcon을 그대로 굽는다).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon")
+	bool bOverrideIcon = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon", meta=(EditCondition="bOverrideIcon"))
+	TObjectPtr<UTexture2D> OverrideTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon", meta=(EditCondition="bOverrideIcon"))
+	FLinearColor OverrideColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Icon", meta=(EditCondition="bOverrideIcon", ClampMin="8"))
+	float OverrideSize = 16.0f;
+
 	/**
 	 * 모닥불 전용 — 에디터에서 활성 상태로 배치된 모닥불인지 여부.
 	 * RefreshFromLevel이 액터의 Is Activated 값을 그대로 굽는다.

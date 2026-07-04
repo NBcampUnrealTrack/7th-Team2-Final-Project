@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
@@ -36,6 +37,10 @@ AEnemyTornadoHazard::AEnemyTornadoHazard()
 	TornadoVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TornadoVFXComponent"));
 	TornadoVFXComponent->SetupAttachment(EffectArea);
 	TornadoVFXComponent->SetAutoActivate(true);
+
+	TornadoSFXComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("TornadoSFXComponent"));
+	TornadoSFXComponent->SetupAttachment(EffectArea);
+	TornadoSFXComponent->SetAutoActivate(true);
 }
 
 void AEnemyTornadoHazard::BeginPlay()

@@ -12,6 +12,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UPrimitiveComponent;
 class USceneComponent;
+class USoundBase;
 class UStaticMeshComponent;
 
 UENUM(BlueprintType)
@@ -98,6 +99,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyPillar|Visual")
 	TObjectPtr<UNiagaraSystem> EndVFXSystem;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyPillar|Audio")
+	TObjectPtr<USoundBase> IceBreakSFX;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="EnemyPillar|Timing", meta=(ClampMin="0.0"))
 	float WarningDuration = 1.5f;
