@@ -446,6 +446,10 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 		{
 			FInputModeUIOnly Mode;
 			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			if (ActiveTopLevelWidget)
+			{
+				Mode.SetWidgetToFocus(ActiveTopLevelWidget->TakeWidget());
+			}
 			SetInputMode(Mode);
 			bShowMouseCursor = true;
 			break;
