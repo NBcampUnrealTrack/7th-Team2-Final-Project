@@ -730,7 +730,9 @@ enum class EAttackExecutionType : uint8
 	WorldActor       UMETA(DisplayName = "월드 액터 (소환물)"),
 	Projectile       UMETA(DisplayName = "투사체"),
 	Dash             UMETA(DisplayName = "돌진"),
-	AreaOfEffect     UMETA(DisplayName = "주변 AoE")
+	AreaOfEffect     UMETA(DisplayName = "주변 AoE"),
+	Cone             UMETA(DisplayName = "부채꼴 (콘)"),
+	AreaContinuous   UMETA(DisplayName = "지속 범위 (소용돌이/장판)")
 };
 
 UENUM(BlueprintType)
@@ -769,6 +771,21 @@ struct RETRIEVE_API FBurstHitInstance
 	 *  예: 3연격을 -30 / 0 / +30 으로 주면 부채살처럼 기울어진 검기. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	float LaunchRollAngle = 0.f;
+
+	// ---- Dash Motion (per-hit 오버라이드; AttackType=Dash 실행에 사용) ----
+	/** 이 타격에서 시전자 발사(대시) 파라미터를 행 기본값 대신 개별 지정한다.
+	 *  같은 버스트에서 HitIndex별로 이동 페이즈를 나눌 때 사용 — 예: 0=순수 상승, 1=전방+하강 다이브. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash")
+	bool bOverrideDashMotion = false;
+	/** 전방 이동 거리(cm). 음수=후방. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash", meta = (EditCondition = "bOverrideDashMotion"))
+	float DashForwardDistance = 0.f;
+	/** 상승(양수)/하강(음수) 속도(cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash", meta = (EditCondition = "bOverrideDashMotion"))
+	float DashUpwardSpeed = 0.f;
+	/** 전방 거리를 이동하는 목표 시간(초). 발사 속도 = 거리/시간. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash", meta = (EditCondition = "bOverrideDashMotion", ClampMin = "0.01"))
+	float DashLaunchDuration = 0.2f;
 
 	/** 이 타격에서 재생할 적중 VFX. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
@@ -849,17 +866,40 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	EAttackExecutionType AttackType = EAttackExecutionType::Cleave;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
 	TSubclassOf<AActor> ProjectileClass;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.0"))
-	float DashDistance = 0.f;
-	/** DashDistance를 이동하는 데 걸리는 목표 시간. 발사 속도 = DashDistance / DashLaunchDuration. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.01"))
-	float DashLaunchDuration = 0.2f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect", ClampMin = "0.0"))
+	// 대시 이동 파라미터는 per-hit(FBurstHitInstance)로 이관. AreaContinuous도 이 반경을 판정 반경으로 재사용.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect || AttackType == EAttackExecutionType::AreaContinuous", ClampMin = "0.0"))
 	float AoeRadius = 0.f;
+	// ---- Area Continuous(소용돌이): 중심 반경 안의 적에게 HitSequence 데미지를 주기 재적용 + 방사 넉백 ----
+	// 데미지 재적용 간격(초). 0이면 매 프레임(비권장, 최소 0.2).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Continuous", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaContinuous", ClampMin = "0.0"))
+	float ContinuousDamageInterval = 0.3f;
+	// 중심에서 바깥으로 지속 방사 넉백(매 프레임 방향 갱신).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Continuous", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaContinuous"))
+	bool bUseContinuousKnockback = true;
+	// 방사 넉백 파라미터. Strength는 지속 밀기라 낮게, Duration은 데미지 간격 이상 권장.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Continuous", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaContinuous && bUseContinuousKnockback"))
+	FRetrieveKnockbackParams ContinuousKnockback;
+	// 보스는 넉백 제외(데미지는 적용). 넉백 면역 태그 보유 시 값과 무관하게 안 밀림.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Continuous", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaContinuous && bUseContinuousKnockback"))
+	bool bExcludeBossFromContinuousKnockback = true;
+	// ---- Cone(부채꼴): 전방 반경 + 반각 ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Cone", meta = (EditCondition = "AttackType == EAttackExecutionType::Cone", ClampMin = "0.0"))
+	float ConeRadius = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|Cone", meta = (EditCondition = "AttackType == EAttackExecutionType::Cone", ClampMin = "0.0", ClampMax = "180.0"))
+	float ConeHalfAngleDeg = 45.f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor", ClampMin = "0.0"))
 	float WorldSpawnDistance = 300.f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor"))
 	TSubclassOf<AActor> WorldSpawnActorClass;
+	/** 전방 스폰 지점 아래로 지면을 찾아 착지 지점을 지면에 맞춘다(메테오 낙하지점 정렬). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor"))
+	bool bWorldSnapToGround = false;
+	/** 착지 지점 위 이 높이에서 스폰(cm). 메테오처럼 하늘에서 떨어뜨릴 때 사용. 0=기존(시전자/지면 높이). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor", ClampMin = "0.0"))
+	float WorldSpawnHeightOffset = 0.f;
+	/** 월드 액터(메테오 등) 데미지 판정 반경(cm). 0이면 컴포넌트 기본(WorldActorRadius) 사용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Attack|World", meta = (EditCondition = "AttackType == EAttackExecutionType::WorldActor", ClampMin = "0.0"))
+	float WorldActorRadius = 0.f;
 	// ---- Damage --------
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffect;
@@ -872,6 +912,28 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	/** 버스트 발동 시 버프 바에 표시할 UI 태그. DT_BuffUIDefinitions Row Name과 일치시킨다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
 	FGameplayTag BurstUITag;
+
+	// ---- Landing Impact (공중 버스트 착지 슬램; WindBurst 등) ----
+	/** 착지 시 슬램 처리(낙법/래그돌 억제 + 착지섹션 점프 + AoE 데미지/넉백)를 켠다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing")
+	bool bDoLandingImpact = false;
+	/** 착지 순간 점프할 몽타주 섹션(비우면 섹션 점프 없음). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact"))
+	FName LandingSectionName = NAME_None;
+	/** 착지 AoE 반경(cm). 0이면 데미지 없음. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact", ClampMin = "0.0"))
+	float LandingAoeRadius = 0.f;
+	/** 착지 AoE 데미지 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact"))
+	float LandingDamageMultiplier = 1.f;
+	/** 착지 시 주변 적을 중심에서 바깥으로 방사 넉백. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact"))
+	bool bUseLandingKnockback = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact && bUseLandingKnockback"))
+	FRetrieveKnockbackParams LandingKnockback;
+	/** 보스는 넉백에서 제외(넉백 안 됨). 보스 접근은 다이브 몽타주의 Attack Warp로 처리 권장. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact && bUseLandingKnockback"))
+	bool bExcludeBossFromKnockback = true;
 };
 
 // 공격 실행 spec — 공용 실행기(UPlayerBurstComponent)가 소비하는 실행 파라미터 묶음
@@ -896,13 +958,45 @@ struct RETRIEVE_API FAttackExecutionSpec
 	float WorldSpawnDistance = 300.f;
 
 	UPROPERTY()
+	bool bWorldSnapToGround = false;
+
+	UPROPERTY()
+	float WorldSpawnHeightOffset = 0.f;
+
+	UPROPERTY()
+	float WorldActorRadius = 0.f;
+
+	// 대시 파라미터 — Heavy 등 공용 실행 spec에서 사용(버스트 행은 per-hit).
+	UPROPERTY()
 	float DashDistance = 0.f;
 
 	UPROPERTY()
 	float DashLaunchDuration = 0.2f;
 
 	UPROPERTY()
+	float DashUpwardSpeed = 0.f;
+
+	UPROPERTY()
 	float AoeRadius = 0.f;
+
+	UPROPERTY()
+	float ConeRadius = 0.f;
+
+	UPROPERTY()
+	float ConeHalfAngleDeg = 45.f;
+
+	// AreaContinuous(지속 장판) 파라미터. AoeRadius 를 판정 반경으로 공용 사용.
+	UPROPERTY()
+	float ContinuousDamageInterval = 0.3f;
+
+	UPROPERTY()
+	bool bUseContinuousKnockback = false;
+
+	UPROPERTY()
+	FRetrieveKnockbackParams ContinuousKnockback;
+
+	UPROPERTY()
+	bool bExcludeBossFromContinuousKnockback = true;
 
 	UPROPERTY()
 	TArray<FBurstHitInstance> HitSequence;
@@ -1052,6 +1146,18 @@ struct RETRIEVE_API FWeaponComboStep
 	/** 넉백 상향(Z) 강도. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackUpwardStrength = 0.f;
+
+	/** 이 스텝에서 무기(블레이드) 트레이스를 켤지. false면 무기 판정 없이(예: 왼손 콘 방출 스텝) 콘만 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo")
+	bool bWeaponTrace = true;
+
+	// ---- Cone(부채꼴): 이 스텝에서 전방 부채꼴 광역 판정을 추가(예: 마지막 타). 무기 블레이드 판정과 별개로 함께 적용. ----
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Cone")
+	bool bUseCone = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Cone", meta = (EditCondition = "bUseCone", ClampMin = "0.0"))
+	float ConeRadius = 400.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Combo|Cone", meta = (EditCondition = "bUseCone", ClampMin = "0.0", ClampMax = "180.0"))
+	float ConeHalfAngleDeg = 45.f;
 };
 
 USTRUCT(BlueprintType)
@@ -1311,7 +1417,21 @@ struct RETRIEVE_API FWeaponHeavyAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
 	FVector SpawnOffset = FVector(60.f, -35.f, 50.f);
-	
+
+	// 다중 투사체 스폰 오프셋(액터 로컬 X전방/Y우/Z상). 비어있으면 단일 SpawnOffset 경로.
+	// 예: 머리 좌/상/우 얼음창 3개 → [(0,-40,150),(15,0,180),(0,40,150)]. SpawnSocketName 있으면 소켓 기준 가산.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	TArray<FVector> ProjectileSpawnOffsets;
+
+	// 스폰 후 발사까지 대기 시간(초). >0이면 스폰 위치에 잠깐 떠 있다 발사(맺힘→발사). ⚠️ 중력 0 직선 투사체용.
+	// 다중 오프셋 모드에선 투사체별 발사 지연을 FireDelays[i]로 지정(없으면 이 값) → 동시 소환 + 개별 발사.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile", ClampMin = "0.0"))
+	float ProjectileLaunchDelay = 0.f;
+
+	// true면 조준 타겟/카메라 방향 무시하고 캐릭터 정면으로 발사. Water Heavy 얼음창 등.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	bool bLaunchInActorForward = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile", ClampMin = "0.0"))
 	float ProjectileDamageMultiplier = 1.2f;
 
@@ -1324,6 +1444,11 @@ struct RETRIEVE_API FWeaponHeavyAttack
 	// AoE. 캐릭터 중심 구체 반경
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect", ClampMin = "0.0"))
 	float AoeRadius = 300.f;
+	// Cone(부채꼴). 캐릭터 전방 부채꼴 범위.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Cone", meta = (EditCondition = "AttackType == EAttackExecutionType::Cone", ClampMin = "0.0"))
+	float ConeRadius = 400.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Cone", meta = (EditCondition = "AttackType == EAttackExecutionType::Cone", ClampMin = "0.0", ClampMax = "180.0"))
+	float ConeHalfAngleDeg = 45.f;
 
 	// Dash/Launch. 데미지 없는 순수 이동이면 HitSequence를 비움
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Dash", meta = (EditCondition = "AttackType == EAttackExecutionType::Dash", ClampMin = "0.0"))
@@ -1418,7 +1543,7 @@ struct RETRIEVE_API FRetrieveWeaponAttachmentData
 
 	// 바운드 단면(나머지 두 축 절반 중 큰 값)에 곱할 스윕 반경 배율(튜닝)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume", ClampMin = "0.0"))
-	float BoundsRadiusScale = 1.0f;
+	float BoundsRadiusScale = 3.0f;
 
 	// 바운드 날 축(최장축) 양 끝에 더할 패딩(튜닝)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat", meta = (EditCondition = "bGeneratesHitVolume"))

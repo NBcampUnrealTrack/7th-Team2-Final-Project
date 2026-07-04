@@ -4,7 +4,10 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/Element/ElementGaugeComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
@@ -136,6 +139,34 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	CachedBurstComp = BurstComp;
 	BurstComp->BeginBurstSkill(MatchedRow);
 
+	// 착지 슬램 준비(낙법/래그돌 억제 + 섹션점프 + AoE/넉백)
+	bLandingHandled = false;
+	bLandingImpactEnabled = MatchedRow->bDoLandingImpact;
+	CachedLandingSection = MatchedRow->LandingSectionName;
+	CachedLandingRadius = MatchedRow->LandingAoeRadius;
+	CachedLandingDamageMul = MatchedRow->LandingDamageMultiplier;
+	bCachedUseLandingKnockback = MatchedRow->bUseLandingKnockback;
+	bCachedExcludeBoss = MatchedRow->bExcludeBossFromKnockback;
+	CachedLandingKnockback = MatchedRow->LandingKnockback;
+	if (bLandingImpactEnabled)
+	{
+		if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(Avatar))
+		{
+			AlsChar->SetSuppressLandingRoll(true);
+		}
+		if (ACharacter* LandChar = Cast<ACharacter>(Avatar))
+		{
+			LandChar->LandedDelegate.AddDynamic(this, &ThisClass::HandleLanded);
+			BoundLandedCharacter = LandChar;
+		}
+	}
+
+	// 돌진형: 시전 중 적(Pawn) 통과, 벽은 막힘
+	if (MatchedRow->AttackType == EAttackExecutionType::Dash)
+	{
+		SetAvatarPawnCollisionIgnored(true);
+	}
+
 	if (MatchedRow->BurstUITag.IsValid())
 	{
 		if (URetrieveBuffUIBroadcastComponent* BuffUI =
@@ -181,6 +212,18 @@ void UGA_Burst::HandleMontageCancelled()
 
 void UGA_Burst::CleanupBurst()
 {
+	UnbindLanded();
+	SetAvatarPawnCollisionIgnored(false);
+	
+	if (bLandingImpactEnabled && !bLandingHandled)
+	{
+		if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			AlsChar->SetSuppressLandingRoll(false);
+		}
+	}
+	bLandingImpactEnabled = false;
+
 	RemoveCastLockTags();
 
 	if (MontageTask)
@@ -194,6 +237,52 @@ void UGA_Burst::CleanupBurst()
 		CachedBurstComp->EndBurstSkill();
 	}
 	CachedBurstComp = nullptr;
+}
+
+void UGA_Burst::HandleLanded(const FHitResult& Hit)
+{
+	if (bLandingHandled)
+	{
+		return;
+	}
+	bLandingHandled = true;
+	UnbindLanded();
+
+	// 잔여 다이브 속도 제거 → 그 자리에 정지
+	if (ACharacter* LandedChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		if (UCharacterMovementComponent* MoveComp = LandedChar->GetCharacterMovement())
+		{
+			MoveComp->StopMovementImmediately();
+		}
+	}
+
+	// 착지 섹션으로 점프(설정 시)
+	if (!CachedLandingSection.IsNone())
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->CurrentMontageJumpToSection(CachedLandingSection);
+		}
+	}
+
+	// 착지 AoE + 방사 넉백(보스 제외)
+	if (CachedLandingRadius > 0.f && IsValid(CachedBurstComp))
+	{
+		const AActor* Avatar = GetAvatarActorFromActorInfo();
+		const FVector Center = IsValid(Avatar) ? Avatar->GetActorLocation() : FVector::ZeroVector;
+		CachedBurstComp->ApplyLandingImpact(Center, CachedLandingRadius, CachedLandingDamageMul,
+			bCachedUseLandingKnockback, CachedLandingKnockback, bCachedExcludeBoss);
+	}
+}
+
+void UGA_Burst::UnbindLanded()
+{
+	if (ACharacter* Character = BoundLandedCharacter.Get())
+	{
+		Character->LandedDelegate.RemoveDynamic(this, &ThisClass::HandleLanded);
+	}
+	BoundLandedCharacter = nullptr;
 }
 
 void UGA_Burst::ApplyCastLockTags(const FSkillCombination* Combo)

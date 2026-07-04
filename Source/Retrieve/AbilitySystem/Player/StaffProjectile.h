@@ -26,6 +26,13 @@ struct FRetrieveProjectileSpawnParams
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Flinch;
 	FName SpawnSocketName = NAME_None;
 	FVector SpawnOffset = FVector::ZeroVector;
+	// true면 SpawnSocketName이 해석된 경우에도 SpawnOffset을 소켓 위치에 (액터 회전 적용) 가산한다.
+	// 기본 false = 기존 동작(소켓이 있으면 오프셋 무시). 다중 오프셋(얼음창 좌/상/우) 스폰에서 소켓 기준 배치용.
+	bool bAddOffsetToSocketBase = false;
+	// >0이면 스폰 후 이 시간만큼 제자리에 떠 있다가 발사(생성→발사 연출). 0이면 즉시 발사.
+	float LaunchDelay = 0.f;
+	// true면 조준점/타겟/컨트롤 방향을 무시하고 시전자(액터) 정면으로 발사.
+	bool bUseActorForward = false;
 	FGameplayTag AttackTypeTag;
 	FGameplayTag ElementTag;
 	TSubclassOf<UGameplayEffect> ElementStatusEffect;
@@ -52,6 +59,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "StaffProjectile")
 	void Launch(const FVector& Direction, float Speed = 1800.f);
+
+	// 스폰 후 Delay초 제자리 대기 → 발사(얼음창이 맺혔다가 날아가는 연출). Delay<=0이면 즉시 발사.
+	void ArmDelayedLaunch(const FVector& Direction, float Speed, float Delay);
+
+	// 같은 볼리(얼음창 3발 등)끼리 이동 충돌을 무시하도록 등록.
+	void IgnoreOtherProjectile(AStaffProjectile* Other);
 	
 	void ConfigureAttack(
 		UAbilitySystemComponent* InSourceASC,
@@ -82,6 +95,8 @@ private:
 	bool IsIgnoredActor(const AActor* OtherActor) const;
 	UAbilitySystemComponent* ResolveSourceASC() const;
 	void ApplyHitToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC, const FHitResult& SweepResult);
+	// ArmDelayedLaunch 타이머 콜백: 저장한 방향/속도로 발사.
+	void HandleDelayedLaunch();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile", meta = (AllowPrivateAccess = "true"))
@@ -127,6 +142,11 @@ private:
 	TSubclassOf<UGameplayEffect> ElementStatusEffect;
 
 	FGameplayTag ChargeBonusEventTag;
-	
+
 	bool bConsumed = false;
+
+	// 지연 발사(ArmDelayedLaunch) 상태
+	FTimerHandle LaunchDelayTimerHandle;
+	FVector PendingLaunchDirection = FVector::ZeroVector;
+	float PendingLaunchSpeed = 0.f;
 };

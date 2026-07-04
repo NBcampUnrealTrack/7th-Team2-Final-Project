@@ -1273,10 +1273,23 @@ void URetrieveInteractionResponseComponent::Multicast_PlayInteractionAnim_Implem
 			USkeleton* MeshSkeleton = Mesh->GetSkeletalMeshAsset()->GetSkeleton();
 			// 정확히 같은 스켈레톤이 아니어도 UE5 Compatible Skeleton으로 등록되어 있으면 재생 허용.
 			// (인벤토리 프리뷰의 Montage_Play는 엔진 기본 호환성 검사를 타므로 이미 이렇게 동작 중 - 여기도 동일하게 맞춘다)
-			// IsCompatibleForEditor는 이름과 달리 ENGINE_API 런타임 함수로, "InSkeleton으로 만든 애니메이션을
-			// 이 스켈레톤에서 재생 가능한가"를 판정한다.
-			if (MeshSkeleton != TargetSkeleton
-				&& !(MeshSkeleton && MeshSkeleton->IsCompatibleForEditor(TargetSkeleton)))
+			// ※ IsCompatibleForEditor()는 이름 그대로 에디터 전용(#if WITH_EDITOR)이라 Shipping 패키징에서
+			//   컴파일되지 않는다. 런타임 안전한 GetCompatibleSkeletons()로 "MeshSkeleton이 TargetSkeleton의
+			//   애니메이션을 재생할 수 있는지"를 직접 판정한다(CompatibleSkeletons는 단방향 목록).
+			bool bSkeletonCompatible = (MeshSkeleton == TargetSkeleton);
+			if (!bSkeletonCompatible && MeshSkeleton)
+			{
+				const FSoftObjectPath TargetSkeletonPath(TargetSkeleton);
+				for (const TSoftObjectPtr<USkeleton>& CompatibleSkeleton : MeshSkeleton->GetCompatibleSkeletons())
+				{
+					if (CompatibleSkeleton.ToSoftObjectPath() == TargetSkeletonPath)
+					{
+						bSkeletonCompatible = true;
+						break;
+					}
+				}
+			}
+			if (!bSkeletonCompatible)
 			{
 				continue;
 			}

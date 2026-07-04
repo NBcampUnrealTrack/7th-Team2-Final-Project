@@ -43,6 +43,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Retrieve|Warp", meta = (ClampMin = "0.0"))
 	float MaxVerticalDelta = 120.f;
 
+	// 무타겟 시 이동 입력 방향으로 회전할지. 콤보 재정렬이 싫으면 false(타겟엔 여전히 워프).
+	UPROPERTY(EditAnywhere, Category = "Retrieve|Warp")
+	bool bRotateToInputWhenNoTarget = true;
+
 private:
 	// 타겟 자동 해석 → 워프 타겟 등록(불가하면 클리어). const: 엔진 시그니처에 맞춤.
 	void ResolveAndRegisterWarpTarget(UMotionWarpingComponent* MotionWarpingComp, const UAnimSequenceBase* Animation, float StartTime, float EndTime) const;

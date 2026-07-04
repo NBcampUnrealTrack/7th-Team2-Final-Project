@@ -368,10 +368,13 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 
 	if (bLanding && bSuppressLandingRoll && Settings)
 	{
-		const bool bPrev = Settings->Rolling.bStartRollingOnLand;
+		const bool bPrevRoll = Settings->Rolling.bStartRollingOnLand;
+		const bool bPrevRagdoll = Settings->Ragdolling.bStartRagdollingOnLand;
 		Settings->Rolling.bStartRollingOnLand = false;
+		Settings->Ragdolling.bStartRagdollingOnLand = false;
 		Super::NotifyLocomotionModeChanged(PreviousLocomotionMode);
-		Settings->Rolling.bStartRollingOnLand = bPrev;
+		Settings->Rolling.bStartRollingOnLand = bPrevRoll;
+		Settings->Ragdolling.bStartRagdollingOnLand = bPrevRagdoll;
 
 		bSuppressLandingRoll = false; // 1회 소비
 		return;

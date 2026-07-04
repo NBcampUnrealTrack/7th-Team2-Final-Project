@@ -131,6 +131,8 @@ void UGA_HeavyAttack::RunExecutorPath()
 	Spec.DashDistance = CachedVariant.DashDistance;
 	Spec.DashLaunchDuration = CachedVariant.DashLaunchDuration;
 	Spec.AoeRadius = CachedVariant.AoeRadius;
+	Spec.ConeRadius = CachedVariant.ConeRadius;
+	Spec.ConeHalfAngleDeg = CachedVariant.ConeHalfAngleDeg;
 	Spec.HitSequence = CachedVariant.HitSequence;
 	
 	Spec.ElementTag = CachedElementTag;
@@ -139,6 +141,11 @@ void UGA_HeavyAttack::RunExecutorPath()
 	Spec.HitEventTag = RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
 
 	bUsedBurstExecutor = true;
+	// 돌진형 강공: 시전 중 적(Pawn) 통과 — 벽은 막힘. EndAbility에서 복구
+	if (CachedVariant.AttackType == EAttackExecutionType::Dash)
+	{
+		SetAvatarPawnCollisionIgnored(true);
+	}
 	CachedBurstComp->BeginAttackExecution(Spec);
 }
 
@@ -156,6 +163,38 @@ void UGA_HeavyAttack::ScheduleProjectiles()
 		return;
 	}
 
+	// 다중 오프셋 모드(얼음창 좌/상/우 등): 오프셋 개수만큼 "동시에 스폰"하고, 투사체별 발사 지연은 FireDelays[i](없으면 ProjectileLaunchDelay).
+	// → 3개가 머리 주변에 동시에 맺힌 뒤, 각자 다른 타이밍에 발사된다.
+	if (CachedVariant.ProjectileSpawnOffsets.Num() > 0)
+	{
+		TArray<AStaffProjectile*> Volley;
+		Volley.Reserve(CachedVariant.ProjectileSpawnOffsets.Num());
+		for (int32 i = 0; i < CachedVariant.ProjectileSpawnOffsets.Num(); ++i)
+		{
+			const float LaunchDelay = CachedVariant.FireDelays.IsValidIndex(i)
+				? FMath::Max(0.f, CachedVariant.FireDelays[i])
+				: CachedVariant.ProjectileLaunchDelay;
+			if (AStaffProjectile* Spawned = SpawnOneProjectile(CachedVariant.ProjectileSpawnOffsets[i], /*bAddOffsetToSocketBase=*/true, LaunchDelay))
+			{
+				Volley.Add(Spawned);
+			}
+		}
+
+		// 먼저 발사된 창이 떠 있는 형제 창에 막혀 파괴되지 않도록 볼리끼리 상호 충돌 무시.
+		for (int32 a = 0; a < Volley.Num(); ++a)
+		{
+			for (int32 b = 0; b < Volley.Num(); ++b)
+			{
+				if (a != b)
+				{
+					Volley[a]->IgnoreOtherProjectile(Volley[b]);
+				}
+			}
+		}
+		return;
+	}
+
+	// 레거시: 단일 SpawnOffset + FireDelays 개수만큼 순차 "스폰"(스폰 시 즉시 or ProjectileLaunchDelay 후 발사).
 	TArray<float> FireDelays = CachedVariant.FireDelays;
 	if (FireDelays.IsEmpty())
 	{
@@ -179,23 +218,29 @@ void UGA_HeavyAttack::ScheduleProjectiles()
 
 void UGA_HeavyAttack::SpawnProjectile()
 {
+	// 레거시 경로: 단일 SpawnOffset, 소켓 가산 없음, 발사지연=ProjectileLaunchDelay(기본 0=즉시).
+	SpawnOneProjectile(CachedVariant.SpawnOffset, /*bAddOffsetToSocketBase=*/false, CachedVariant.ProjectileLaunchDelay);
+}
+
+AStaffProjectile* UGA_HeavyAttack::SpawnOneProjectile(FVector SpawnOffset, bool bAddOffsetToSocketBase, float LaunchDelay)
+{
 	if (!HasAuthority(&GetCurrentActivationInfoRef()))
 	{
-		return;
+		return nullptr;
 	}
 
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	UWorld* World = GetWorld();
 	if (!CachedVariant.ProjectileClass || !IsValid(AvatarActor) || !IsValid(World))
 	{
-		return;
+		return nullptr;
 	}
 
 	if (!CachedVariant.ProjectileClass->IsChildOf(AStaffProjectile::StaticClass()))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[GA_HeavyAttack] Projectile heavy: %s is not an AStaffProjectile subclass."),
 			*GetNameSafe(CachedVariant.ProjectileClass));
-		return;
+		return nullptr;
 	}
 
 	FRetrieveProjectileSpawnParams Params;
@@ -204,14 +249,17 @@ void UGA_HeavyAttack::SpawnProjectile()
 	Params.DamageMultiplier = CachedVariant.ProjectileDamageMultiplier;
 	Params.HitReactType = CachedVariant.ProjectileHitReactType;
 	Params.SpawnSocketName = CachedVariant.SpawnSocketName;
-	Params.SpawnOffset = CachedVariant.SpawnOffset;
+	Params.SpawnOffset = SpawnOffset;
+	Params.bAddOffsetToSocketBase = bAddOffsetToSocketBase;
+	Params.LaunchDelay = LaunchDelay;
+	Params.bUseActorForward = CachedVariant.bLaunchInActorForward;
 	Params.AttackTypeTag = RetrieveGameplayTags::Attack_Type_Heavy;
 	Params.ElementTag = CachedElementTag;
 	Params.ElementStatusEffect = CachedVariant.ProjectileElementStatusEffect;
 	Params.ChargeBonusEventTag = CachedVariant.ChargeBonusEventTag;
 
 	UMeshComponent* WeaponMesh = IsValid(CachedWeaponComponent) ? CachedWeaponComponent->GetPrimaryEquippedWeaponMesh() : nullptr;
-	AStaffProjectile::SpawnConfigured(World, AvatarActor, GetAbilitySystemComponentFromActorInfo(), WeaponMesh, CachedAimTarget, Params);
+	return AStaffProjectile::SpawnConfigured(World, AvatarActor, GetAbilitySystemComponentFromActorInfo(), WeaponMesh, CachedAimTarget, Params);
 }
 
 AActor* UGA_HeavyAttack::ResolveAimTarget() const
@@ -314,6 +362,7 @@ void UGA_HeavyAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const 
 	SpawnTimerHandles.Reset();
 
 	RemoveCastLockTags();
+	SetAvatarPawnCollisionIgnored(false);
 
 	if (bUsedBurstExecutor && IsValid(CachedBurstComp))
 	{

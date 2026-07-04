@@ -8,6 +8,7 @@
 #include "Character/RetrieveAlsCharacter.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -59,6 +60,18 @@ void URetrieveGameplayAbility::ApplyCommonActionBlocks(bool bBlockAirborne)
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Staggered);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Dead);
+}
+
+void URetrieveGameplayAbility::SetAvatarPawnCollisionIgnored(bool bIgnore) const
+{
+	if (const ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
+		{
+			// 적(Pawn) 관통 토글. 벽(WorldStatic/Dynamic)은 Block 유지.
+			Capsule->SetCollisionResponseToChannel(ECC_Pawn, bIgnore ? ECR_Ignore : ECR_Block);
+		}
+	}
 }
 
 bool URetrieveGameplayAbility::HasStamina(const FGameplayAbilityActorInfo* ActorInfo, float Cost) const
