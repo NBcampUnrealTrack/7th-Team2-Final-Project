@@ -429,3 +429,47 @@ struct FRetrieveDialogueChangedPayload
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Dialogue")
 	bool bActive = false;
 };
+
+// ---- Quest notification (top-center toast) ---------------------------
+
+/** 퀘스트 토스트 종류. Started = Locked->Active, Completed = 모든 목표 완료. */
+UENUM(BlueprintType)
+enum class EQuestNotificationKind : uint8
+{
+	Started,
+	Completed
+};
+
+/**
+ * Channel.UI.QuestNotification 원시(raw) 페이로드 (치트 / 발사 후 확인 안 함).
+ * 정상 경로는 UQuestNotificationSubsystem 내부에서 Channel.Quest.StepChanged로부터 도출됨
+ * 이 채널은 퀘스트 상태 diff를 우회하는 수동/디버그용 전송을 위해서만 존재합니다.
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveQuestNotificationPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Quest")
+	FText QuestName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Quest")
+	EQuestNotificationKind Kind = EQuestNotificationKind::Started;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI|Quest")
+	float Duration = 4.0f;
+};
+
+/**
+ * Channel.UI.RevealGate 로컬 페이로드.
+ * 전체 화면 로딩 커버가 보이는 동안 PlayerController가 bBlocked=true로, 사라지면 bBlocked=false로 방송.
+ * 알림 위젯들은 차단된 동안 억제 후 버퍼링하며, 오프닝 디렉터는 차단이 풀릴 때 타임라인을 시작합니다.
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveRevealGatePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|UI")
+	bool bBlocked = false;
+};

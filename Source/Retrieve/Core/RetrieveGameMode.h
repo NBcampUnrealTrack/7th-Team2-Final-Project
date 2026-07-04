@@ -6,7 +6,9 @@
 #include "RetrieveGameMode.generated.h"
 
 class ARetrieveGameState;
+class URetrieveOpeningSequenceAsset;
 struct FPlayerDiedPayload;
+struct FRetrieveRevealGatePayload;
 
 UCLASS()
 class RETRIEVE_API ARetrieveGameMode : public AGameModeBase
@@ -33,10 +35,7 @@ protected:
 	ARetrieveGameState* GetRetrieveGameState() const;
 
 	bool IsRequestorHost(const APlayerController* Requestor) const;
-
-	/** 호스트 전용. ResetForTest + Awakening 스텝을 완료합니다. */
-	void BootstrapNewGameQuest();
-
+	
 	/** 호스트 전용. Channel_Player_Died 발생 시 세션을 Result 상태로 라우팅합니다. */
 	void HandlePlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Message);
 	
@@ -48,4 +47,43 @@ protected:
 	bool bSkipMainMenuOnBoot = true;
 	
 	FGameplayMessageListenerHandle PlayerDiedListener;
+
+#pragma region Opening Sequence (New Game)
+
+protected:
+	/** 새 게임을 위해 퀘스트 원장을 리셋하고 체크포인트를 시딩합니다. Awakening은 발생시키지 않습니다. */
+	void ResetWorldForNewGame();
+	
+	/** 오프닝 준비: 알림 베이스라인을 리셋하고 Reveal 게이트 해제를 기다립니다. */
+	void ArmOpeningSequence();
+
+	void BootstrapNewGameQuest();
+	void HandleRevealGate(FGameplayTag Channel, const FRetrieveRevealGatePayload& Message);
+	void StartOpeningSequence();
+	void ScheduleNextOpeningBeat();
+	void FireOpeningBeat();
+
+	/** 애셋이 작성되지 않은 경우에도 Awakening을 발생시켜 첫 퀘스트가 시작되게 합니다. */
+	void FallbackStartFirstQuest();
+
+public:
+	/** 치트/디버그: 오프닝 타임라인을 즉시 재실행합니다. Reveal 대기를 생략합니다. */
+	void DebugStartOpeningSequence();
+
+protected:
+	/** 순서가 있는 오프닝 비트. BP_RetrieveGameMode에서 할당. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
+	TObjectPtr<URetrieveOpeningSequenceAsset> OpeningSequence;
+
+	/** 인트로 컷씬이 끝날 때까지 메시지/퀘스트 비트를 게이팅합니다.
+	 * 인트로 Level Sequence가 생기기 전까지 false로 유지하세요. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
+	bool bWaitForIntroCinematic = false;
+
+	bool bOpeningArmed = false;
+	int32 OpeningBeatIndex = 0;
+	FTimerHandle OpeningBeatTimer;
+	FGameplayMessageListenerHandle RevealGateListener;
+	FGameplayMessageListenerHandle OpeningCinematicListener;
+#pragma endregion
 };

@@ -52,6 +52,8 @@ public:
 	void RegisterZone(ARetrieveMusicZoneVolume* Zone);
 	void UnregisterZone(ARetrieveMusicZoneVolume* Zone);
 
+	bool IsCombatActive() const { return bCombatMusicActive; }
+
 private:
 	void HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
 

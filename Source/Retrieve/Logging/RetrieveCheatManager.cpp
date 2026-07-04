@@ -24,6 +24,7 @@
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Bark/BarkSubsystem.h"
+#include "Core/RetrieveGameMode.h"
 
 UAbilitySystemComponent* URetrieveCheatManager::GetLocalPlayerASC() const
 {
@@ -456,5 +457,30 @@ void URetrieveCheatManager::RetrieveSystemMessageKey(const FString& KeyTagName)
 		{
 			SystemMessageSubsystem->RequestMessageByKey(Tag);
 		}
+	}
+}
+
+void URetrieveCheatManager::RetrieveQuestNotification(const FString& QuestName, int32 bCompleted)
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	FRetrieveQuestNotificationPayload Message;
+	Message.QuestName = FText::FromString(QuestName);
+	Message.Kind = (bCompleted != 0) ? EQuestNotificationKind::Completed : EQuestNotificationKind::Started;
+	Message.Duration = 4.f;
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_UI_QuestNotification, Message);
+}
+
+void URetrieveCheatManager::RetrieveReplayOpening()
+{
+	const APlayerController* PC = GetOuterAPlayerController();
+	UWorld* World = PC ? PC->GetWorld() : nullptr;
+	if (ARetrieveGameMode* GameMode = World ? World->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GameMode->DebugStartOpeningSequence();
 	}
 }

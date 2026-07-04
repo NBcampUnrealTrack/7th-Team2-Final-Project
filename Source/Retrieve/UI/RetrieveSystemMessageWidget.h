@@ -7,6 +7,7 @@
 
 class UTextBlock;
 struct FRetrieveCinematicStatePayload;
+struct FRetrieveRevealGatePayload;
 
 /**
  * 우상단 텍스트 전용 시스템 메시지 위젯. 큐는 USystemMessageSubsystem이 갖고, 이 위젯은 꺼내 보여주기만 하는 얇은 뷰입니다.
@@ -25,6 +26,7 @@ protected:
 	void HandleQueued();
 
 	void HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Message);
+	void HandleRevealGate(FGameplayTag Channel, const FRetrieveRevealGatePayload& Message);
 
 	/** 억제 중이 아니고 표시 중 아니라면 큐에서 하나 꺼내 표시하고, 비었으면 숨깁니다. */
 	void PumpNext();
@@ -52,8 +54,10 @@ private:
 	bool bHasCurrent = false;
 	bool bShowing = false;
 	bool bCinematicActive = false;
+	bool bRevealBlocked = false;
 
 	FDelegateHandle QueuedHandle;
 	FGameplayMessageListenerHandle CinematicHandle;
+	FGameplayMessageListenerHandle RevealHandle;
 	FTimerHandle HoldTimer;
 };

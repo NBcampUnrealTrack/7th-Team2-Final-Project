@@ -393,6 +393,10 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_BarkRequested);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_DialogueChanged);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_SystemMessage);
+	
+	// ---- Message channels: UI Quest notification / Reveal gate
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_QuestNotification);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_RevealGate);
 
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Bow_Charge);	
 
@@ -479,6 +483,10 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_QueenDefeated);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_GameComplete);
 
+	// Stage 1 (main quest) per-objective steps
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Cave);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_ExitedCave);
+
 	// ---- Quest definitions (DT_Quest QuestIds)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_OpenYourEyes);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ACenturyLater);
@@ -497,6 +505,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_Imprint);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_About);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_FollowWait);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_CaveIntro); // Stage 1 first-meeting conclusion (Sigil topic -> Quest.Step.TalkedToLumen.Cave)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_FireSigil);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WindSigil);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WaterSigil);

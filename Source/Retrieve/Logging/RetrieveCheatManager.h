@@ -78,6 +78,14 @@ public:
 
 	UFUNCTION(Exec, Category = "Retrieve|Debug")
 	void RetrieveSystemMessageKey(const FString& KeyTagName);
+	
+	/** (원시 전송) bCompleted=0 -> "QUEST STARTED", !=0 -> "QUEST COMPLETED" */
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveQuestNotification(const FString& QuestName, int32 bCompleted);
+	
+	/** 새 게임 오프닝 타임라인을 즉시 재실행합니다(호스트 전용). */
+	UFUNCTION(Exec, Category = "Retrieve|Debug")
+	void RetrieveReplayOpening();
 
 private:
 	UAbilitySystemComponent* GetLocalPlayerASC() const;

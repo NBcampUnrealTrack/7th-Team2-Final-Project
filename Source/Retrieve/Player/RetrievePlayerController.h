@@ -119,6 +119,12 @@ protected:
 	void ShowLoadingScreen();
 	void HideLoadingScreen();
 
+	UFUNCTION()
+	void HandleLoadingScreenRemoved();
+
+	/** 커버가 올라와 있는 동안 알림 표면들이 억제되도록 Channel.UI.RevealGate를 브로드캐스트합니다. */
+	void BroadcastRevealGate(bool bBlocked);
+
 	/** 부팅/메뉴 로딩 화면 위젯 (코스메틱). (빠른 이동용 WBP_LoadingCutscene이 아님) */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> LoadingScreenClass;
@@ -143,6 +149,8 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveLoadingScreen;
+
+	bool bLoadingCoverActive = false;
 
 	FTimerHandle LoadingScreenTimerHandle;
 #pragma endregion

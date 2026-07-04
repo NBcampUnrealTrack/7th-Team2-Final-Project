@@ -27,6 +27,10 @@ void URetrieveSystemMessageWidget::NativeConstruct()
 		CinematicHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveCinematicStatePayload>(
 			RetrieveGameplayTags::Channel_Cinematic_Changed, this,
 			&URetrieveSystemMessageWidget::HandleCinematicChanged);
+
+		RevealHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveRevealGatePayload>(
+			RetrieveGameplayTags::Channel_UI_RevealGate, this,
+			&URetrieveSystemMessageWidget::HandleRevealGate);
 	}
 
 	// 위젯이 막 생성됨: 그동안 큐에 쌓여 있던 항목을 바로 표시하기 시작
@@ -38,6 +42,7 @@ void URetrieveSystemMessageWidget::NativeDestruct()
 	if (UWorld* World = GetWorld())
 	{
 		UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicHandle);
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(RevealHandle);
 		World->GetTimerManager().ClearTimer(HoldTimer);
 	}
 	if (USystemMessageSubsystem* SystemMessageSubsystem = Subsystem.Get())
@@ -87,9 +92,36 @@ void URetrieveSystemMessageWidget::HandleCinematicChanged(FGameplayTag Channel,
 	}
 }
 
+void URetrieveSystemMessageWidget::HandleRevealGate(FGameplayTag Channel, const FRetrieveRevealGatePayload& Message)
+{
+	bRevealBlocked = Message.bBlocked;
+	if (bRevealBlocked)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(HoldTimer);
+		}
+		StopAllAnimations();
+		if (bHasCurrent)
+		{
+			if (USystemMessageSubsystem* SystemMessageSubsystem = Subsystem.Get())
+			{
+				SystemMessageSubsystem->RequeueFront(CurrentEntry);
+			}
+			bHasCurrent = false;
+		}
+		bShowing = false;
+		SetVisibility(ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		PumpNext();
+	}
+}
+
 void URetrieveSystemMessageWidget::PumpNext()
 {
-	if (bShowing || bCinematicActive)
+	if (bShowing || bCinematicActive || bRevealBlocked)
 	{
 		return; // 표시 중이거나 억제 중: 현재 상태 유지
 	}

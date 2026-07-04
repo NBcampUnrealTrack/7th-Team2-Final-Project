@@ -388,6 +388,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_DialogueChanged, "Channel.UI.DialogueChanged");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_SystemMessage, "Channel.UI.SystemMessage");
 	
+	// ---- Message channels: UI Quest notification / Reveal gate
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_QuestNotification, "Channel.UI.QuestNotification");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_RevealGate, "Channel.UI.RevealGate");
+	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Fall, "Data.Damage.Fall");
@@ -469,6 +473,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_QueenDefeated, "Quest.Step.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_GameComplete, "Quest.Step.GameComplete");
 
+	// Stage 1 (main quest) per-objective steps
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Cave, "Quest.Step.TalkedToLumen.Cave");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_ExitedCave, "Quest.Step.ExitedCave");
+
 	// ---- Quest definitions (DT_Quest QuestIds)
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_OpenYourEyes, "Quest.Main.OpenYourEyes");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ACenturyLater, "Quest.Main.ACenturyLater");
@@ -487,6 +495,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_Imprint, "Topic.Lumen.Imprint");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_About, "Topic.Lumen.About");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FollowWait, "Topic.Lumen.FollowWait");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_CaveIntro, "Topic.Lumen.CaveIntro");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FireSigil, "Topic.Lumen.FireSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WindSigil, "Topic.Lumen.WindSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WaterSigil, "Topic.Lumen.WaterSigil");
