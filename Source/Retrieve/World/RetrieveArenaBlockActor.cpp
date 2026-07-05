@@ -1,10 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "RetrieveArenaBlockActor.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/HitResult.h"
+#include "GameFramework/Pawn.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -21,18 +22,24 @@ ARetrieveArenaBlockActor::ARetrieveArenaBlockActor()
 	Barrier->SetupAttachment(Root);
 	Barrier->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Barrier->SetNotifyRigidBodyCollision(true);
+	Barrier->SetVisibility(false);
+
+	EntryTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("EntryTrigger"));
+	EntryTrigger->SetupAttachment(Root);
+	EntryTrigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	EntryTrigger->SetCollisionResponseToAllChannels(ECR_Ignore);
+	EntryTrigger->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	EntryTrigger->SetBoxExtent(FVector(1200.f, 1200.f, 300.f));
 }
 
 void ARetrieveArenaBlockActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 결계FX 런타임 제어용 MID 생성
 	BarrierMID = Barrier->CreateDynamicMaterialInstance(0);
 
-	// 결계에 부딪히는 충돌 → 피격 링 트리거
-	// (스트리밍 재-BeginPlay 시 중복 바인딩 ensure 방지: AddUnique + EndPlay에서 해제)
 	Barrier->OnComponentHit.AddUniqueDynamic(this, &ARetrieveArenaBlockActor::OnBarrierHit);
+	EntryTrigger->OnComponentBeginOverlap.AddUniqueDynamic(this, &ARetrieveArenaBlockActor::OnEntryTriggerBeginOverlap);
 
 	UnlockArena();
 
@@ -54,6 +61,11 @@ void ARetrieveArenaBlockActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Barrier->OnComponentHit.RemoveDynamic(this, &ARetrieveArenaBlockActor::OnBarrierHit);
 	}
 
+	if (EntryTrigger)
+	{
+		EntryTrigger->OnComponentBeginOverlap.RemoveDynamic(this, &ARetrieveArenaBlockActor::OnEntryTriggerBeginOverlap);
+	}
+
 	UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(this);
 
 	if (SpottedHandle.IsValid())
@@ -65,21 +77,50 @@ void ARetrieveArenaBlockActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MsgSubsys.UnregisterListener(DiedHandle);
 	}
 
+	GetWorldTimerManager().ClearTimer(HideTimerHandle);
+
 	Super::EndPlay(EndPlayReason);
 }
 
 void ARetrieveArenaBlockActor::OnPlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
 {
-	if (bCleared)
+	if (bCleared || bIsLocked)
 	{
 		return;
 	}
 
-	// 다른 적이 아닌, 이 아레나의 보스가 인지했을 때만 잠금
-	if (IsArenaBoss(Payload.InstigatorEnemy.Get(), Payload.InstigatorLocation))
+	// 다른 적이 아닌, 이 아레나의 보스가 인지했을 때만 대기 상태로 전환
+	if (!IsArenaBoss(Payload.InstigatorEnemy.Get(), Payload.InstigatorLocation))
 	{
-		LockArena();
+		return;
 	}
+
+	// 여기서 바로 결계를 걸지 않는다. 보스가 문/벽 너머로 플레이어를 먼저 인지해도,
+	// 플레이어가 EntryTrigger(아레나 입구를 지난 지점)를 실제로 통과할 때만 잠근다.
+	PendingSpottedPlayer = Payload.SpottedActor;
+	bWaitingForPlayerEntry = true;
+}
+
+void ARetrieveArenaBlockActor::OnEntryTriggerBeginOverlap(
+	UPrimitiveComponent* OverlappedComp,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
+{
+	if (bCleared || bIsLocked || !bWaitingForPlayerEntry)
+	{
+		return;
+	}
+
+	if (!OtherActor || OtherActor != PendingSpottedPlayer.Get())
+	{
+		return;
+	}
+
+	bWaitingForPlayerEntry = false;
+	LockArena();
 }
 
 void ARetrieveArenaBlockActor::OnMonsterDied(FGameplayTag Channel, const FMonsterDiedPayload& Payload)
@@ -90,6 +131,8 @@ void ARetrieveArenaBlockActor::OnMonsterDied(FGameplayTag Channel, const FMonste
 	}
 
 	bCleared = true;
+	bWaitingForPlayerEntry = false;
+
 	UnlockArena();
 }
 
@@ -112,17 +155,19 @@ bool ARetrieveArenaBlockActor::IsArenaBoss(const AActor* Actor, const FVector& L
 
 void ARetrieveArenaBlockActor::LockArena()
 {
-	if (bIsLocked)
+	if (bIsLocked || bCleared)
 	{
-		return; // 이미 활성화됨 — 중복 방지
+		return;
 	}
 	bIsLocked = true;
+
+	GetWorldTimerManager().ClearTimer(HideTimerHandle);
 
 	Barrier->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Barrier->SetVisibility(true);
 
 	// 애니메이션 시작 시각 기록 (머티리얼 Time 노드가 자체 재생)
-	if (BarrierMID)
+	if (BarrierMID && GetWorld())
 	{
 		BarrierMID->SetScalarParameterValue(TEXT("LockTime"), GetWorld()->GetTimeSeconds());
 	}
@@ -143,7 +188,7 @@ void ARetrieveArenaBlockActor::UnlockArena()
 	bIsLocked = false;
 
 	// 소멸 디졸브 시작: 메시는 유지, UnlockDuration 후 숨김
-	if (BarrierMID)
+	if (BarrierMID && GetWorld())
 	{
 		BarrierMID->SetScalarParameterValue(TEXT("UnlockTime"), GetWorld()->GetTimeSeconds());
 	}
@@ -155,12 +200,15 @@ void ARetrieveArenaBlockActor::UnlockArena()
 
 void ARetrieveArenaBlockActor::HideBarrier()
 {
-	Barrier->SetVisibility(false);
+	if (Barrier)
+	{
+		Barrier->SetVisibility(false);
+	}
 }
 
 void ARetrieveArenaBlockActor::TriggerHitRipple(const FVector& HitWorldLocation)
 {
-	if (!BarrierMID)
+	if (!BarrierMID || !GetWorld())
 	{
 		return;
 	}

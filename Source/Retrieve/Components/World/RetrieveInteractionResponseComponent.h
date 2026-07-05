@@ -236,7 +236,7 @@ public:
 
 	/** true면 결과 적용 시 화면 디버그 메시지 출력 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Debug")
-	bool bShowDebugMessageOnApply = true;
+	bool bShowDebugMessageOnApply = false;
 
 	// ── 후처리 hook ──────────────────────────────────────────────────────
 	/** 결과 적용 후 BP가 후처리(이펙트/사운드 등)할 수 있는 델리게이트 */
@@ -378,6 +378,8 @@ protected:
 	void OnPlayInteractionAnim(AActor* InteractionInstigator);
 
 private:
+	void DisableShippingInteractionDebug();
+
 	/** 결과 적용 후 bReopenAfterRests면 비활성 상태로 전환 + MapIconComponent에 전파 */
 	void BeginDepletedState();
 

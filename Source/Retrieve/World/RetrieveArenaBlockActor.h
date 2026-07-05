@@ -9,6 +9,7 @@
 #include "RetrieveArenaBlockActor.generated.h"
 
 class UStaticMeshComponent;
+class UBoxComponent;
 class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 struct FEnemyPlayerSpottedPayload;
@@ -17,11 +18,16 @@ struct FMonsterDiedPayload;
 /**
  * 보스 아레나 결계 액터.
  *
- * 보스가 플레이어를 처음 인지하면 결계를 올려 구역 이탈을 막고,
- * 보스가 처치되면 결계를 해제합니다.
+ * 보스가 플레이어를 처음 인지해도 바로 결계를 올리지 않고, 플레이어가 EntryTrigger
+ * (아레나 안쪽 입구를 지난 지점에 배치하는 박스 볼륨) 안으로 실제로 들어왔을 때만
+ * 결계를 올려 구역 이탈을 막습니다. 보스가 처치되면 결계를 해제합니다.
+ *
+ * 거리/반경 기반 판정(플레이어-보스 거리, 아레나 중심 반경 등)은 방 형태와 크기에 따라
+ * 값이 계속 달라져 안정적이지 않았기 때문에, 디자이너가 직접 배치하는 Overlap 트리거로
+ * 대체했습니다 - "플레이어가 이 지점을 지났다"를 코드가 추측하지 않고 레벨에서 직접 정의합니다.
  *
  * 보스/AI 코드와 직접 결합하지 않고 기존 Gameplay Message만 구독합니다.
- *  - 잠금: Channel.Enemy.PlayerSpotted (FRetrieveEnemyTargetEvaluator가 첫 인지 시 발행)
+ *  - 감지: Channel.Enemy.PlayerSpotted (FRetrieveEnemyTargetEvaluator가 첫 인지 시 발행)
  *  - 해제: Channel.Monster.Died        (HandleDeathStarted에서 발행)
  *
  * 보스는 EnemySpawner로 런타임에 생성되므로 인스턴스 참조 대신
@@ -30,7 +36,9 @@ struct FMonsterDiedPayload;
  *
  * 에디터에서 반드시 설정할 항목:
  *  - BossClass   : 이 아레나가 감시할 보스 BP 클래스
- *  - ArenaRadius : 아레나 중심 기준 판별 반경 (0이면 거리 체크 안 함)
+ *  - ArenaRadius : 같은 클래스 보스가 여러 구역에 있을 때 구분용 반경 (0이면 거리 체크 안 함)
+ *  - EntryTrigger: 아레나 입구를 지나 안쪽에 배치할 진입 판정 박스 (결계 메시 전체보다 작게,
+ *                  입구를 지나 아레나 내부로 살짝 들어온 위치에 둘 것)
  *  - Barrier     : 결계 메시/콜리전 (Pawn Block 권장)
  */
 UCLASS()
@@ -68,7 +76,7 @@ protected:
 	void HideBarrier();
 
 private:
-	/** 보스가 플레이어를 처음 인지한 순간 → 결계 잠금 */
+	/** 보스가 플레이어를 처음 인지한 순간 → 결계를 바로 걸지 않고 EntryTrigger 진입을 기다린다 */
 	void OnPlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
 
 	/** 보스 사망 → 결계 해제 */
@@ -76,6 +84,16 @@ private:
 
 	/** 메시지에 실려 온 액터/위치가 이 아레나의 보스인지 판별 */
 	bool IsArenaBoss(const AActor* Actor, const FVector& Location) const;
+
+	/** 플레이어가 EntryTrigger 안으로 들어오면 결계를 잠근다 */
+	UFUNCTION()
+	void OnEntryTriggerBeginOverlap(
+		UPrimitiveComponent* OverlappedComp,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
 
 	/** 결계에 무언가 부딪히면(플레이어/적/무기 충돌) 그 지점에 피격 링 */
 	UFUNCTION()
@@ -106,12 +124,26 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Boss Arena")
 	TObjectPtr<UStaticMeshComponent> Barrier;
 
+	/**
+	 * 플레이어가 이 트리거 안으로 들어오면 결계를 잠근다.
+	 * 에디터에서 아레나 입구를 지나 안쪽으로 살짝 들어온 위치/크기로 배치할 것
+	 * (결계 메시 전체보다 작게 잡아야 "들어온 뒤"에만 반응한다).
+	 */
+	UPROPERTY(VisibleAnywhere, Category="Boss Arena")
+	TObjectPtr<UBoxComponent> EntryTrigger;
+
 private:
 	FGameplayMessageListenerHandle SpottedHandle;
 	FGameplayMessageListenerHandle DiedHandle;
 
 	/** 디졸브 종료 후 숨김 타이머 */
 	FTimerHandle HideTimerHandle;
+
+	/** 보스가 처음 인지한 플레이어 - EntryTrigger 오버랩 시 이 액터인지 확인용 */
+	TWeakObjectPtr<AActor> PendingSpottedPlayer;
+
+	/** 보스가 플레이어를 인지해서 EntryTrigger 진입을 기다리는 중인지 */
+	bool bWaitingForPlayerEntry = false;
 
 	/** 결계FX 런타임 파라미터(LockTime/HitLocation/HitTime) 제어용 MID */
 	UPROPERTY()

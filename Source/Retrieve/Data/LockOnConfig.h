@@ -52,5 +52,5 @@ public:
 	// Debug
 	// 트레이스/타겟/시야 라인 디버그 드로우
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
-	bool bDebugDraw = true;
+	bool bDebugDraw = false;
 };

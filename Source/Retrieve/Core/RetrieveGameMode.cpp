@@ -1,5 +1,6 @@
 #include "Core/RetrieveGameMode.h"
 
+#include "Diagnostics/RetrieveDiagLog.h"
 #include "RetrieveGameState.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
 #include "Data/RetrieveOpeningSequenceAsset.h"
@@ -10,9 +11,24 @@
 #include "Quest/QuestBranchComponent.h"
 #include "Subsystems/QuestNotificationSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
+#include "UObject/UObjectGlobals.h"
 
 ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
+	RetrieveDiagCheckpoint(TEXT("GameMode constructor (CDO or instance)"));
+
+	static bool bBoundPostLoadMapDiag = false;
+	if (!bBoundPostLoadMapDiag)
+	{
+		bBoundPostLoadMapDiag = true;
+		FCoreUObjectDelegates::PostLoadMapWithWorld.AddStatic(
+			[](UWorld* World)
+			{
+				RetrieveDiagCheckpoint(*FString::Printf(TEXT("PostLoadMapWithWorld: %s"),
+					World ? *World->GetName() : TEXT("null")));
+			});
+	}
+
 	PlayerControllerClass = ARetrievePlayerController::StaticClass();
 	PlayerStateClass = ARetrievePlayerState::StaticClass();
 	GameStateClass = ARetrieveGameState::StaticClass();
@@ -20,23 +36,26 @@ ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer
 
 void ARetrieveGameMode::PostLogin(APlayerController* NewPlayerController)
 {
+	RetrieveDiagCheckpoint(TEXT("GameMode::PostLogin start"));
 	Super::PostLogin(NewPlayerController);
-	
+
 	ARetrieveGameState* GS = GetRetrieveGameState();
 	if (!GS || !NewPlayerController)
 	{
 		return;
 	}
-	
+
 	if (GS->GetHostPlayerState() == nullptr && NewPlayerController->PlayerState)
 	{
 		GS->SetHostPlayerState(NewPlayerController->PlayerState);
+		RetrieveDiagCheckpoint(TEXT("GameMode::PostLogin -> OnWorldReadyForGameplay"));
 		OnWorldReadyForGameplay();
 	}
 }
 
 void ARetrieveGameMode::BeginPlay()
 {
+	RetrieveDiagCheckpoint(TEXT("GameMode::BeginPlay start"));
 	Super::BeginPlay();
 
 	if (UWorld* World = GetWorld())
@@ -50,19 +69,22 @@ void ARetrieveGameMode::BeginPlay()
 
 void ARetrieveGameMode::OnWorldReadyForGameplay()
 {
+	RetrieveDiagCheckpoint(TEXT("GameMode::OnWorldReadyForGameplay start"));
 	ARetrieveGameState* GS = GetRetrieveGameState();
 	if (!GS)
 	{
 		return;
 	}
-	
+
 	GS->TransitionTo(ERetrieveSessionState::MainMenu);
+	RetrieveDiagCheckpoint(TEXT("GameMode::OnWorldReadyForGameplay - MainMenu state set"));
 
 	if (bSkipMainMenuOnBoot)
 	{
 		BootstrapNewGameQuest();
 		GS->TransitionTo(ERetrieveSessionState::InGame);
 	}
+	RetrieveDiagCheckpoint(TEXT("GameMode::OnWorldReadyForGameplay end"));
 }
 
 void ARetrieveGameMode::HandleNewGame(APlayerController* Requestor)

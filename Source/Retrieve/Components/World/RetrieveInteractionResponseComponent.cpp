@@ -19,11 +19,13 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Internationalization/Text.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/ShapeComponent.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
 namespace RetrieveInteractionPrompt
@@ -161,6 +163,15 @@ void URetrieveInteractionResponseComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+#if UE_BUILD_SHIPPING
+	DisableShippingInteractionDebug();
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(
+			this, &URetrieveInteractionResponseComponent::DisableShippingInteractionDebug);
+	}
+#endif
+
 	if (bAutoBindInteractionManager)
 	{
 		TryAutoBindInteractionManager();
@@ -183,6 +194,43 @@ void URetrieveInteractionResponseComponent::BeginPlay()
 					});
 		}
 	}
+}
+
+void URetrieveInteractionResponseComponent::DisableShippingInteractionDebug()
+{
+#if UE_BUILD_SHIPPING
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	TInlineComponentArray<UActorComponent*> Components(OwnerActor);
+	for (UActorComponent* Component : Components)
+	{
+		if (!Component)
+		{
+			continue;
+		}
+
+		if (Component->GetClass()->GetName().Contains(TEXT("Manager_InteractionTarget")))
+		{
+			if (FBoolProperty* EnableDebugProperty = FindFProperty<FBoolProperty>(
+				Component->GetClass(), TEXT("EnableDebug")))
+			{
+				EnableDebugProperty->SetPropertyValue_InContainer(Component, false);
+			}
+		}
+
+		// Interaction Manager의 디버그 존은 런타임 ShapeComponent로 표시된다.
+		// 충돌 기능은 유지하고 렌더링만 차단한다.
+		if (UShapeComponent* ShapeComponent = Cast<UShapeComponent>(Component))
+		{
+			ShapeComponent->SetHiddenInGame(true, true);
+			ShapeComponent->SetVisibility(false, true);
+		}
+	}
+#endif
 }
 
 void URetrieveInteractionResponseComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -1180,6 +1228,7 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 	}
 
 	// 3) ?붾쾭洹?硫붿떆吏
+#if !UE_BUILD_SHIPPING
 	if (bShowDebugMessageOnApply && GEngine)
 	{
 		const FString TypeName = GetEffectiveDisplayText().ToString();
@@ -1193,6 +1242,8 @@ void URetrieveInteractionResponseComponent::ApplyResultAuthoritative(AActor* Int
 	}
 
 	// 4) BP ?꾩쿂由??몃━寃뚯씠??
+#endif
+
 	OnApplied.Broadcast(InteractionInstigator);
 
 	// 5) 1?뚯꽦 ?≫꽣 destroy (SetLifeSpan?쇰줈 1 tick 吏??

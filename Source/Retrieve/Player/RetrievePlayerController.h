@@ -35,8 +35,12 @@ struct FRetrievePanelShortcutConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI")
 	FKey Key;
 
+	// 임시: WBP_InventoryPanel 로딩 시 Shipping에서만 재현되는 IoStore 익스포트 테이블 크래시를
+	// 회피하기 위해 하드 레퍼런스(TSubclassOf) 대신 지연 로딩(TSoftClassPtr)으로 전환.
+	// 부팅 시점이 아니라 실제로 패널을 열 때 로드되므로, 문제가 있는 패널을 열 때만 크래시가
+	// 발생하고 나머지 게임플레이는 정상 진행된다. 근본 원인 확인 후 되돌릴 것.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI")
-	TSubclassOf<URetrieveGamePanelWidget> PanelClass;
+	TSoftClassPtr<URetrieveGamePanelWidget> PanelClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI")
 	bool bRequiresInventoryOpenPermission = false;
@@ -131,7 +135,7 @@ protected:
 	
 	/** 개발 편의: 새 게임/부팅 진입 시 로딩 커버 생략 (부활 커버는 항상 유지). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dev")
-	bool bSkipEntryLoadingScreen = true;
+	bool bSkipEntryLoadingScreen = false;
 
 	/** Persistant 레벨에 배치된 인게임 메인 메뉴 시네 카메라를 식별하는 액터 태그. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Menu")
@@ -142,7 +146,7 @@ protected:
 	float MenuToGameplayBlendSeconds = 1.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Menu")
-	float LoadingScreenMinSeconds = 2.0f;
+	float LoadingScreenMinSeconds = 5.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Menu")
 	float LoadingScreenSafetySeconds = 10.0f;
