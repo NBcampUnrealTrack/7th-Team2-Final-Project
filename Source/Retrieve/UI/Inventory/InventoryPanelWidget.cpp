@@ -87,6 +87,32 @@ UInventoryPanelWidget::UInventoryPanelWidget(const FObjectInitializer& ObjectIni
 	CurrentSortMode = EInventorySortMode::AttackPowerDesc;
 }
 
+void UInventoryPanelWidget::NativeOnInitialized()
+{
+	// 이 WBP는 한때 Monolith(에디터 전용 플러그인)의 GAS 어트리뷰트 바인딩 확장을 컴파일된
+	// 클래스에 포함하고 있었다. 그 확장 클래스는 Shipping에 로드되지 않는 Editor 전용
+	// 모듈이라, Shipping에서 이 클래스를 로드하면 UUserWidget::Extensions 배열에 null
+	// 항목이 남는다. Super::NativeOnInitialized()는 각 Extension에 대해 check() 없이
+	// (Shipping에서는 DO_CHECK=0이라 스트립됨) 바로 Initialize()를 호출해 null 역참조로
+	// 크래시한다. private 프로퍼티라 리플렉션으로 직접 정리한다.
+	if (FArrayProperty* ExtensionsProp = FindFProperty<FArrayProperty>(UUserWidget::StaticClass(), TEXT("Extensions")))
+	{
+		if (FObjectProperty* InnerObjectProp = CastField<FObjectProperty>(ExtensionsProp->Inner))
+		{
+			FScriptArrayHelper ArrayHelper(ExtensionsProp, ExtensionsProp->ContainerPtrToValuePtr<void>(this));
+			for (int32 Index = ArrayHelper.Num() - 1; Index >= 0; --Index)
+			{
+				if (!InnerObjectProp->GetObjectPropertyValue(ArrayHelper.GetRawPtr(Index)))
+				{
+					ArrayHelper.RemoveValues(Index, 1);
+				}
+			}
+		}
+	}
+
+	Super::NativeOnInitialized();
+}
+
 void UInventoryPanelWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -113,6 +139,7 @@ void UInventoryPanelWidget::NativeConstruct()
 	UpdateQuickSlotActionButtons();
 	RefreshInventoryGridLayout();
 	RefreshSlotIcons();
+	RefreshStatDisplay();
 	BindEquipLockTagEvents();
 }
 
@@ -536,7 +563,6 @@ bool UInventoryPanelWidget::IsWeaponItemEquipped(FName WeaponItemId, int32 SlotI
 {
 	if (!InventoryComponent
 		|| WeaponItemId.IsNone()
-		|| SlotInstanceId == INDEX_NONE
 		|| InventoryComponent->GetEquippedWeaponId() != WeaponItemId)
 	{
 		return false;
@@ -546,7 +572,7 @@ bool UInventoryPanelWidget::IsWeaponItemEquipped(FName WeaponItemId, int32 SlotI
 
 bool UInventoryPanelWidget::IsArmorItemEquipped(FName ArmorItemId, int32 SlotInstanceId) const
 {
-	if (!InventoryComponent || ArmorItemId.IsNone() || SlotInstanceId == INDEX_NONE || !ArmorDataTable) return false;
+	if (!InventoryComponent || ArmorItemId.IsNone() || !ArmorDataTable) return false;
 	const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
 		ArmorItemId, TEXT("UInventoryPanelWidget::IsArmorItemEquipped"));
 	if (!Row) return false;
@@ -1006,6 +1032,7 @@ void UInventoryPanelWidget::HandleEquippedWeaponChanged(FName WeaponItemId)
 		OnSelectedItemChanged.Broadcast(SelectedItemId, SelectedItemCategoryTag);
 	}
 	RefreshSlotIcons();
+	RefreshStatDisplay();
 	RefreshSlotButtonTooltips();
 }
 
@@ -1162,6 +1189,7 @@ void UInventoryPanelWidget::HandleEquippedArmorChanged(FGameplayTag EquipmentSlo
 		RefreshSelectedArmorDetails();
 	}
 	RefreshSlotIcons();
+	RefreshStatDisplay();
 	RefreshSlotButtonTooltips();
 }
 
@@ -3273,6 +3301,38 @@ float UInventoryPanelWidget::GetTotalDefense() const
 		: 0.0f;
 	const float DataTableDefense = GetCharacterBaseDefense() + GetArmorBonusDefense();
 	return FMath::Max(AttributeDefense, DataTableDefense);
+}
+
+float UInventoryPanelWidget::GetTotalMaxHealth() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	return ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetMaxHealthAttribute()) : 0.0f;
+}
+
+float UInventoryPanelWidget::GetTotalMoveSpeed() const
+{
+	const URetrieveAbilitySystemComponent* ASC = GetOwnerASC();
+	return ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetMoveSpeedAttribute()) : 0.0f;
+}
+
+void UInventoryPanelWidget::RefreshStatDisplay()
+{
+	if (Txt_StatAtkValue)
+	{
+		Txt_StatAtkValue->SetText(FText::AsNumber(FMath::RoundToInt(GetTotalAttackPower())));
+	}
+	if (Txt_StatDefValue)
+	{
+		Txt_StatDefValue->SetText(FText::AsNumber(FMath::RoundToInt(GetTotalDefense())));
+	}
+	if (Txt_StatHpValue)
+	{
+		Txt_StatHpValue->SetText(FText::AsNumber(FMath::RoundToInt(GetTotalMaxHealth())));
+	}
+	if (Txt_StatSpdValue)
+	{
+		Txt_StatSpdValue->SetText(FText::AsNumber(FMath::RoundToInt(GetTotalMoveSpeed())));
+	}
 }
 
 FText UInventoryPanelWidget::GetFinalStatDisplayText() const

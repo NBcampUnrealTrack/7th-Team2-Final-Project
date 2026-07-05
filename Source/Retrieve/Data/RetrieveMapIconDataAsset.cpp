@@ -64,10 +64,12 @@ void URetrieveMapIconDataAsset::RefreshFromLevel()
 		TEXT("[MapIconDataAsset] RefreshFromLevel 완료 — 총 %d개 아이콘 등록"),
 		Icons.Num());
 
+#if !UE_BUILD_SHIPPING
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green,
 			FString::Printf(TEXT("WorldMap 아이콘 %d개 등록 완료"), Icons.Num()));
 	}
+#endif
 }
 #endif

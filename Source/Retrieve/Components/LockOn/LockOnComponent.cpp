@@ -17,6 +17,14 @@
 #include "Data/LockOnConfig.h"
 #include "TimerManager.h"
 
+namespace
+{
+	bool IsLockOnDebugDrawEnabled(const ULockOnConfig* Config)
+	{
+		return !UE_BUILD_SHIPPING && IsValid(Config) && Config->bDebugDraw;
+	}
+}
+
 ULockOnComponent::ULockOnComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -160,7 +168,7 @@ void ULockOnComponent::MonitorTick()
 
 void ULockOnComponent::DrawDebugLockOn() const
 {
-	if (IsValid(Config) == false ||  Config->bDebugDraw == false)
+	if (!IsLockOnDebugDrawEnabled(Config))
 	{
 		return;
 	}
@@ -262,7 +270,7 @@ void ULockOnComponent::FindCandidates(TArray<AActor*>& OutCandidates) const
 		SearchObjectTypes,
 		false,
 		IgnoreActors,
-		Config->bDebugDraw ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
+		IsLockOnDebugDrawEnabled(Config) ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
 		Hits,
 		true
 		);	
@@ -329,7 +337,7 @@ bool ULockOnComponent::HasLineOfSight(const AActor* Target) const
 		Hit, Start, End, Config->LineOfSightChannel, Params
 		);
 	
-	if (Config->bDebugDraw)
+	if (IsLockOnDebugDrawEnabled(Config))
 	{
 		const FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
 		DrawDebugLine(World, Start, End, LineColor, false, 0.1f, 0, 1.f);

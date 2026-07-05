@@ -397,6 +397,17 @@ bool UInventoryComponent::RequestEquipWeapon(FName WeaponItemId, int32 SlotInsta
 		return false;
 	}
 
+	// 호출부(예: 캐릭터 BP의 시작 장비 지급 노드)가 SlotInstanceId를 안 넘겨 기본값(-1)이 들어오면,
+	// 실제 보유 스택의 SlotInstanceId로 보정한다 - 안 그러면 "이미 장착돼 있던" 아이템이
+	// 인벤토리 그리드에서 영원히 장착중으로 표시되지 않는다.
+	if (SlotInstanceId == INDEX_NONE)
+	{
+		if (const FRetrieveItemStack* Stack = FindStack(WeaponItemId))
+		{
+			SlotInstanceId = Stack->SlotInstanceId;
+		}
+	}
+
 	EquippedWeaponId = WeaponItemId;
 	EquippedWeaponSlotInstanceId = SlotInstanceId;
 	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
@@ -470,6 +481,14 @@ bool UInventoryComponent::RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[RequestEquipArmor] FAIL — ArmorComp=%d EquipArmor failed"), ArmorComp ? 1 : 0);
 		return false;
+	}
+
+	// 호출부(예: 캐릭터 BP의 시작 장비 지급 노드)가 SlotInstanceId를 안 넘겨 기본값(-1)이 들어오면,
+	// 위에서 이미 찾아둔 실제 보유 스택(Stack)의 SlotInstanceId로 보정한다 - 안 그러면 "이미
+	// 장착돼 있던" 방어구가 인벤토리 그리드에서 영원히 장착중으로 표시되지 않는다.
+	if (SlotInstanceId == INDEX_NONE)
+	{
+		SlotInstanceId = Stack->SlotInstanceId;
 	}
 
 	if (FRetrieveEquippedArmorEntry* ExistingSlot = FindMutableEquippedArmorSlot(EquipmentSlotTag))
@@ -990,11 +1009,18 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 
 	// 이 기능 이전에 저장된 세이브 데이터는 무기/방어구 슬롯에 SlotInstanceId가 없다(INDEX_NONE).
 	// 그대로 두면 같은 아이템의 모든 슬롯이 "장착됨"으로 동시에 표시되므로, 여기서 새 ID를 부여해 이관한다.
+	// 이때 EquippedWeaponSlotInstanceId/EquippedArmorSlots도 여전히 INDEX_NONE인 채로 남아있으면
+	// (둘 다 예전 세이브 형식이라) 아이템 스택의 새 ID와 영원히 어긋나 "이미 장착돼 있던" 아이템의
+	// 장착중 표시가 뜨지 않는 버그가 생긴다 - 같은 ItemId면 새로 부여한 ID를 장착 슬롯에도 그대로 전파한다.
 	for (FRetrieveItemStack& Stack : WeaponItems)
 	{
 		if (Stack.SlotInstanceId == INDEX_NONE)
 		{
 			Stack.SlotInstanceId = NextSlotInstanceId++;
+			if (EquippedWeaponSlotInstanceId == INDEX_NONE && EquippedWeaponId == Stack.ItemId)
+			{
+				EquippedWeaponSlotInstanceId = Stack.SlotInstanceId;
+			}
 		}
 	}
 	for (FRetrieveItemStack& Stack : ArmorItems)
@@ -1002,6 +1028,14 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 		if (Stack.SlotInstanceId == INDEX_NONE)
 		{
 			Stack.SlotInstanceId = NextSlotInstanceId++;
+			for (FRetrieveEquippedArmorEntry& ArmorSlot : EquippedArmorSlots)
+			{
+				if (ArmorSlot.SlotInstanceId == INDEX_NONE && ArmorSlot.ArmorItemId == Stack.ItemId)
+				{
+					ArmorSlot.SlotInstanceId = Stack.SlotInstanceId;
+					break;
+				}
+			}
 		}
 	}
 
@@ -1015,8 +1049,9 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 	else if (!WeaponItems.ContainsByPredicate(
 		[this](const FRetrieveItemStack& Stack) { return Stack.SlotInstanceId == EquippedWeaponSlotInstanceId; }))
 	{
-		// 저장된 슬롯이 더 이상 없으면(예전 버전 세이브 등) 하이라이트만 해제, 장착 자체는 유지
-		EquippedWeaponSlotInstanceId = INDEX_NONE;
+		// 저장된 슬롯을 찾을 수 없으면, 같은 ItemId 스택으로 재연결을 시도한다.
+		// (마이그레이션이 어긋나 EquippedWeaponSlotInstanceId만 예전 값에 머물러 있는 경우 자가 복구)
+		EquippedWeaponSlotInstanceId = EquippedStack ? EquippedStack->SlotInstanceId : INDEX_NONE;
 	}
 
 	for (int32 Index = EquippedArmorSlots.Num() - 1; Index >= 0; --Index)
@@ -1036,7 +1071,10 @@ bool UInventoryComponent::ApplyInventorySaveData(const FRetrieveInventorySaveDat
 		if (!ArmorItems.ContainsByPredicate(
 			[&ArmorSlot](const FRetrieveItemStack& Stack) { return Stack.SlotInstanceId == ArmorSlot.SlotInstanceId; }))
 		{
-			ArmorSlot.SlotInstanceId = INDEX_NONE;
+			// 저장된 슬롯을 찾을 수 없으면, 같은 ItemId 스택(ArmorStack, 위에서 이미 조회함)으로 재연결을 시도한다.
+			// (마이그레이션이 어긋나 EquippedArmorSlots만 예전 값에 머물러 그리드의 "장착중" 배지가
+			// 영원히 안 뜨던 버그를 매 로드마다 자가 복구한다)
+			ArmorSlot.SlotInstanceId = ArmorStack->SlotInstanceId;
 		}
 	}
 

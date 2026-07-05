@@ -1,5 +1,6 @@
 #include "Player/RetrievePlayerController.h"
 
+#include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
 #include "Engine/LocalPlayer.h"
@@ -123,7 +124,15 @@ UActorComponent* ARetrievePlayerController::GetInteractorComponent() const
 
 void ARetrievePlayerController::BeginPlay()
 {
+	RetrieveDiagCheckpoint(TEXT("PlayerController::BeginPlay start"));
 	Super::BeginPlay();
+
+#if UE_BUILD_SHIPPING
+	// Texture Streaming 비활성화 상태에서는 월드 진입 직후 전체 해상도 리소스가
+	// 정착하는 과정이 화면에 노출될 수 있으므로 Shipping 진입 커버를 강제한다.
+	bSkipEntryLoadingScreen = false;
+	LoadingScreenMinSeconds = FMath::Max(LoadingScreenMinSeconds, 5.0f);
+#endif
 
 	if (!IsLocalController())
 	{
@@ -182,8 +191,10 @@ void ARetrievePlayerController::BeginPlay()
 	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
 		const ERetrieveSessionState Current = GS->GetSessionState();
+		RetrieveDiagCheckpoint(TEXT("PlayerController::BeginPlay -> HandleSessionStateChanged (initial)"));
 		HandleSessionStateChanged(Current, Current); // 최초 바인드는 전환이 아님
 	}
+	RetrieveDiagCheckpoint(TEXT("PlayerController::BeginPlay end"));
 }
 
 void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -366,12 +377,14 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
 {
+	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget start"));
 	const bool bShouldCover = ShouldShowLoadingCover(Previous, NewState);
 	if (bShouldCover)
 	{
 		ShowLoadingScreen();
 	}
-	
+	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - loading cover done"));
+
 	if (ActiveTopLevelWidget)
 	{
 		ClearHUDViewModel();
@@ -380,9 +393,13 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 	}
 
 	const TSubclassOf<UUserWidget> WidgetClass = ResolveWidgetClass(NewState);
+	RetrieveDiagCheckpoint(*FString::Printf(TEXT("PlayerController::SwapActiveWidget - resolved class %s"),
+		WidgetClass ? *WidgetClass->GetName() : TEXT("None")));
 	if (WidgetClass)
 	{
+		RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - before CreateWidget"));
 		ActiveTopLevelWidget = CreateWidget<UUserWidget>(this, WidgetClass);
+		RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - after CreateWidget"));
 		if (ActiveTopLevelWidget)
 		{
 			if (NewState == ERetrieveSessionState::InGame)
@@ -394,7 +411,9 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 				TryBindHealthToHUD();
 				TryBindElementGaugeToHUD();
 			}
+			RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - before AddToViewport"));
 			ActiveTopLevelWidget->AddToViewport();
+			RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - after AddToViewport"));
 			if (NewState == ERetrieveSessionState::InGame)
 			{
 				EnsureHUDViewModel();
@@ -419,6 +438,7 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 			ActiveToastManager->AddToViewport(10);
 		}
 	}
+	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
 }
 
 bool ARetrievePlayerController::ShouldShowLoadingCover(ERetrieveSessionState Previous,
@@ -1012,7 +1032,7 @@ bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
 			return true;
 		}
 
-		OpenExclusivePanel(ShortcutConfig.PanelClass, ShortcutConfig.Key);
+		OpenExclusivePanel(ShortcutConfig.PanelClass.LoadSynchronous(), ShortcutConfig.Key);
 		return true;
 	}
 
@@ -1088,7 +1108,10 @@ void ARetrievePlayerController::CloseQuickSlotWheelAndUse()
 
 bool ARetrievePlayerController::CanOpenPanel(const FRetrievePanelShortcutConfig& ShortcutConfig) const
 {
-	if (!ShortcutConfig.PanelClass)
+	// TSoftClassPtr는 로드되기 전까지 operator bool()(=IsValid(), 즉 "현재 메모리에 로드돼 있는가")이
+	// false를 반환한다. 아직 LoadSynchronous()를 호출하기 전인 이 시점에는 항상 false가 되어 모든
+	// 패널이 열리지 않는 회귀가 발생했었다. "경로 자체가 비어있는가"를 뜻하는 IsNull()로 검사해야 한다.
+	if (ShortcutConfig.PanelClass.IsNull())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Invalid panel shortcut: %s has no PanelClass."), *ShortcutConfig.Key.ToString());
 		return false;

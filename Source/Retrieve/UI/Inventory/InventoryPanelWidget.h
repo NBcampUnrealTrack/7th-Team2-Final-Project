@@ -221,6 +221,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
 	float GetTotalDefense() const;
 
+	/** ASC 어트리뷰트 기준 최대 체력 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetTotalMaxHealth() const;
+
+	/** ASC 어트리뷰트 기준 이동 속도 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
+	float GetTotalMoveSpeed() const;
+
 	/** 인벤토리 스탯 패널용 포맷 텍스트: "기본 ATK: N\n무기 보너스: +M\n최종 ATK: P" */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|Stats")
 	FText GetFinalStatDisplayText() const;
@@ -248,7 +256,7 @@ public:
 	bool IsItemSelected(FName ItemId, int32 SlotInstanceId = -1) const;
 
 	// 장비는 ItemId와 SlotInstanceId가 모두 일치할 때만 장착 슬롯으로 판정한다.
-	// INDEX_NONE은 실제 슬롯을 특정하지 못한 상태이므로 장착 표시를 하지 않는다.
+	// 시작 장비처럼 SlotInstanceId가 INDEX_NONE인 스택도 장착 측 값 역시 INDEX_NONE이면 일치로 처리한다.
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory")
 	bool IsWeaponItemEquipped(FName WeaponItemId, int32 SlotInstanceId = -1) const;
 
@@ -353,6 +361,7 @@ public:
 
 protected:
 	// 라이프사이클
+	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -417,6 +426,7 @@ protected:
 
 	void RefreshSlotButtonTooltips();
 	void RefreshSlotIcons();
+	void RefreshStatDisplay();
 
 	UFUNCTION()
 	void HandleSlotHeadClicked();
@@ -443,6 +453,20 @@ protected:
 	// 위젯 바인딩 — UMG 설계 시점에 연결, 런타임 상태와 구분
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_CurrencyDisplay;
+
+	// 캐릭터 스탯 표시 (Monolith GAS 어트리뷰트 바인딩은 Editor 전용 모듈이라 Shipping에서
+	// 동작하지 않으므로 네이티브 코드로 대체 — RefreshStatDisplay() 참고).
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_StatAtkValue;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_StatDefValue;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_StatHpValue;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Txt_StatSpdValue;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_SelectedCompare;

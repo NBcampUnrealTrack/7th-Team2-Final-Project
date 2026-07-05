@@ -414,6 +414,7 @@ void URetrieveMapSubsystem::DebugPrintBounds() const
 		MapExtent
 	);
 
+#if !UE_BUILD_SHIPPING
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
@@ -426,6 +427,7 @@ void URetrieveMapSubsystem::DebugPrintBounds() const
 			)
 		);
 	}
+#endif
 }
 
 UTexture2D* URetrieveMapSubsystem::GetTextureForUV(const FVector2D& UV) const
@@ -483,11 +485,13 @@ void URetrieveMapSubsystem::DebugPrintIconSnapshots() const
 			*S.MapLabel.ToString());
 	}
 
+#if !UE_BUILD_SHIPPING
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Cyan,
 			FString::Printf(TEXT("[WorldMap] IconSnapshots: %d개"), IconSnapshots.Num()));
 	}
+#endif
 }
 
 void URetrieveMapSubsystem::RegisterIcon(URetrieveMapIconComponent* Icon)
