@@ -321,10 +321,10 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 		}
 
 		const float DamageAfterGuard = RawDamage * (1.0f - GetGuardDamageReduction());
-		return FMath::Max(0.0f, DamageAfterGuard - GetDefense());
+		return FMath::Max(1.0f, DamageAfterGuard - GetDefense());
 	}
 	
-	return FMath::Max(0.0f, RawDamage - GetDefense());
+	return FMath::Max(1.0f, RawDamage - GetDefense());
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
