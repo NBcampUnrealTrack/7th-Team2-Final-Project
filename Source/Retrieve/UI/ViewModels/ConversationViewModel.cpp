@@ -252,6 +252,18 @@ void UConversationViewModel::OnTopicSelected(FGameplayTag TopicId)
 	}
 }
 
+void UConversationViewModel::SelectTopicByIndex(int32 Index)
+{
+	// 선택 불가(비호스트 공유 대화)이거나 범위 밖/비활성 토픽은 무시.
+	if (!bTopicsEnabled || !Topics.IsValidIndex(Index) || !Topics[Index].bEnabled)
+	{
+		return;
+	}
+
+	// 마지막 Goodbye(무효 TopicId)도 OnTopicSelected가 대화 종료로 자연히 처리.
+	OnTopicSelected(Topics[Index].TopicId);
+}
+
 void UConversationViewModel::HandleLineRequested(FGameplayTag Channel, const FRetrieveDialoguePayload& Message)
 {
 	SpeakerName = Message.SpeakerName;

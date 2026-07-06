@@ -23,6 +23,7 @@
 #include "UI/Shop/ShopPanelWidget.h"
 #include "Engine/Engine.h"
 #include "Shop/RetrieveShopDefinitionAsset.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "Components/World/RetrieveShopComponent.h"
 #include "Quest/QuestBranchComponent.h"
@@ -1280,12 +1281,18 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	CurrentDialogueNPC = NPC;
 	ConversationVM->BuildOpeningTopicsFor(NPC);
 
-	// NPC 대화 시작 애니메이션 트리거
+	// NPC 대화 시작 애니메이션 트리거 + 플레이어가 상대를 바라보게 회전
 	if (NPC)
 	{
 		if (URetrieveDialogueComponent* DC = NPC->FindComponentByClass<URetrieveDialogueComponent>())
 		{
 			DC->PlayGreetingAnimation();
+		}
+
+		// 플레이어가 대화 상대 방향으로 부드럽게 회전 (ALS 일관 회전; 1° 이내 정렬 시 자동 종료)
+		if (ARetrieveAlsCharacter* PlayerChar = Cast<ARetrieveAlsCharacter>(GetPawn()))
+		{
+			PlayerChar->TurnYawTowardActor(NPC, ConversationFaceInterpSpeed);
 		}
 	}
 

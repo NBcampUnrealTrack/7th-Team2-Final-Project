@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|Dialogue")
 	TArray<FRetrieveDialogueTopic> GetTopics() const { return Topics; }
 
+	/** 표시 중인 토픽 개수(숫자키 유효성 판단·번호 라벨 표시용). */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Dialogue")
+	int32 GetTopicCount() const { return Topics.Num(); }
+
 	/**  비호스트는 false. 공유되는 대화에서 선택은 호스트만 가능합니다. */
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|Dialogue")
 	bool GetTopicsEnabled() const { return bTopicsEnabled; }
@@ -54,6 +58,10 @@ public:
 	/** 토픽 버튼, 또는 무효 TopicId를 가진 ESC/대화 종료(Goodbye) */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Dialogue")
 	void OnTopicSelected(FGameplayTag TopicId);
+
+	/** 인덱스로 토픽 선택(숫자키/방향키+Enter용). 유효·활성 검사 후 OnTopicSelected로 위임. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Dialogue")
+	void SelectTopicByIndex(int32 Index);
 
 protected:
 	virtual void BeginDestroy() override;

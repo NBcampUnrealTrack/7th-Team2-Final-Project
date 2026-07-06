@@ -331,6 +331,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> ConversationWidgetClass;
 
+	/** 대화 시작 시 플레이어가 상대를 바라보는 회전 보간 속도. 0 이하면 즉시 스냅. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
+	float ConversationFaceInterpSpeed = 10.f;
+
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ConversationInstance;
 
