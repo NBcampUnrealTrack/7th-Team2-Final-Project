@@ -206,7 +206,9 @@ void URetrieveMusicSubsystem::PollEngagement()
 		AActor* Enemy = It->Get();
 		bool bStillEngaged = false;
 
-		if (Enemy)
+		// 파괴(Destroy)되거나 디스폰(DeactivateEnemy → SetActorHiddenInGame)된 몬스터는 교전 종료로 본다.
+		// 디스폰은 상태 태그를 정리하지 않으므로(Chase/Attack 등이 남음) IsHidden으로 별도 판정해야 한다.
+		if (IsValid(Enemy) && !Enemy->IsHidden())
 		{
 			if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy))
 			{
