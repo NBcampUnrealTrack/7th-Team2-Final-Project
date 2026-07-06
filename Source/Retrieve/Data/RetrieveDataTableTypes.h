@@ -56,6 +56,9 @@ struct RETRIEVE_API FEnemyPatternVFXRow : public FTableRowBase
 	FName SocketName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
+	bool bAttachToSocket = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
 	FVector LocationOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern VFX|Attach")
