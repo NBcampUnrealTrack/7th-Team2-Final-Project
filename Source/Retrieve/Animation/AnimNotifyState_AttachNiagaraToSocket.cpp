@@ -37,8 +37,10 @@ void UAnimNotifyState_AttachNiagaraToSocket::NotifyBegin(
 	{
 		return;
 	}
-
-	UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+	UNiagaraComponent* SpawnedComponent = nullptr;
+	if (ResolvedConfig.bAttachToSocket)
+	{
+		SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
 		ResolvedConfig.NiagaraSystem,
 		MeshComp,
 		ResolvedConfig.SocketName,
@@ -47,6 +49,19 @@ void UAnimNotifyState_AttachNiagaraToSocket::NotifyBegin(
 		ResolvedConfig.AttachLocationType,
 		false,
 		ResolvedConfig.bAutoActivate);
+	}
+	else
+	{
+		const FTransform SocketTransform = MeshComp->GetSocketTransform(ResolvedConfig.SocketName);
+		SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			MeshComp,
+			ResolvedConfig.NiagaraSystem,
+			SocketTransform.TransformPosition(ResolvedConfig.LocationOffset),
+			(SocketTransform.GetRotation() * ResolvedConfig.RotationOffset.Quaternion()).Rotator(),
+			FVector::OneVector,
+			/*bAutoDestroy=*/false,
+			ResolvedConfig.bAutoActivate);
+	}
 
 	if (!IsValid(SpawnedComponent))
 	{
@@ -146,6 +161,7 @@ bool UAnimNotifyState_AttachNiagaraToSocket::ResolveVFXConfig(FEnemyPatternVFXRo
 
 	OutConfig.NiagaraSystem = NiagaraSystem;
 	OutConfig.SocketName = SocketName;
+	OutConfig.bAttachToSocket = bAttachToSocket; 
 	OutConfig.LocationOffset = LocationOffset;
 	OutConfig.RotationOffset = RotationOffset;
 	OutConfig.AttachLocationType = AttachLocationType;

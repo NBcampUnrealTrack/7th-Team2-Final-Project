@@ -83,6 +83,9 @@ protected:
 	FName SocketName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Niagara|Direct", meta=(EditCondition="!bUseVFXDataTable", EditConditionHides))
+	bool bAttachToSocket = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Niagara|Direct", meta=(EditCondition="!bUseVFXDataTable", EditConditionHides))
 	FVector LocationOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Niagara|Direct", meta=(EditCondition="!bUseVFXDataTable", EditConditionHides))
