@@ -120,6 +120,36 @@ struct RETRIEVE_API FEnemyPatternVFXRow : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
+struct RETRIEVE_API FMonsterSFXRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound")
+	TObjectPtr<USoundBase> Sound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.0", ClampMax="2.0"))
+	float VolumeMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.5", ClampMax="2.0"))
+	float PitchMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Attach")
+	FName SocketName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Attach")
+	bool bFollow = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Loop")
+	bool bLoop = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Fade", meta=(ClampMin="0.0"))
+	float FadeInTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Fade", meta=(ClampMin="0.0"))
+	float FadeOutTime = 0.f;
+};
+
+USTRUCT(BlueprintType)
 struct RETRIEVE_API FCharacterStats : public FTableRowBase
 {
 	GENERATED_BODY()
