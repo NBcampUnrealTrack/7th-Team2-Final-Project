@@ -163,6 +163,12 @@ bool UCombatStanceComponent::IsPlayerAttacking() const
 		&& OwnerASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Attacking);
 }
 
+bool UCombatStanceComponent::IsAiming() const
+{
+	return IsValid(OwnerASC)
+		&& OwnerASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Aiming);
+}
+
 void UCombatStanceComponent::HandleRelaxTimer()
 {
 	if (IsPlayerAttacking())
@@ -188,6 +194,18 @@ void UCombatStanceComponent::HandleSheatheTimer()
 	if (IsPlayerAttacking())
 	{
 		NotifyCombatActivity(/*bFromAttack=*/true);
+		return;
+	}
+
+	// 조준 지속 중이면 납검 보류 — 활을 겨눈 채 활이 등으로 들어가는 것 방지.
+	// 스탠스는 그대로 두고(손 유지) 타이머만 재무장해 조준 종료를 기다린다.
+	if (IsAiming())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(SheatheTimerHandle,
+				this, &UCombatStanceComponent::HandleSheatheTimer, FMath::Max(0.01f, SheatheDelay), false);
+		}
 		return;
 	}
 

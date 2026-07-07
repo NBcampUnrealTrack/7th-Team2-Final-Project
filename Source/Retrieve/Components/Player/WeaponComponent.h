@@ -96,8 +96,17 @@ public:
 	// 발검/납검 시 무기 파트들을 손/등 소켓으로 재부착한다(상태/타이밍은 호출자가 결정, 부착 연산만 담당).
 	// OnlyDrawnSocket을 지정하면 그 손 소켓(DrawnSocket)을 가진 파트만 스왑한다 — 한 몽타주에서
 	// 검/방패를 다른 프레임에 따로 옮기는 용도. NAME_None이면 전체 파트(기본).
+	// bSetHidden=true면 소켓 스왑 대신 대상 파트를 Hidden 처리한다(등 소켓 없는 방패 등, 파괴 직전 은폐).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Weapon")
-	void SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket = NAME_None);
+	void SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket = NAME_None, bool bSetHidden = false);
+
+	// 노킹 화살(별도 메시, bIsNockedArrow attachment) 표시/숨김. 노티(AnimNotify_SetNockedArrow)가 호출.
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Weapon")
+	void SetNockedArrowVisible(bool bVisible);
+
+	// 현재 화살이 노킹(장전)돼 있는가. GA_BowShot이 드로우 전 장전 필요 판정에 쓴다.
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
+	bool IsArrowNocked() const { return bArrowNocked; }
 
 	// 비주얼 축(로컬). 장착/해제 몽타주의 노티와 ReconcileVisuals가 직접 호출한다.
 	void SpawnWeaponVisuals();   // 현재 데이터로 메시 스폰 (장착 중일 때만)
@@ -157,6 +166,13 @@ protected:
 	// (#6이 EquippedWeaponMeshComponents를 재구성해도 영향 없게 분리. 나중에 한 struct로 합칠 수 있음)
 	UPROPERTY(Transient)
 	TArray<FRetrieveEquippedWeaponPart> WeaponAttachParts;
+
+	// 노킹 화살 메시(bIsNockedArrow attachment). 표시/숨김 토글용. EquippedWeaponMeshComponents가 소유·파괴한다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMeshComponent>> NockedArrowMeshes;
+
+	// 노킹 상태(화살 장전됨). SetNockedArrowVisible에서 갱신. 드로우 전 장전 판정용(로컬 비주얼 상태).
+	bool bArrowNocked = false;
 
 	UPROPERTY(Transient)
 	FRetrieveAbilitySet_GrantedHandles WeaponGrantedHandles;

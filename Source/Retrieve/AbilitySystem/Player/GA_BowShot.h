@@ -5,6 +5,7 @@
 #include "Combat/RetrieveCombatTypes.h"
 #include "GameplayTagContainer.h"
 #include "Messaging/RetrieveMessageTypes.h"
+#include "Character/Cosmetics/RetrieveBowMontageSet.h"
 #include "GA_BowShot.generated.h"
 
 class UAbilityTask_PlayMontageAndWait;
@@ -14,6 +15,9 @@ class UAnimMontage;
 class UGameplayEffect;
 class UWeaponComponent;
 class AStaffProjectile;
+class URetrieveBowLinkedAnimInstance;
+class URetrieveBowMeshAnimInstance;
+// EBowShotPhase는 RetrieveBowMontageSet.h에 정의(캐릭터·활메시 공용).
 
 /**
  * 활(궁수) 조준 사격 — 좌클릭 홀드로 차징, 릴리즈 시점 차징량으로 데미지 스케일 후 화살 발사.
@@ -35,13 +39,31 @@ protected:
 
 private:
 	// ---- 차징 흐름 ----
-	void StartCharging();
+	void StartCharging();               // 진입: 장전 필요 판정 게이트
+	void BeginCharge();                 // 실제 차징 시작(릴리즈 감시/드로우/타이머)
+	void PlayReloadThenBeginCharge();   // 미노킹 시 장전 몽타주 → 완료 후 BeginCharge
+
+	UFUNCTION()
+	void HandleReloadFinished();
 
 	UFUNCTION()
 	void HandleChargeReleased(float TimeHeld);
 
 	UFUNCTION()
 	void HandleAimTagRemoved();
+
+	// 인트로(DrawnStart) 블렌드아웃 → 홀드 루프(Drawn) 진입.
+	UFUNCTION()
+	void PlayChargeHold();
+
+	// 풀차지 도달(타이머) → 손떨림 루프(DrawnShake)로 교체.
+	void HandleFullChargeReached();
+
+	// 차징 루프 몽타주 교체 재생(기존 차징 태스크 종료 후 새로 재생).
+	void StartChargeLoopMontage(UAnimMontage* Montage);
+
+	// 차징 상태 종료: bCharging=false + 차징 몽타주/풀차지 타이머 정지.
+	void StopCharging();
 
 	// ---- 발사 ----
 	void ScheduleProjectiles();
@@ -59,6 +81,12 @@ private:
 	int32 GetArrowCost() const;
 	// 차징 상태를 로컬 UI(레티클)로 브로드캐스트.
 	void BroadcastChargeState(ERetrieveBowChargePhase Phase, float ChargeRatio) const;
+	// 캐릭터 레이어에서 phase 몽타주를 자세에 맞게 해결. 레이어 없으면 nullptr → 호출부 스킵.
+	UAnimMontage* ResolveShotMontage(EBowShotPhase Phase) const;
+	// 활 메시 AnimInstance에 phase 몽타주를 재생(캐릭터와 lockstep). 미설정 시 무동작.
+	// 루프는 몽타주 애셋 자체에 맡긴다(코드 강제 루프 없음).
+	void PlayBowMeshMontage(EBowShotPhase Phase, float PlayRate);
+	bool IsOwnerCrouched() const;
 
 private:
 	// ---- 발사체 ----
@@ -96,9 +124,8 @@ private:
 	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> ElementStatusEffects;
 
 	// ---- 시전 몽타주 ----
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bow")
-	TSoftObjectPtr<UAnimMontage> FireMontage;
-
+	// 차징/발사 몽타주는 활별 레이어(URetrieveBowLinkedAnimInstance)가 소유한다.
+	// GA는 장착 시 링크된 레이어를 CachedBowLayer로 잡아 단계별로 꺼내 재생한다.
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bow", meta = (ClampMin = "0.1"))
 	float MontagePlayRate = 1.0f;
 
@@ -147,8 +174,22 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;
 
+	// 장착된 활의 링크 레이어. 캐릭터 차징/발사 몽타주 소스. ActivateAbility에서 캐시.
+	TWeakObjectPtr<URetrieveBowLinkedAnimInstance> CachedBowLayer;
+
+	// 활 메시의 AnimInstance. 활메시 phase 몽타주 소스+재생 대상(캐릭터와 lockstep). ActivateAbility에서 캐시.
+	TWeakObjectPtr<URetrieveBowMeshAnimInstance> CachedBowMeshAnim;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
+
+	// 차징 인트로/홀드/셰이크 재생용(발사 MontageTask와 분리).
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> ChargeMontageTask;
+
+	// 빈 활 장전(Reload) 재생용. 완료 시 BeginCharge로 이어진다.
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_PlayMontageAndWait> ReloadMontageTask;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitInputRelease> ChargeReleaseTask;
@@ -157,6 +198,12 @@ private:
 	TObjectPtr<UAbilityTask_WaitGameplayTagRemoved> AimTagRemovedTask;
 
 	TArray<FTimerHandle> SpawnTimerHandles;
+
+	// 풀차지 도달 시각 트리거(홀드 → 셰이크 교체).
+	FTimerHandle FullChargeTimerHandle;
+
+	// 차징 구간 여부. 릴리즈/조준해제 후 늦게 도착한 차징 콜백을 무시하는 가드.
+	bool bCharging = false;
 
 	FGameplayTag CachedElementTag;
 	float CachedChargeMultiplier = 1.f;

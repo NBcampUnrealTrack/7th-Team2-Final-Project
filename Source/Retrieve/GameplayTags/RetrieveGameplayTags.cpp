@@ -83,6 +83,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Crouching, "State.Player.Crouching");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Aiming, "State.Player.Aiming");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_BowShot_Empowered, "State.Player.BowShot.Empowered");
+	// 활 시위를 당긴 상태(차징 중). 활 메시 Post-Process ABP가 읽어 현 본을 손으로 당긴다.
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_BowShot_Drawing, "State.Player.BowShot.Drawing");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming, "State.Player.Swimming");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Swimming_UnderWater, "State.Player.Swimming.UnderWater");
 	

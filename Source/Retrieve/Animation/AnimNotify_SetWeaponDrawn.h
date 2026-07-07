@@ -27,4 +27,9 @@ protected:
 	// — 한 몽타주에서 검(prop_rSocket)·방패(Shield)를 다른 프레임에 옮길 때 사용.
 	UPROPERTY(EditAnywhere, Category = "Retrieve")
 	FName TargetDrawnSocket = NAME_None;
+
+	// true면 소켓 스왑 대신 이 파트를 Hidden 처리한다(등 소켓 없는 방패 등).
+	// 납검 애님과 동시에 숨기고 곧 ClearWeapon 노티가 파괴하는 용도.
+	UPROPERTY(EditAnywhere, Category = "Retrieve")
+	bool bSetHidden = false;
 };

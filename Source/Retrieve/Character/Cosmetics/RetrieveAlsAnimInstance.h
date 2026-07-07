@@ -48,8 +48,29 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintPure, Category = "Retrieve|Stance", meta = (BlueprintThreadSafe))
 	bool IsGuarding() const;
 
+	// ---- 활 드로우 손 IK (메인 그래프 Control Rig 뒤의 Two Bone IK가 소비) ----
+	// 현 소켓 월드 트랜스폼. IK effector(World space)에 연결.
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Bow|IK")
+	FTransform BowDrawHandTargetWorld = FTransform::Identity;
+
+	// IK 알파(0~1). Drawing(차징) 상태로 램프 — 당김~홀드 ON, 발사 OFF. IK Alpha에 연결.
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Bow|IK")
+	float BowDrawHandIkAlpha = 0.f;
+
 protected:
 	virtual void NativeInitializeAnimation() override;
+
+	// 게임스레드에서 현 소켓 월드/알파 갱신(AnimGraph는 저장값을 워커에서 읽음).
+	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+
+	// 드로우 손 그립 소켓(활 메시). 당기는 손목이 여기로 IK되어 저작된 손가락이 현을 쥔다.
+	// 활이 아니거나 소켓 없으면 IK 비활성(알파 0).
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bow|IK")
+	FName BowDrawGripSocket = TEXT("draw_hand_grip");
+
+	// IK 알파 램프 속도(FInterpTo). 발사 시 손이 현을 놓는 속도.
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Bow|IK", meta = (ClampMin = "0.0"))
+	float BowDrawIkBlendSpeed = 12.f;
 
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;

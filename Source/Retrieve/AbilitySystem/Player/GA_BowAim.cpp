@@ -2,6 +2,7 @@
 #include "GA_BowAim.h"
 
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "Components/Combat/CombatStanceComponent.h"
 #include "Components/LockOn/LockOnComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -17,8 +18,8 @@ UGA_BowAim::UGA_BowAim()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	ActivationPolicy = ERetrieveAbilityActivationPolicy::WhileInputActive;
 
-	BowAimCameraProfile.TargetArmLength = 260.f;
-	BowAimCameraProfile.CameraRelativeOffset = FVector(0.f, 70.f, 30.f);
+	BowAimCameraProfile.TargetArmLength = 300.f;
+	BowAimCameraProfile.CameraRelativeOffset = FVector(0.f, 90.f, 25.f);
 	BowAimCameraProfile.ArmBlendSpeed = 12.f;
 	BowAimCameraProfile.OffsetBlendSpeed = 10.f;
 
@@ -103,6 +104,16 @@ void UGA_BowAim::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 		if (ActiveCameraBoom.IsValid())
 		{
 			ActiveCameraBoom->SetCameraBoomProfileOverride(BowAimCameraOverrideId, BowAimCameraProfile);
+		}
+	}
+
+	// 조준 시작 = 전투 활동으로 신고 → 기존 발검 파이프라인이 UnSheathe 몽타주를 재생한다.
+	// (로컬/서버 양쪽에서 태그·소켓이 일치하도록 IsLocallyControlled 블록 밖에서 호출)
+	if (AActor* AvatarActor = GetAvatarActorFromActorInfo())
+	{
+		if (UCombatStanceComponent* Stance = AvatarActor->FindComponentByClass<UCombatStanceComponent>())
+		{
+			Stance->NotifyCombatActivity(/*bFromAttack=*/false); // false → 발검 몽타주 재생
 		}
 	}
 
