@@ -3,7 +3,10 @@
 #include "UI/RetrieveElementUILibrary.h"
 
 #include "Engine/Texture2D.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Kismet/GameplayStatics.h"
 #include "Rendering/DrawElements.h"
+#include "Sound/SoundBase.h"
 #include "Styling/CoreStyle.h"
 #include "InputCoreTypes.h"
 
@@ -101,6 +104,7 @@ void URetrievePuzzleBoardWidget::ClearAllRegions()
 	NextRegionId = 0;
 	NotifyBoardChanged();
 	UpdateSolvedState();
+	PlayPuzzleSound(ResetSound);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,9 +340,10 @@ void URetrievePuzzleBoardWidget::PaintCellToActiveRegion(const FIntPoint& Cell)
 {
 	if (FRetrievePuzzleCell* C = GetCellMutable(Cell.X, Cell.Y))
 	{
-		if (C->bExists)
+		if (C->bExists && C->RegionId != ActiveRegionId)
 		{
 			C->RegionId = ActiveRegionId;
+			PlayPuzzleSound(FillSound);
 		}
 	}
 }
@@ -347,7 +352,11 @@ void URetrievePuzzleBoardWidget::EraseCell(const FIntPoint& Cell)
 {
 	if (FRetrievePuzzleCell* C = GetCellMutable(Cell.X, Cell.Y))
 	{
-		C->RegionId = INDEX_NONE;
+		if (C->RegionId != INDEX_NONE)
+		{
+			C->RegionId = INDEX_NONE;
+			PlayPuzzleSound(EraseSound);
+		}
 	}
 }
 
@@ -518,12 +527,24 @@ void URetrievePuzzleBoardWidget::NotifyBoardChanged()
 	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
+void URetrievePuzzleBoardWidget::PlayPuzzleSound(USoundBase* Sound) const
+{
+	if (Sound)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
+}
+
 void URetrievePuzzleBoardWidget::UpdateSolvedState()
 {
 	const bool bNow = IsSolved();
 	if (bNow != bLastSolved)
 	{
 		bLastSolved = bNow;
+		if (bNow)
+		{
+			PlayPuzzleSound(SolvedSound);
+		}
 		OnSolvedChanged.Broadcast(bNow);
 	}
 }
@@ -575,9 +596,10 @@ int32 URetrievePuzzleBoardWidget::NativePaint(
 	}
 	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
-	const int32 FillLayer = BaseLayer + 1;
-	const int32 IconLayer = BaseLayer + 2;
-	const int32 LineLayer = BaseLayer + 3;
+	const int32 BackgroundLayer = BaseLayer + 1;
+	const int32 FillLayer = BaseLayer + 2;
+	const int32 IconLayer = BaseLayer + 3;
+	const int32 LineLayer = BaseLayer + 4;
 
 	auto DrawBox = [&](const FVector2D& Pos, const FVector2D& BoxSize, const FSlateBrush* Brush, const FLinearColor& Tint, int32 Layer)
 	{
@@ -606,7 +628,103 @@ int32 URetrievePuzzleBoardWidget::NativePaint(
 			Thickness);
 	};
 
-	// 1) 셀 채움
+	// A→B를 대시 길이/간격으로 잘라 점선으로 그린다.
+	auto DrawDashedEdge = [&](const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness)
+	{
+		const FVector2D Delta = B - A;
+		const float Len = static_cast<float>(Delta.Size());
+		if (Len <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+		const FVector2D Dir = Delta / Len;
+		const float DashLen = FMath::Max(0.5f, GridDashLength);
+		const float Period = DashLen + FMath::Max(0.5f, GridDashGap);
+		for (float S = 0.0f; S < Len; S += Period)
+		{
+			const float E = FMath::Min(S + DashLen, Len);
+			TArray<FVector2D> Pts;
+			Pts.Add(A + Dir * S);
+			Pts.Add(A + Dir * E);
+			FSlateDrawElement::MakeLines(
+				OutDrawElements,
+				LineLayer,
+				AllottedGeometry.ToPaintGeometry(),
+				Pts,
+				ESlateDrawEffect::None,
+				Color,
+				true,
+				Thickness);
+		}
+	};
+
+	// 0) 배경 바탕 — 존재하는 칸만 커스텀 버텍스로 그려 AbsentCell(구멍)은 투명하게.
+	//    UV는 보드 전체(0..1) 기준으로 줘서 물결 패턴이 칸 경계에서 끊기지 않고 이어진다.
+	if (BackgroundBrush.GetResourceObject() != nullptr && FSlateApplication::IsInitialized())
+	{
+		const FSlateResourceHandle Handle =
+			FSlateApplication::Get().GetRenderer()->GetResourceHandle(BackgroundBrush);
+		if (Handle.IsValid())
+		{
+			const FColor VertColor = BackgroundBrush.GetTint(InWidgetStyle).ToFColor(true);
+			const float InvW = 1.0f / GridWidth;
+			const float InvH = 1.0f / GridHeight;
+
+			TArray<FSlateVertex> Verts;
+			TArray<SlateIndex> Indices;
+
+			auto AddVert = [&](float LX, float LY, float U, float V)
+			{
+				const FVector2f Abs = AllottedGeometry.LocalToAbsolute(FVector2f(LX, LY));
+				Verts.AddZeroed();
+				FSlateVertex& SV = Verts.Last();
+				SV.Position[0] = Abs.X;
+				SV.Position[1] = Abs.Y;
+				SV.TexCoords[0] = U;
+				SV.TexCoords[1] = V;
+				SV.TexCoords[2] = 1.0f;
+				SV.TexCoords[3] = 1.0f;
+				SV.Color = VertColor;
+			};
+
+			for (int32 Row = 0; Row < GridHeight; ++Row)
+			{
+				for (int32 Col = 0; Col < GridWidth; ++Col)
+				{
+					if (!Cells[CellIndex(Col, Row)].bExists)
+					{
+						continue;
+					}
+					const float LX0 = Origin.X + Col * Cell;
+					const float LY0 = Origin.Y + Row * Cell;
+					const float LX1 = LX0 + Cell;
+					const float LY1 = LY0 + Cell;
+					const SlateIndex Base = static_cast<SlateIndex>(Verts.Num());
+
+					AddVert(LX0, LY0, Col * InvW, Row * InvH);
+					AddVert(LX1, LY0, (Col + 1) * InvW, Row * InvH);
+					AddVert(LX1, LY1, (Col + 1) * InvW, (Row + 1) * InvH);
+					AddVert(LX0, LY1, Col * InvW, (Row + 1) * InvH);
+
+					Indices.Add(Base + 0);
+					Indices.Add(Base + 1);
+					Indices.Add(Base + 2);
+					Indices.Add(Base + 0);
+					Indices.Add(Base + 2);
+					Indices.Add(Base + 3);
+				}
+			}
+
+			if (Verts.Num() > 0)
+			{
+				FSlateDrawElement::MakeCustomVerts(
+					OutDrawElements, BackgroundLayer, Handle, Verts, Indices, nullptr, 0, 0);
+			}
+		}
+	}
+
+	// 1) 셀 채움 — 할당된 칸은 채움 텍스처를 영역 색으로 틴트(없으면 단색), 미할당은 단색.
+	const FSlateBrush* FillBrush = (RegionFillBrush.GetResourceObject() != nullptr) ? &RegionFillBrush : WhiteBrush;
 	for (int32 Row = 0; Row < GridHeight; ++Row)
 	{
 		for (int32 Col = 0; Col < GridWidth; ++Col)
@@ -617,8 +735,14 @@ int32 URetrievePuzzleBoardWidget::NativePaint(
 				continue;
 			}
 			const FVector2D Pos(Origin.X + Col * Cell, Origin.Y + Row * Cell);
-			const FLinearColor Fill = (C.RegionId == INDEX_NONE) ? UnassignedCellColor : GetRegionColor(C.RegionId);
-			DrawBox(Pos, FVector2D(Cell, Cell), WhiteBrush, Fill, FillLayer);
+			if (C.RegionId == INDEX_NONE)
+			{
+				DrawBox(Pos, FVector2D(Cell, Cell), WhiteBrush, UnassignedCellColor, FillLayer);
+			}
+			else
+			{
+				DrawBox(Pos, FVector2D(Cell, Cell), FillBrush, GetRegionColor(C.RegionId), FillLayer);
+			}
 		}
 	}
 
@@ -689,24 +813,33 @@ int32 URetrievePuzzleBoardWidget::NativePaint(
 			const float Y1 = Origin.Y + (Row + 1) * Cell;
 
 			// 내부 에지는 오른쪽/아래만 그려 중복 방지.
+			// 같은 영역 내부 = 점선(GridLine), 다른 영역 경계 = 실선(굵게).
 			if (const FRetrievePuzzleCell* RightCell = GetCell(Col + 1, Row))
 			{
 				if (RightCell->bExists)
 				{
-					const bool bBorder = (C.RegionId != RightCell->RegionId);
-					DrawEdge(FVector2D(X1, Y0), FVector2D(X1, Y1),
-						bBorder ? RegionBorderColor : GridLineColor,
-						bBorder ? RegionBorderThickness : 1.0f);
+					if (C.RegionId != RightCell->RegionId)
+					{
+						DrawEdge(FVector2D(X1, Y0), FVector2D(X1, Y1), RegionBorderColor, RegionBorderThickness);
+					}
+					else
+					{
+						DrawDashedEdge(FVector2D(X1, Y0), FVector2D(X1, Y1), GridLineColor, GridLineThickness);
+					}
 				}
 			}
 			if (const FRetrievePuzzleCell* BottomCell = GetCell(Col, Row + 1))
 			{
 				if (BottomCell->bExists)
 				{
-					const bool bBorder = (C.RegionId != BottomCell->RegionId);
-					DrawEdge(FVector2D(X0, Y1), FVector2D(X1, Y1),
-						bBorder ? RegionBorderColor : GridLineColor,
-						bBorder ? RegionBorderThickness : 1.0f);
+					if (C.RegionId != BottomCell->RegionId)
+					{
+						DrawEdge(FVector2D(X0, Y1), FVector2D(X1, Y1), RegionBorderColor, RegionBorderThickness);
+					}
+					else
+					{
+						DrawDashedEdge(FVector2D(X0, Y1), FVector2D(X1, Y1), GridLineColor, GridLineThickness);
+					}
 				}
 			}
 

@@ -57,7 +57,8 @@ public:
 	ARetrievePlayerController(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 protected:
-	//BeginPlay, EndPlay, PlayerTick, InputKey, AcknowledgePossession
+	//PostInitializeComponents, BeginPlay, EndPlay, PlayerTick, InputKey, AcknowledgePossession
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PlayerTick(float DeltaTime) override;
