@@ -40,17 +40,13 @@ public:
 	virtual bool ShouldGroundSnapOnSpawn() const override { return true; }
 	virtual bool ShouldUseStateTreeAerialPhase() const override { return false; }
 	virtual bool ShouldUseDirectChaseToTarget() const override { return true; }
-	virtual bool ShouldUseDirectVisibilityTargetAcquisition() const override { return true; }
 	virtual bool ShouldFaceTargetDuringShiftOrbit() const override { return true; }
 	virtual bool ShouldSuppressNormalAttackWhileFlying() const override { return true; }
 	virtual bool ShouldUsePatternRangeForNormalAttack() const override { return true; }
 	virtual bool ShouldUse2DPatternRangeWhileFlying() const override { return true; }
 	virtual bool ShouldTreatZeroPatternMaxRangeAsUnlimited() const override { return true; }
 	virtual bool ShouldUseFallbackEpicStateTree() const override { return true; }
-	virtual float GetInitialAcquireRangeMultiplierForAI() const override { return InitialAcquireRangeMultiplier; }
 	virtual float GetHorizontalHalfFOVOverrideForAI() const override { return HorizontalHalfFOVOverride; }
-	virtual float GetSightRadiusMultiplierForAI() const override { return SightRadiusMultiplier; }
-	virtual float GetLoseSightRadiusMultiplierForAI() const override { return LoseSightRadiusMultiplier; }
 	virtual float GetPeripheralVisionAngleOverrideForAI() const override { return PeripheralVisionAngleOverride; }
 
 protected:
@@ -126,17 +122,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Epic|Locomotion", meta=(ClampMin="0.0"))
 	float AnimMovingSpeedThreshold = 10.f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Epic|AI", meta=(ClampMin="1.0"))
-	float InitialAcquireRangeMultiplier = 1.6f;
-
 	UPROPERTY(EditDefaultsOnly, Category="Epic|AI", meta=(ClampMin="0.0", ClampMax="180.0"))
 	float HorizontalHalfFOVOverride = 120.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Epic|AI|Perception", meta=(ClampMin="1.0"))
-	float SightRadiusMultiplier = 1.6f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Epic|AI|Perception", meta=(ClampMin="1.0"))
-	float LoseSightRadiusMultiplier = 1.6f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Epic|AI|Perception", meta=(ClampMin="0.0", ClampMax="180.0"))
 	float PeripheralVisionAngleOverride = 170.f;

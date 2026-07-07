@@ -39,6 +39,10 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 		SpawnRotation = bHasSocket ? MeshComp->GetSocketRotation(ResolvedConfig.SocketName) : MeshComp->GetComponentRotation();
 	}
 
+	// bIgnoreEnd가 켜져 있으면 NotifyEnd가 관리하지 않으므로, 반복 재생도 걸 수 없다
+	// (걸어봤자 멈춰줄 주체가 없어 컴포넌트가 새게 된다).
+	const bool bManagedLoop = ResolvedConfig.bLoop && !bIgnoreEnd;
+
 	UAudioComponent* SpawnedComponent = UGameplayStatics::SpawnSoundAttached(
 		ResolvedConfig.Sound,
 		MeshComp,
@@ -48,7 +52,13 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 		ResolvedConfig.bFollow ? EAttachLocation::KeepRelativeOffset : EAttachLocation::KeepWorldPosition,
 		false,
 		ResolvedConfig.VolumeMultiplier,
-		ResolvedConfig.PitchMultiplier);
+		ResolvedConfig.PitchMultiplier,
+		0.f,
+		nullptr,
+		nullptr,
+		// 반복 재생 사이에 스스로 파괴되면 안 되므로 관리 대상 루프만 bAutoDestroy를 끈다.
+		// NotifyEnd에서 실제로 멈추기로 결정한 시점에 다시 켠다.
+		!bManagedLoop);
 
 	if (!IsValid(SpawnedComponent))
 	{
@@ -61,10 +71,16 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 		SpawnedComponent->FadeIn(ResolvedConfig.FadeInTime, 1.0f);
 	}
 
-	if (!ResolvedConfig.bLoop && ResolvedConfig.FadeOutTime <= 0.f)
+	if (bIgnoreEnd)
 	{
-		// 자연 종료에 맡김 — NotifyEnd에서 추적/정리할 필요 없음.
+		// NotifyEnd에서 관리하지 않는다 — 재생 길이만큼 자연 재생 후 스스로 정리된다.
 		return;
+	}
+
+	if (bManagedLoop)
+	{
+		// bLoop는 사운드 에셋 자체의 루프 설정과 무관하게 코드가 직접 반복 재생시킨다.
+		SpawnedComponent->OnAudioFinishedNative.AddUObject(this, &UAnimNotifyState_PlayMonsterSFX::HandleLoopingAudioFinished);
 	}
 
 	FRetrieveMonsterSFXRuntimeEntry RuntimeEntry;
@@ -73,6 +89,7 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 	RuntimeEntry.NotifyReference = EventReference;
 	RuntimeEntry.NotifyEvent = EventReference.GetNotify();
 	RuntimeEntry.FadeOutTime = ResolvedConfig.FadeOutTime;
+	RuntimeEntry.bIsLooping = bManagedLoop;
 	SpawnedComponentsByMesh.FindOrAdd(MeshComp).Add(RuntimeEntry);
 }
 
@@ -99,6 +116,13 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyEnd(
 				if (!DoesRuntimeEntryMatchNotify(RuntimeEntry, Animation, EventReference))
 				{
 					continue;
+				}
+
+				if (RuntimeEntry.bIsLooping)
+				{
+					// 반복 재생 감지 핸들러를 먼저 해제하고, 정지 후 정상적으로 파괴되도록 되돌린다.
+					SpawnedComponent->OnAudioFinishedNative.RemoveAll(this);
+					SpawnedComponent->bAutoDestroy = true;
 				}
 
 				if (RuntimeEntry.FadeOutTime > 0.f)
@@ -179,4 +203,13 @@ bool UAnimNotifyState_PlayMonsterSFX::DoesRuntimeEntryMatchNotify(
 	}
 
 	return false;
+}
+
+void UAnimNotifyState_PlayMonsterSFX::HandleLoopingAudioFinished(UAudioComponent* FinishedComponent)
+{
+	// NotifyEnd가 명시적으로 정지시키기 전까지는 재생이 끝날 때마다 처음부터 다시 재생한다.
+	if (IsValid(FinishedComponent))
+	{
+		FinishedComponent->Play();
+	}
 }

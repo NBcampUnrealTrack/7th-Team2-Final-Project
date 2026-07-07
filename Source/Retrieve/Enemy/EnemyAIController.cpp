@@ -154,13 +154,21 @@ void AEnemyAIController::InitSightConfig()
 float AEnemyAIController::GetEffectiveSightRadius() const
 {
 	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
-	return SightRadius * (Enemy ? FMath::Max(1.f, Enemy->GetSightRadiusMultiplierForAI()) : 1.f);
+	if (const FMonsterDataRow* Row = Enemy ? Enemy->GetMonsterDataRow() : nullptr)
+	{
+		return Row->SightRadius;
+	}
+	return SightRadius;
 }
 
 float AEnemyAIController::GetEffectiveLoseSightRadius() const
 {
 	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
-	return LoseSightRadius * (Enemy ? FMath::Max(1.f, Enemy->GetLoseSightRadiusMultiplierForAI()) : 1.f);
+	if (const FMonsterDataRow* Row = Enemy ? Enemy->GetMonsterDataRow() : nullptr)
+	{
+		return Row->LoseSightRadius;
+	}
+	return LoseSightRadius;
 }
 
 float AEnemyAIController::GetEffectivePeripheralVisionAngleDegrees() const
