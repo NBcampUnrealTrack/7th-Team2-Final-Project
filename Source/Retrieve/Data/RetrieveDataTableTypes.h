@@ -127,7 +127,7 @@ struct RETRIEVE_API FMonsterSFXRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound")
 	TObjectPtr<USoundBase> Sound = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.0", ClampMax="2.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.0", ClampMax="20.0"))
 	float VolumeMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.5", ClampMax="2.0"))
@@ -618,7 +618,15 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** 범위 지정 - 추적 가능 범위 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float ChaseRange = 1500.f;
-	
+
+	/** 최초 발견 감지 반경. AIController의 SightRadius 폴백값과 별개로 몬스터별 지정 */
+	UPROPERTY(EditAnywhere, Category = "Monster|Perception")
+	float SightRadius = 1500.f;
+
+	/** 한 번 발견한 대상을 놓치는 소실 반경 */
+	UPROPERTY(EditAnywhere, Category = "Monster|Perception")
+	float LoseSightRadius = 1800.f;
+
 	/** Return -> Chase 가능해지는 스폰 지점과의 거리 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float RechasableRange = 100.f;

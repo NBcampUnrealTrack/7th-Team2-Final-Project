@@ -25,19 +25,20 @@ public:
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 	
 	void Deactivate();
-	
+
 	void Reactivate();
-	
+
+	float GetEffectiveSightRadius() const;
+
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
-	
+
 	virtual void PostInitializeComponents() override;
 
 private:
 	void InitSightConfig();
 	void InitDamageConfig();
-	float GetEffectiveSightRadius() const;
 	float GetEffectiveLoseSightRadius() const;
 	float GetEffectivePeripheralVisionAngleDegrees() const;
 	

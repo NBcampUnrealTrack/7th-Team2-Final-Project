@@ -3,6 +3,7 @@
 #include "StateTreeLinker.h"
 #include "StateTreeExecutionContext.h"
 #include "AIController.h"
+#include "Enemy/EnemyAIController.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISense.h"
 #include "Perception/AISense_Damage.h"
@@ -71,35 +72,6 @@ namespace
 		});
 	}
 
-	bool HasDirectVisibilityIgnoringOwner(const APawn* Pawn, const APawn* Target)
-	{
-		if (!Pawn || !Target)
-		{
-			return false;
-		}
-
-		UWorld* World = Pawn->GetWorld();
-		if (!World)
-		{
-			return false;
-		}
-
-		const float PawnEyeHeight = Pawn->BaseEyeHeight > 0.f
-			? Pawn->BaseEyeHeight
-			: Pawn->GetSimpleCollisionHalfHeight() * 0.6f;
-		const float TargetEyeHeight = Target->BaseEyeHeight > 0.f
-			? Target->BaseEyeHeight
-			: Target->GetSimpleCollisionHalfHeight() * 0.6f;
-		const FVector Start = Pawn->GetActorLocation() + FVector(0.f, 0.f, PawnEyeHeight);
-		const FVector End = Target->GetActorLocation() + FVector(0.f, 0.f, TargetEyeHeight);
-
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EpicEnemyTargetVisibility), false);
-		QueryParams.AddIgnoredActor(Pawn);
-		QueryParams.AddIgnoredActor(Target);
-
-		FHitResult Hit;
-		return !World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams);
-	}
 }
 
 bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
@@ -344,19 +316,23 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(Pawn, 0))
 	{
-		const ARetrieveEnemyCharacter* EnemyForAcquisition = Cast<ARetrieveEnemyCharacter>(Pawn);
-		const float AcquireRangeMultiplier = EnemyForAcquisition
-			? EnemyForAcquisition->GetInitialAcquireRangeMultiplierForAI()
-			: 1.f;
 		const float PlayerDistSq = FVector::DistSquared(PawnLocation, PlayerPawn->GetActorLocation());
-		const float BaseInitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
-		const float InitialAcquireRange = BaseInitialAcquireRange * FMath::Max(1.f, AcquireRangeMultiplier);
-		const bool bHasLineOfSight = AIController->LineOfSightTo(PlayerPawn)
-			|| (EnemyForAcquisition
-				&& EnemyForAcquisition->ShouldUseDirectVisibilityTargetAcquisition()
-				&& HasDirectVisibilityIgnoringOwner(Pawn, PlayerPawn));
+		float InitialAcquireRange;
+		if (InstanceData.TargetPlayer == nullptr)
+		{
+			// 최초 발견은 AIPerception Sight 설정(SightRadius)을 그대로 따른다.
+			const AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(AIController);
+			InitialAcquireRange = EnemyAIController
+				? EnemyAIController->GetEffectiveSightRadius()
+				: InstanceData.ChaseRange;
+		}
+		else
+		{
+			// 이미 추적 중인 타겟은 ChaseRange까지 재획득을 유지한다(추격 중 시야 이탈 방지).
+			InitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
+		}
 		if (PlayerDistSq <= FMath::Square(InitialAcquireRange)
-			&& bHasLineOfSight
+			&& AIController->LineOfSightTo(PlayerPawn)
 			&& !ContainsActor(PerceivedActors, PlayerPawn))
 		{
 			PerceivedActors.Add(PlayerPawn);
