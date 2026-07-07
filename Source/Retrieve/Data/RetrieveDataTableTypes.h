@@ -1562,12 +1562,22 @@ struct RETRIEVE_API FRetrieveWeaponAttachmentData
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	FName AttachSocketName = TEXT("Weapon_R");
 
-	// 납검(Sheathed) 시 부착할 캐릭터 소켓(등/허리). 비우면 SetWeaponDrawn(false)가 이 파트를 옮기지 않는다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
-	FName SheathedSocketName = NAME_None;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	FTransform RelativeTransform = FTransform::Identity;
+
+	// 이 (스켈레탈) 파트의 메인 AnimBP. 지정 시 스폰 컴포넌트에 SetAnimInstanceClass 한다.
+	// 활 메시가 사격 몽타주를 재생하려면 필요(Slot 노드 포함 ABP). StaticMesh엔 무시된다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	TSoftClassPtr<UAnimInstance> MeshAnimClass;
+
+	// 노킹 화살 파트 표식. 스폰 시 (아래 플래그대로) 시작하고, 노티(SetNockedArrow)가 표시/숨김을 토글한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
+	bool bIsNockedArrow = false;
+
+	// 노킹 화살을 스폰 시 '보이게' 시작할지. 무한 화살(GA ArrowItemId=None) 활에 true — 항상 노킹.
+	// 유한 화살은 false(기본): hidden 스폰 후 Reload 노티가 표시.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual", meta = (EditCondition = "bIsNockedArrow"))
+	bool bNockedArrowStartsVisible = false;
 
 	// ---- 공격 히트 트레이스 ----
 	// 이 파트가 공격 히트 트레이스(피해 판정)를 생성하는가

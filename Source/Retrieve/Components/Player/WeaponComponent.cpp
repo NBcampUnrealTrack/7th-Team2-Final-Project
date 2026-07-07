@@ -3,6 +3,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/SceneComponent.h"
+#include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
@@ -251,6 +252,20 @@ void UWeaponComponent::ClearWeaponVisuals()
 	}
 	EquippedWeaponMeshComponents.Reset();
 	WeaponAttachParts.Reset();
+	NockedArrowMeshes.Reset();
+	bArrowNocked = false;
+}
+
+void UWeaponComponent::SetNockedArrowVisible(bool bVisible)
+{
+	bArrowNocked = bVisible;
+	for (const TObjectPtr<UMeshComponent>& Arrow : NockedArrowMeshes)
+	{
+		if (IsValid(Arrow))
+		{
+			Arrow->SetVisibility(bVisible, /*bPropagateToChildren=*/true);
+		}
+	}
 }
 
 UMeshComponent* UWeaponComponent::GetPrimaryEquippedWeaponMesh() const
@@ -423,13 +438,24 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		Part.SheathedSocket = SheathedMap ? SheathedMap->DrawnToSheathed.FindRef(Attachment.AttachSocketName) : NAME_None;
 		Part.RelativeTransform = Attachment.RelativeTransform;
 
+		// 노킹 화살 스폰 가시성은 데이터로: 무한(항상 노킹)=visible, 유한=hidden(Reload 노티가 표시).
+		if (Attachment.bIsNockedArrow)
+		{
+			WeaponMeshComponent->SetVisibility(Attachment.bNockedArrowStartsVisible, /*bPropagateToChildren=*/true);
+			NockedArrowMeshes.Add(WeaponMeshComponent);
+			if (Attachment.bNockedArrowStartsVisible)
+			{
+				bArrowNocked = true; // 스폰부터 노킹 → GA가 장전 스킵(무한 활)
+			}
+		}
+
 		bAttachedAnyPart = true;
 	}
 
 	return bAttachedAnyPart;
 }
 
-void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket)
+void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket, bool bSetHidden)
 {
 	for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
 	{
@@ -442,6 +468,13 @@ void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket)
 		UMeshComponent* Mesh = Part.Mesh;
 		if (!IsValid(Mesh))
 		{
+			continue;
+		}
+
+		// 숨김 지시(등 소켓 없는 방패 등): 소켓 스왑 없이 Hidden 처리. 곧 ClearWeapon이 파괴한다.
+		if (bSetHidden)
+		{
+			Mesh->SetVisibility(false, /*bPropagateToChildren=*/true);
 			continue;
 		}
 
@@ -486,6 +519,11 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Comp->SetGenerateOverlapEvents(false);
 		Comp->SetCanEverAffectNavigation(false);
+		// PartName 태그 — attachment의 OwnerComponentTag 타깃이 이 파트를 찾게 한다(예: 화살 → 활 메시).
+		if (!Attachment.PartName.IsNone())
+		{
+			Comp->ComponentTags.Add(Attachment.PartName);
+		}
 		return Comp;
 	}
 
@@ -499,6 +537,16 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Comp->SetGenerateOverlapEvents(false);
 	Comp->SetCanEverAffectNavigation(false);
+	// PartName 태그(OwnerComponentTag 타깃용).
+	if (!Attachment.PartName.IsNone())
+	{
+		Comp->ComponentTags.Add(Attachment.PartName);
+	}
+	// 메인 AnimBP 지정 시 붙인다 — 활 메시가 사격 몽타주를 재생하려면 필요(Slot 포함 ABP).
+	if (TSubclassOf<UAnimInstance> AnimClass = Attachment.MeshAnimClass.LoadSynchronous())
+	{
+		Comp->SetAnimInstanceClass(AnimClass);
+	}
 	return Comp;
 }
 

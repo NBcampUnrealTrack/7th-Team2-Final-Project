@@ -9,7 +9,11 @@
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/Player/WeaponComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Character/Cosmetics/RetrieveBowLinkedAnimInstance.h"
+#include "Character/Cosmetics/RetrieveBowMeshAnimInstance.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystem/Player/StaffProjectile.h"
@@ -102,6 +106,34 @@ void UGA_BowShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
 	CachedWeaponComponent = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
+
+	// 링크된 활 레이어를 잡아 캐시(차징/발사 몽타주 소스). GA_StanceTransition과 동일 탐색.
+	CachedBowLayer = nullptr;
+	if (const ACharacter* Character = Cast<ACharacter>(AvatarActor))
+	{
+		if (const USkeletalMeshComponent* Mesh = Character->GetMesh())
+		{
+			for (UAnimInstance* Linked : Mesh->GetLinkedAnimInstances())
+			{
+				if (URetrieveBowLinkedAnimInstance* BowLayer = Cast<URetrieveBowLinkedAnimInstance>(Linked))
+				{
+					CachedBowLayer = BowLayer;
+					break;
+				}
+			}
+		}
+	}
+
+	// 활 메시 AnimInstance 캐시(활메시 phase 몽타주 재생 대상). AnimInstanceClass 미설정이면 null → 재생 스킵.
+	CachedBowMeshAnim = nullptr;
+	if (IsValid(CachedWeaponComponent))
+	{
+		if (USkeletalMeshComponent* BowSkel = Cast<USkeletalMeshComponent>(CachedWeaponComponent->GetPrimaryEquippedWeaponMesh()))
+		{
+			CachedBowMeshAnim = Cast<URetrieveBowMeshAnimInstance>(BowSkel->GetAnimInstance());
+		}
+	}
+
 	CachedElementTag = ResolveCurrentElementTag();
 	CachedChargeMultiplier = 1.f;
 	CachedEmpowerMultiplier = 1.f;
@@ -111,6 +143,79 @@ void UGA_BowShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 
 void UGA_BowShot::StartCharging()
 {
+	// 조준(Aiming) 해제 감시 — 장전/차징 전 구간(중간 우클릭 해제 시 캔슬).
+	AimTagRemovedTask = UAbilityTask_WaitGameplayTagRemoved::WaitGameplayTagRemove(
+		this, RetrieveGameplayTags::State_Player_Aiming, /*InOptionalExternalTarget=*/nullptr, /*OnlyTriggerOnce=*/true);
+	if (IsValid(AimTagRemovedTask))
+	{
+		AimTagRemovedTask->Removed.AddDynamic(this, &ThisClass::HandleAimTagRemoved);
+		AimTagRemovedTask->ReadyForActivation();
+	}
+
+	// 미노킹 + 화살 소비형 → 장전(Reload) 먼저 후 차징. 무제한/이미 노킹이면 바로 차징.
+	const bool bSkipReload = ArrowItemId.IsNone()
+		|| !IsValid(CachedWeaponComponent)
+		|| CachedWeaponComponent->IsArrowNocked();
+	if (bSkipReload)
+	{
+		BeginCharge();
+	}
+	else
+	{
+		PlayReloadThenBeginCharge();
+	}
+}
+
+void UGA_BowShot::PlayReloadThenBeginCharge()
+{
+	// 활 메시 장전 애님(lockstep).
+	PlayBowMeshMontage(EBowShotPhase::Reload, MontagePlayRate);
+
+	UAnimMontage* Reload = ResolveShotMontage(EBowShotPhase::Reload);
+	if (!IsValid(Reload))
+	{
+		// 캐릭터 장전 몽타주 없음 → 연출 없이 즉시 노킹 후 차징.
+		if (IsValid(CachedWeaponComponent))
+		{
+			CachedWeaponComponent->SetNockedArrowVisible(true);
+		}
+		BeginCharge();
+		return;
+	}
+
+	ReloadMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, Reload, MontagePlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
+	if (!ReloadMontageTask)
+	{
+		if (IsValid(CachedWeaponComponent))
+		{
+			CachedWeaponComponent->SetNockedArrowVisible(true);
+		}
+		BeginCharge();
+		return;
+	}
+
+	// 장전 완료/인터럽트 → 차징 시작. 중복·종료 콜백은 HandleReloadFinished가 가드.
+	ReloadMontageTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleReloadFinished);
+	ReloadMontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleReloadFinished);
+	ReloadMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleReloadFinished);
+	ReloadMontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleReloadFinished);
+	ReloadMontageTask->ReadyForActivation();
+}
+
+void UGA_BowShot::HandleReloadFinished()
+{
+	if (bCharging || !IsActive())
+	{
+		return; // 이미 차징 시작했거나 어빌리티 종료 중(중복/인터럽트 가드)
+	}
+	BeginCharge();
+}
+
+void UGA_BowShot::BeginCharge()
+{
+	// 릴리즈 감시 — 장전 이후부터 카운트(차징 시간에 장전 시간 미포함).
+	// bTestAlreadyReleased=false: 미래 릴리즈 이벤트만 발화(true면 서버에서 입력 복제 전 '이미 뗌')
 	ChargeReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, /*bTestAlreadyReleased=*/false);
 	if (!IsValid(ChargeReleaseTask))
 	{
@@ -120,16 +225,48 @@ void UGA_BowShot::StartCharging()
 	ChargeReleaseTask->OnRelease.AddDynamic(this, &ThisClass::HandleChargeReleased);
 	ChargeReleaseTask->ReadyForActivation();
 
-	// 조준(Aiming) 태그가 사라지면(우클릭 해제) 즉시 캔슬.
-	AimTagRemovedTask = UAbilityTask_WaitGameplayTagRemoved::WaitGameplayTagRemove(
-		this, RetrieveGameplayTags::State_Player_Aiming, /*InOptionalExternalTarget=*/nullptr, /*OnlyTriggerOnce=*/true);
-	if (IsValid(AimTagRemovedTask))
+	BroadcastChargeState(ERetrieveBowChargePhase::Started, 0.f);
+
+	bCharging = true;
+
+	// 활 메시 ABP가 읽어 현을 손으로 당긴다. 발사/캔슬 시 StopCharging에서 해제 → 원형 복귀.
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		AimTagRemovedTask->Removed.AddDynamic(this, &ThisClass::HandleAimTagRemoved);
-		AimTagRemovedTask->ReadyForActivation();
+		ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_BowShot_Drawing);
 	}
 
-	BroadcastChargeState(ERetrieveBowChargePhase::Started, 0.f);
+	// 차징 애님: DrawnStart(1회) 재생 → 블렌드아웃 시 Drawn(loop) 진입. 인트로 미설정이면 바로 홀드.
+	if (UAnimMontage* Intro = ResolveShotMontage(EBowShotPhase::DrawnStart))
+	{
+		ChargeMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, NAME_None, Intro, 1.f, NAME_None, /*bStopWhenAbilityEnds=*/true);
+		if (ChargeMontageTask)
+		{
+			ChargeMontageTask->OnBlendOut.AddDynamic(this, &ThisClass::PlayChargeHold);
+			ChargeMontageTask->ReadyForActivation();
+		}
+		else
+		{
+			PlayChargeHold();
+		}
+	}
+	else
+	{
+		PlayChargeHold();
+	}
+
+	// 활 메시 lockstep: 현/화살 DrawnStart 동시 재생.
+	PlayBowMeshMontage(EBowShotPhase::DrawnStart, 1.f);
+
+	// 풀차지 도달 → DrawnShake로 교체.
+	if (MaxChargeTime > 0.f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(FullChargeTimerHandle, this,
+				&UGA_BowShot::HandleFullChargeReached, MaxChargeTime, false);
+		}
+	}
 }
 
 void UGA_BowShot::HandleChargeReleased(float TimeHeld)
@@ -140,6 +277,9 @@ void UGA_BowShot::HandleChargeReleased(float TimeHeld)
 		AimTagRemovedTask->EndTask();
 		AimTagRemovedTask = nullptr;
 	}
+
+	// 차징 애님/풀차지 타이머 정지(발사 몽타주로 전환).
+	StopCharging();
 
 	const float Clamped = FMath::Clamp(TimeHeld, 0.f, MaxChargeTime);
 
@@ -196,8 +336,90 @@ void UGA_BowShot::HandleAimTagRemoved()
 		ChargeReleaseTask = nullptr;
 	}
 
+	StopCharging();
+
 	BroadcastChargeState(ERetrieveBowChargePhase::Cancelled, 0.f);
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
+}
+
+void UGA_BowShot::PlayChargeHold()
+{
+	if (!bCharging)
+	{
+		return; // 릴리즈/조준해제 후 늦게 온 인트로 콜백 무시
+	}
+	StartChargeLoopMontage(ResolveShotMontage(EBowShotPhase::Drawn));
+	PlayBowMeshMontage(EBowShotPhase::Drawn, 1.f);
+}
+
+void UGA_BowShot::HandleFullChargeReached()
+{
+	if (!bCharging)
+	{
+		return;
+	}
+	StartChargeLoopMontage(ResolveShotMontage(EBowShotPhase::DrawnShake));
+	PlayBowMeshMontage(EBowShotPhase::DrawnShake, 1.f);
+}
+
+void UGA_BowShot::StartChargeLoopMontage(UAnimMontage* Montage)
+{
+	if (!IsValid(Montage))
+	{
+		return; // 몽타주 미설정 → 애님 없이 차징 지속(UI/타이머 유효)
+	}
+
+	if (ChargeMontageTask)
+	{
+		ChargeMontageTask->EndTask();
+		ChargeMontageTask = nullptr;
+	}
+
+	ChargeMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, Montage, 1.f, NAME_None, /*bStopWhenAbilityEnds=*/true);
+	if (ChargeMontageTask)
+	{
+		ChargeMontageTask->ReadyForActivation();
+	}
+}
+
+void UGA_BowShot::StopCharging()
+{
+	bCharging = false;
+
+	// 현 당김 해제 → 활 ABP가 원형 rest로 복귀(발사 트왕) + 화살 본 숨김.
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Player_BowShot_Drawing);
+
+		// 차징 몽타주(DrawnShake 등) 명시적 정지. ChargeMontageTask->EndTask()는 '어빌리티 종료' 시에만
+		// 몽타주를 멈추므로(bStopWhenAbilityEnds && AbilityEnded), 발사 몽타주로 덮이지 않는 캔슬 경로에선
+		// 여기서 직접 멈추지 않으면 셰이크 포즈가 남는다.
+		ASC->CurrentMontageStop();
+	}
+
+	if (ChargeMontageTask)
+	{
+		ChargeMontageTask->EndTask();
+		ChargeMontageTask = nullptr;
+	}
+
+	if (ReloadMontageTask)
+	{
+		ReloadMontageTask->EndTask();
+		ReloadMontageTask = nullptr;
+	}
+
+	// 활 메시 lockstep 몽타주도 정지(차징 루프 해제).
+	if (URetrieveBowMeshAnimInstance* BowAnim = CachedBowMeshAnim.Get())
+	{
+		BowAnim->Montage_Stop(0.1f);
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FullChargeTimerHandle);
+	}
 }
 
 void UGA_BowShot::ScheduleProjectiles()
@@ -270,7 +492,18 @@ void UGA_BowShot::SpawnProjectile()
 
 void UGA_BowShot::PlayFireMontageThenEnd()
 {
-	UAnimMontage* Montage = FireMontage.LoadSynchronous();
+	// 발사 후 잔탄 여부로 재장전/전탄소진 분기. 무제한(ArrowItemId=None)이면 항상 재장전.
+	// 발사 전 잔량 기준(GetArrowCost()+1: 이번 발사분보다 더 있나) — 로컬 컨트롤 표현 일치.
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const UInventoryComponent* Inventory = IsValid(AvatarActor) ? AvatarActor->FindComponentByClass<UInventoryComponent>() : nullptr;
+	const bool bWillHaveAmmo = ArrowItemId.IsNone()
+		|| (Inventory && Inventory->HasItem(ArrowItemId, GetArrowCost() + 1));
+
+	const EBowShotPhase FirePhase = bWillHaveAmmo ? EBowShotPhase::FireReload : EBowShotPhase::FireIdle;
+	UAnimMontage* Montage = ResolveShotMontage(FirePhase);
+	PlayBowMeshMontage(FirePhase, MontagePlayRate); // 활 메시 lockstep 발사
+
+	// 발사 몽타주 미설정 → 애님 없이 종료(투사체는 이미 스케줄됨).
 	if (!IsValid(Montage))
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
@@ -368,6 +601,33 @@ void UGA_BowShot::BroadcastChargeState(ERetrieveBowChargePhase Phase, float Char
 	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Bow_Charge, Payload);
 }
 
+UAnimMontage* UGA_BowShot::ResolveShotMontage(EBowShotPhase Phase) const
+{
+	const URetrieveBowLinkedAnimInstance* Layer = CachedBowLayer.Get();
+	return IsValid(Layer) ? Layer->ShotMontages.Resolve(Phase, IsOwnerCrouched()) : nullptr;
+}
+
+void UGA_BowShot::PlayBowMeshMontage(EBowShotPhase Phase, float PlayRate)
+{
+	URetrieveBowMeshAnimInstance* Anim = CachedBowMeshAnim.Get();
+	if (!IsValid(Anim))
+	{
+		return; // 활 메시 AnimInstance 미설정 → 스킵(캐릭터 몽타주만 재생)
+	}
+
+	// 루프(Drawn/DrawnShake)는 몽타주 애셋 자체 루프 섹션에 맡긴다(캐릭터와 동일 — 코드 강제 루프 없음).
+	if (UAnimMontage* Montage = Anim->ShotMontages.Resolve(Phase, IsOwnerCrouched()))
+	{
+		Anim->Montage_Play(Montage, PlayRate);
+	}
+}
+
+bool UGA_BowShot::IsOwnerCrouched() const
+{
+	const ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	return Character && Character->bIsCrouched;
+}
+
 void UGA_BowShot::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	if (UWorld* World = GetWorld())
@@ -378,6 +638,8 @@ void UGA_BowShot::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGam
 		}
 	}
 	SpawnTimerHandles.Reset();
+
+	StopCharging(); // 차징 몽타주 태스크 종료 + 풀차지 타이머 정리
 
 	if (ChargeReleaseTask)
 	{

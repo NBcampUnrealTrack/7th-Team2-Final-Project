@@ -78,6 +78,9 @@ void URetrieveCharacterMovementComponent::SetWaterState(float InSurfaceZ, float 
 	WaterSubmersion = InSubmersion;
 	bInWaterColumn = bInColumn;
 	bWaterFullySubmerged = bFullySubmerged;
+
+	// ALS FootstepEffects 노티가 물 발소리 분기에 쓰도록 잠김 정도를 부모 CMC에 주입.
+	SetWaterImmersion(bInColumn ? InSubmersion : 0.f);
 }
 
 void URetrieveCharacterMovementComponent::ClearWaterState()
@@ -85,6 +88,7 @@ void URetrieveCharacterMovementComponent::ClearWaterState()
 	WaterSubmersion = 0.f;
 	bInWaterColumn = false;
 	bWaterFullySubmerged = false;
+	SetWaterImmersion(0.f);
 }
 
 void URetrieveCharacterMovementComponent::InitializeComponent()

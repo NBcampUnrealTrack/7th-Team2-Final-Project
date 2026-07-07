@@ -20,7 +20,7 @@ void UAnimNotify_SetWeaponDrawn::Notify(USkeletalMeshComponent* MeshComp, UAnimS
 
 	if (UWeaponComponent* Weapon = Owner->FindComponentByClass<UWeaponComponent>())
 	{
-		Weapon->SetWeaponDrawn(bDrawn, TargetDrawnSocket);
+		Weapon->SetWeaponDrawn(bDrawn, TargetDrawnSocket, bSetHidden);
 	}
 }
 
