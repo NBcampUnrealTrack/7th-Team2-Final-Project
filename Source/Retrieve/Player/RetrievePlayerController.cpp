@@ -76,6 +76,40 @@ namespace
 		}
 	}
 
+	/** 이 PlayerController에 붙은 InteractionManager 플러그인의 Manager_Interactor 컴포넌트를 찾아
+	 *  OwnerController를 미리(this) 채워 넣는다.
+	 *
+	 *  플러그인은 OwnerController를 컴포넌트 BeginPlay(Construct_Player_Essentials)에서야 캐싱하고
+	 *  복제하지 않는다. 코옵/조인 클라이언트에서는 서버의 Client_Update_PointOfInterests RPC가 그
+	 *  BeginPlay보다 먼저 도착할 수 있어, On_PointOfInterest_Updated_ClientSide가 아직 None인
+	 *  OwnerController를 읽고 "Accessed None"으로 죽는 초기화 순서 레이스가 발생한다.
+	 *  BeginPlay/RPC 처리보다 앞서는 PostInitializeComponents 시점에 리플렉션으로 선캐싱해 창을 없앤다.
+	 *  (컴포넌트 BeginPlay가 나중에 같은 값 this로 다시 세팅해도 무해하다.) */
+	void PrimeInteractorOwnerController(APlayerController* PC)
+	{
+		if (!PC)
+		{
+			return;
+		}
+
+		TInlineComponentArray<UActorComponent*> Components(PC);
+		for (UActorComponent* Comp : Components)
+		{
+			// PC에는 Manager_Interactor_C만 존재한다(월드 액터의 Manager_InteractionTarget과 이름이 겹치지 않음).
+			if (!Comp || !Comp->GetClass()->GetName().Contains(TEXT("Manager_Interactor")))
+			{
+				continue;
+			}
+
+			if (FObjectProperty* OwnerProp =
+				FindFProperty<FObjectProperty>(Comp->GetClass(), TEXT("OwnerController")))
+			{
+				OwnerProp->SetObjectPropertyValue_InContainer(Comp, PC);
+			}
+			break;
+		}
+	}
+
 	UWidget* FindBossBarWidget(UUserWidget* TopLevelWidget)
 	{
 		if (!TopLevelWidget)
@@ -121,6 +155,15 @@ UActorComponent* ARetrievePlayerController::GetInteractorComponent() const
 		return FindComponentByClass(ComponentClass);
 	}
 	return nullptr;
+}
+
+void ARetrievePlayerController::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	// InteractionManager(Manager_Interactor)의 OwnerController를 BeginPlay/RPC 처리 이전에 선캐싱.
+	// (초기화 순서 레이스 상세는 PrimeInteractorOwnerController 주석 참조)
+	PrimeInteractorOwnerController(this);
 }
 
 void ARetrievePlayerController::BeginPlay()

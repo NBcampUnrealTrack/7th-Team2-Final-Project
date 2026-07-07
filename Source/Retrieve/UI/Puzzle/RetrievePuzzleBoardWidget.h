@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "Styling/SlateBrush.h"
 #include "UI/Puzzle/RetrievePuzzleTypes.h"
 #include "RetrievePuzzleBoardWidget.generated.h"
 
 class UTexture2D;
+class USoundBase;
 
 // 보드의 영역 구성이 바뀔 때마다 브로드캐스트 (드래그 1스텝 단위).
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrievePuzzleBoardChangedSignature);
@@ -67,8 +69,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual")
 	FLinearColor UnassignedCellColor = FLinearColor(0.12f, 0.12f, 0.14f, 1.0f);
 
+	// 보드 배경 바탕 텍스처(브러시). 격자 영역 뒤에 그려진다. 리소스가 없으면 안 그림.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual")
+	FSlateBrush BackgroundBrush;
+
+	// 칸을 영역에 채웠을 때 그릴 텍스처(브러시). 영역 색으로 틴트됨. 리소스가 없으면 단색으로 채움.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual")
+	FSlateBrush RegionFillBrush;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual")
 	FLinearColor GridLineColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.25f);
+
+	// 같은 영역 내부 격자선 두께.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual", meta = (ClampMin = "0.5"))
+	float GridLineThickness = 1.5f;
+
+	// 같은 영역 내부 격자선을 점선으로 — 대시 길이 / 간격(px).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual", meta = (ClampMin = "0.5"))
+	float GridDashLength = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual", meta = (ClampMin = "0.5"))
+	float GridDashGap = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual")
 	FLinearColor RegionBorderColor = FLinearColor(0.05f, 0.03f, 0.02f, 1.0f);
@@ -79,6 +100,24 @@ public:
 	// 칸 크기 대비 원소 아이콘 비율.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Visual", meta = (ClampMin = "0.05", ClampMax = "0.95"))
 	float ElementIconRatio = 0.6f;
+
+	// ---------- 사운드 ----------
+
+	// 칸이 영역에 채워질 때(드래그로 칠할 때, 칸당 1회). 짧은 효과음 권장.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Audio")
+	TObjectPtr<USoundBase> FillSound;
+
+	// 칸이 지워질 때(우클릭 드래그, 칸당 1회). 짧은 효과음 권장.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Audio")
+	TObjectPtr<USoundBase> EraseSound;
+
+	// 퍼즐이 처음 풀렸을 때(클리어).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Audio")
+	TObjectPtr<USoundBase> SolvedSound;
+
+	// 영역 전체 초기화(리셋 버튼) 시.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle|Audio")
+	TObjectPtr<USoundBase> ResetSound;
 
 	// ---------- 이벤트 ----------
 
@@ -163,5 +202,6 @@ private:
 	FLinearColor GetRegionColor(int32 RegionId) const;
 	void NotifyBoardChanged();
 	void UpdateSolvedState();
+	void PlayPuzzleSound(USoundBase* Sound) const;
 	bool AreRegionsContiguous() const;
 };
