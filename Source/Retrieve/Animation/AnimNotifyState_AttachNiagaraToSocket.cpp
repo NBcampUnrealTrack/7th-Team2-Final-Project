@@ -215,10 +215,15 @@ void UAnimNotifyState_AttachNiagaraToSocket::CleanupNiagaraComponent(UNiagaraCom
 
 	if (Config.bDeactivateOnEnd)
 	{
+		if (Config.bDestroyOnEnd)
+		{
+			// 남아있는 파티클이 자연스럽게 소멸할 때까지 기다렸다가 엔진이 알아서 정리하게 한다.
+			// (Deactivate 직후 바로 DestroyComponent를 부르면 Deactivate가 무의미해짐)
+			NiagaraComponent->SetAutoDestroy(true);
+		}
 		NiagaraComponent->Deactivate();
 	}
-
-	if (Config.bDestroyOnEnd)
+	else if (Config.bDestroyOnEnd)
 	{
 		NiagaraComponent->DestroyComponent();
 	}
