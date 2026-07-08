@@ -14,7 +14,7 @@ void ARetrieveLeverDoor::BeginPlay()
 	{
 		if (Lever)
 		{
-			Lever->OnLeverChanged.AddDynamic(this, &ARetrieveLeverDoor::HandleLeverChanged);
+			Lever->OnLeverChanged.AddUniqueDynamic(this, &ARetrieveLeverDoor::HandleLeverChanged);
 		}
 	}
 

@@ -13,7 +13,7 @@ void ARetrieveInteractDoor::BeginPlay()
 
 	if (InteractionResponse)
 	{
-		InteractionResponse->OnApplied.AddDynamic(this, &ARetrieveInteractDoor::HandleInteracted);
+		InteractionResponse->OnApplied.AddUniqueDynamic(this, &ARetrieveInteractDoor::HandleInteracted);
 	}
 }
 
