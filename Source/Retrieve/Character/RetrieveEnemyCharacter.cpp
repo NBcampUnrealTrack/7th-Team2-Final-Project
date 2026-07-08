@@ -206,7 +206,7 @@ void ARetrieveEnemyCharacter::BeginPlay()
 	GroupAlertHandle = MsgSubsys.RegisterListener<FEnemyPlayerSpottedPayload>(
 		RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
 		this, &ARetrieveEnemyCharacter::OnAlerted);
-	
+
 	if (UCharacterMovementComponent* MoveComp = Cast<UCharacterMovementComponent>(GetMovementComponent()))
 	{
 		DefaultGravityScale = MoveComp->GravityScale;
@@ -264,7 +264,7 @@ void ARetrieveEnemyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
-	
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -443,6 +443,27 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 	if (UAbilitySystemComponent* ASC = OwnedASC)
 	{
 		ASC->RemoveLooseGameplayTag(RetrieveGameplayTags::State_Enemy_Dead);
+	}
+
+	// 월드 레벨(가디언 처치 수) 반영: 재활성화·리스폰 시 현재 레벨 스탯으로 재적용한다.
+	// 근접 스폰/디스폰 사이클 자체가 재스케일 지점이 되므로 별도 이벤트 구독이 필요 없다.
+	if (PawnExtensionComponent && OwnedASC)
+	{
+		const float PrevMaxHealth = OwnedASC->GetNumericAttribute(UCombatAttributeSet::GetMaxHealthAttribute());
+		const float PrevHealth    = OwnedASC->GetNumericAttribute(UCombatAttributeSet::GetHealthAttribute());
+		const float MissingHealth = FMath::Max(0.f, PrevMaxHealth - PrevHealth);
+
+		PawnExtensionComponent->ApplyCharacterStatsRow();
+		RefreshMoveSpeedFromAttribute();
+
+		// 리스폰은 아래에서 ResetHealth로 만피 처리하므로, 비-리스폰(재활성화)만 기존 데미지를 보존한다.
+		if (!bIsRespawn)
+		{
+			const float NewMaxHealth = OwnedASC->GetNumericAttribute(UCombatAttributeSet::GetMaxHealthAttribute());
+			OwnedASC->SetNumericAttributeBase(
+				UCombatAttributeSet::GetHealthAttribute(),
+				FMath::Clamp(NewMaxHealth - MissingHealth, 1.f, NewMaxHealth));
+		}
 	}
 
 	if (USkeletalMeshComponent* MeshComp = GetMesh())

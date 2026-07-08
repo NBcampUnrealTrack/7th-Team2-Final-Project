@@ -56,7 +56,14 @@ public:
 	/** DataTable 에셋. `CharacterStatsRow` 설정 시 반드시 지정해야 합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
 	TObjectPtr<UDataTable> CharacterStatsTable;
-	
+
+	/**
+	 * true면 `CharacterStatsTable`을 `FLeveledCharacterStats` 테이블로 간주하고, 월드 레벨로 `ByLevel`을 인덱싱합니다.
+	 * 플레이어·Lumen은 false(기존 flat `FCharacterStats` 경로 유지), 적/보스 archetype만 true로 설정합니다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
+	bool bScalesWithWorldLevel = false;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
 	TSubclassOf<UGameplayEffect> InitStatsEffect;
 };

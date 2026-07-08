@@ -5,6 +5,7 @@
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Character/RetrievePawnData.h"
 #include "Components/GameFrameworkComponentManager.h"
+#include "Core/RetrieveGameState.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "GameplayEffect.h"
@@ -266,7 +267,21 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 	const FCharacterStats* Row = &DefaultStats;
 	if (!PawnData->CharacterStatsRow.IsNone() && PawnData->CharacterStatsTable)
 	{
-		if (const FCharacterStats* Found = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
+		if (PawnData->bScalesWithWorldLevel)
+		{
+			// 스케일 폰: CharacterStatsTable을 FLeveledCharacterStats 테이블로 간주하고 월드 레벨로 인덱싱
+			if (const FLeveledCharacterStats* Leveled = PawnData->CharacterStatsTable->FindRow<FLeveledCharacterStats>(
+				PawnData->CharacterStatsRow, TEXT("URetrievePawnExtensionComponent::ApplyCharacterStatsRow(Leveled)")))
+			{
+				if (Leveled->ByLevel.Num() > 0)
+				{
+					const int32 WorldLevel = ARetrieveGameState::GetWorldLevelFor(this);
+					const int32 Index = FMath::Clamp(WorldLevel - 1, 0, Leveled->ByLevel.Num() - 1);
+					Row = &Leveled->ByLevel[Index];
+				}
+			}
+		}
+		else if (const FCharacterStats* Found = PawnData->CharacterStatsTable->FindRow<FCharacterStats>(
 			PawnData->CharacterStatsRow, TEXT("URetrievePawnExtensionComponent::ApplyCharacterStatsRow")))
 		{
 			Row = Found;

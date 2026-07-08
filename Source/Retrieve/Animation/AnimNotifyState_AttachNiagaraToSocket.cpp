@@ -215,6 +215,9 @@ void UAnimNotifyState_AttachNiagaraToSocket::CleanupNiagaraComponent(UNiagaraCom
 
 	if (Config.bDeactivateOnEnd)
 	{
+		// 스폰만 멈추고 남은 파티클은 수명대로 소멸시킨다. 완료되면 컴포넌트가 자동 파괴되어
+		// (bDestroyOnEnd=false일 때) 비활성 컴포넌트가 누적되는 것을 방지한다.
+		NiagaraComponent->SetAutoDestroy(true);
 		if (Config.bDestroyOnEnd)
 		{
 			// 남아있는 파티클이 자연스럽게 소멸할 때까지 기다렸다가 엔진이 알아서 정리하게 한다.
