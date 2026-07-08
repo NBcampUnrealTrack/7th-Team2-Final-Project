@@ -30,6 +30,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Session")
 	APawn* GetHostPawn() const;
 
+	/** 월드 레벨 = 1 + 처치된 가디언 수(플레이어 해방 원소 수). 최소 1. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|World")
+	int32 GetWorldLevel() const;
+
+	/** 월드 컨텍스트에서 GameState를 찾아 월드 레벨을 반환합니다. 못 찾으면 1. */
+	static int32 GetWorldLevelFor(const UObject* WorldContext);
+
 	/** 호스트 권한. 플레이어가 가장 최근에 휴식하거나 활성화한 모닥불을 기록. */
 	void SetLastCheckpointBonfire(FName BonfireId);
 

@@ -14,6 +14,9 @@
 #include "Quest/QuestBranchComponent.h"
 #include "Save/RetrieveSaveSubsystem.h"
 #include "World/GuardianCoreSpawnerComponent.h"
+#include "Components/Element/ElementUnlockComponent.h"
+#include "Engine/Engine.h"
+#include "GameFramework/PlayerController.h"
 
 ARetrieveGameState::ARetrieveGameState(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -35,6 +38,24 @@ void ARetrieveGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 APawn* ARetrieveGameState::GetHostPawn() const
 {
 	return HostPlayerState ? HostPlayerState->GetPawn() : nullptr;
+}
+
+int32 ARetrieveGameState::GetWorldLevel() const
+{
+	// 해방 원소 수 = 처치한 가디언 수. ElementUnlockComponent가 WorldState에 영속 저장하므로
+	// 세이브 로드 후에도 이 값으로 복원된다.
+	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
+	const UElementUnlockComponent* Unlock =
+		PlayerPawn ? PlayerPawn->FindComponentByClass<UElementUnlockComponent>() : nullptr;
+	return 1 + (Unlock ? Unlock->GetUnlockedElements().Num() : 0);
+}
+
+int32 ARetrieveGameState::GetWorldLevelFor(const UObject* WorldContext)
+{
+	const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+	const ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	return GS ? GS->GetWorldLevel() : 1;
 }
 
 bool ARetrieveGameState::TransitionTo(ERetrieveSessionState NewState)

@@ -182,6 +182,20 @@ struct RETRIEVE_API FCharacterStats : public FTableRowBase
 	float StaminaRegenRate = 50.0f;
 };
 
+/**
+ * 월드 레벨별 FCharacterStats 묶음. 가디언 처치로 월드 레벨이 오르면 해당 레벨의 스탯을 사용한다.
+ * PawnData.bScalesWithWorldLevel = true인 폰(적/보스)의 CharacterStatsTable 행 타입으로 사용.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FLeveledCharacterStats : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** 인덱스 0 = 월드 레벨 1 … 3 = 레벨 4. 월드 레벨로 인덱싱하며 범위를 벗어나면 마지막 원소로 clamp. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Level")
+	TArray<FCharacterStats> ByLevel;
+};
+
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FCombatTimingRow : public FTableRowBase
 {
