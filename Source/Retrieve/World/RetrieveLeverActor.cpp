@@ -23,7 +23,7 @@ void ARetrieveLeverActor::BeginPlay()
 
 	if (InteractionResponse)
 	{
-		InteractionResponse->OnApplied.AddDynamic(this, &ARetrieveLeverActor::HandleInteracted);
+		InteractionResponse->OnApplied.AddUniqueDynamic(this, &ARetrieveLeverActor::HandleInteracted);
 	}
 }
 

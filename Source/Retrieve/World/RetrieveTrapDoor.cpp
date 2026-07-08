@@ -26,12 +26,12 @@ void ARetrieveTrapDoor::BeginPlay()
 
 	if (InteractionResponse)
 	{
-		InteractionResponse->OnApplied.AddDynamic(this, &ARetrieveTrapDoor::HandleInteracted);
+		InteractionResponse->OnApplied.AddUniqueDynamic(this, &ARetrieveTrapDoor::HandleInteracted);
 	}
 
 	if (RoomVolume)
 	{
-		RoomVolume->OnComponentBeginOverlap.AddDynamic(this, &ARetrieveTrapDoor::OnRoomBeginOverlap);
+		RoomVolume->OnComponentBeginOverlap.AddUniqueDynamic(this, &ARetrieveTrapDoor::OnRoomBeginOverlap);
 	}
 
 	UGameplayMessageSubsystem& MsgSubsys = UGameplayMessageSubsystem::Get(this);
