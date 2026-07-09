@@ -363,7 +363,12 @@ void ARetrieveEnemyCharacter::HandleDeathStarted(AActor* OwningActor)
 	{
 		return;
 	}
-	
+
+	if (DropComponent)
+	{
+		DropComponent->ProcessDrop();
+	}
+
 	const URetrieveHealthComponent* HC = GetHealthComponent();
 	
 	FMonsterDiedPayload Payload;

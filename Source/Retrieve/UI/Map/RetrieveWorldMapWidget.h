@@ -305,9 +305,6 @@ private:
 	mutable FVector2D DbgLastRectTopLeft = FVector2D(-1.f, -1.f);
 	mutable FVector2D DbgLastRectSize    = FVector2D(-1.f, -1.f);
 
-	// 디버그: NativePaint 진입 시 위젯 크기를 값이 바뀔 때만 1회 로깅하기 위한 캐시.
-	mutable FVector2D DbgLastPaintWidgetSize = FVector2D(-1.f, -1.f);
-
 	// MapDisplayMaterial로부터 생성한 동적 머티리얼 인스턴스(맵 텍스처 파라미터 주입용) 캐시.
 	UPROPERTY(Transient)
 	mutable TObjectPtr<UMaterialInstanceDynamic> MapDisplayMID;
