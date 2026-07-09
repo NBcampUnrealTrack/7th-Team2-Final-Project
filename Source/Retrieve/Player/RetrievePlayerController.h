@@ -82,6 +82,12 @@ public:
 	void Server_RequestQuitToMenu();
 
 	UFUNCTION(Server, Reliable)
+	void Server_RequestContinueGame();
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestLoadGameSlot(int32 SlotIndex);
+
+	UFUNCTION(Server, Reliable)
 	void Server_RequestUnstuck();
 
 	/**
@@ -90,6 +96,20 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestNewGame();
+
+	/**
+	 * 메뉴 - 이어하기 진입점. 가장 최근 저장 슬롯을 서버가 판별해 로드합니다
+	 * (-> HandleContinueGame -> SaveSubsystem::LoadFromSlot -> MainMenu->InGame). W_MainMenu에서 호출.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestContinueGame();
+
+	/**
+	 * 메뉴 - 불러오기(슬롯 선택) 진입점. 지정 슬롯을 서버가 로드합니다
+	 * (-> HandleLoadGameSlot -> SaveSubsystem::LoadFromSlot -> MainMenu->InGame). WBP_LoadGame에서 호출.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestLoadGameSlot(int32 SlotIndex);
 
 	/** 언스턱/강제 리스폰. 정규 사망 흐름(로딩 커버 포함)으로 마지막 체크포인트에 리스폰. 포즈 팝업에서 호출. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
@@ -240,6 +260,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Settings")
 	void OpenSettingsPanel();
 
+	/** 메인메뉴 "불러오기" 버튼에서 직접 연결할 진입점. 슬롯 선택형 불러오기 창(WBP_LoadGame)을 연다. */
+	UFUNCTION(BlueprintCallable, Exec, Category = "Retrieve|Menu")
+	void OpenLoadGamePanel();
+
 	/** 상점 패널을 열고 InitializeShopPanel을 자동으로 호출합니다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void OpenShopPanel(TSubclassOf<URetrieveGamePanelWidget> ShopPanelClass,
@@ -275,6 +299,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
 	FKey SettingsPanelKey = EKeys::F10;
+
+	/** 메인메뉴 불러오기 화면(WBP_LoadGame). BP_RetrievePlayerController에서 할당. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
+	TSoftClassPtr<URetrieveGamePanelWidget> LoadGamePanelClass;
 
 	/** 상점 패널 위젯 클래스. BP_RetrievePlayerController에서 WBP_ShopPanel 할당 */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Shop")

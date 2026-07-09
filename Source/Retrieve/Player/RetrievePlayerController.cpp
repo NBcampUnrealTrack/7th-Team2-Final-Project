@@ -412,6 +412,16 @@ void ARetrievePlayerController::RequestNewGame()
 	Server_RequestNewGame();
 }
 
+void ARetrievePlayerController::RequestContinueGame()
+{
+	Server_RequestContinueGame();
+}
+
+void ARetrievePlayerController::RequestLoadGameSlot(int32 SlotIndex)
+{
+	Server_RequestLoadGameSlot(SlotIndex);
+}
+
 void ARetrievePlayerController::RequestUnstuck()
 {
 	Server_RequestUnstuck();
@@ -884,6 +894,24 @@ void ARetrievePlayerController::OpenSettingsPanel()
 	}
 }
 
+void ARetrievePlayerController::OpenLoadGamePanel()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = LoadGamePanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open load game: LoadGamePanelClass is empty."));
+		return;
+	}
+
+	FRetrievePanelShortcutConfig LoadGameShortcut;
+	LoadGameShortcut.Key = EKeys::Escape;
+	LoadGameShortcut.PanelClass = PanelClass;
+	if (CanOpenPanel(LoadGameShortcut))
+	{
+		OpenExclusivePanel(PanelClass, EKeys::Escape);
+	}
+}
+
 void ARetrievePlayerController::CloseActivePanel()
 {
 	if (!ActivePanel || bActivePanelClosing)
@@ -930,9 +958,26 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	ActivePanelClass = nullptr;
 	bActivePanelClosing = false;
 
-	FInputModeGameOnly InputMode;
-	SetInputMode(InputMode);
-	bShowMouseCursor = false;
+	// 패널을 닫은 뒤 입력 모드를 현재 세션 상태에 맞게 복원한다.
+	// 메인메뉴/결과 화면에서 설정 패널을 열었다 닫으면 UIOnly+커서를 유지해야 하고,
+	// 인게임에서만 GameOnly로 돌아간다. (예전엔 무조건 GameOnly로 강제해서, 메인메뉴에서
+	// 설정을 닫으면 커서와 UI 입력이 죽어 메뉴가 조작 불가 상태가 됐다.)
+	ERetrieveSessionState SessionState = ERetrieveSessionState::InGame;
+	if (const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+	{
+		SessionState = GS->GetSessionState();
+	}
+
+	if (SessionState == ERetrieveSessionState::MainMenu || SessionState == ERetrieveSessionState::Result)
+	{
+		UpdateInputMode(SessionState);
+	}
+	else
+	{
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		bShowMouseCursor = false;
+	}
 
 	// 상점 등으로 NPC를 비추던 카메라를 플레이어로 복귀한다.
 	if (bShopCameraActive)
@@ -1332,6 +1377,22 @@ void ARetrievePlayerController::Server_RequestNewGame_Implementation()
 	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
 	{
 		GM->HandleNewGame(this);
+	}
+}
+
+void ARetrievePlayerController::Server_RequestContinueGame_Implementation()
+{
+	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GM->HandleContinueGame(this);
+	}
+}
+
+void ARetrievePlayerController::Server_RequestLoadGameSlot_Implementation(int32 SlotIndex)
+{
+	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GM->HandleLoadGameSlot(this, SlotIndex);
 	}
 }
 

@@ -83,6 +83,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	int32 GetNextFreeSlotIndex() const;
 
+	/** 저장 시각이 가장 최근인 슬롯 인덱스 반환(메인메뉴 "이어하기"용). 세이브가 없으면 -1. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	int32 GetMostRecentSaveSlotIndex() const;
+
 	/** 현재 활성 슬롯 인덱스 (-1 = 슬롯 미선택) */
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Save")
 	int32 ActiveSlotIndex = -1;

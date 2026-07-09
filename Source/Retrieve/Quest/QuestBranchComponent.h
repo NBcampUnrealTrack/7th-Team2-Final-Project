@@ -46,6 +46,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Quest")
 	void ResetForTest();
 
+	/** 세이브 시스템 전용. 현재 진행 상태를 저장 데이터로 추출합니다. */
+	void MakeQuestSaveData(TArray<FGameplayTag>& OutCompletedSteps, FGameplayTag& OutCurrentTrackerStep,
+	                       TMap<FName, FGameplayTag>& OutChoiceHistory) const;
+
+	/**
+	 * 세이브 시스템 전용. 저장된 진행 상태를 그대로 복원합니다(호스트 전용).
+	 * CompleteStep과 달리 선행 조건 검사/개별 알림 브로드캐스트를 생략하므로,
+	 * 호출부가 복원 후 알림 베이스라인 재시딩 + 단일 갱신 브로드캐스트를 책임져야 합니다.
+	 */
+	bool ApplyQuestSaveData(const TArray<FGameplayTag>& InCompletedSteps, FGameplayTag InCurrentTrackerStep,
+	                        const TMap<FName, FGameplayTag>& InChoiceHistory);
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
