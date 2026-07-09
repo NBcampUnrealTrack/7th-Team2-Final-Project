@@ -264,6 +264,10 @@ public:
 	UFUNCTION(BlueprintCallable, Exec, Category = "Retrieve|Menu")
 	void OpenLoadGamePanel();
 
+	/** 조작키 안내 화면을 연다(일시정지 메뉴의 "조작키 안내" 버튼에서 호출). 현재 패널은 교체된다. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
+	void OpenControlsGuide();
+
 	/** 상점 패널을 열고 InitializeShopPanel을 자동으로 호출합니다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void OpenShopPanel(TSubclassOf<URetrieveGamePanelWidget> ShopPanelClass,
@@ -303,6 +307,10 @@ protected:
 	/** 메인메뉴 불러오기 화면(WBP_LoadGame). BP_RetrievePlayerController에서 할당. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
 	TSoftClassPtr<URetrieveGamePanelWidget> LoadGamePanelClass;
+
+	/** 조작키 안내 위젯(WBP_ControlsGuide). 기본값은 C++ 생성자에서 지정. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|UI")
+	TSoftClassPtr<URetrieveGamePanelWidget> ControlsGuideClass;
 
 	/** 상점 패널 위젯 클래스. BP_RetrievePlayerController에서 WBP_ShopPanel 할당 */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Shop")
