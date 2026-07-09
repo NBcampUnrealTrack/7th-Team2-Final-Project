@@ -128,7 +128,8 @@ bool ARetrieveGameState::IsLegalTransition(ERetrieveSessionState From, ERetrieve
 		return To == ERetrieveSessionState::InGame;
 
 	case ERetrieveSessionState::InGame:
-		return To == ERetrieveSessionState::Result;
+		// MainMenu 허용: 시스템 메뉴의 "메인 메뉴로"(Server_RequestQuitToMenu)가 InGame 상태에서 호출된다.
+		return To == ERetrieveSessionState::Result || To == ERetrieveSessionState::MainMenu;
 
 	case ERetrieveSessionState::Result:
 		return To == ERetrieveSessionState::InGame || To == ERetrieveSessionState::MainMenu;

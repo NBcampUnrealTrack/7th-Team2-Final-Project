@@ -143,6 +143,10 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 	AttackFeedbackComponent = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
 	SettingsPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Settings/WBP_SettingsScreen.WBP_SettingsScreen_C")));
+	LoadGamePanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_LoadGame.WBP_LoadGame_C")));
+	SystemMenuClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_SystemMenu.WBP_SystemMenu_C")));
 	ControlsGuideClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_ControlsGuide.WBP_ControlsGuide_C")));
 }
@@ -354,6 +358,13 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 		if (ActivePanel && Params.Key == EKeys::Escape)
 		{
 			CloseActivePanel();
+			return true;
+		}
+
+		// 순수 게임플레이(패널 없음·휠 없음) 중 ESC → 시스템 메뉴.
+		if (!ActivePanel && !bQuickSlotWheelOpen && Params.Key == EKeys::Escape)
+		{
+			OpenSystemMenu();
 			return true;
 		}
 
@@ -914,6 +925,33 @@ void ARetrievePlayerController::OpenLoadGamePanel()
 	}
 }
 
+void ARetrievePlayerController::OpenSystemMenu()
+{
+	// 이미 다른 패널이 열려 있으면(인벤/월드맵/설정 등) ESC는 그 패널을 닫는 용도이므로 무시.
+	if (ActivePanel)
+	{
+		return;
+	}
+
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = SystemMenuClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		// SystemMenuClass가 비어 있어도(예: BP에 None 오버라이드가 남은 경우) 알려진 경로로 폴백한다.
+		// 이 경로 에셋은 DirectoriesToAlwaysCook(/Game/Retrieve/UI/Menu)로 항상 쿡되므로 패키지에서도 로드된다.
+		PanelClass = LoadClass<URetrieveGamePanelWidget>(
+			nullptr, TEXT("/Game/Retrieve/UI/Menu/WBP_SystemMenu.WBP_SystemMenu_C"));
+	}
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open pause menu: SystemMenuClass is empty and fallback load failed."));
+		return;
+	}
+
+	// ESC를 ToggleKey로 넘겨 다시 ESC로 닫히게 한다.
+	// 멀티플레이를 고려해 게임을 실제로 멈추지 않는다(패널이 열려 있는 동안 전투 입력은 PlayerTick에서 클라이언트 로컬로 차단됨).
+	OpenExclusivePanel(PanelClass, EKeys::Escape);
+}
+
 void ARetrievePlayerController::OpenControlsGuide()
 {
 	TSubclassOf<URetrieveGamePanelWidget> PanelClass = ControlsGuideClass.LoadSynchronous();
@@ -929,7 +967,7 @@ void ARetrievePlayerController::OpenControlsGuide()
 		return;
 	}
 
-	// 일시정지 메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
+	// 시스템 메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
 	OpenExclusivePanel(PanelClass, EKeys::Escape);
 }
 
