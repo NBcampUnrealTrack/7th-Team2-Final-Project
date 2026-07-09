@@ -569,6 +569,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Unequip;
 
+	// 선택 아이템이 소모품일 때만 표시 (가시성은 UpdateEquipActionButtons에서 제어)
+	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_UseConsumable;
+
 	/** 방어구 탭일 때만 표시되는 방어력 정렬 버튼 */
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Inventory|Widgets", meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_SortDefense;
@@ -643,6 +647,9 @@ protected:
 	FName PendingQuickSlotItemId = NAME_None;
 	FGameplayTag PendingQuickSlotCategoryTag;
 
+	// 교체 확인 창을 앞에 보이게 하려고 휠을 패널 아래로 내렸는지 여부 (복원용)
+	bool bQuickSlotWheelLowered = false;
+
 	// 무기 교체 확인 팝업을 우회할 때만 true. TGuardValue로 사용
 	bool bBypassWeaponSwapConfirm = false;
 	bool bBypassSelectedItemActivationGuard = false;
@@ -682,6 +689,10 @@ protected:
 	void RefreshInventoryGridLayout();
 	void OpenQuickSlotWheelForAssign();
 	void ShowQuickSlotReplaceConfirm(bool bShow);
+	// 교체 확인 다이얼로그를 마우스 커서 옆으로 이동
+	void PositionConfirmDialogNearCursor(UWidget* DialogWidget) const;
+	// 교체 확인용으로 패널 아래로 내렸던 퀵슬롯 휠을 원래 z-order/조작 가능 상태로 복원
+	void RestoreQuickSlotWheelZOrder();
 	void MarkInventoryTooltipsDirty();
 	void ApplyInventorySlotTooltips();
 	void ClearWidgetTooltipRecursive(UWidget* Widget) const;

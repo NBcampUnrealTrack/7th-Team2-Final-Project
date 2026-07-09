@@ -61,19 +61,19 @@ FText URetrieveItemDescriptionHelper::FormatWeapon(const FRetrieveWeaponDataRow&
 	}
 
 	TArray<FString> Stats;
-	Stats.Add(FString::Printf(TEXT("Attack: %.0f"), Row.AttackPower));
+	Stats.Add(FString::Printf(TEXT("공격력: %.0f"), Row.AttackPower));
 	if (Row.WeaponTypeTag.IsValid())
 	{
-		Stats.Add(FString::Printf(TEXT("Type: %s"), *GetTagLeaf(Row.WeaponTypeTag)));
+		Stats.Add(FString::Printf(TEXT("타입: %s"), *GetTagLeaf(Row.WeaponTypeTag)));
 	}
 	if (Row.WeaponGradeTag.IsValid())
 	{
-		Stats.Add(FString::Printf(TEXT("Grade: %s"), *GetTagLeaf(Row.WeaponGradeTag)));
+		Stats.Add(FString::Printf(TEXT("등급: %s"), *GetTagLeaf(Row.WeaponGradeTag)));
 	}
 	const FString Affinity = Row.WeaponAffinityTag.IsValid() ? GetTagLeaf(Row.WeaponAffinityTag) : FString();
 	if (!Affinity.IsEmpty() && Affinity != TEXT("None"))
 	{
-		Stats.Add(FString::Printf(TEXT("Affinity: %s"), *Affinity));
+		Stats.Add(FString::Printf(TEXT("친화도: %s"), *Affinity));
 	}
 	Lines.Add(FString::Join(Stats, TEXT("  |  ")));
 
@@ -116,15 +116,15 @@ FText URetrieveItemDescriptionHelper::FormatConsumable(const FRetrieveConsumable
 	TArray<FString> Stats;
 	if (Row.HealAmount > 0.0f)
 	{
-		Stats.Add(FString::Printf(TEXT("Heal: %.0f"), Row.HealAmount));
+		Stats.Add(FString::Printf(TEXT("회복량: %.0f"), Row.HealAmount));
 	}
 	if (Row.BuffDuration > 0.0f)
 	{
 		if (Row.ElementBuffMultiplier > 1.0f)
 		{
-			Stats.Add(FString::Printf(TEXT("Element Buff: x%.2f"), Row.ElementBuffMultiplier));
+			Stats.Add(FString::Printf(TEXT("원소 버프: x%.2f"), Row.ElementBuffMultiplier));
 		}
-		Stats.Add(FString::Printf(TEXT("Duration: %.1fs"), Row.BuffDuration));
+		Stats.Add(FString::Printf(TEXT("지속시간: %.1fs"), Row.BuffDuration));
 	}
 	if (!Stats.IsEmpty())
 	{
