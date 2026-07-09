@@ -143,6 +143,8 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 	AttackFeedbackComponent = CreateDefaultSubobject<UAttackFeedbackComponent>(TEXT("AttackFeedbackComponent"));
 	SettingsPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Settings/WBP_SettingsScreen.WBP_SettingsScreen_C")));
+	ControlsGuideClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_ControlsGuide.WBP_ControlsGuide_C")));
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -910,6 +912,25 @@ void ARetrievePlayerController::OpenLoadGamePanel()
 	{
 		OpenExclusivePanel(PanelClass, EKeys::Escape);
 	}
+}
+
+void ARetrievePlayerController::OpenControlsGuide()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = ControlsGuideClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		// 값이 비어 있어도 알려진 경로로 폴백(에셋은 /Game/Retrieve/UI/Menu always-cook로 패키지 포함).
+		PanelClass = LoadClass<URetrieveGamePanelWidget>(
+			nullptr, TEXT("/Game/Retrieve/UI/Menu/WBP_ControlsGuide.WBP_ControlsGuide_C"));
+	}
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open controls guide: ControlsGuideClass is empty and fallback load failed."));
+		return;
+	}
+
+	// 일시정지 메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
+	OpenExclusivePanel(PanelClass, EKeys::Escape);
 }
 
 void ARetrievePlayerController::CloseActivePanel()
