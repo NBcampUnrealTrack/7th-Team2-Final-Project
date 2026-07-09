@@ -226,8 +226,17 @@ void URetrieveInteractionResponseComponent::DisableShippingInteractionDebug()
 		// 충돌 기능은 유지하고 렌더링만 차단한다.
 		if (UShapeComponent* ShapeComponent = Cast<UShapeComponent>(Component))
 		{
-			ShapeComponent->SetHiddenInGame(true, true);
-			ShapeComponent->SetVisibility(false, true);
+			// 캐릭터 루트 Capsule은 건드리지 않는다. 루트에 전파(propagate=true)로 렌더링을
+			// 끄면 자식인 CharacterMesh0의 bHiddenInGame/bVisible까지 동시에 꺼져 메시가
+			// 통째로 사라진다(루멘 메시 소실 버그의 직접 원인). 루프가 모든 Shape를 개별
+			// 방문하므로 전파 없이도 디버그 존은 정상적으로 숨겨진다.
+			if (ShapeComponent == OwnerActor->GetRootComponent())
+			{
+				continue;
+			}
+
+			ShapeComponent->SetHiddenInGame(true, false);
+			ShapeComponent->SetVisibility(false, false);
 		}
 	}
 #endif
