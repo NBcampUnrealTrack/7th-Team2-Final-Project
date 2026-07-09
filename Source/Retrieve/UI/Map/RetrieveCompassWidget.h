@@ -104,6 +104,12 @@ public:
 		meta=(ClampMin="0.0", ClampMax="1.0"))
 	float CompassBandYRatio = 0.5f;
 
+	// 카메라 회전 시 나침반 띠가 즉시 따라가지 않고 부드럽게 뒤따르게 하는 보간 속도.
+	// 값이 클수록 더 즉각적으로 따라감(뻣뻣해짐), 작을수록 더 부드럽지만 지연이 커짐.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Layout",
+		meta=(ClampMin="1.0"))
+	float CompassYawInterpSpeed = 10.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|WorldIcons")
 	TObjectPtr<URetrieveMapIconDataAsset> WorldMapIconData;
 
@@ -115,6 +121,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|WorldIcons", meta=(ClampMin="4.0"))
 	float CompassIconSizeScale = 0.75f;
+
+	// 0 이하 = 거리 무제한. 양수면 이 반경(UU) 밖 정적 월드 아이콘은 나침반에서 숨김.
+	// (기존에는 거리 제한이 전혀 없어 맵 전체 아이콘이 시야각 안에만 들어오면 다 표시되던 문제 수정용)
+	// 기본값 8000: 몬스터 ChaseRange가 최대 20000, PatrolRange가 최대 2500인 이 게임 스케일에서
+	// 3000(최초 시도값)은 너무 좁아 근처 몬스터/아이콘도 안 보였음 — WBP 클래스 디폴트에서 취향껏 조정 가능.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|WorldIcons",
+		meta=(ClampMin="0.0"))
+	float CompassIconViewRadius = 8000.0f;
 
 	// ── 애니메이션 마커 위젯 풀링 옵션 ───────────────────────────────────────
 	// WBP_Compass 안에 같은 이름의 CanvasPanel을 만들고 Is Variable 체크.
@@ -135,10 +149,12 @@ public:
 	TSet<ERetrieveMapIconType> EnemyIconTypes = { ERetrieveMapIconType::Boss, ERetrieveMapIconType::Enemy };
 
 	// 0 이하 = 거리 무제한. 양수면 이 반경(UU) 밖 에너미는 나침반에서 숨김.
-	// 미니맵 ViewWorldRadius(기본 3000)에 맞추면 두 위젯 표시 범위가 일치.
+	// 이전 기본값 0(무제한)은 근접 구간에서 몹이 몰릴 때 나침반에 마커가 과다 표시되는 원인이었음.
+	// 8000: 몬스터 PatrolRange(최대 2500)/ChaseRange(최대 20000) 스케일 대비 3000은 너무 좁아
+	// 근처 몬스터도 안 보이는 문제가 있었음 — WBP 클래스 디폴트에서 취향껏 조정 가능.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|MarkerWidgets",
 		meta=(ClampMin="0.0"))
-	float EnemyViewRadius = 0.0f;
+	float EnemyViewRadius = 8000.0f;
 
 	// 라이브 에너미 마커 기본 크기(픽셀). IconRegistry Row.IconSize가 있으면 그쪽 우선.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|MarkerWidgets",
@@ -214,4 +230,16 @@ private:
 	// 에너미 컴포넌트(FObjectKey) → 안정 슬롯 번호. UUserWidget을 담지 않으므로 GC 추적 불필요.
 	TMap<FObjectKey, int32> EnemyIconSlots;
 	int32 NextEnemySlot = 0;
+
+	// NativeTick에서 매 프레임 실제 카메라 Yaw로 보간되는 캐시값. NativePaint(const)와
+	// UpdateWidgetMarkers는 이 값을 읽기만 해서, 카메라를 빠르게 돌려도 나침반 띠가
+	// 순간이동하듯 튀지 않고 부드럽게 따라가게 한다.
+	// 각도(degree)를 직접 보간하면 ±180 경계에서 예기치 못한 큰 점프가 발생할 수 있어(실측 확인됨),
+	// 2D 단위벡터로 변환해 보간한 뒤 각도로 역산한다 — 이 방식은 경계 자체가 존재하지 않는다.
+	FVector2D SmoothedYawDir = FVector2D(1.0f, 0.0f);
+	float SmoothedCameraYaw = 0.0f;
+	bool bSmoothedYawInitialized = false;
+
+	// NativeTick에서 매 프레임 호출. PC의 실제 카메라 Yaw로 SmoothedCameraYaw를 보간 갱신한다.
+	void UpdateSmoothedCameraYaw(const APlayerController* PC, float DeltaTime);
 };
