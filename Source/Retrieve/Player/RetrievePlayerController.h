@@ -81,12 +81,23 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_RequestQuitToMenu();
 
+	UFUNCTION(Server, Reliable)
+	void Server_RequestUnstuck();
+
 	/**
 	 * 메뉴 - 새 게임 진입점. 로컬에 코스메틱 로딩 화면을 표시한 후,
 	 * 호스트 전용 Server_RequestNewGame (-> HandleNewGame -> MainMenu->InGame)을 호출합니다. W_MainMenu에서 호출.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestNewGame();
+
+	/** 언스턱/강제 리스폰. 정규 사망 흐름(로딩 커버 포함)으로 마지막 체크포인트에 리스폰. 포즈 팝업에서 호출. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestUnstuck();
+
+	/** 게임 종료(애플리케이션 종료). 포즈 팝업에서 호출. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestQuitGame();
 
 protected:
 	void HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState);

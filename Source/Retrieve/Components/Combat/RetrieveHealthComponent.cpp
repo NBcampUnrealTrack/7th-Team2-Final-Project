@@ -54,6 +54,22 @@ void URetrieveHealthComponent::Revive()
 	ResetHealth();
 }
 
+void URetrieveHealthComponent::KillOwner()
+{
+	if (!AbilitySystemComponent || !AttributeSet)
+	{
+		return;
+	}
+
+	if (bDeathStarted)
+	{
+		return;
+	}
+	
+	AbilitySystemComponent->SetNumericAttributeBase(
+		UCombatAttributeSet::GetHealthAttribute(), 0.f);
+}
+
 void URetrieveHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UninitializeWithAbilitySystem();

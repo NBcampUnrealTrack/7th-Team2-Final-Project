@@ -1,5 +1,7 @@
 #include "UI/RetrieveSettingsPanelWidget.h"
 
+#include "Core/RetrieveGameState.h"
+#include "Player/RetrievePlayerController.h"
 #include "Settings/RetrieveGameUserSettings.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
 #include "Settings/RetrieveSettingAvailability.h"
@@ -157,6 +159,14 @@ void URetrieveSettingsPanelWidget::NativeConstruct()
 	if (const URetrieveGameUserSettings* S = GetUserSettings())
 	{
 		BaselineSnapshot.CaptureFrom(S);
+	}
+
+	// "강제 리스폰" 버튼은 인게임에서만 노출(메인 메뉴 설정에선 숨김)
+	if (UButton* RespawnButton = FindWidget<UButton>(this, TEXT("Btn_Respawn")))
+	{
+		const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr;
+		const bool bInGame = GS && GS->GetSessionState() == ERetrieveSessionState::InGame;
+		RespawnButton->SetVisibility(bInGame ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 
 	SelectCategory(ERetrieveSettingsCategory::Graphics);
@@ -541,6 +551,7 @@ void URetrieveSettingsPanelWidget::BindScreenEvents()
 	BIND_SCREEN_BUTTON("Btn_Apply", HandleApply)
 	BIND_SCREEN_BUTTON("Btn_Reset", HandleReset)
 	BIND_SCREEN_BUTTON("Btn_Close", HandleClose)
+	BIND_SCREEN_BUTTON("Btn_Respawn", HandleRespawn)
 #undef BIND_SCREEN_BUTTON
 }
 
@@ -1264,6 +1275,21 @@ void URetrieveSettingsPanelWidget::HandleAccessibilityTab() { SelectCategory(ERe
 void URetrieveSettingsPanelWidget::HandleApply() { ApplyAndSave(); }
 void URetrieveSettingsPanelWidget::HandleReset() { ResetCurrentCategory(); }
 void URetrieveSettingsPanelWidget::HandleClose() { RequestClose(); }
+
+void URetrieveSettingsPanelWidget::HandleRespawn()
+{
+	const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr;
+	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+
+	if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(GetOwningPlayer()))
+	{
+		PC->RequestUnstuck();
+	}
+	RequestClose();
+}
 
 void URetrieveSettingsPanelWidget::HandleSettingChanged(ERetrieveSettingsCategory Category)
 {

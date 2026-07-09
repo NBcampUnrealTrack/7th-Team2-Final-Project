@@ -409,7 +409,7 @@ void ARetrieveAlsCharacter::HandleLandingImpact(float FallSpeed)
 		const float Health = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetHealthAttribute()) : 0.f;
 		if (Health > 0.f && LandingFailMontage)
 		{
-			PlayAnimMontage(LandingFailMontage);
+			PlayAnimMontage(LandingFailMontage, LandingFailMontagePlayRate);
 		}
 	}
 
