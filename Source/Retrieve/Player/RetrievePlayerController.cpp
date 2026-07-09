@@ -45,6 +45,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "View/MVVMView.h"
 #include "UObject/UnrealType.h"
@@ -408,6 +409,16 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 void ARetrievePlayerController::RequestNewGame()
 {
 	Server_RequestNewGame();
+}
+
+void ARetrievePlayerController::RequestUnstuck()
+{
+	Server_RequestUnstuck();
+}
+
+void ARetrievePlayerController::RequestQuitGame()
+{
+	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, /*bIgnorePlatformRestrictions*/ false);
 }
 
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
@@ -1272,6 +1283,14 @@ void ARetrievePlayerController::Server_RequestQuitToMenu_Implementation()
 	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
 	{
 		GM->HandleQuitToMenu(this);
+	}
+}
+
+void ARetrievePlayerController::Server_RequestUnstuck_Implementation()
+{
+	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GM->HandleUnstuck(this);
 	}
 }
 

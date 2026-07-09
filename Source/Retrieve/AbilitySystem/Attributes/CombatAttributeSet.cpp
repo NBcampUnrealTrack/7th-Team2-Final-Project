@@ -438,8 +438,12 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		}
 	}
 
-	EventData.EventTag = AttackerEventTag;
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
+	// 자기 피격(낙하 등, instigator=self)은 '적중'이 아니므로 공격자 이벤트 미발행 -> 원소 게이지 오충전 버그 방지
+	if (TargetActor != AttackerActor)
+	{
+		EventData.EventTag = AttackerEventTag;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
+	}
 
 	// Burn 등 지속 데미지(DoT)는 데미지만 적용하고 피격 반응(움찔/몽타주)은 발생시키지 않는다.
 	// 틱마다 Hit 이벤트가 나가면 매 틱 Flinch가 걸리므로 타겟 Hit 이벤트만 건너뛴다.

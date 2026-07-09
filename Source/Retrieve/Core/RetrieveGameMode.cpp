@@ -3,6 +3,7 @@
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "RetrieveGameState.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
+#include "Components/Combat/RetrieveHealthComponent.h"
 #include "Data/RetrieveOpeningSequenceAsset.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
@@ -132,10 +133,27 @@ void ARetrieveGameMode::HandleQuitToMenu(APlayerController* Requestor)
 	{
 		return;
 	}
-	
+
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		GS->TransitionTo(ERetrieveSessionState::MainMenu);
+	}
+}
+
+void ARetrieveGameMode::HandleUnstuck(APlayerController* Requestor)
+{
+	if (!IsRequestorHost(Requestor))
+	{
+		return;
+	}
+	
+	APawn* Pawn = Requestor ? Requestor->GetPawn() : nullptr;
+	if (ARetrieveAlsCombatCharacter* CombatPawn = Cast<ARetrieveAlsCombatCharacter>(Pawn))
+	{
+		if (URetrieveHealthComponent* Health = CombatPawn->GetHealthComponent())
+		{
+			Health->KillOwner();
+		}
 	}
 }
 

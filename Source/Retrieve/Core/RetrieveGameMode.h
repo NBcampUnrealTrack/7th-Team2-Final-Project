@@ -25,6 +25,7 @@ public:
 	void HandleNewGame(APlayerController* Requestor);
 	void HandleRetry(APlayerController* Requestor);
 	void HandleQuitToMenu(APlayerController* Requestor);
+	void HandleUnstuck(APlayerController* Requestor);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

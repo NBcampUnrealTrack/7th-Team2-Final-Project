@@ -160,6 +160,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
 	TObjectPtr<UAnimMontage> LandingFailMontage;
 
+	/** 낙법 실패 착지 몽타주 재생 배속. 1.0=원본, >1.0=짧게(빠르게) 재생. 착지 경직 길이 튜닝용. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall", meta = (ClampMin = "0.1"))
+	float LandingFailMontagePlayRate = 1.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<URetrievePawnExtensionComponent> PawnExtensionComponent;
 

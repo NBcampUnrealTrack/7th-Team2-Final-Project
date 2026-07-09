@@ -157,6 +157,9 @@ private:
 	UFUNCTION() void HandleReset();
 	UFUNCTION() void HandleClose();
 
+	/** 강제 리스폰(언스턱): PC->RequestUnstuck 호출 후 패널을 닫는다. 인게임에서만 동작. */
+	UFUNCTION() void HandleRespawn();
+
 	/** 설정 변경(특히 접근성/고대비) 시 화면 스타일을 즉시 다시 적용한다. */
 	UFUNCTION() void HandleSettingChanged(ERetrieveSettingsCategory Category);
 

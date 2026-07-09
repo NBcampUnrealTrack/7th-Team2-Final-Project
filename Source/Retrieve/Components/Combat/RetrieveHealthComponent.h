@@ -49,7 +49,8 @@ public:
 
 	void ResetHealth();
 	void Revive();
-	
+	void KillOwner();
+
 public:
 	UPROPERTY(BlueprintAssignable)
 	FOnHealthChanged OnHealthChanged;
