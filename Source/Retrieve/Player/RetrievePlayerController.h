@@ -256,7 +256,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Map")
 	void ToggleMinimapRotationMode();
 
-	/** 메인 메뉴/일시정지/화톳불 UI에서 설정 버튼에 직접 연결할 진입점. */
+	/** 메인 메뉴/시스템 메뉴/화톳불 UI에서 설정 버튼에 직접 연결할 진입점. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Settings")
 	void OpenSettingsPanel();
 
@@ -264,7 +264,11 @@ public:
 	UFUNCTION(BlueprintCallable, Exec, Category = "Retrieve|Menu")
 	void OpenLoadGamePanel();
 
-	/** 조작키 안내 화면을 연다(일시정지 메뉴의 "조작키 안내" 버튼에서 호출). 현재 패널은 교체된다. */
+	/** 순수 게임플레이 중 ESC로 여는 시스템 메뉴. SystemMenuClass가 비어 있으면 무시된다. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
+	void OpenSystemMenu();
+
+	/** 조작키 안내 화면을 연다(시스템 메뉴의 "조작키 안내" 버튼에서 호출). 현재 패널은 교체된다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void OpenControlsGuide();
 
@@ -304,9 +308,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
 	FKey SettingsPanelKey = EKeys::F10;
 
-	/** 메인메뉴 불러오기 화면(WBP_LoadGame). BP_RetrievePlayerController에서 할당. */
+	/** 메인메뉴 불러오기 화면(WBP_LoadGame). 기본값은 C++ 생성자에서 지정, BP에서 오버라이드 가능. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
 	TSoftClassPtr<URetrieveGamePanelWidget> LoadGamePanelClass;
+
+	/** 시스템 메뉴 위젯(WBP_SystemMenu). BP_RetrievePlayerController에서 할당. 비어 있으면 ESC 시스템 메뉴는 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|UI")
+	TSoftClassPtr<URetrieveGamePanelWidget> SystemMenuClass;
 
 	/** 조작키 안내 위젯(WBP_ControlsGuide). 기본값은 C++ 생성자에서 지정. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|UI")
