@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Core/RetrieveSessionState.h"
@@ -82,6 +82,12 @@ public:
 	void Server_RequestQuitToMenu();
 
 	UFUNCTION(Server, Reliable)
+	void Server_RequestContinueGame();
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestLoadGameSlot(int32 SlotIndex);
+
+	UFUNCTION(Server, Reliable)
 	void Server_RequestUnstuck();
 
 	/**
@@ -90,6 +96,20 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestNewGame();
+
+	/**
+	 * 메뉴 - 이어하기 진입점. 가장 최근 저장 슬롯을 서버가 판별해 로드합니다
+	 * (-> HandleContinueGame -> SaveSubsystem::LoadFromSlot -> MainMenu->InGame). W_MainMenu에서 호출.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestContinueGame();
+
+	/**
+	 * 메뉴 - 불러오기(슬롯 선택) 진입점. 지정 슬롯을 서버가 로드합니다
+	 * (-> HandleLoadGameSlot -> SaveSubsystem::LoadFromSlot -> MainMenu->InGame). WBP_LoadGame에서 호출.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void RequestLoadGameSlot(int32 SlotIndex);
 
 	/** 언스턱/강제 리스폰. 정규 사망 흐름(로딩 커버 포함)으로 마지막 체크포인트에 리스폰. 포즈 팝업에서 호출. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
@@ -240,6 +260,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Settings")
 	void OpenSettingsPanel();
 
+	/** 메인메뉴 "불러오기" 버튼에서 직접 연결할 진입점. 슬롯 선택형 불러오기 창(WBP_LoadGame)을 연다. */
+	UFUNCTION(BlueprintCallable, Exec, Category = "Retrieve|Menu")
+	void OpenLoadGamePanel();
+
 	/** 상점 패널을 열고 InitializeShopPanel을 자동으로 호출합니다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void OpenShopPanel(TSubclassOf<URetrieveGamePanelWidget> ShopPanelClass,
@@ -275,6 +299,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
 	FKey SettingsPanelKey = EKeys::F10;
+
+	/** 메인메뉴 불러오기 화면(WBP_LoadGame). BP_RetrievePlayerController에서 할당. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
+	TSoftClassPtr<URetrieveGamePanelWidget> LoadGamePanelClass;
 
 	/** 상점 패널 위젯 클래스. BP_RetrievePlayerController에서 WBP_ShopPanel 할당 */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Shop")
@@ -420,6 +448,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Shop|Camera")
 	bool bHidePlayerDuringShopCamera = true;
 
+	// ── 일반 대화(다이얼로그) NPC 포커스 카메라 오버라이드 ────────────────────
+	// Villager 등 상점이 아닌 NPC와의 대화에서 상점 카메라보다 더 확대하고,
+	// 화면 좌측에 더 가깝게(FrameRightOffset을 낮춰) 배치하기 위한 값.
+
+	/** 대화 포커스 카메라 거리(cm). 상점보다 가까이 당겨 확대감을 준다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
+	float DialogueCameraDistance = 220.0f;
+
+	/** 대화 포커스 카메라 시야각. 상점보다 낮춰 더 확대되게 한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera", meta = (ClampMin = "20.0", ClampMax = "90.0"))
+	float DialogueCameraFOV = 42.0f;
+
+	/** 대화 포커스 카메라의 좌우 프레이밍 오프셋. 상점보다 낮춰(또는 음수로) NPC를 화면 좌측에 가깝게 배치한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
+	float DialogueCameraFrameRightOffset = 20.0f;
+
 	/** 현재 상점 카메라(NPC 포커스)가 활성 상태인지 */
 	bool bShopCameraActive = false;
 
@@ -427,11 +471,31 @@ protected:
 	UPROPERTY()
 	TObjectPtr<ACameraActor> ShopFocusCameraActor;
 
-	/** TargetActor(상점 NPC 등)의 정면을 비추도록 카메라를 블렌드한다. */
-	void FocusCameraOnActor(AActor* TargetActor);
+	/** 카메라가 NPC를 포커스하는 동안 임시로 꺼둔(원래 켜져 있던) 상호작용 대상들. 복귀 시 다시 켠다. */
+	UPROPERTY()
+	TArray<TWeakObjectPtr<AActor>> HiddenInteractionActorsForCamera;
+
+	/** 위 목록이 이미 채워져 중복으로 다시 스캔/숨기지 않도록 하는 플래그. */
+	bool bInteractionTargetsHiddenForCamera = false;
+
+	/**
+	 * TargetActor(상점 NPC 등)의 정면을 비추도록 카메라를 블렌드한다.
+	 * 각 Override를 지정하지 않으면 대응하는 ShopCamera* 프로퍼티(상점 NPC 기준으로 보정된 값)를 사용한다.
+	 * 캐릭터 종류/상황마다 메시 정면-액터 Forward 관계나 원하는 프레이밍이 달라(예: Villager 대화는 더 확대)
+	 * 호출부에서 오버라이드할 수 있게 한다.
+	 */
+	void FocusCameraOnActor(AActor* TargetActor, TOptional<float> OrbitYawOverride = TOptional<float>(),
+		TOptional<float> DistanceOverride = TOptional<float>(), TOptional<float> FOVOverride = TOptional<float>(),
+		TOptional<float> FrameRightOffsetOverride = TOptional<float>());
 
 	/** 플레이어 폰으로 뷰 타깃을 복귀한다. */
 	void RestorePlayerCameraView();
+
+	/** 현재 켜져 있는 모든 상호작용 대상(InteractionTarget)을 임시로 끄고 목록에 기록한다(NPC 포커스 카메라 동안 다른 NPC의 프롬프트가 뜨지 않도록). */
+	void HideAllInteractionTargetsForCamera();
+
+	/** HideAllInteractionTargetsForCamera로 꺼둔 상호작용 대상들을 원래대로 복귀한다. */
+	void RestoreAllInteractionTargetsForCamera();
 
 #pragma endregion
 

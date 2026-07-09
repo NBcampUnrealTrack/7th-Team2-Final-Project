@@ -10,6 +10,7 @@
 #include "Player/RetrievePlayerController.h"
 #include "Player/RetrievePlayerState.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "Subsystems/QuestNotificationSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
 #include "UObject/UObjectGlobals.h"
@@ -103,6 +104,65 @@ void ARetrieveGameMode::HandleNewGame(APlayerController* Requestor)
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		GS->TransitionTo(ERetrieveSessionState::InGame);
+	}
+}
+
+void ARetrieveGameMode::HandleContinueGame(APlayerController* Requestor)
+{
+	if (!IsRequestorHost(Requestor))
+	{
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!SaveSubsystem)
+	{
+		return;
+	}
+
+	const int32 SlotIndex = SaveSubsystem->GetMostRecentSaveSlotIndex();
+	if (SlotIndex == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GameMode] HandleContinueGame: 저장된 슬롯 없음"));
+		return;
+	}
+
+	if (SaveSubsystem->LoadFromSlot(Requestor, SlotIndex))
+	{
+		if (ARetrieveGameState* GS = GetRetrieveGameState())
+		{
+			GS->TransitionTo(ERetrieveSessionState::InGame);
+		}
+	}
+}
+
+void ARetrieveGameMode::HandleLoadGameSlot(APlayerController* Requestor, int32 SlotIndex)
+{
+	if (!IsRequestorHost(Requestor))
+	{
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!SaveSubsystem)
+	{
+		return;
+	}
+
+	if (!SaveSubsystem->GetSaveGameForSlot(SlotIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GameMode] HandleLoadGameSlot: 슬롯 %d에 저장 데이터 없음"), SlotIndex);
+		return;
+	}
+
+	if (SaveSubsystem->LoadFromSlot(Requestor, SlotIndex))
+	{
+		if (ARetrieveGameState* GS = GetRetrieveGameState())
+		{
+			GS->TransitionTo(ERetrieveSessionState::InGame);
+		}
 	}
 }
 

@@ -4,6 +4,7 @@
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -420,12 +421,35 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 		LastAppliedSelectedSlotIndex != INDEX_NONE
 		&& SelectedSlotIndex != LastAppliedSelectedSlotIndex;
 
+	// 클릭 선택 글로우는 호버(흰색)와 구분되는 골드 틴트로 표시한다.
+	const FLinearColor SelectedGlowTint(1.0f, 0.72f, 0.30f, 1.0f);
+	const FLinearColor HoverGlowTint = FLinearColor::White; // 디자이너 기본값
+
 	for (int32 ChildIndex = 0; ChildIndex < EntryCount; ++ChildIndex)
 	{
 		UUserWidget* Entry = Cast<UUserWidget>(SaveSlots->GetChildAt(ChildIndex));
 		if (!Entry)
 		{
 			continue;
+		}
+
+		const bool bIsSelected = ResolveSlotIndex(Entry, ChildIndex) == SelectedSlotIndex;
+
+		// WBP의 SetSelected(false)가 클릭 선택된 엔트리의 글로우를 언호버 시 끄지 않도록 하는 플래그.
+		// SetSelected 호출보다 먼저 세팅해야 같은 프레임의 분기에서 올바르게 읽힌다.
+		if (FBoolProperty* ClickSelectedProperty =
+			FindFProperty<FBoolProperty>(Entry->GetClass(), TEXT("bIsClickSelected")))
+		{
+			ClickSelectedProperty->SetPropertyValue_InContainer(Entry, bIsSelected);
+		}
+
+		const FLinearColor GlowTint = bIsSelected ? SelectedGlowTint : HoverGlowTint;
+		for (const TCHAR* GlowWidgetName : { TEXT("Img_SelectedGlow"), TEXT("Img_EdgeGlow"), TEXT("IMG_Arrow_1") })
+		{
+			if (UImage* GlowImage = Cast<UImage>(Entry->GetWidgetFromName(GlowWidgetName)))
+			{
+				GlowImage->SetColorAndOpacity(GlowTint);
+			}
 		}
 
 		if (UFunction* SetSelectedFunction = Entry->FindFunction(TEXT("SetSelected")))
@@ -436,7 +460,7 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 			};
 
 			FSetSelectedParams Params;
-			Params.bIsSelected = ResolveSlotIndex(Entry, ChildIndex) == SelectedSlotIndex;
+			Params.bIsSelected = bIsSelected;
 			Entry->ProcessEvent(SetSelectedFunction, &Params);
 		}
 	}
@@ -555,6 +579,33 @@ void UBonfireMenuWidget::ApplyThumbnailToEntry(UUserWidget* EntryWidget, int32 F
 			BonfireNameText->SetText(FText::FromString(ResolveBonfireDisplayName(
 				GetWorld(), SaveGame->LoadSnapshot.BonfireId, SaveGame->BonfireDisplayName)));
 		}
+
+		// 저장 시점 추적 퀘스트 표시. WBP 에셋을 건드리지 않기 위해 썸네일과 같은 방식으로 동적 생성한다.
+		UTextBlock* QuestNameText = Cast<UTextBlock>(EntryWidget->GetWidgetFromName(TEXT("Text_QuestName")));
+		if (!QuestNameText)
+		{
+			if (UVerticalBox* InfoBox = Cast<UVerticalBox>(EntryWidget->GetWidgetFromName(TEXT("VerticalBox_Info"))))
+			{
+				QuestNameText = EntryWidget->WidgetTree->ConstructWidget<UTextBlock>(
+					UTextBlock::StaticClass(), TEXT("Text_QuestName"));
+				QuestNameText->SetColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.78f, 0.55f, 1.0f)));
+				QuestNameText->SetAutoWrapText(true);
+				if (UVerticalBoxSlot* QuestSlot = InfoBox->AddChildToVerticalBox(QuestNameText))
+				{
+					QuestSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 0.0f));
+				}
+			}
+		}
+		if (QuestNameText)
+		{
+			const FString QuestLine = SaveGame->TrackedQuestName.IsEmpty()
+				? FString()
+				: (SaveGame->TrackedQuestObjective.IsEmpty()
+					? SaveGame->TrackedQuestName
+					: FString::Printf(TEXT("%s - %s"), *SaveGame->TrackedQuestName, *SaveGame->TrackedQuestObjective));
+			QuestNameText->SetText(FText::FromString(QuestLine));
+			QuestNameText->SetVisibility(QuestLine.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		}
 	}
 
 	if (SaveGame && !SaveGame->ScreenshotPng.IsEmpty())
@@ -590,9 +641,9 @@ void UBonfireMenuWidget::ApplyThumbnailToEntry(UUserWidget* EntryWidget, int32 F
 			SlotIndex, SaveGame->ScreenshotPng.Num());
 	}
 
-	// 기존 저장 파일과 빈 슬롯은 어두운 플레이스홀더로 표시한다.
+	// 빈 슬롯은 플레이스홀더 없이 완전히 투명하게 둔다.
 	ThumbnailImage->SetBrushFromTexture(nullptr);
-	ThumbnailImage->SetColorAndOpacity(FLinearColor(0.025f, 0.08f, 0.12f, 0.92f));
+	ThumbnailImage->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 }
 
 void UBonfireMenuWidget::SetActiveTab(bool bSaveActive)

@@ -1,10 +1,13 @@
 #include "Components/World/RetrieveDialogueComponent.h"
 
 #include "Animation/AnimSequenceBase.h"
+#include "Animation/AnimInstance.h"
 #include "Character/LumenCharacter.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Core/RetrieveGameState.h"
+#include "NPC/NPCPatrolAIController.h"
 #include "Player/RetrievePlayerController.h"
 #include "TimerManager.h"
 #include "UObject/UnrealType.h"
@@ -118,6 +121,18 @@ void URetrieveDialogueComponent::HandleInteract(AActor* Instigator)
 void URetrieveDialogueComponent::PlayGreetingAnimation()
 {
 	if (!CachedMesh) return;
+
+	// 몽타주는 AnimBP Slot으로 재생되어 상태머신(Idle/Run 블렌드)을 그대로 두므로,
+	// 순찰 중 걸음이 끊기지 않는 Villager 같은 NPC에 우선 사용한다.
+	if (GreetingMontage)
+	{
+		if (UAnimInstance* AnimInstance = CachedMesh->GetAnimInstance())
+		{
+			AnimInstance->Montage_Play(GreetingMontage);
+			return;
+		}
+	}
+
 	UAnimSequenceBase* AnimToPlay = TalkingAnimation ? TalkingAnimation.Get() : IdleAnimation.Get();
 	if (AnimToPlay)
 	{
@@ -130,7 +145,21 @@ void URetrieveDialogueComponent::PlayTopicAnimation(FGameplayTag TopicId)
 	if (!CachedMesh) return;
 	for (const FNPCDialogueAnimEntry& Entry : TopicAnimations)
 	{
-		if (Entry.TopicId == TopicId && Entry.Animation)
+		if (Entry.TopicId != TopicId)
+		{
+			continue;
+		}
+
+		if (Entry.Montage)
+		{
+			if (UAnimInstance* AnimInstance = CachedMesh->GetAnimInstance())
+			{
+				AnimInstance->Montage_Play(Entry.Montage);
+			}
+			return;
+		}
+
+		if (Entry.Animation)
 		{
 			CachedMesh->PlayAnimation(Entry.Animation, false);
 			if (Entry.bAutoReturnToTalking)
@@ -145,8 +174,8 @@ void URetrieveDialogueComponent::PlayTopicAnimation(FGameplayTag TopicId)
 						false);
 				}
 			}
-			return;
 		}
+		return;
 	}
 }
 
@@ -160,6 +189,62 @@ void URetrieveDialogueComponent::ReturnToIdle()
 	{
 		CachedMesh->PlayAnimation(IdleAnimation, true);
 	}
+
+	// 순찰 중이던 NPC라면 대화 종료 후 순찰 재개
+	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (ANPCPatrolAIController* PatrolAIC = Cast<ANPCPatrolAIController>(OwnerPawn->GetController()))
+		{
+			PatrolAIC->Reactivate();
+		}
+	}
+}
+
+bool URetrieveDialogueComponent::TryGrantItemReward(AActor* Instigator)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	if (ItemRewardPool.Num() == 0 || ItemRewardChance <= 0.f)
+	{
+		return false;
+	}
+
+	if (FMath::FRand() > ItemRewardChance)
+	{
+		return false;
+	}
+
+	float TotalWeight = 0.f;
+	for (const FRetrieveDialogueItemReward& Reward : ItemRewardPool)
+	{
+		TotalWeight += FMath::Max(0.f, Reward.Weight);
+	}
+
+	if (TotalWeight <= 0.f)
+	{
+		return false;
+	}
+
+	UInventoryComponent* Inventory = Instigator ? Instigator->FindComponentByClass<UInventoryComponent>() : nullptr;
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	float Roll = FMath::FRandRange(0.f, TotalWeight);
+	for (const FRetrieveDialogueItemReward& Reward : ItemRewardPool)
+	{
+		Roll -= FMath::Max(0.f, Reward.Weight);
+		if (Roll <= 0.f)
+		{
+			return Inventory->AddItem(Reward.ItemId, Reward.ItemCategoryTag, Reward.Quantity);
+		}
+	}
+
+	return false;
 }
 
 void URetrieveDialogueComponent::OpenConversationFor(AActor* Instigator)
@@ -174,7 +259,16 @@ void URetrieveDialogueComponent::OpenConversationFor(AActor* Instigator)
 	{
 		return;
 	}
-	
+
+	// 순찰 중인 NPC라면 대화 중 걸어다니지 않도록 정지
+	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (ANPCPatrolAIController* PatrolAIC = Cast<ANPCPatrolAIController>(OwnerPawn->GetController()))
+		{
+			PatrolAIC->Deactivate();
+		}
+	}
+
 	// TODO: 일반화하기. Cast를 IRetrieverConversationSpeaker로 교체할것.
 	FText ResolvedSpeaker = SpeakerDisplayName;
 	if (const ALumenCharacter* Lumen = Cast<ALumenCharacter>(GetOwner()))

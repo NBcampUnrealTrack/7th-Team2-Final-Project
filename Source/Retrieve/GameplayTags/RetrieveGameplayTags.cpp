@@ -501,7 +501,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_FireSigil, "Topic.Lumen.FireSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WindSigil, "Topic.Lumen.WindSigil");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WaterSigil, "Topic.Lumen.WaterSigil");
-	
+	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Greeting, "Topic.NPC.VillagerTest.Greeting");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Weather, "Topic.NPC.VillagerTest.Weather");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Goodbye, "Topic.NPC.VillagerTest.Goodbye");
+
 	// ---- Bark
 	UE_DEFINE_GAMEPLAY_TAG(Bark_Category_Ambient, "Bark.Category.Ambient");
 	UE_DEFINE_GAMEPLAY_TAG(Bark_Category_Tutorial, "Bark.Category.Tutorial");

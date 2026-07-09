@@ -26,6 +26,13 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
+#include "Core/RetrieveGameState.h"
+#include "Quest/QuestBranchComponent.h"
+#include "UI/Quest/RetrieveQuestStatus.h"
+#include "Subsystems/QuestNotificationSubsystem.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "Messaging/RetrieveMessageTypes.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
 
 void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -107,6 +114,67 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		Pawn->FindComponentByClass<URetrieveHealthComponent>())
 	{
 		Snapshot.SavedHealth = HealthComp->GetHealth();
+	}
+
+	// 퀘스트 진행 상태 기록 (GameState 소속이라 Pawn과 별도로 조회)
+	SlotSave->TrackedQuestName = FString();
+	SlotSave->TrackedQuestObjective = FString();
+	if (UWorld* World = PC->GetWorld())
+	{
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+			{
+				Quest->MakeQuestSaveData(SlotSave->CompletedQuestSteps, SlotSave->CurrentTrackerStep,
+					SlotSave->QuestChoiceHistory);
+
+				// UI 표시용: HUD 트래커(QuestTrackerViewModel::Recompute)와 동일한 기본 선정 로직으로
+				// "지금 추적 중일 퀘스트"를 재계산한다. 어떤 퀘스트를 명시적으로 추적 중이었는지는
+				// HUD의 로컬 상태라 세이브에 없으므로, 저장 시점엔 항상 이 기본값 기준으로 계산한다.
+				if (const UDataTable* QuestTable = GS->GetQuestTable())
+				{
+					static const FString Ctx(TEXT("SaveSubsystem_ResolveTrackedQuest"));
+					TArray<FQuestDefinition*> Rows;
+					QuestTable->GetAllRows<FQuestDefinition>(Ctx, Rows);
+
+					Rows.Sort([](const FQuestDefinition& A, const FQuestDefinition& B)
+					{
+						return A.DisplayOrder < B.DisplayOrder;
+					});
+
+					const FQuestDefinition* DefaultMain = nullptr;
+					const FQuestDefinition* DefaultAny = nullptr;
+					for (const FQuestDefinition* Row : Rows)
+					{
+						if (!Row || !QuestStatus::IsQuestUnlocked(*Row, *Quest) || QuestStatus::AreAllObjectivesComplete(*Row, *Quest))
+						{
+							continue;
+						}
+						if (!DefaultAny)
+						{
+							DefaultAny = Row;
+						}
+						if (!DefaultMain && Row->Type == EQuestType::Main)
+						{
+							DefaultMain = Row;
+						}
+					}
+
+					if (const FQuestDefinition* Tracked = DefaultMain ? DefaultMain : DefaultAny)
+					{
+						SlotSave->TrackedQuestName = Tracked->DisplayName.ToString();
+						for (const FQuestObjective& Obj : Tracked->Objectives)
+						{
+							if (!Quest->IsStepCompleted(Obj.CompletionTag))
+							{
+								SlotSave->TrackedQuestObjective = Obj.ObjectiveText.ToString();
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// 저장 시각 기록
@@ -244,6 +312,30 @@ bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerCo
 		Inventory->ApplyInventorySaveData(CurrentSaveGame->InventoryProgress.Inventory);
 	}
 
+	// 퀘스트 진행 상태 복원. 개별 스텝 알림을 재생하지 않기 위해 알림 베이스라인을
+	// 복원된 상태로 재시딩한 뒤, UI(트래커/퀘스트로그)에는 갱신 신호만 한 번 보낸다.
+	if (UWorld* World = PC->GetWorld())
+	{
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+			{
+				Quest->ApplyQuestSaveData(CurrentSaveGame->CompletedQuestSteps,
+					CurrentSaveGame->CurrentTrackerStep, CurrentSaveGame->QuestChoiceHistory);
+			}
+		}
+
+		if (UQuestNotificationSubsystem* NotificationSubsystem = World->GetSubsystem<UQuestNotificationSubsystem>())
+		{
+			NotificationSubsystem->ResetBaseline();
+		}
+
+		FRetrieveQuestStepPayload RefreshMessage;
+		RefreshMessage.StepTag = CurrentSaveGame->CurrentTrackerStep;
+		UGameplayMessageSubsystem::Get(World).BroadcastMessage(
+			RetrieveGameplayTags::Channel_Quest_StepChanged, RefreshMessage);
+	}
+
 	const FRetrieveLoadSnapshotData& Snapshot = CurrentSaveGame->LoadSnapshot;
 	// 저장된 위치로 텔레포트 — 빠른 이동과 동일하게 로딩화면을 띄우고
 	// 목적지 스트리밍이 안정될 때까지 대기한 뒤 안착시킨다(직접 SetActorTransform 대신).
@@ -339,6 +431,26 @@ int32 URetrieveSaveSubsystem::GetNextFreeSlotIndex() const
 	}
 	// 모든 슬롯이 찼으면 가장 오래된 Slot0 덮어쓰기
 	return 0;
+}
+
+int32 URetrieveSaveSubsystem::GetMostRecentSaveSlotIndex() const
+{
+	int32 BestSlot = INDEX_NONE;
+	FString BestTimestamp;
+
+	for (int32 SlotIndex : GetExistingSaveSlotIndices())
+	{
+		if (URetrieveSaveGame* Save = GetSaveGameForSlot(SlotIndex))
+		{
+			// SaveTimestamp는 "%Y-%m-%d %H:%M" 형식이라 문자열 비교만으로 시간순 정렬이 성립한다.
+			if (BestSlot == INDEX_NONE || Save->SaveTimestamp > BestTimestamp)
+			{
+				BestSlot = SlotIndex;
+				BestTimestamp = Save->SaveTimestamp;
+			}
+		}
+	}
+	return BestSlot;
 }
 
 // ── 레거시 (하위 호환) ─────────────────────────────────────────────────────────

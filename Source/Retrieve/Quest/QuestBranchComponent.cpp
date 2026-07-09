@@ -228,3 +228,29 @@ void UQuestBranchComponent::ResetForTest()
 	CurrentTrackerStep = FGameplayTag();
 	ChoiceHistory.Empty();
 }
+
+void UQuestBranchComponent::MakeQuestSaveData(TArray<FGameplayTag>& OutCompletedSteps,
+                                              FGameplayTag& OutCurrentTrackerStep,
+                                              TMap<FName, FGameplayTag>& OutChoiceHistory) const
+{
+	OutCompletedSteps = CompletedSteps;
+	OutCurrentTrackerStep = CurrentTrackerStep;
+	OutChoiceHistory = ChoiceHistory;
+}
+
+bool UQuestBranchComponent::ApplyQuestSaveData(const TArray<FGameplayTag>& InCompletedSteps,
+                                               FGameplayTag InCurrentTrackerStep,
+                                               const TMap<FName, FGameplayTag>& InChoiceHistory)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	CompletedSteps = InCompletedSteps;
+	// OnRep_CompletedSteps가 복제 클라이언트에서 이 스텝들을 "새로 완료됨"으로 재알림하지 않도록 기준선을 맞춘다.
+	LastSeenCompletedSteps = CompletedSteps;
+	CurrentTrackerStep = InCurrentTrackerStep;
+	ChoiceHistory = InChoiceHistory;
+	return true;
+}

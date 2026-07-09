@@ -52,6 +52,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Meta")
 	FString BonfireDisplayName;
 
+	/** 저장 당시 추적 중이던 퀘스트 표시 이름 (없으면 빈 문자열) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Meta")
+	FString TrackedQuestName;
+
+	/** 저장 당시 추적 퀘스트의 첫 미완료 목표 문구 (없으면 빈 문자열) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Meta")
+	FString TrackedQuestObjective;
+
 	/**
 	 * 저장 시점의 게임 화면 썸네일(PNG).
 	 * UI가 포함되지 않는 별도 SceneCapture로 생성하므로 저장 메뉴는 화면에서 깜빡이지 않는다.
@@ -71,4 +79,18 @@ public:
 	/** 상점 판매 재구매 히스토리 (최대 20건 FIFO). 판매 시 기록, 재구매 시 제거 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	TArray<FShopRepurchaseRecord> ShopRepurchaseHistory;
+
+	// ── 퀘스트 진행 상태 (QuestBranchComponent 미러) ─────────────────────────────
+
+	/** 완료된 퀘스트 스텝 목록 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Quest")
+	TArray<FGameplayTag> CompletedQuestSteps;
+
+	/** 현재 추적 중인 퀘스트 스텝 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Quest")
+	FGameplayTag CurrentTrackerStep;
+
+	/** 대화 분기 선택 기록 (ChoiceId → 선택된 태그) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Quest")
+	TMap<FName, FGameplayTag> QuestChoiceHistory;
 };

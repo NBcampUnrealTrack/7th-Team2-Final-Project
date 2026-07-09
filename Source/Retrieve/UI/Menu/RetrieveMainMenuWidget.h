@@ -46,8 +46,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> QuitButton;
 
-	/** 디스크에 세이브가 존재하는지 여부 (URetrieveSaveSubsystem::HasSaveGame). WBP에서 계속하기 서브레이블 표시용 */
-	// TODO: 메뉴->불러오기->체크포인트 스폰 흐름이 아직 없음
+	/** 디스크에 세이브가 존재하는지 여부 (URetrieveSaveSubsystem::HasSaveGame). WBP에서 계속하기/불러오기 서브레이블 표시용 */
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Menu")
 	bool bSaveDataExists = false;
 
@@ -61,6 +60,15 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void HandleNewGameClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void HandleContinueClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void HandleLoadGameClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void HandleOptionsClicked();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void HandleQuitClicked();

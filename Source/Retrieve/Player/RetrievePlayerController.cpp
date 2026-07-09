@@ -1,4 +1,4 @@
-#include "Player/RetrievePlayerController.h"
+﻿#include "Player/RetrievePlayerController.h"
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
@@ -49,6 +49,7 @@
 #include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "View/MVVMView.h"
 #include "UObject/UnrealType.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -409,6 +410,16 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 void ARetrievePlayerController::RequestNewGame()
 {
 	Server_RequestNewGame();
+}
+
+void ARetrievePlayerController::RequestContinueGame()
+{
+	Server_RequestContinueGame();
+}
+
+void ARetrievePlayerController::RequestLoadGameSlot(int32 SlotIndex)
+{
+	Server_RequestLoadGameSlot(SlotIndex);
 }
 
 void ARetrievePlayerController::RequestUnstuck()
@@ -883,6 +894,24 @@ void ARetrievePlayerController::OpenSettingsPanel()
 	}
 }
 
+void ARetrievePlayerController::OpenLoadGamePanel()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = LoadGamePanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open load game: LoadGamePanelClass is empty."));
+		return;
+	}
+
+	FRetrievePanelShortcutConfig LoadGameShortcut;
+	LoadGameShortcut.Key = EKeys::Escape;
+	LoadGameShortcut.PanelClass = PanelClass;
+	if (CanOpenPanel(LoadGameShortcut))
+	{
+		OpenExclusivePanel(PanelClass, EKeys::Escape);
+	}
+}
+
 void ARetrievePlayerController::CloseActivePanel()
 {
 	if (!ActivePanel || bActivePanelClosing)
@@ -929,9 +958,26 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	ActivePanelClass = nullptr;
 	bActivePanelClosing = false;
 
-	FInputModeGameOnly InputMode;
-	SetInputMode(InputMode);
-	bShowMouseCursor = false;
+	// 패널을 닫은 뒤 입력 모드를 현재 세션 상태에 맞게 복원한다.
+	// 메인메뉴/결과 화면에서 설정 패널을 열었다 닫으면 UIOnly+커서를 유지해야 하고,
+	// 인게임에서만 GameOnly로 돌아간다. (예전엔 무조건 GameOnly로 강제해서, 메인메뉴에서
+	// 설정을 닫으면 커서와 UI 입력이 죽어 메뉴가 조작 불가 상태가 됐다.)
+	ERetrieveSessionState SessionState = ERetrieveSessionState::InGame;
+	if (const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+	{
+		SessionState = GS->GetSessionState();
+	}
+
+	if (SessionState == ERetrieveSessionState::MainMenu || SessionState == ERetrieveSessionState::Result)
+	{
+		UpdateInputMode(SessionState);
+	}
+	else
+	{
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		bShowMouseCursor = false;
+	}
 
 	// 상점 등으로 NPC를 비추던 카메라를 플레이어로 복귀한다.
 	if (bShopCameraActive)
@@ -947,7 +993,8 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 	}
 }
 
-void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor)
+void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor, TOptional<float> OrbitYawOverride,
+	TOptional<float> DistanceOverride, TOptional<float> FOVOverride, TOptional<float> FrameRightOffsetOverride)
 {
 	UWorld* World = GetWorld();
 	if (!TargetActor || !World)
@@ -957,29 +1004,23 @@ void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor)
 
 	// NPC 정면 기준으로 카메라 위치/회전 계산.
 	// 메시 정면이 액터 Forward와 반대인 경우가 많아 OrbitYaw로 배치 방향을 조정한다.
+	// (캐릭터 종류마다 이 관계가 달라 호출부에서 오버라이드할 수 있다 — 상점 NPC는 180이 정면이지만
+	// Villager는 메시 정면이 액터 Forward와 일치해 0이 정면이다.)
+	const float OrbitYaw = OrbitYawOverride.IsSet() ? OrbitYawOverride.GetValue() : ShopCameraOrbitYaw;
+	const float Distance = DistanceOverride.IsSet() ? DistanceOverride.GetValue() : ShopCameraDistance;
+	const float FOV = FOVOverride.IsSet() ? FOVOverride.GetValue() : ShopCameraFOV;
+	const float FrameRightOffset = FrameRightOffsetOverride.IsSet() ? FrameRightOffsetOverride.GetValue() : ShopCameraFrameRightOffset;
+
 	const FVector NpcLoc = TargetActor->GetActorLocation();
 	const FVector Forward = TargetActor->GetActorForwardVector();
-	const FVector Dir = Forward.RotateAngleAxis(ShopCameraOrbitYaw, FVector::UpVector);
-	const FVector CamLoc = NpcLoc + Dir * ShopCameraDistance
+	const FVector Dir = Forward.RotateAngleAxis(OrbitYaw, FVector::UpVector);
+	const FVector CamLoc = NpcLoc + Dir * Distance
 		+ FVector(0.0f, 0.0f, ShopCameraHeight);
 	const FVector BaseLookAt = NpcLoc + FVector(0.0f, 0.0f, ShopCameraLookAtHeight);
 	const FRotator BaseCamRot = (BaseLookAt - CamLoc).Rotation();
 	const FVector CameraRight = FRotationMatrix(BaseCamRot).GetUnitAxis(EAxis::Y);
-	const FVector LookAt = BaseLookAt - CameraRight * ShopCameraFrameRightOffset;
+	const FVector LookAt = BaseLookAt - CameraRight * FrameRightOffset;
 	const FRotator CamRot = (LookAt - CamLoc).Rotation();
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("[ShopCamera] PC=%s Target=%s Distance=%.1f Height=%.1f LookAtHeight=%.1f FOV=%.1f FrameRightOffset=%.1f OrbitYaw=%.1f CamLoc=%s LookAt=%s"),
-		*GetClass()->GetPathName(),
-		*GetNameSafe(TargetActor),
-		ShopCameraDistance,
-		ShopCameraHeight,
-		ShopCameraLookAtHeight,
-		ShopCameraFOV,
-		ShopCameraFrameRightOffset,
-		ShopCameraOrbitYaw,
-		*CamLoc.ToCompactString(),
-		*LookAt.ToCompactString());
 
 	// 카메라 액터를 한 번만 스폰해 재사용한다.
 	if (!ShopFocusCameraActor)
@@ -1002,12 +1043,15 @@ void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor)
 	}
 	if (UCameraComponent* CameraComponent = ShopFocusCameraActor->GetCameraComponent())
 	{
-		CameraComponent->SetFieldOfView(ShopCameraFOV);
+		CameraComponent->SetFieldOfView(FOV);
 	}
 
 	SetViewTargetWithBlend(ShopFocusCameraActor, ShopCameraBlendTime,
 		EViewTargetBlendFunction::VTBlend_Cubic, 0.0f, false);
 	bShopCameraActive = true;
+
+	// NPC 포커스 카메라가 활성화된 동안 다른 NPC들의 상호작용 프롬프트가 화면에 뜨지 않도록 숨긴다.
+	HideAllInteractionTargetsForCamera();
 
 	// 상점 카메라 동안 플레이어 폰을 일시적으로 숨긴다.
 	if (bHidePlayerDuringShopCamera)
@@ -1031,6 +1075,73 @@ void ARetrievePlayerController::RestorePlayerCameraView()
 		SetViewTargetWithBlend(PawnTarget, ShopCameraBlendTime,
 			EViewTargetBlendFunction::VTBlend_Cubic, 0.0f, false);
 	}
+
+	RestoreAllInteractionTargetsForCamera();
+}
+
+void ARetrievePlayerController::HideAllInteractionTargetsForCamera()
+{
+	if (bInteractionTargetsHiddenForCamera)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	HiddenInteractionActorsForCamera.Reset();
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor)
+		{
+			continue;
+		}
+
+		TArray<UActorComponent*> Comps;
+		Actor->GetComponents(Comps);
+		for (UActorComponent* Comp : Comps)
+		{
+			if (Comp && Comp->GetFName() == TEXT("InteractionTarget"))
+			{
+				if (FBoolProperty* EnabledProp =
+					FindFProperty<FBoolProperty>(Comp->GetClass(), TEXT("InteractionEnabled")))
+				{
+					if (EnabledProp->GetPropertyValue_InContainer(Comp))
+					{
+						EnabledProp->SetPropertyValue_InContainer(Comp, false);
+						HiddenInteractionActorsForCamera.Add(Actor);
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	bInteractionTargetsHiddenForCamera = true;
+}
+
+void ARetrievePlayerController::RestoreAllInteractionTargetsForCamera()
+{
+	if (!bInteractionTargetsHiddenForCamera)
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<AActor>& WeakActor : HiddenInteractionActorsForCamera)
+	{
+		if (AActor* Actor = WeakActor.Get())
+		{
+			SetInteractionTargetEnabled(Actor, true);
+		}
+	}
+
+	HiddenInteractionActorsForCamera.Reset();
+	bInteractionTargetsHiddenForCamera = false;
 }
 
 void ARetrievePlayerController::HandleActivePanelCloseFallback()
@@ -1269,6 +1380,22 @@ void ARetrievePlayerController::Server_RequestNewGame_Implementation()
 	}
 }
 
+void ARetrievePlayerController::Server_RequestContinueGame_Implementation()
+{
+	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GM->HandleContinueGame(this);
+	}
+}
+
+void ARetrievePlayerController::Server_RequestLoadGameSlot_Implementation(int32 SlotIndex)
+{
+	if (ARetrieveGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ARetrieveGameMode>() : nullptr)
+	{
+		GM->HandleLoadGameSlot(this, SlotIndex);
+	}
+}
+
 
 void ARetrievePlayerController::Server_RequestRetry_Implementation()
 {
@@ -1358,6 +1485,11 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 		}
 	}
 
+	// 상점 NPC와 동일하게, 대화 시작 시 카메라를 NPC 정면으로 블렌드한다.
+	// Villager 계열은 메시 정면이 액터 Forward와 일치하므로(상점 NPC와 반대) OrbitYaw=0을 명시하고,
+	// 상점보다 더 확대해 화면 좌측에 가깝게 배치하도록 Dialogue* 오버라이드를 넘긴다.
+	FocusCameraOnActor(NPC, 0.0f, DialogueCameraDistance, DialogueCameraFOV, DialogueCameraFrameRightOffset);
+
 	if (UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr)
 	{
 		if (UMVVMView* View = MVVM->GetViewFromUserWidget(ConversationInstance))
@@ -1422,9 +1554,22 @@ void ARetrievePlayerController::CloseConversation()
 					}
 				}
 			}
+
+			if (HasAuthority())
+			{
+				DC->TryGrantItemReward(GetPawn());
+			}
 		}
 	}
 	CurrentDialogueNPC = nullptr;
+
+	// 대화 시작 시 NPC로 블렌드했던 카메라를 플레이어로 복귀한다.
+	// (상점으로 전환되는 경우 OpenShopFromCurrentConversation이 곧바로 FocusCameraOnActor를
+	// 다시 호출해 상점 NPC로 재전환하므로 여기서 복귀해도 무방하다.)
+	if (bShopCameraActive)
+	{
+		RestorePlayerCameraView();
+	}
 
 	if (ConversationInstance)
 	{

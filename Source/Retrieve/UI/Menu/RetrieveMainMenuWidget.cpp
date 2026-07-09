@@ -16,12 +16,23 @@ void URetrieveMainMenuWidget::NativeConstruct()
 	{
 		NewGameButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleNewGameClicked);
 	}
+	if (ContinueButton)
+	{
+		ContinueButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleContinueClicked);
+	}
+	if (LoadGameButton)
+	{
+		LoadGameButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleLoadGameClicked);
+	}
+	if (OptionsButton)
+	{
+		OptionsButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleOptionsClicked);
+	}
 	if (QuitButton)
 	{
 		QuitButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleQuitClicked);
 	}
 
-	// TODO: 표시는 되지만 상호작용은 안됨
 	bSaveDataExists = false;
 	if (const UGameInstance* GI = GetGameInstance())
 	{
@@ -33,15 +44,11 @@ void URetrieveMainMenuWidget::NativeConstruct()
 
 	if (ContinueButton)
 	{
-		ContinueButton->SetIsEnabled(false);
+		ContinueButton->SetIsEnabled(bSaveDataExists);
 	}
 	if (LoadGameButton)
 	{
-		LoadGameButton->SetIsEnabled(false);
-	}
-	if (OptionsButton)
-	{
-		OptionsButton->SetIsEnabled(false);
+		LoadGameButton->SetIsEnabled(bSaveDataExists);
 	}
 	if (CreditsButton)
 	{
@@ -87,6 +94,42 @@ void URetrieveMainMenuWidget::HandleNewGameClicked()
 	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
 	{
 		PC->RequestNewGame();
+	}
+}
+
+void URetrieveMainMenuWidget::HandleContinueClicked()
+{
+	if (!bSaveDataExists)
+	{
+		return;
+	}
+
+	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
+	{
+		PC->RequestContinueGame();
+	}
+}
+
+void URetrieveMainMenuWidget::HandleLoadGameClicked()
+{
+	if (!bSaveDataExists)
+	{
+		return;
+	}
+
+	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
+	{
+		PC->OpenLoadGamePanel();
+	}
+}
+
+void URetrieveMainMenuWidget::HandleOptionsClicked()
+{
+	// 메인메뉴에서 설정창을 연다. 닫을 때의 입력모드 복원은 PlayerController가
+	// SessionState(MainMenu)에 맞춰 UIOnly+커서를 유지하도록 이미 처리한다.
+	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
+	{
+		PC->OpenSettingsPanel();
 	}
 }
 

@@ -27,6 +27,12 @@ public:
 	void HandleQuitToMenu(APlayerController* Requestor);
 	void HandleUnstuck(APlayerController* Requestor);
 
+	/** 서버 전용. 가장 최근 저장 슬롯을 로드하고 InGame으로 전환합니다(메인메뉴 "이어하기"). */
+	void HandleContinueGame(APlayerController* Requestor);
+
+	/** 서버 전용. 지정 슬롯을 로드하고 InGame으로 전환합니다(메인메뉴 "불러오기" 슬롯 선택). */
+	void HandleLoadGameSlot(APlayerController* Requestor, int32 SlotIndex);
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
