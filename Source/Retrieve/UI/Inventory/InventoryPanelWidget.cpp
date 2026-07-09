@@ -6,6 +6,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
@@ -155,9 +156,19 @@ void UInventoryPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 	RefreshInventoryGridLayout();
 	SuppressBlueprintManagedTooltip();
 
-	// 그리드 슬롯 툴팁(Compare/Detail)이 슬롯 밖으로 마우스가 나간 뒤에도 커서를 따라다니며
-	// 남아있는 경우에 대한 안전장치. 그리드 안의 슬롯이 하나도 호버되지 않으면 강제로 닫는다.
-	if (UniformGrid_ItemList && !IsWidgetOrDescendantHovered(UniformGrid_ItemList))
+	// 그리드 슬롯 + 장착 프리뷰 슬롯 버튼 툴팁이 영역 밖으로 나간 뒤에도 커서를 따라다니며
+	// 남아있는 경우에 대한 안전장치. 두 영역 어디에도 호버가 없을 때만 강제로 닫는다.
+	// (그리드만 검사하면 슬롯 버튼 호버 중 매 틱 CloseToolTip이 불려 슬롯 툴팁이 커서에 붙어버린다.)
+	const bool bGridHovered = UniformGrid_ItemList && IsWidgetOrDescendantHovered(UniformGrid_ItemList);
+	const bool bSlotButtonHovered =
+		IsWidgetOrDescendantHovered(Button_SlotHead)
+		|| IsWidgetOrDescendantHovered(Button_SlotWeapon)
+		|| IsWidgetOrDescendantHovered(Button_SlotChest)
+		|| IsWidgetOrDescendantHovered(Button_SlotHands_L)
+		|| IsWidgetOrDescendantHovered(Button_SlotHands_R)
+		|| IsWidgetOrDescendantHovered(Button_SlotLegs)
+		|| IsWidgetOrDescendantHovered(Button_SlotFeet);
+	if (!bGridHovered && !bSlotButtonHovered)
 	{
 		FSlateApplication::Get().CloseToolTip();
 	}
@@ -920,11 +931,11 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 		Lines.Add(GetItemDisplayName(FallbackStack));
 		if (ItemCategoryTag.IsValid())
 		{
-			Lines.Add(FString::Printf(TEXT("Type: %s"), *GetItemTypeName(FallbackStack)));
+			Lines.Add(FString::Printf(TEXT("타입: %s"), *GetItemTypeName(FallbackStack)));
 		}
 		if (Quantity > 0)
 		{
-			Lines.Add(FString::Printf(TEXT("Owned: %d"), Quantity));
+			Lines.Add(FString::Printf(TEXT("보유: %d"), Quantity));
 		}
 		return FText::FromString(FString::Join(Lines, TEXT("\n")));
 	}
@@ -937,20 +948,20 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 	{
 		const bool bSameWeaponTypeEquipped = InventoryComponent
 			&& InventoryComponent->GetEquippedWeaponId() == ItemId;
-		ContextLines.Add(bSameWeaponTypeEquipped ? TEXT("Equipped") : TEXT("In storage"));
+		ContextLines.Add(bSameWeaponTypeEquipped ? TEXT("장착 됨") : TEXT("보유 중"));
 	}
 	else if (IsConsumableCategory(ItemCategoryTag) && ConsumableItemTable)
 	{
 		if (const FRetrieveConsumableItemRow* Row = ConsumableItemTable->FindRow<FRetrieveConsumableItemRow>(
 			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
 		{
-			ContextLines.Add(FString::Printf(TEXT("Owned: %d / Max %d"), Quantity, Row->MaxStack));
+			ContextLines.Add(FString::Printf(TEXT("보유: %d / 최대: %d"), Quantity, Row->MaxStack));
 		}
 		const int32 SlotKey = InventoryComponent
 			? InventoryComponent->GetAssignedConsumableSlotKey(ItemId) : INDEX_NONE;
 		if (SlotKey != INDEX_NONE)
 		{
-			ContextLines.Add(FString::Printf(TEXT("Quick Slot: %d"), SlotKey));
+			ContextLines.Add(FString::Printf(TEXT("퀵슬롯: %d"), SlotKey));
 		}
 	}
 	else if (IsMaterialCategory(ItemCategoryTag))
@@ -960,7 +971,7 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 			if (const FRetrieveMaterialItemRow* Row = Table->FindRow<FRetrieveMaterialItemRow>(
 				ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
 			{
-				ContextLines.Add(FString::Printf(TEXT("Owned: %d / Max %d"), Quantity, Row->MaxStack));
+				ContextLines.Add(FString::Printf(TEXT("보유: %d / 최대: %d"), Quantity, Row->MaxStack));
 			}
 		}
 	}
@@ -984,7 +995,7 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 	}
 
 	return FText::FromString(BaseDesc.ToString()
-		+ TEXT("\n──────────────\n")
+		+ TEXT("\n---------------------------\n")
 		+ FString::Join(ContextLines, TEXT("\n")));
 }
 
@@ -998,7 +1009,7 @@ void UInventoryPanelWidget::RefreshWeaponComparisonText()
 	{
 		Text_FinalStatDisplay->SetText(GetFullStatDisplayText());
 	}
-	RefreshWeaponSkillIcons();
+	// RefreshWeaponSkillIcons();
 }
 
 void UInventoryPanelWidget::HandleInventoryChanged()
@@ -1572,6 +1583,13 @@ void UInventoryPanelWidget::UpdateEquipActionButtons()
 		Button_Unequip->SetVisibility(bShowUnequip ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 		Button_Unequip->SetIsEnabled(bCanUnequip);
 	}
+	if (Button_UseConsumable)
+	{
+		// 선택 아이템이 소모품일 때만 표시, 활성화는 보유 수량 등 실제 사용 가능 여부로 결정
+		const bool bShowUse = !SelectedItemId.IsNone() && IsConsumableCategory(SelectedItemCategoryTag);
+		Button_UseConsumable->SetVisibility(bShowUse ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		Button_UseConsumable->SetIsEnabled(CanUseSelectedConsumable());
+	}
 }
 
 bool UInventoryPanelWidget::ShouldShowEquipButton() const
@@ -1677,10 +1695,14 @@ void UInventoryPanelWidget::HandleQuickSlotWheelSlotClicked(int32 SlotKey)
 	PendingQuickSlotItemId = SelectedItemId;
 	PendingQuickSlotCategoryTag = SelectedItemCategoryTag;
 
-	// 휠이 뷰포트 위(z80)를 덮은 채로 두면 교체 다이얼로그 버튼 클릭을 가로채므로 먼저 닫는다
+	// 휠(z80)이 교체 창(패널 z50 안)을 덮으므로, 교체 창이 앞에 오도록 휠을 패널 아래(z49)로 내린다.
+	// 화면에는 계속 보이되 클릭은 통과하도록 HitTestInvisible로 두고, 취소/확정 시 원래대로(z80) 복원한다.
 	if (QuickSlotWheelInstance)
 	{
-		QuickSlotWheelInstance->SetVisibility(ESlateVisibility::Collapsed);
+		QuickSlotWheelInstance->SetVisibility(ESlateVisibility::HitTestInvisible);
+		QuickSlotWheelInstance->RemoveFromParent();
+		QuickSlotWheelInstance->AddToViewport(49);
+		bQuickSlotWheelLowered = true;
 	}
 
 	ShowQuickSlotReplaceConfirm(true);
@@ -1785,6 +1807,9 @@ void UInventoryPanelWidget::ConfirmQuickSlotReplace()
 	PendingQuickSlotCategoryTag = FGameplayTag();
 
 	ShowQuickSlotReplaceConfirm(false);
+
+	// 확정 후 휠은 닫히지만(위 SetVisibility(Collapsed)), 다음 사용을 위해 z-order는 원래대로 복원한다.
+	RestoreQuickSlotWheelZOrder();
 }
 
 void UInventoryPanelWidget::CancelQuickSlotReplace()
@@ -1794,6 +1819,30 @@ void UInventoryPanelWidget::CancelQuickSlotReplace()
 	PendingQuickSlotCategoryTag = FGameplayTag();
 
 	ShowQuickSlotReplaceConfirm(false);
+
+	// 교체를 취소하면 휠을 원래 z-order로 되돌리고 다시 조작 가능하게 한다.
+	const bool bWasLowered = bQuickSlotWheelLowered;
+	RestoreQuickSlotWheelZOrder();
+	if (bWasLowered && QuickSlotWheelInstance)
+	{
+		QuickSlotWheelInstance->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
+void UInventoryPanelWidget::RestoreQuickSlotWheelZOrder()
+{
+	if (!bQuickSlotWheelLowered)
+	{
+		return;
+	}
+	bQuickSlotWheelLowered = false;
+
+	if (QuickSlotWheelInstance)
+	{
+		// z49 → 원래 z80으로 재배치. 시각/조작 상태(Visible/Collapsed)는 호출부가 결정한다.
+		QuickSlotWheelInstance->RemoveFromParent();
+		QuickSlotWheelInstance->AddToViewport(80);
+	}
 }
 
 void UInventoryPanelWidget::ShowQuickSlotReplaceConfirm(bool bShow)
@@ -1809,6 +1858,11 @@ void UInventoryPanelWidget::ShowQuickSlotReplaceConfirm(bool bShow)
 		Text_QuickSlotReplaceMessage->SetText(
 			INVTEXT("이미 아이템이 등록된 슬롯입니다.\n교체하시겠습니까?"));
 	}
+
+	if (bShow)
+	{
+		PositionConfirmDialogNearCursor(Border_QuickSlotReplaceConfirm);
+	}
 }
 
 void UInventoryPanelWidget::ShowWeaponSwapConfirm(bool bShow)
@@ -1817,6 +1871,65 @@ void UInventoryPanelWidget::ShowWeaponSwapConfirm(bool bShow)
 	{
 		Border_WeaponSwapConfirm->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
+
+	// 확인 창이 뜨는 순간, 지금 호버 중인 그리드 슬롯의 툴팁을 제거해 즉시 닫고 Slate 재소환을 막는다.
+	// (매 틱 CloseToolTip을 부르면 호버된 위젯 툴팁이 재소환돼 커서를 따라다닌다.)
+	// 창이 닫히고 마우스가 슬롯을 벗어나면 ApplyInventorySlotTooltips가 툴팁을 복구한다.
+	if (bShow && UniformGrid_ItemList)
+	{
+		const int32 ChildCount = UniformGrid_ItemList->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			UWidget* Child = UniformGrid_ItemList->GetChildAt(ChildIndex);
+			if (Child && IsWidgetOrDescendantHovered(Child))
+			{
+				ClearWidgetTooltipRecursive(Child);
+			}
+		}
+		FSlateApplication::Get().CloseToolTip();
+		MarkInventoryTooltipsDirty();
+
+		PositionConfirmDialogNearCursor(Border_WeaponSwapConfirm);
+	}
+}
+
+void UInventoryPanelWidget::PositionConfirmDialogNearCursor(UWidget* DialogWidget) const
+{
+	if (!DialogWidget)
+	{
+		return;
+	}
+
+	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(DialogWidget->Slot);
+	UPanelWidget* ParentPanel = DialogWidget->GetParent();
+	if (!CanvasSlot || !ParentPanel)
+	{
+		return;
+	}
+
+	const FGeometry ParentGeometry = ParentPanel->GetCachedGeometry();
+	const FVector2D ParentSize = ParentGeometry.GetLocalSize();
+	if (ParentSize.IsNearlyZero())
+	{
+		return;
+	}
+
+	// 마우스 커서(절대) → 부모 Canvas 로컬 좌표, 커서 오른쪽 아래로 살짝 띄움
+	const FVector2D CursorAbs = FSlateApplication::Get().GetCursorPos();
+	FVector2D LocalPos = ParentGeometry.AbsoluteToLocal(CursorAbs) + FVector2D(12.0f, 12.0f);
+
+	// 다이얼로그가 부모 영역을 벗어나지 않도록 클램프
+	const FVector2D DialogSize = DialogWidget->GetCachedGeometry().GetLocalSize();
+	if (DialogSize.X > KINDA_SMALL_NUMBER)
+	{
+		LocalPos.X = FMath::Clamp(LocalPos.X, 0.0f, FMath::Max(0.0f, ParentSize.X - DialogSize.X));
+		LocalPos.Y = FMath::Clamp(LocalPos.Y, 0.0f, FMath::Max(0.0f, ParentSize.Y - DialogSize.Y));
+	}
+
+	// 계산 좌표를 Canvas 좌상단 기준으로 쓰도록 앵커/정렬을 좌상단으로 고정
+	CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+	CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+	CanvasSlot->SetPosition(LocalPos);
 }
 
 void UInventoryPanelWidget::UpdateQuickSlotPanel()
@@ -2211,7 +2324,7 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 	FString RarityText = !OverrideRarity.IsEmpty() ? OverrideRarity : TypeName;
 	FString MainStatText = !OverrideMainStat.IsEmpty()
 		? OverrideMainStat
-		: (Quantity > 0 ? FString::Printf(TEXT("%d Owned"), Quantity) : TypeName);
+		: (Quantity > 0 ? FString::Printf(TEXT("%d개 보유 중"), Quantity) : TypeName);
 	int32 BasePrice = OverrideBasePrice >= 0 ? OverrideBasePrice : 0;
 
 	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
@@ -2225,7 +2338,7 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
-				MainStatText = FString::Printf(TEXT("%.0f Attack"), Row->AttackPower);
+				MainStatText = FString::Printf(TEXT("%.0f 공격력"), Row->AttackPower);
 			}
 			if (OverrideBasePrice < 0)
 			{
@@ -2239,11 +2352,11 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 		{
 			if (OverrideRarity.IsEmpty())
 			{
-				RarityText = FString::Printf(TEXT("Armor %s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag));
+				RarityText = FString::Printf(TEXT("%s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag));
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
-				MainStatText = FString::Printf(TEXT("%.0f Defense"), Row->Defense);
+				MainStatText = FString::Printf(TEXT("%.0f 방어력"), Row->Defense);
 			}
 			if (OverrideBasePrice < 0)
 			{
@@ -2257,7 +2370,7 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 		{
 			if (OverrideRarity.IsEmpty())
 			{
-				RarityText = TEXT("Consumable");
+				RarityText = TEXT("소모품");
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
@@ -2279,11 +2392,11 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 			{
 				if (OverrideRarity.IsEmpty())
 				{
-					RarityText = TEXT("Material");
+					RarityText = TEXT("재료");
 				}
 				if (OverrideMainStat.IsEmpty())
 				{
-					MainStatText = FString::Printf(TEXT("%d Owned"), Quantity);
+					MainStatText = FString::Printf(TEXT("%d개 보유"), Quantity);
 				}
 				if (OverrideBasePrice < 0)
 				{
@@ -2337,7 +2450,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 	FString BadgeText;
 	if (IsWeaponCategory(Item.ItemCategoryTag) && IsWeaponItemEquipped(Item.ItemId, Item.SlotInstanceId))
 	{
-		BadgeText = TEXT("EQUIPPED");
+		BadgeText = TEXT("장착 중");
 	}
 	else if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable && InventoryComponent)
 	{
@@ -2345,7 +2458,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 		{
 			if (IsArmorItemEquipped(Item.ItemId, Item.SlotInstanceId))
 			{
-				BadgeText = TEXT("EQUIPPED");
+				BadgeText = TEXT("장착 중");
 			}
 		}
 	}
@@ -2428,13 +2541,13 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 	const FString TypeName = GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag);
 	const FString RarityText = GradeName.IsEmpty() ? TypeName : FString::Printf(TEXT("%s %s"), *GradeName, *TypeName);
 
-	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("COMPARE"));
+	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("장비 비교"));
 	SetTooltipText(TooltipWidget, TEXT("Text_ItemDetails"), DeltaInfo);
 	PopulateFantasyTooltipWidget(
 		TooltipWidget,
 		HoveredItem,
-		TEXT("COMPARE"),
-		FString::Printf(TEXT("%.0f Attack"), HoveredWeapon.AttackPower),
+		TEXT("장비 비교"),
+		FString::Printf(TEXT("%.0f 공격력"), HoveredWeapon.AttackPower),
 		RarityText,
 		HoveredWeapon.BasePrice);
 
@@ -2468,14 +2581,14 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 
 	const FString SlotName = GetGameplayTagLeaf(HoveredArmor.EquipmentSlotTag);
 
-	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("COMPARE"));
+	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("장비 비교"));
 	SetTooltipText(TooltipWidget, TEXT("Text_ItemDetails"), DeltaInfo);
 	PopulateFantasyTooltipWidget(
 		TooltipWidget,
 		HoveredItem,
-		TEXT("COMPARE"),
-		FString::Printf(TEXT("%.0f Defense"), HoveredArmor.Defense),
-		FString::Printf(TEXT("Armor %s"), *SlotName),
+		TEXT("장비 비교"),
+		FString::Printf(TEXT("%.0f 방어력"), HoveredArmor.Defense),
+		FString::Printf(TEXT("%s"), *SlotName),
 		HoveredArmor.BasePrice);
 
 	return TooltipWidget;
@@ -2626,11 +2739,11 @@ FString UInventoryPanelWidget::FormatWeaponTooltipBlock(
 	TArray<FString> Lines;
 	Lines.Add(Header + TEXT(":"));
 	Lines.Add(WeaponData.DisplayName.ToString());
-	Lines.Add(FString::Printf(TEXT("Grade: %s"), *GetGameplayTagLeaf(WeaponData.WeaponGradeTag)));
-	Lines.Add(FString::Printf(TEXT("Type: %s"), *GetGameplayTagLeaf(WeaponData.WeaponTypeTag)));
-	Lines.Add(FString::Printf(TEXT("Element: %s"), *GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
-	Lines.Add(FString::Printf(TEXT("Attack Power: %.0f"), WeaponData.AttackPower));
-	Lines.Add(FString::Printf(TEXT("Element Charge: x%.2f"), WeaponData.ElementChargeMultiplier));
+	Lines.Add(FString::Printf(TEXT("등급: %s"), *GetGameplayTagLeaf(WeaponData.WeaponGradeTag)));
+	Lines.Add(FString::Printf(TEXT("타입: %s"), *GetGameplayTagLeaf(WeaponData.WeaponTypeTag)));
+	Lines.Add(FString::Printf(TEXT("원소: %s"), *GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
+	Lines.Add(FString::Printf(TEXT("공격력: %.0f"), WeaponData.AttackPower));
+	Lines.Add(FString::Printf(TEXT("원소 충전: x%.2f"), WeaponData.ElementChargeMultiplier));
 
 	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
 	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
@@ -2647,19 +2760,19 @@ FString UInventoryPanelWidget::BuildWeaponSwapDeltaText(
 	const float AttackDelta = HoveredWeapon.AttackPower - CurrentWeapon.AttackPower;
 	if (!FMath::IsNearlyZero(AttackDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.0f Attack Power"), AttackDelta));
+		Lines.Add(FString::Printf(TEXT("%+.0f 공격력"), AttackDelta));
 	}
 
 	const float ElementChargeDelta = HoveredWeapon.ElementChargeMultiplier - CurrentWeapon.ElementChargeMultiplier;
 	if (!FMath::IsNearlyZero(ElementChargeDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.2f Element Charge"), ElementChargeDelta));
+		Lines.Add(FString::Printf(TEXT("%+.2f 원소 충전"), ElementChargeDelta));
 	}
 
 	if (HoveredWeapon.WeaponTypeTag != CurrentWeapon.WeaponTypeTag)
 	{
 		Lines.Add(FString::Printf(
-			TEXT("Type: %s -> %s"),
+			TEXT("타입: %s -> %s"),
 			*GetGameplayTagLeaf(CurrentWeapon.WeaponTypeTag),
 			*GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag)));
 	}
@@ -2667,14 +2780,14 @@ FString UInventoryPanelWidget::BuildWeaponSwapDeltaText(
 	if (HoveredWeapon.WeaponAffinityTag != CurrentWeapon.WeaponAffinityTag)
 	{
 		Lines.Add(FString::Printf(
-			TEXT("Element: %s -> %s"),
+			TEXT("원소: %s -> %s"),
 			*GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag),
 			*GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)));
 	}
 
 	if (Lines.IsEmpty())
 	{
-		Lines.Add(TEXT("No stat changes"));
+		Lines.Add(TEXT("스탯 변화 없음"));
 	}
 
 	return FString::Join(Lines, TEXT("\n"));
@@ -2687,8 +2800,8 @@ FString UInventoryPanelWidget::FormatArmorTooltipBlock(
 	TArray<FString> Lines;
 	Lines.Add(Header + TEXT(":"));
 	Lines.Add(ArmorData.DisplayName.ToString());
-	Lines.Add(FString::Printf(TEXT("Slot: %s"), *GetGameplayTagLeaf(ArmorData.EquipmentSlotTag)));
-	Lines.Add(FString::Printf(TEXT("Defense: %.0f"), ArmorData.Defense));
+	Lines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(ArmorData.EquipmentSlotTag)));
+	Lines.Add(FString::Printf(TEXT("방어력: %.0f"), ArmorData.Defense));
 
 	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
 	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
@@ -2705,12 +2818,12 @@ FString UInventoryPanelWidget::BuildArmorSwapDeltaText(
 	const float DefenseDelta = HoveredArmor.Defense - CurrentArmor.Defense;
 	if (!FMath::IsNearlyZero(DefenseDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.0f Defense"), DefenseDelta));
+		Lines.Add(FString::Printf(TEXT("%+.0f 방어력"), DefenseDelta));
 	}
 
 	if (Lines.IsEmpty())
 	{
-		Lines.Add(TEXT("No stat changes"));
+		Lines.Add(TEXT("스탯 변화 없음"));
 	}
 
 	return FString::Join(Lines, TEXT("\n"));
@@ -2775,7 +2888,7 @@ void UInventoryPanelWidget::PopulateWeaponSkillIcons(UHorizontalBox* SkillIconBo
 		}
 		else
 		{
-			SkillIcon->SetToolTipText(FText::FromString(TEXT("Empty Skill Slot")));
+			SkillIcon->SetToolTipText(FText::FromString(TEXT("빈 스킬 슬롯")));
 		}
 
 		SkillIconFrame->AddChild(SkillIcon);
@@ -2796,17 +2909,17 @@ FString UInventoryPanelWidget::BuildWeaponComparisonText() const
 
 	if (!bHasSelectedWeapon && !bHasCurrentWeapon)
 	{
-		return TEXT("Compare\nSelect a weapon.");
+		return TEXT("장비 비교\n무기를 선택하세요.");
 	}
 
 	if (!bHasSelectedWeapon)
 	{
-		return FString::Printf(TEXT("Current\n%s\n\nSelected\nNone"), *FormatWeaponSummary(CurrentWeaponData));
+		return FString::Printf(TEXT("현재 장착 중\n%s\n\nSelected\nNone"), *FormatWeaponSummary(CurrentWeaponData));
 	}
 
 	if (!bHasCurrentWeapon)
 	{
-		return FString::Printf(TEXT("Selected\n%s\n\nCurrent\nNone"), *FormatWeaponSummary(SelectedWeaponData));
+		return FString::Printf(TEXT("선택 됨\n%s\n\nCurrent\nNone"), *FormatWeaponSummary(SelectedWeaponData));
 	}
 
 	const float AttackDelta = SelectedWeaponData.AttackPower - CurrentWeaponData.AttackPower;
@@ -2817,9 +2930,9 @@ FString UInventoryPanelWidget::BuildWeaponComparisonText() const
 	return FString::Printf(
 		TEXT("Current -> Selected\n")
 		TEXT("%s -> %s\n")
-		TEXT("ATK %.0f -> %.0f (%s)\n")
-		TEXT("Type %s -> %s\n")
-		TEXT("Element %s -> %s"),
+		TEXT("공격력 %.0f -> %.0f (%s)\n")
+		TEXT("타입 %s -> %s\n")
+		TEXT("원소 충전 %s -> %s"),
 		*CurrentWeaponData.DisplayName.ToString(),
 		*SelectedWeaponData.DisplayName.ToString(),
 		CurrentWeaponData.AttackPower,
@@ -2834,7 +2947,7 @@ FString UInventoryPanelWidget::BuildWeaponComparisonText() const
 FString UInventoryPanelWidget::FormatWeaponSummary(const FRetrieveWeaponDataRow& WeaponData) const
 {
 	return FString::Printf(
-		TEXT("%s\nATK %.0f\nType %s\nElement %s"),
+		TEXT("%s\n공격력 %.0f\n타입 %s\n원소 충전 %s"),
 		*WeaponData.DisplayName.ToString(),
 		WeaponData.AttackPower,
 		*GetGameplayTagLeaf(WeaponData.WeaponTypeTag),
@@ -3347,7 +3460,7 @@ FText UInventoryPanelWidget::GetFinalStatDisplayText() const
 	if (const UWorld* World = GetWorld(); World || !World)
 	{
 		return FText::FromString(FString::Printf(
-		TEXT("Base ATK: %.0f\nWeapon ATK: +%.0f\nTotal ATK: %.0f\n기본 방어력: %.0f\n방어구 방어력: +%.0f\n최종 방어력: %.0f"),
+		TEXT("Base ATK: %.0f\nWeapon ATK: +%.0f\nTotal ATK: %.0f\n기본 방어력: %.0f\nArmor 방어력: +%.0f\n최종 방어력: %.0f"),
 		BaseATK, WeaponATK, TotalATK, BaseDEF, ArmorDEF, TotalDEF));
 	}
 
