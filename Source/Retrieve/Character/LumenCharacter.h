@@ -43,17 +43,9 @@ public:
 	FGameplayTag IntroSeenStep;
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
 	TObjectPtr<ULumenFollowComponent> FollowComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
 	TObjectPtr<URetrieveDialogueComponent> DialogueComponent;
-
-private:
-	// 임시 방어 코드: 원인 불명의 HiddenInGame=true를 주기적으로 되돌린다. 근본 원인 파악 후 제거할 것.
-	void ForceMeshVisible();
-	FTimerHandle ForceVisibleTimerHandle;
 };

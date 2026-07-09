@@ -5,7 +5,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "TimerManager.h"
 
 ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -45,50 +44,4 @@ ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : 
 
 	FollowComponent = CreateDefaultSubobject<ULumenFollowComponent>(TEXT("FollowComponent"));
 	DialogueComponent = CreateDefaultSubobject<URetrieveDialogueComponent>(TEXT("DialogueComponent"));
-}
-
-void ALumenCharacter::BeginPlay()
-{
-	Super::BeginPlay();
-
-	// 임시 방어 코드: 레벨 데이터/CDO 모두 HiddenInGame=false로 저장돼 있음을 직접 확인했음에도
-	// Shipping 런타임에서는 스폰 직후부터 true로 관측된다 (원인 불명 - C++/블루프린트/StateTree
-	// 바인딩을 모두 뒤졌으나 이 메시를 숨기는 코드를 찾지 못함). 근본 원인 파악 전까지, 매 0.2초마다
-	// 강제로 다시 보이게 만들어 증상을 우회한다.
-	GetWorldTimerManager().SetTimer(ForceVisibleTimerHandle, this, &ALumenCharacter::ForceMeshVisible, 0.2f, true);
-}
-
-void ALumenCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	// 월드/레벨 트랜지션 중 액터가 파괴돼도 반복 타이머가 남아있다가 무효해진 월드에서
-	// 발동해 크래시가 나는 것을 막기 위해 명시적으로 해제한다.
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(ForceVisibleTimerHandle);
-	}
-
-	Super::EndPlay(EndPlayReason);
-}
-
-void ALumenCharacter::ForceMeshVisible()
-{
-	if (!IsValid(this))
-	{
-		return;
-	}
-
-	if (USkeletalMeshComponent* LumenMesh = GetMesh())
-	{
-		// bHiddenInGame과 bVisible은 서로 다른 별개의 플래그이며 IsVisible()은 bVisible만 반영한다.
-		// bHiddenInGame만 강제로 되돌렸을 때 IsVisible()이 계속 0으로 나온 것으로 보아
-		// bVisible 쪽도 별도로 false가 되고 있을 가능성이 있어 둘 다 강제한다.
-		if (LumenMesh->bHiddenInGame)
-		{
-			LumenMesh->SetHiddenInGame(false);
-		}
-		if (!LumenMesh->IsVisible())
-		{
-			LumenMesh->SetVisibility(true, true);
-		}
-	}
 }
