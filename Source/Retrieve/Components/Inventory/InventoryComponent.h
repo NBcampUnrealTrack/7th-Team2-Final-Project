@@ -263,6 +263,11 @@ protected:
 	UPROPERTY()
 	TMap<int32, FRetrieveQuickSlotEntry> QuickSlots;
 
+	// 퀵슬롯 연타 시 서버 RPC(RequestEquipWeapon 등)가 중첩 발생해 UI 갱신이 씹히는 것을 막기 위한 입력 쿨다운
+	double LastQuickSlotActivateTime = -1.0;
+
+	static constexpr double QuickSlotActivateCooldownSeconds = 0.25;
+
 	// 전투 소모품 슬롯 4, 5번. TMap은 복제 불가라 필드로 직접 관리
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_ConsumableSlots, Category = "Retrieve|Inventory")
 	FName ConsumableSlot4ItemId = NAME_None;

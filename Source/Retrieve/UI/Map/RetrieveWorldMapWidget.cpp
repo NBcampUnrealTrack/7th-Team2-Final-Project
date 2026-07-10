@@ -1,5 +1,6 @@
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 #include "InputCoreTypes.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
@@ -315,39 +316,6 @@ int32 URetrieveWorldMapWidget::NativePaint(
 
 	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
 
-	// 디버그: 위젯 크기가 바뀔 때만 1회 로깅. 크기가 0/1 이하이면 아래에서 early-return → 맵 텍스처 통째로 스킵.
-	if (!DbgLastPaintWidgetSize.Equals(WidgetSize, 0.5f))
-	{
-		DbgLastPaintWidgetSize = WidgetSize;
-		if (WidgetSize.X <= 1.0f || WidgetSize.Y <= 1.0f)
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("[WorldMap] NativePaint — WidgetSize too small, map drawing skipped (%.1f, %.1f)"),
-				WidgetSize.X, WidgetSize.Y);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Log,
-				TEXT("[WorldMap] NativePaint enter — WidgetSize=(%.1f, %.1f)"),
-				WidgetSize.X, WidgetSize.Y);
-
-			// 디버그: MapViewport → 루트까지 부모 체인의 런타임 geometry/렌더 트랜스폼을 1회 덤프.
-			// 어느 위젯에서 크기가 절반으로 꺾이는지(레이아웃 vs 렌더스케일) 데이터로 특정한다.
-			for (UWidget* W = MapViewport; W; W = W->GetParent())
-			{
-				const FGeometry& G = W->GetCachedGeometry();
-				const FWidgetTransform RT = W->GetRenderTransform();
-				UE_LOG(LogTemp, Warning,
-					TEXT("[WorldMap][Chain] %s (%s) LocalSize=(%.1f, %.1f) AbsPos=(%.1f, %.1f) RTScale=(%.2f, %.2f) RTTrans=(%.1f, %.1f) Opacity=%.2f"),
-					*W->GetName(), *W->GetClass()->GetName(),
-					G.GetLocalSize().X, G.GetLocalSize().Y,
-					G.GetAbsolutePosition().X, G.GetAbsolutePosition().Y,
-					RT.Scale.X, RT.Scale.Y, RT.Translation.X, RT.Translation.Y,
-					W->GetRenderOpacity());
-			}
-		}
-	}
-
 	if (WidgetSize.X <= 1.0f || WidgetSize.Y <= 1.0f) { return CurrentLayer; }
 
 	FVector2D MapViewTopLeft;
@@ -560,7 +528,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 					IconHalfSize = IconRegistry->FindRow(Entry.IconType).IconSize * 0.5f;
 				}
 				const FSlateFontInfo IconFont =
-					FCoreStyle::GetDefaultFontStyle("Regular", IconLabelFontSize);
+					FCoreStyle::GetDefaultFontStyle("Regular", FMath::RoundToInt(IconLabelFontSize * URetrieveUISettingsLibrary::GetUIScale()));
 				DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
 				          Entry.MapLabel.ToString(),
 				          FVector2D(IconScreen.X, IconScreen.Y + IconHalfSize + 4.0f),
@@ -573,7 +541,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	if (MapSub && MapSub->HasValidBounds())
 	{
 		const TArray<FUserWaypoint>& Waypoints = MapSub->GetUserWaypoints();
-		const FSlateFontInfo WpFont = FCoreStyle::GetDefaultFontStyle("Bold", 10);
+		const FSlateFontInfo WpFont = FCoreStyle::GetDefaultFontStyle("Bold", FMath::RoundToInt(10 * URetrieveUISettingsLibrary::GetUIScale()));
 
 		for (const FUserWaypoint& WP : Waypoints)
 		{
@@ -662,7 +630,7 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			if (!LocationText.IsEmpty())
 			{
 				const FSlateFontInfo LabelFont =
-					FCoreStyle::GetDefaultFontStyle("Bold", PlayerLabelFontSize);
+					FCoreStyle::GetDefaultFontStyle("Bold", FMath::RoundToInt(PlayerLabelFontSize * URetrieveUISettingsLibrary::GetUIScale()));
 				DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
 				          LocationText.ToString(),
 				          FVector2D(PlayerScreen.X, PlayerScreen.Y - MarkerSz.Y * 0.5f - 6.0f),

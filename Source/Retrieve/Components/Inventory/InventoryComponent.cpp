@@ -816,6 +816,14 @@ bool UInventoryComponent::ActivateQuickSlotItem(int32 SlotKey)
 		return false;
 	}
 
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (LastQuickSlotActivateTime >= 0.0 && Now - LastQuickSlotActivateTime < QuickSlotActivateCooldownSeconds)
+	{
+		// 연타 입력으로 서버 RPC가 중첩 발생해 무기 교체/퀵슬롯 UI가 씹히는 현상 방지
+		return false;
+	}
+	LastQuickSlotActivateTime = Now;
+
 	if (Entry.ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
 	{
 		return RequestEquipWeapon(Entry.ItemId);
