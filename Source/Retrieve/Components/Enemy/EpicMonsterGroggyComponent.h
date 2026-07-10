@@ -40,6 +40,9 @@ public:
 
 	void ApplyGroggyState(float Duration);
 
+	/** 재조우(리스폰/재활성) 시 그로기 누적·타이머·쿨다운을 초기화한다. */
+	void ResetRespawnState();
+
 private:
 	void OnAbilitySystemInitialized();
 

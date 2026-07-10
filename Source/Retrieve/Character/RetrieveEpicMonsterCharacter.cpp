@@ -340,6 +340,17 @@ void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
 	}
 }
 
+void ARetrieveEpicMonsterCharacter::ResetRespawnState()
+{
+	Super::ResetRespawnState();
+
+	// 에픽 그로기(강공격 누적/타이머/쿨다운) 내부 상태 초기화
+	if (EpicGroggyComponent)
+	{
+		EpicGroggyComponent->ResetRespawnState();
+	}
+}
+
 void ARetrieveEpicMonsterCharacter::ConfigureEnemyMovement()
 {
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();

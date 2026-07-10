@@ -53,6 +53,9 @@ protected:
 	virtual void ConfigureEnemyMovement() override;
 	virtual void StopLocomotionMontages() override;
 
+	/** 공통 전투상태 리셋에 더해 에픽 그로기(강공격 누적/타이머/쿨다운)를 초기화한다. */
+	virtual void ResetRespawnState() override;
+
 	// ---- 이동/회전 설정 (밸런싱용) ----
 
 	/** 전진 로코모션(bOrientRotationToMovement) 사용 여부 */

@@ -166,6 +166,24 @@ void UEpicMonsterGroggyComponent::ApplyGroggyState(float Duration)
 	OnGroggyGaugeUpdated.Broadcast(1.f, true);
 }
 
+void UEpicMonsterGroggyComponent::ResetRespawnState()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(GroggyEndTimerHandle);
+	}
+
+	// State.Enemy.Groggy 루즈 태그는 상위(ResetRespawnState)에서 정리되므로, 여기선 내부 상태만 초기화
+	bGroggyActive = false;
+	HeavyAttackCount = 0;
+	GroggyCooldownExpiry = 0.f;
+
+	// 기존 그로기 Tick 중단
+	SetComponentTickEnabled(false);
+
+	OnGroggyGaugeUpdated.Broadcast(0.f, false);
+}
+
 void UEpicMonsterGroggyComponent::ClearGroggyState()
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();

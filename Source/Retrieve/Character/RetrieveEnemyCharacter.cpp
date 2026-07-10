@@ -8,6 +8,7 @@
 #include "Enemy/EnemyAIController.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Animation/AnimInstance.h"
 #include "NavigationSystem.h"
 #include "AIController.h"
 #include "GameFramework/Controller.h"
@@ -443,9 +444,75 @@ void ARetrieveEnemyCharacter::HandleDeathEnded(AActor* OwningActor)
 	}
 }
 
+void ARetrieveEnemyCharacter::ResetRespawnState()
+{
+	// 이전 교전 어그로 정보
+	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
+	AlertedTarget = nullptr;
+
+	// 진행 중 공격/시퀀스/히트박스/포커스 + 패턴 쿨다운
+	if (EnemyCombatComponent)
+	{
+		EnemyCombatComponent->StopCurrentPattern();
+		EnemyCombatComponent->ResetCooldowns();
+	}
+
+	// 카운터 취약창
+	if (PatternCounterComponent)
+	{
+		PatternCounterComponent->CloseCounterWindow();
+	}
+
+	// 포이즈·그로기 쿨다운 만회
+	if (EnemyPoiseComponent)
+	{
+		EnemyPoiseComponent->ResetRespawnState();
+	}
+
+	// 상태이상 GE + 경직/그로기 태그 정리
+	if (OwnedASC)
+	{
+		FGameplayTagContainer ResetTags;
+		ResetTags.AddTag(RetrieveGameplayTags::State_Status_Burn);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Status_Cold);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Status_ColdReaction);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Status_Vulnerable);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Enemy_Hit);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Enemy_Staggered);
+		ResetTags.AddTag(RetrieveGameplayTags::State_Enemy_Groggy);
+		OwnedASC->RemoveActiveEffectsWithGrantedTags(ResetTags);
+
+		// 루즈 태그로도 붙는 것들 정리
+		OwnedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Status_Vulnerable, 0);
+		OwnedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Enemy_Groggy, 0);
+		OwnedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Enemy_Staggered, 0);
+		OwnedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Enemy_Hit, 0);
+	}
+
+	// 공중 특수공격 페이즈
+	ResetAerialSpecialPhase();
+
+	// 남은 공격/피격 몽타주 종료 → AnimBP가 Idle로 복귀
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			AnimInstance->Montage_Stop(0.1f);
+		}
+	}
+}
+
 void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn)
 {
-	ResetAerialSpecialPhase();
+	// 재조우(리스폰/재활성)는 완전 초기화, 그 외엔 공중 페이즈만 초기화.
+	if (bIsRespawn)
+	{
+		ResetRespawnState();
+	}
+	else
+	{
+		ResetAerialSpecialPhase();
+	}
 
 	// HandleDeathStarted()에서 붙인 사망 태그를 여기서 반드시 제거한다.
 	// 안 지우면 몸은 리스폰돼도 GAS가 여전히 "사망" 상태로 보고 공격/이동 어빌리티가
@@ -634,6 +701,14 @@ bool ARetrieveEnemyCharacter::HasAerialPhase() const
 
 void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
+	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
+	AlertedTarget = nullptr;
+
+	if (MapIconComponent)
+	{
+		MapIconComponent->bShowOnMinimap = false;
+	}
+
 	ResetAerialSpecialPhase();
 	StopLocomotionMontages();
 
@@ -665,10 +740,11 @@ void ARetrieveEnemyCharacter::DeactivateEnemy()
 
 void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
 {
-	if (Payload.InstigatorEnemy == this || AlertedTarget)
+	if (IsHidden() || (HealthComponent && HealthComponent->IsDeadOrDying()) || Payload.InstigatorEnemy == this || AlertedTarget)
 	{
 		return;
 	}
+
 	if (FVector::Dist(GetActorLocation(), Payload.InstigatorLocation) > GroupAlertRadius)
 	{
 		return;
@@ -687,6 +763,11 @@ void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayer
 	const float Delay = FMath::FRandRange(0.f, EngageStaggerMaxDelay);
 	FTimerDelegate InDelegate = FTimerDelegate::CreateWeakLambda(this, [this, SpottedActor]()
 	{
+		if (IsHidden() || (HealthComponent && HealthComponent->IsDeadOrDying()))
+		{
+			return;
+		}
+	
 		if (!AlertedTarget && IsValid(SpottedActor))
 		{
 			AlertedTarget = SpottedActor;

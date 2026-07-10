@@ -50,6 +50,9 @@ protected:
 	virtual void InitializeComponents() override;
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
+	/** 공통 전투상태 리셋에 더해 보스 페이즈를 1페이즈로 되돌린다. */
+	virtual void ResetRespawnState() override;
+
 	const FBossStatsRow* GetBossStatsRow() const;
 
 protected:

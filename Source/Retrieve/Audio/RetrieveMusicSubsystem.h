@@ -14,6 +14,7 @@ class USoundBase;
 class ARetrieveMusicZoneVolume;
 struct FEnemyPlayerSpottedPayload;
 struct FRetrieveSessionStatePayload;
+struct FPlayerDiedPayload;
 
 /**
  * BGM 중앙 관리자. 두 개의 UAudioComponent 슬롯을 번갈아 크로스페이드한다.
@@ -56,7 +57,8 @@ public:
 
 private:
 	void HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
-
+	/** 플레이어 사망 시 교전 집합을 비우고 전투 BGM을 강제 해제 */
+	void HandlePlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Payload);
 	/** 세션 상태(메뉴/게임플레이/결과) 전환에 맞춰 BGM 컨텍스트를 바꾼다. */
 	void HandleSessionStateChanged(FGameplayTag Channel, const FRetrieveSessionStatePayload& Payload);
 
@@ -97,6 +99,7 @@ private:
 	TWeakObjectPtr<APawn> LocalPlayerPawn;
 	FGameplayMessageListenerHandle SpottedListenerHandle;
 	FGameplayMessageListenerHandle SessionListenerHandle;
+	FGameplayMessageListenerHandle PlayerDiedListenerHandle;
 
 	// 현재 세션 상태. 메뉴/로딩이면 게임플레이(존/전투) 판정을 건너뛴다.
 	ERetrieveSessionState CurrentSessionState = ERetrieveSessionState::Loading;

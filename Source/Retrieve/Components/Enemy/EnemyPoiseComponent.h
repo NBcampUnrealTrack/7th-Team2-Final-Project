@@ -21,6 +21,9 @@ public:
 
 	void InitializeFromMonsterData(const FMonsterDataRow& Row, bool bIgnorePendingPoiseDamage = false);
 
+	/** 재조우(리스폰/재활성) 시 포이즈·그로기 쿨다운을 초기화한다. */
+	void ResetRespawnState();
+
 private:
 	void OnAbilitySystemInitialized();
 	void HandleHitEvent(const FGameplayEventData* Payload);

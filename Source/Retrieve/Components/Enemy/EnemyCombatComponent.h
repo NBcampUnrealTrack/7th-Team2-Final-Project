@@ -45,6 +45,9 @@ public:
 	bool IsSpecialAttackEvaluationLocked() const;
 	bool IsSpecialAttackRetryCooldownReady() const;
 	void StartSpecialAttackRetryCooldown();
+
+	/** 재조우(리스폰/재활성) 시 모든 패턴 쿨다운을 초기화한다. */
+	void ResetCooldowns();
 	void SuppressSpecialAttackEvaluation(float Duration);
 	
 	void SetMovementLockedByAttack(bool bLocked);

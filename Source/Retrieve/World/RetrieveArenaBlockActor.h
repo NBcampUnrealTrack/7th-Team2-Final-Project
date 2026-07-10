@@ -85,6 +85,9 @@ private:
 	/** 메시지에 실려 온 액터/위치가 이 아레나의 보스인지 판별 */
 	bool IsArenaBoss(const AActor* Actor, const FVector& Location) const;
 
+	/** 캐시된 보스의 BossHPBarComponent를 표시/숨김 */
+	void SetBossHPBarVisible(bool bVisible);
+
 	/** 플레이어가 EntryTrigger 안으로 들어오면 결계를 잠근다 */
 	UFUNCTION()
 	void OnEntryTriggerBeginOverlap(
@@ -157,4 +160,6 @@ private:
 
 	/** 보스 처치 후 재진입 방지 */
 	bool bCleared = false;
+	/** 이 아레나의 보스 인스턴스 (PlayerSpotted 시 캐시 → HP바 Show/Hide 대상) */
+	TWeakObjectPtr<AActor> CachedBoss;
 };

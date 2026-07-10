@@ -162,6 +162,13 @@ void UEnemyPoiseComponent::ResetPoise() const
 	}
 }
 
+void UEnemyPoiseComponent::ResetRespawnState()
+{
+	NextGroggyAllowedTime = 0.f;
+	bIgnoreNextPoiseDamage = false;
+	ResetPoise();
+}
+
 void UEnemyPoiseComponent::TryTriggerGroggy(AActor* Instigator)
 {
 	UWorld* World = GetWorld();

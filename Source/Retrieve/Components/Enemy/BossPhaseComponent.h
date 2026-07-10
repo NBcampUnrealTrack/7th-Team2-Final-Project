@@ -38,6 +38,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Retrieve|Boss")
 	int32 GetCurrentPhase() const { return CurrentPhase; }
 
+	/** 재조우 시 보스를 1페이즈로 되돌린다 (CurrentPhase=1 + 1페이즈 패턴 슬롯 재적용). */
+	void ResetToPhase1();
+
 private:
 	UFUNCTION()
 	void OnHealthChanged(float NewHealth);
@@ -52,6 +55,8 @@ private:
 	TObjectPtr<UDataTable> MonsterDataTable;
 
 	FName  BossStatsRowName;
+	// 초기(1페이즈) DT_MonsterData 행 이름 — Initialize에서 캐시, ResetToPhase1에서 복구.
+	FName  Phase1DataRowName;
 	int32  CurrentPhase        = 1;
 	int32  MaxPhases           = 1;
 	float  Phase2HPThreshold   = 0.5f;
