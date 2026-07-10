@@ -21,6 +21,10 @@ public:
 	/** MoveSpeed Attribute의 기준값(cm/s). 이 값이 ALS DA 속도 그대로(=배율 1.0)에 대응합니다. */
 	static constexpr float ReferenceMoveSpeed = 600.f;
 
+	/** 방어력 비율 감쇄 상수(K). 받는 피해 = Damage * K/(K+Defense).
+	 *  Defense가 이 값과 같아지면 피해가 정확히 절반이 된다. */
+	static constexpr float DefenseConstant = 100.f;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
@@ -107,6 +111,8 @@ private:
 
 	// 방어 분기 단일 진입점
 	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);
+	// 방어력 비율 감쇄: 받는 피해 = Damage * DefenseConstant/(DefenseConstant + Defense), 최소 1 보장
+	float ApplyDefenseMitigation(float Damage) const;
 	// 데미지 적용 후 카메라/플로터/리액션 시스템에 알릴 이벤트 발행
 	void BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const;
 };

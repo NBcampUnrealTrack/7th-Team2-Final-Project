@@ -321,10 +321,19 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 		}
 
 		const float DamageAfterGuard = RawDamage * (1.0f - GetGuardDamageReduction());
-		return FMath::Max(1.0f, DamageAfterGuard - GetDefense());
+		return ApplyDefenseMitigation(DamageAfterGuard);
 	}
 	
-	return FMath::Max(1.0f, RawDamage - GetDefense());
+	return ApplyDefenseMitigation(RawDamage);
+}
+
+float UCombatAttributeSet::ApplyDefenseMitigation(float Damage) const
+{
+	// 비율형 방어: 받는 피해 = Damage * K/(K + Defense). Defense가 클수록 0에 수렴한다(감소율 = Defense/(K+Defense)).
+	// Defense는 ClampAttribute에서 항상 >= 0으로 유지되고 K(DefenseConstant)는 양수라 분모는 항상 양수 → 0 나눗셈 없음.
+	const float DefenseValue = FMath::Max(0.f, GetDefense());
+	const float Mitigated = Damage * (DefenseConstant / (DefenseConstant + DefenseValue));
+	return FMath::Max(1.0f, Mitigated);
 }
 
 void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const
