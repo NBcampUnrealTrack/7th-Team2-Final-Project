@@ -6,6 +6,7 @@
 #include "Perception/AISenseConfig_Sight.h"
 #include "GenericTeamAgentInterface.h"
 #include "Character/RetrieveEnemyCharacter.h"
+#include "Character/LumenCharacter.h"
 #include "StateTree.h"
 
 namespace
@@ -71,6 +72,13 @@ void AEnemyAIController::ConfigureStateTree(UStateTree* InStateTree)
 
 ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Other) const
 {
+	// 루멘은 플레이어의 동반 NPC로, 몬스터의 인식·공격 대상에서 무조건 제외한다.
+	// (LumenAIController가 세팅한 Team ID가 Enemy와 다른 값이라 기본 solver로는 Hostile 판정되므로 여기서 명시적 차단)
+	if (Cast<const ALumenCharacter>(&Other))
+	{
+		return ETeamAttitude::Neutral;
+	}
+
 	ETeamAttitude::Type Result = ETeamAttitude::Neutral;
 
 	if (const APawn* OtherPawn = Cast<APawn>(&Other))
