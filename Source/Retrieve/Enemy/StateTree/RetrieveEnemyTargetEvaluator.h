@@ -8,6 +8,7 @@
 class AAIController;
 class APawn;
 class UEnemyCombatComponent;
+class UEnemySuspicionIndicatorComponent;
 
 USTRUCT(BlueprintType)
 struct FRetrieveEnemyTargetEvalInstanceData
@@ -86,13 +87,29 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	FVector ChaseLocation = FVector::ZeroVector;
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
-	bool bHasToken = false; 
+	bool bHasToken = false;
+
+	// 경계(Suspicious) 게이지, 0~1 정규화. UI에서 그대로 구독 가능.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
+	float SuspicionGauge = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bSuspicionGaugeFull = false;
+
+	bool bWasSuspicionGaugeFull = false;
+
+	float SuspicionIncreaseRate = 0.f;
+	float SuspicionDecreaseRate = 0.f;
+	float ForceCombatRange = 0.f;   
 	
 	float AccumulatedTime = 0.f;
 	float TimeSinceLastSeen = 0.f;
 	
 	UPROPERTY()
 	TWeakObjectPtr<UEnemyCombatComponent> CachedCombatComponent = nullptr;
+
+	UPROPERTY()
+	TWeakObjectPtr<UEnemySuspicionIndicatorComponent> CachedSuspicionIndicator = nullptr;
 };
 
 USTRUCT(BlueprintType, meta = (DisplayName = "Enemy Target Evaluator", Category = "Retrieve|AI"))

@@ -18,6 +18,7 @@
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Components/Enemy/EnemyPoiseComponent.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
+#include "Components/Enemy/EnemySuspicionIndicatorComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
@@ -45,6 +46,10 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	NormalHealthBarComponent = CreateDefaultSubobject<UNormalMonsterHealthBarComponent>(TEXT("NormalHealthBarComponent"));
 	NormalHealthBarComponent->SetupAttachment(GetRootComponent());
 	NormalHealthBarComponent->SetRelativeLocation(FVector(0.f, 0.f, 120.f));
+
+	SuspicionIndicatorComponent = CreateDefaultSubobject<UEnemySuspicionIndicatorComponent>(TEXT("SuspicionIndicatorComponent"));
+	SuspicionIndicatorComponent->SetupAttachment(GetRootComponent());
+	SuspicionIndicatorComponent->SetRelativeLocation(FVector(0.f, 0.f, 160.f));
 	HitReactionComponent = CreateDefaultSubobject<UHitReactionComponent>(TEXT("HitReactionComponent"));
 	OverlayStackComponent = CreateDefaultSubobject<URetrieveOverlayStackComponent>(TEXT("OverlayStackComponent"));
 	
@@ -74,7 +79,7 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	MoveComp->bUseControllerDesiredRotation = false;
 	MoveComp->bOrientRotationToMovement = true;
-	MoveComp->RotationRate = FRotator(0.f, 360.f, 0.f);
+	MoveComp->RotationRate = FRotator(0.f, 180.f, 0.f);
 	
 	// Avoidance
 	MoveComp->bUseRVOAvoidance = true;

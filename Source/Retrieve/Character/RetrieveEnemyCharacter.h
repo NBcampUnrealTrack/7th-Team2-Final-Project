@@ -21,13 +21,14 @@ class URetrieveHitReactionProfile;
 class UAnimMontage;
 class URetrieveMapIconComponent;
 class URetrieveOverlayStackComponent;
+class UEnemySuspicionIndicatorComponent;
 
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDataRow;
 struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathEnded, AActor*, DeadCharacter);
-	
+
 UCLASS()
 class RETRIEVE_API ARetrieveEnemyCharacter : public ARetrieveCombatCharacter, public IGenericTeamAgentInterface
 {
@@ -179,6 +180,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UNormalMonsterHealthBarComponent> NormalHealthBarComponent;
 
+	/** 경계(Suspicious) 게이지를 ?/! 아이콘으로 표시 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UEnemySuspicionIndicatorComponent> SuspicionIndicatorComponent;
+
 	/** 미니맵·나침반 마커 등록용. 기본 IconType=Enemy(보스는 생성자에서 Boss로 변경). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<URetrieveMapIconComponent> MapIconComponent;
@@ -231,6 +236,6 @@ private:
 
 	bool bAerialSpecialAttackReady = false;
 	float AerialSpecialPhaseStartTime = -1.f;
-	
+
 	FTimerHandle AlertStaggerTimer;
 };
