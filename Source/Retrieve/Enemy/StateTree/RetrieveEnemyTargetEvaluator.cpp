@@ -18,6 +18,7 @@
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Enemy/EncirclementSubsystem.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
+#include "Components/Enemy/EnemySuspicionIndicatorComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
@@ -103,6 +104,11 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 		{
 			InstanceData.CachedCombatComponent = CombatComp;
 		}
+
+		if (UEnemySuspicionIndicatorComponent* SuspicionIndicator = Pawn->GetComponentByClass<UEnemySuspicionIndicatorComponent>())
+		{
+			InstanceData.CachedSuspicionIndicator = SuspicionIndicator;
+		}
 	}
 	
 	InstanceData.bOutOfChaseRange = false;
@@ -121,6 +127,9 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 			InstanceData.OrbitOuterRadius = Row->OrbitOuterRadius;
 			InstanceData.ChaseRange = Row->ChaseRange;
 			InstanceData.RechasableRange = Row->RechasableRange;
+			InstanceData.SuspicionIncreaseRate = Row->SuspicionIncreaseRate;
+			InstanceData.SuspicionDecreaseRate = Row->SuspicionDecreaseRate;
+			InstanceData.ForceCombatRange = Row->ForceCombatRange;
 			InstanceData.bPatrolable = Row->bPatrolable;
 			InstanceData.PatrolRange = Row->PatrolRange;
 			InstanceData.MoveAcceptableRadius = Row->MoveAcceptableRadius;
@@ -342,7 +351,10 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	AActor* BestTarget = nullptr;
 	float BestScore = MAX_FLT;
 	float CurrentScore = MAX_FLT;
-	const bool bApplyFov = (InstanceData.TargetPlayer == nullptr);
+	// 경계(Suspicious) 단계를 쓰는 몬스터는 최초 발견에 정면 시야각을 요구하지 않는다 —
+	// 거리 내에 들어오면 우선 눈치채고, Suspicious 상태에서 서서히 돌아보게 한다.
+	const bool bUsesSuspiciousFlow = InstanceData.SuspicionIncreaseRate > 0.f;
+	const bool bApplyFov = (InstanceData.TargetPlayer == nullptr) && !bUsesSuspiciousFlow;
 
 	UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 
@@ -431,7 +443,9 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			}
 			InstanceData.TargetPlayer = ChosenTarget;
 
-			if (!bHadTarget)
+			// Suspicious 플로우를 쓰는 몬스터는 여기서 바로 전파하지 않는다 —
+			// 경계 게이지가 다 찼을 때(진짜 Combat 진입 시점)로 미룬다 (아래 참고).
+			if (!bHadTarget && !bUsesSuspiciousFlow)
 			{
 				FEnemyPlayerSpottedPayload Payload;
 				Payload.SpottedActor = ChosenTarget;
@@ -447,9 +461,9 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	}
 	else if (InstanceData.TargetPlayer)
 	{
-		InstanceData.TimeSinceLastSeen += TickInterval;
-		if (InstanceData.TimeSinceLastSeen >= TargetLostDelay)
+		if (bUsesSuspiciousFlow && !InstanceData.bSuspicionGaugeFull)
 		{
+			// 아직 Combat까지 확신하지 못한 Suspicious 단계에서는 유예 없이 즉시 놓친다.
 			if (EncirclementSubsystem)
 			{
 				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
@@ -458,6 +472,21 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			InstanceData.TargetPlayer = nullptr;
 			InstanceData.DistanceToTarget = 0.f;
 			InstanceData.bTargetLost = true;
+		}
+		else
+		{
+			InstanceData.TimeSinceLastSeen += TickInterval;
+			if (InstanceData.TimeSinceLastSeen >= TargetLostDelay)
+			{
+				if (EncirclementSubsystem)
+				{
+					EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+					EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
+				}
+				InstanceData.TargetPlayer = nullptr;
+				InstanceData.DistanceToTarget = 0.f;
+				InstanceData.bTargetLost = true;
+			}
 		}
 	}
 	else
@@ -470,9 +499,58 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				{
 					InstanceData.TargetPlayer = Alerted;
 					InstanceData.bTargetLost = false;
+					// 동료가 이미 확신하고 전파한 대상이므로 Suspicious를 건너뛰고 바로 Combat 자격을 준다.
+					InstanceData.SuspicionGauge = 1.f;
 				}
 				EnemyChar->AlertedTarget = nullptr;
 			}
+		}
+	}
+
+	if (bUsesSuspiciousFlow)
+	{
+		if (IsValid(InstanceData.TargetPlayer) && !InstanceData.bTargetLost)
+		{
+			// DistanceToTarget은 타겟을 처음 인식한 이번 틱엔 아직 갱신 전(이전 틱 값=0)이라
+			// 여기서 직접 신선한 거리를 계산한다 — 안 그러면 최초 인식 시 항상 0<=ForceCombatRange로 오판된다.
+			const float FreshDistanceToTarget = FVector2D::Distance(
+				FVector2D(Pawn->GetActorLocation()), FVector2D(InstanceData.TargetPlayer->GetActorLocation()));
+			const bool bForceCombat = InstanceData.ForceCombatRange > 0.f
+				&& FreshDistanceToTarget <= InstanceData.ForceCombatRange;
+			if (WasDamageSensed(PerceptionComp, InstanceData.TargetPlayer) || bForceCombat)
+			{
+				// 피격 감지 또는 강제 전투 진입 거리 이내 — 이미 확실히 들켰으므로 Suspicious를 건너뛴다.
+				InstanceData.SuspicionGauge = 1.f;
+			}
+			else
+			{
+				InstanceData.SuspicionGauge = FMath::Clamp(
+					InstanceData.SuspicionGauge + InstanceData.SuspicionIncreaseRate * TickInterval, 0.f, 1.f);
+			}
+		}
+		else if (InstanceData.SuspicionGauge > 0.f)
+		{
+			InstanceData.SuspicionGauge = FMath::Clamp(
+				InstanceData.SuspicionGauge - InstanceData.SuspicionDecreaseRate * TickInterval, 0.f, 1.f);
+		}
+
+		InstanceData.bSuspicionGaugeFull = InstanceData.SuspicionGauge >= 1.f;
+
+		if (InstanceData.bSuspicionGaugeFull && !InstanceData.bWasSuspicionGaugeFull && IsValid(InstanceData.TargetPlayer))
+		{
+			FEnemyPlayerSpottedPayload Payload;
+			Payload.SpottedActor = InstanceData.TargetPlayer;
+			Payload.SpottedLocation = InstanceData.TargetPlayer->GetActorLocation();
+			Payload.InstigatorLocation = Pawn->GetActorLocation();
+			Payload.InstigatorEnemy = Pawn;
+			UGameplayMessageSubsystem::Get(Pawn->GetWorld()).BroadcastMessage(
+				RetrieveGameplayTags::Channel_Enemy_PlayerSpotted, Payload);
+		}
+		InstanceData.bWasSuspicionGaugeFull = InstanceData.bSuspicionGaugeFull;
+
+		if (InstanceData.CachedSuspicionIndicator.IsValid())
+		{
+			InstanceData.CachedSuspicionIndicator->SetSuspicionGauge(InstanceData.SuspicionGauge);
 		}
 	}
 	

@@ -641,6 +641,18 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Monster|Perception")
 	float LoseSightRadius = 1800.f;
 
+	/** 경계(Suspicious) 게이지 초당 증가량. 0이면 경계 단계 없이 기존처럼 즉시 Combat 전환 */
+	UPROPERTY(EditAnywhere, Category = "Monster|Perception", meta=(ClampMin="0.0"))
+	float SuspicionIncreaseRate = 0.3f;
+
+	/** 경계(Suspicious) 게이지 초당 감소량 (경계 상태가 아닐 때 적용) */
+	UPROPERTY(EditAnywhere, Category = "Monster|Perception", meta=(ClampMin="0.0"))
+	float SuspicionDecreaseRate = 0.3f;
+	
+	/** 강제 전투 진입 거리 (0 = 비활성. SightRadius보다 작게 설정) */
+	UPROPERTY(EditAnywhere, Category = "Monster|Perception", meta=(ClampMin="0.0"))
+	float ForceCombatRange = 500.f;
+	
 	/** Return -> Chase 가능해지는 스폰 지점과의 거리 */
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	float RechasableRange = 100.f;

@@ -12,6 +12,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
+#include "Components/Enemy/EnemySuspicionIndicatorComponent.h"
 #include "Components/Enemy/EpicMonsterGroggyComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "UObject/UnrealType.h"
@@ -224,6 +225,13 @@ ARetrieveEpicMonsterCharacter::ARetrieveEpicMonsterCharacter(const FObjectInitia
 {
 	PrimaryActorTick.bCanEverTick = true;
 	EpicGroggyComponent = CreateDefaultSubobject<UEpicMonsterGroggyComponent>(TEXT("EpicMonsterGroggyComponent"));
+
+	// 부모(Normal) 기본 크기(64x64)의 1.5배로 확대. 위치도 더 높이 올려 큰 몸체를 벗어나게 한다.
+	if (SuspicionIndicatorComponent)
+	{
+		SuspicionIndicatorComponent->SetDrawSize(FVector2D(96.f, 96.f));
+		SuspicionIndicatorComponent->SetRelativeLocation(FVector(0.f, 0.f, 240.f));
+	}
 }
 
 void ARetrieveEpicMonsterCharacter::Tick(float DeltaSeconds)
