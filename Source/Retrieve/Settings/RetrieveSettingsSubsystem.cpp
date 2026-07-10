@@ -13,7 +13,7 @@
 #include "Engine/UserInterfaceSettings.h"
 #include "HAL/IConsoleManager.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Camera/PlayerCameraManager.h"
+#include "Camera/CameraComponent.h"
 #include "Misc/App.h"
 #include "Rendering/SlateRenderer.h"
 #include "Rendering/RenderingCommon.h"
@@ -397,12 +397,13 @@ void URetrieveSettingsSubsystem::ApplyCultureInternal(URetrieveGameUserSettings*
 
 void URetrieveSettingsSubsystem::ApplyFOVInternal(URetrieveGameUserSettings* S, APawn* Pawn)
 {
-	// 일반 플레이 카메라 FOV. Pawn(또는 그 컨트롤러)의 PlayerCameraManager에 적용한다.
-	// (SovereignCharacter의 ThirdPersonCamera 직접 적용은 카메라 담당 협의 후 작업 3에서 다룬다.)
-	APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : GetSubsystemPlayerController();
-	if (PC && PC->PlayerCameraManager)
+	// 일반 플레이 카메라 FOV. 폰의 카메라 컴포넌트에 직접 적용한다.
+	// PlayerCameraManager::SetFOV는 FOV를 잠가(LockedFOV) 시네캠/상점·연출 카메라 등 뷰타겟이 바뀌어도
+	// 그 화각까지 설정값으로 덮어쓰므로 쓰지 않는다. 폰 교체/리스폰 재적용은 AcknowledgePossession이 담당.
+	APawn* TargetPawn = Pawn ? Pawn : GetSubsystemPawn();
+	if (UCameraComponent* Camera = TargetPawn ? TargetPawn->FindComponentByClass<UCameraComponent>() : nullptr)
 	{
-		PC->PlayerCameraManager->SetFOV(FMath::Clamp(S->FieldOfView, 60.f, 120.f));
+		Camera->SetFieldOfView(FMath::Clamp(S->FieldOfView, 60.f, 120.f));
 	}
 }
 

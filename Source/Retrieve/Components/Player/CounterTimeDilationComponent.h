@@ -42,6 +42,9 @@ public:
 	// 카운터 어택 진입(Attack 입력) 시 호출. 플레이어 역보정 시작(WindowSlow 상태에서만 유효).
 	void EnterReboost();
 
+	// 시네마틱 등 외부 연출이 시작될 때 호출. 진행 중인 슬로우를 즉시 원복하고 Idle로 되돌린다.
+	void CancelImmediately();
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

@@ -44,8 +44,11 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Subsystems/RetrieveCinematicSubsystem.h"
 #include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "View/MVVMView.h"
 #include "UObject/UnrealType.h"
@@ -190,6 +193,18 @@ void ARetrievePlayerController::BeginPlay()
 	{
 		return;
 	}
+
+	// 시네마틱 상태 리스너를 항상 등록 (대화창 닫기 + HUD 일괄 숨김/복원).
+	// 기존에는 대화창을 처음 열 때만 등록되어, 대화 이전에 재생되는 오프닝 컷씬에서는 동작하지 않았다.
+	EnsureCinematicCloseListener();
+
+	// 창(앱) 전환 복귀 시 입력 상태 재정립 — look 입력이 죽는 입력 모드 잔류 방어
+	if (FSlateApplication::IsInitialized())
+	{
+		AppActivationHandle = FSlateApplication::Get().OnApplicationActivationStateChanged().AddUObject(
+			this, &ARetrievePlayerController::HandleAppActivationChanged);
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -253,6 +268,12 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 {
 	RemoveActivePanelImmediately();
 
+	if (AppActivationHandle.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().OnApplicationActivationStateChanged().Remove(AppActivationHandle);
+		AppActivationHandle.Reset();
+	}
+
 	if (SessionListener.IsValid())
 	{
 		if (UWorld* World = GetWorld())
@@ -269,6 +290,15 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(ShopCommandHandle);
 		}
 		ShopCommandHandle = FGameplayMessageListenerHandle();
+	}
+
+	if (CinematicCloseHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicCloseHandle);
+		}
+		CinematicCloseHandle = FGameplayMessageListenerHandle();
 	}
 
 	if (ActiveTopLevelWidget)
@@ -435,10 +465,16 @@ void ARetrievePlayerController::EnterModalMessageInput(UUserWidget* MessageWidge
 	}
 	SetInputMode(Mode);
 	bShowMouseCursor = false;
+
+	// 이 잠금이 활성인 동안엔 창 전환 복귀(HandleAppActivationChanged)가 GameOnly로 강제 복원해
+	// 위젯 포커스를 뺏어 Enter 해제를 못 하게 만드는 것을 막는 플래그. 잠금 자체는 위 UIOnly가 담당.
+	bModalMessageInputActive = true;
 }
 
 void ARetrievePlayerController::ExitModalMessageInput()
 {
+	bModalMessageInputActive = false;
+
 	// 로딩 커버가 떠 있으면 UIOnly가 유지됨
 	if (const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
 	{
@@ -464,6 +500,53 @@ void ARetrievePlayerController::RequestUnstuck()
 void ARetrievePlayerController::RequestQuitGame()
 {
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, /*bIgnorePlatformRestrictions*/ false);
+}
+
+void ARetrievePlayerController::HandleAppActivationChanged(bool bIsActive)
+{
+	if (!bIsActive || !IsLocalController())
+	{
+		return;
+	}
+
+	// UI 컨텍스트(대화/패널/퀵슬롯 휠/로딩 커버/시네마틱/비 InGame)가 활성이면 각자의 로직이
+	// 입력 모드를 관리하므로 개입하지 않는다. 순수 게임플레이 복귀에만 입력 상태를 재정립.
+	const UWorld* World = GetWorld();
+	const ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	const bool bPureGameplay = GS
+		&& GS->GetSessionState() == ERetrieveSessionState::InGame
+		&& !bLoadingCoverActive
+		&& !IsCinematicActive()
+		&& !ActivePanel
+		&& !bModalMessageInputActive
+		&& !(ConversationInstance && ConversationInstance->IsInViewport())
+		&& !(QuickSlotWheelInstance && QuickSlotWheelInstance->IsInViewport());
+
+	if (!bPureGameplay)
+	{
+		return;
+	}
+
+	// 창 전환 중 유실/잔류된 입력 상태 정리 후 게임 입력 모드 재적용
+	ResetIgnoreInputFlags();
+	FInputModeGameOnly Mode;
+	SetInputMode(Mode);
+	SetShowMouseCursor(false);
+}
+
+void ARetrievePlayerController::FlushPressedKeys()
+{
+	Super::FlushPressedKeys();
+
+	// 창 포커스 상실/입력 모드 전환으로 Sprint(Hold)의 Completed 이벤트가 유실되면
+	// State.Player.Sprinting 태그가 잔존해 입력 없이 계속 달리는 모션이 고착된다. 명시적으로 정리.
+	if (ARetrievePlayerState* RetrievePS = GetPlayerState<ARetrievePlayerState>())
+	{
+		if (URetrieveAbilitySystemComponent* RetrieveASC = RetrievePS->GetRetrieveAbilitySystemComponent())
+		{
+			RetrieveASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
+		}
+	}
 }
 
 void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
@@ -538,6 +621,12 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 			ActiveToastManager->AddToViewport(60);
 		}
 	}
+
+	// 시네마틱 재생 중에 위젯이 교체/생성된 경우(오프닝과 상태 전환 경합 등) 새 위젯도 숨김 대상에 포함
+	if (IsCinematicActive())
+	{
+		SetHUDHiddenForCinematic(true);
+	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
 }
 
@@ -553,12 +642,20 @@ bool ARetrievePlayerController::ShouldShowLoadingCover(ERetrieveSessionState Pre
 	{
 		return true;
 	}
-	// 새 게임/부팅 진입: dev 플래그로 생략 가능
+	// 새 게임/부팅 진입: dev 플래그로 생략 가능.
+	// (오프닝 컷씬이 장전돼 있어도 커버는 유지한다 — 메뉴에서 바로 첫 컷으로 점프하는 것보다
+	//  로딩을 거치는 쪽이 자연스럽다는 피드백. 인게임 중 재생되는 시네마틱은 세션 전환이 아니라
+	//  애초에 커버와 무관하게 바로 재생된다.)
 	return !bSkipEntryLoadingScreen;
 }
 
 void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 {
+	// 여기서부터는 세션 상태가 입력 모드를 결정하므로 모달 메시지 잠금은 더 이상 유효하지 않다.
+	// (메시지 위젯이 Exit 호출 없이 파괴되는 세션 전환 경로에서 플래그 잔류 방지.
+	//  모달이 계속 표시 중이면 위젯 쪽 재진입 시 EnterModalMessageInput가 다시 세팅한다.)
+	bModalMessageInputActive = false;
+
 	switch (NewState)
 	{
 	case ERetrieveSessionState::MainMenu:
@@ -603,6 +700,10 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 
 void ARetrievePlayerController::SetInputModeUIOnlyDuringConversation()
 {
+	// UIOnly 전환 전에 눌림 상태를 정리 — 달리면서 스토리 트리거/대화에 진입하면 이동·스프린트의
+	// 릴리즈 이벤트가 유실되어 대화 종료 후에도 계속 달리는 모션이 고착되는 것을 방지 (FlushPressedKeys 오버라이드 참고)
+	FlushPressedKeys();
+
 	FInputModeUIOnly Mode;
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(Mode);
@@ -627,14 +728,100 @@ void ARetrievePlayerController::EnsureCinematicCloseListener()
 			[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
 		(FGameplayTag /*Channel*/, const FRetrieveCinematicStatePayload& Message)
 			{
+				ARetrievePlayerController* PC = WeakThis.Get();
+				if (!PC)
+				{
+					return;
+				}
+
 				if (Message.bActive)
 				{
-					if (ARetrievePlayerController* PC = WeakThis.Get())
-					{
-						PC->CloseConversation();
-					}
+					PC->CloseConversation();
 				}
+				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원
+				PC->SetHUDHiddenForCinematic(Message.bActive);
 			});
+}
+
+bool ARetrievePlayerController::IsCinematicActive() const
+{
+	const UWorld* World = GetWorld();
+	const ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	return GS && GS->GetCinematicState().IsActive();
+}
+
+void ARetrievePlayerController::SetHUDHiddenForCinematic(bool bHideForCinematic)
+{
+	UE_LOG(LogTemp, Log, TEXT("[RetrieveCinematic] SetHUDHiddenForCinematic(%d): HUD=%s Toast=%s"),
+		bHideForCinematic ? 1 : 0,
+		ActiveTopLevelWidget ? *ActiveTopLevelWidget->GetName() : TEXT("null"),
+		ActiveToastManager ? *ActiveToastManager->GetName() : TEXT("null"));
+
+	if (bHideForCinematic)
+	{
+		// 재진입 허용: 시네마틱 중 새로 생성/표시된 위젯(HUD 교체, 토스트 등)을 추가로 숨길 수 있도록
+		// "이미 적용됨" 조기 반환을 두지 않는다. 이미 추적 중인 위젯은 아래 루프에서 중복 등록되지 않는다.
+		UWorld* World = GetWorld();
+		if (!World)
+		{
+			return;
+		}
+
+		// HUD 루트(WBP_HUD)뿐 아니라 퀵슬롯/토스트처럼 뷰포트에 직접 AddToViewport된 위젯이 여럿이므로
+		// 최상위 위젯 전체를 열거해 일괄 숨긴다. 시네마틱 오버레이는 이 호출 이후에 추가되지만 방어적으로 제외.
+		const URetrieveCinematicSubsystem* CinematicSubsystem = World->GetSubsystem<URetrieveCinematicSubsystem>();
+
+		TArray<UUserWidget*> TopLevelWidgets;
+		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World, TopLevelWidgets, UUserWidget::StaticClass(), /*TopLevelOnly=*/true);
+		for (UUserWidget* Widget : TopLevelWidgets)
+		{
+			if (!Widget || !Widget->IsInViewport())
+			{
+				continue;
+			}
+			// 로딩 커버는 자체 수명(페이드아웃)에 맡긴다. 포인터 비교만으로는 부족 —
+			// HideLoadingScreen이 페이드아웃을 시작하며 ActiveLoadingScreen을 즉시 비우는데, 같은 콜스택의
+			// RevealGate로 시네마틱이 시작되면 페이드아웃 중인 커버가 여기서 Collapse되고(틱 정지 = 페이드 정지,
+			// OnRemoved 미발화) 시네마틱 종료 복원 때 화면에 되살아나는 문제가 있었다. 클래스 기준으로 제외한다.
+			if (Widget == ActiveLoadingScreen || Widget->IsA<URetrieveLoadingScreenWidget>())
+			{
+				continue;
+			}
+			if (CinematicSubsystem && CinematicSubsystem->IsCinematicOverlayWidget(Widget))
+			{
+				continue;
+			}
+			const ESlateVisibility CurrentVisibility = Widget->GetVisibility();
+			if (CurrentVisibility == ESlateVisibility::Collapsed || CurrentVisibility == ESlateVisibility::Hidden)
+			{
+				continue; // 원래 숨어 있던 위젯은 복원 대상에서 제외 (원상태 유지)
+			}
+			const bool bAlreadyTracked = CinematicHiddenWidgets.ContainsByPredicate(
+				[Widget](const TPair<TWeakObjectPtr<UUserWidget>, ESlateVisibility>& Entry)
+				{
+					return Entry.Key.Get() == Widget;
+				});
+			if (bAlreadyTracked)
+			{
+				Widget->SetVisibility(ESlateVisibility::Collapsed); // 도중에 스스로 켜진 위젯은 재숨김만
+				continue;
+			}
+			CinematicHiddenWidgets.Emplace(Widget, CurrentVisibility);
+			Widget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	else
+	{
+		// 숨김을 적용했던 위젯에만 원래 가시성 복원. 도중 파괴된 위젯은 약참조가 걸러낸다.
+		for (const TPair<TWeakObjectPtr<UUserWidget>, ESlateVisibility>& Entry : CinematicHiddenWidgets)
+		{
+			if (UUserWidget* Widget = Entry.Key.Get())
+			{
+				Widget->SetVisibility(Entry.Value);
+			}
+		}
+		CinematicHiddenWidgets.Reset();
+	}
 }
 
 TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieveSessionState State) const
@@ -950,6 +1137,13 @@ void ARetrievePlayerController::OpenSystemMenu()
 {
 	// 이미 다른 패널이 열려 있으면(인벤/월드맵/설정 등) ESC는 그 패널을 닫는 용도이므로 무시.
 	if (ActivePanel)
+	{
+		return;
+	}
+
+	// 시네마틱 중 차단. 여기서 Retry/Unstuck/QuitToMenu가 실행되면 재생 중 세션 전환·강제 사망이 발동된다.
+	// (다른 패널과 달리 이 경로는 CanOpenPanel을 거치지 않는다.)
+	if (IsCinematicActive())
 	{
 		return;
 	}
@@ -1287,7 +1481,8 @@ bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
 
 void ARetrievePlayerController::OpenQuickSlotWheel()
 {
-	if (bQuickSlotWheelOpen || !QuickSlotWheelClass)
+	// 시네마틱 중 차단 — 휠은 InputKey 직행 경로라 DisableInput으로 막히지 않고, 열리면 아이템 사용까지 이어진다.
+	if (bQuickSlotWheelOpen || !QuickSlotWheelClass || IsCinematicActive())
 	{
 		return;
 	}
@@ -1339,8 +1534,16 @@ void ARetrievePlayerController::CloseQuickSlotWheelAndUse()
 
 	if (QuickSlotWheelInstance)
 	{
-		// 마우스 방향으로 하이라이트된 슬롯 사용 후 휠 닫기
-		QuickSlotWheelInstance->ActivateHighlightedSlotAndClose();
+		if (IsCinematicActive())
+		{
+			// 휠을 연 채로 시네마틱이 시작된 경우: 아이템 사용 없이 닫기만 한다
+			QuickSlotWheelInstance->CloseWheel();
+		}
+		else
+		{
+			// 마우스 방향으로 하이라이트된 슬롯 사용 후 휠 닫기
+			QuickSlotWheelInstance->ActivateHighlightedSlotAndClose();
+		}
 	}
 
 	// 게임 입력 모드로 복귀 + 커서 모양 복원
@@ -1655,15 +1858,10 @@ void ARetrievePlayerController::CloseConversation()
 		bShowMouseCursor = false;
 	}
 
-	if (CinematicCloseHandle.IsValid())
-	{
-		if (UWorld* World = GetWorld())
-		{
-			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicCloseHandle);
-		}
-		CinematicCloseHandle = FGameplayMessageListenerHandle();
-	}
-	
+	// 주의: CinematicCloseHandle은 여기서 해제하지 않는다. 리스너가 "대화창 열 때 등록"이던 시절의
+	// 해제 코드가 남아 있으면, 대화창 정리 한 번에 상시 리스너(BeginPlay 등록)가 죽어서
+	// 이후 시네마틱의 HUD 일괄 숨김/대화창 닫기가 통째로 동작하지 않는다. 해제는 EndPlay에서 수행한다.
+
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);

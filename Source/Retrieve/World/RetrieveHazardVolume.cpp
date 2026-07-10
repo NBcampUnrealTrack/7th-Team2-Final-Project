@@ -132,6 +132,14 @@ void ARetrieveHazardVolume::ApplyDamageTo(AActor* TargetActor)
 		return;
 	}
 
+	// 시네마틱 연출로 이동 중인 대상(State.Player.Cinematic)은 환경 데미지 제외 —
+	// 시퀀서 경로가 볼륨을 지나도 데미지/사망이 연출을 끊지 않는다. 주기 타이머는 계속 돌므로
+	// 종료 후에도 볼륨 안에 있으면 데미지가 재개된다.
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Cinematic))
+	{
+		return;
+	}
+
 	// 소스 없는 환경 데미지 — 대상 자기 ASC에 자가 적용(낙하 데미지와 동일 경로).
 	FGameplayEffectContextHandle Context = TargetASC->MakeEffectContext();
 	Context.AddInstigator(this, this);

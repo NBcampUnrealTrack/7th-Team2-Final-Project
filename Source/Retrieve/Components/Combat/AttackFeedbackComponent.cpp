@@ -5,6 +5,7 @@
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
+#include "Core/RetrieveGameState.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -189,6 +190,18 @@ void UAttackFeedbackComponent::PlayCameraShake(const FHitFeedback& Feedback) con
 	if (Settings && Settings->bReduceMotion)
 	{
 		return;
+	}
+
+	// 시네마틱 중 셰이크 억제 — 셰이크는 카메라 매니저 레벨이라 시네캠 뷰까지 흔든다
+	if (const UWorld* World = GetWorld())
+	{
+		if (const ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			if (GS->GetCinematicState().IsActive())
+			{
+				return;
+			}
+		}
 	}
 
 	if (Feedback.CameraShake.IsNull())

@@ -42,6 +42,14 @@ void UCounterTimeDilationComponent::EnterReboost()
 	}
 }
 
+void UCounterTimeDilationComponent::CancelImmediately()
+{
+	if (State != ECounterTimeDilationState::Idle)
+	{
+		SetState(ECounterTimeDilationState::Idle); // Idle 진입이 글로벌/플레이어 딜레이션을 1로 원복한다
+	}
+}
+
 void UCounterTimeDilationComponent::SetState(ECounterTimeDilationState NewState)
 {
 	State = NewState;
