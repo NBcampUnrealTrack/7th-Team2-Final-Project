@@ -6,6 +6,7 @@
 #include "RetrievePuzzleTableRow.generated.h"
 
 class URetrieveInteractionResultAsset;
+class URetrieveLootTableAsset;
 
 /**
  * DataTable 한 행 = 고정 퍼즐 하나.
@@ -33,7 +34,11 @@ struct FRetrievePuzzleTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle")
 	FRetrievePuzzleSolution Solution;
 
-	// 풀면 적용할 결과(보상). 기존 상호작용 Result 체계(픽업/루트/CustomEvent/Composite) 재사용.
+	// 풀면 적용할 결과(보상). 기존 상호작용 Result 체계(픽업/CustomEvent/Composite) 재사용.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle")
 	TArray<TObjectPtr<URetrieveInteractionResultAsset>> SolveResults;
+
+	// 풀면 굴려서 지급할 루트테이블(확률 드롭). DA_LootTable_*을 바로 넣음. SolveResults와 함께 적용됨.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Puzzle")
+	TArray<TObjectPtr<URetrieveLootTableAsset>> SolveLootTables;
 };

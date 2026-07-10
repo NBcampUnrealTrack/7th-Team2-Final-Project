@@ -3,8 +3,10 @@
 #include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/Inventory/InventoryComponent.h"
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Data/Interaction/RetrieveInteractionResultAsset.h"
+#include "Data/Interaction/RetrieveLootTableAsset.h"
 #include "Data/Puzzle/RetrievePuzzleTableRow.h"
 #include "Engine/DataTable.h"
 #include "Engine/World.h"
@@ -159,6 +161,39 @@ void ARetrievePuzzleActor::ApplySolveResults(AActor* InteractionInstigator)
 		if (Result)
 		{
 			Result->ApplyResult(this, InteractionInstigator, this);
+		}
+	}
+
+	// 루트테이블 보상: 굴려서 instigator 인벤토리에 지급(ResponseComponent의 DirectLootTable과 동일 방식).
+	if (Row->SolveLootTables.Num() > 0)
+	{
+		UInventoryComponent* Inventory =
+			InteractionInstigator ? InteractionInstigator->FindComponentByClass<UInventoryComponent>() : nullptr;
+		if (Inventory)
+		{
+			FRandomStream Stream;
+			Stream.GenerateNewSeed();
+			for (const TObjectPtr<URetrieveLootTableAsset>& Table : Row->SolveLootTables)
+			{
+				if (!Table)
+				{
+					continue;
+				}
+				const TArray<FRetrievePickupEntry> Drops = Table->RollLoot(Stream);
+				for (const FRetrievePickupEntry& Drop : Drops)
+				{
+					if (Drop.ItemId.IsNone())
+					{
+						continue;
+					}
+					Inventory->AddItem(Drop.ItemId, Drop.ItemCategoryTag, Drop.Quantity);
+				}
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Puzzle] %s: SolveLootTables 지정됐지만 instigator에 InventoryComponent 없음"), *GetName());
 		}
 	}
 }
