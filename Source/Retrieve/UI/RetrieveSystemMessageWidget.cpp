@@ -3,10 +3,12 @@
 #include "Components/TextBlock.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Player/RetrievePlayerController.h"
 
 void URetrieveSystemMessageWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	SetIsFocusable(true);
 	SetVisibility(ESlateVisibility::Collapsed);
 	if (HideAnim)
 	{
@@ -58,6 +60,30 @@ void URetrieveSystemMessageWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
+FReply URetrieveSystemMessageWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	// 해제 필수 메시지를 보여주는 동안에만 Enter를 소비해 다음으로 넘김.
+	if (bShowing && bHasCurrent && CurrentEntry.bRequiresDismiss)
+	{
+		if (InKeyEvent.GetKey() == EKeys::Enter)
+		{
+			HandleHoldExpired(); // 타이머가 만료됐을 때와 동일한 경로: 페이드 → PumpNext → 다음 항목
+			return FReply::Handled();
+		}
+	}
+	
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+void URetrieveSystemMessageWidget::NativeOnFocusLost(const FFocusEvent& InFocusEvent)
+{
+	Super::NativeOnFocusLost(InFocusEvent);
+	if (bShowing && bHasCurrent && CurrentEntry.bRequiresDismiss)
+	{
+		FocusSelfNextTick();
+	}
+}
+
 void URetrieveSystemMessageWidget::HandleQueued()
 {
 	PumpNext();
@@ -84,6 +110,7 @@ void URetrieveSystemMessageWidget::HandleCinematicChanged(FGameplayTag Channel,
 			bHasCurrent = false;
 		}
 		bShowing = false;
+		SetModalInputBlock(false);
 		SetVisibility(ESlateVisibility::Collapsed);
 	}
 	else
@@ -111,6 +138,7 @@ void URetrieveSystemMessageWidget::HandleRevealGate(FGameplayTag Channel, const 
 			bHasCurrent = false;
 		}
 		bShowing = false;
+		SetModalInputBlock(false);
 		SetVisibility(ESlateVisibility::Collapsed);
 	}
 	else
@@ -128,8 +156,10 @@ void URetrieveSystemMessageWidget::PumpNext()
 
 	USystemMessageSubsystem* SystemMessageSubsystem = Subsystem.Get();
 	FSystemMessageEntry NextEntry;
+	
 	if (!SystemMessageSubsystem || !SystemMessageSubsystem->DequeueNext(NextEntry))
 	{
+		SetModalInputBlock(false); // 큐가 비면 잡고 있던 입력 잠금 해제
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
@@ -144,15 +174,35 @@ void URetrieveSystemMessageWidget::PumpNext()
 		MessageText->SetText(CurrentEntry.Text);
 	}
 	SetRenderOpacity(1.f);
-	SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (ShowAnim)
 	{
 		PlayAnimation(ShowAnim);
 	}
-	if (UWorld* World = GetWorld())
+
+	if (CurrentEntry.bRequiresDismiss)
 	{
-		World->GetTimerManager().SetTimer(HoldTimer, this, &URetrieveSystemMessageWidget::HandleHoldExpired,
-		                                  FMath::Max(0.5f, CurrentEntry.Duration), false);
+		SetVisibility(ESlateVisibility::Visible); // 포커스/키 입력을 받으려면 Visible
+		SetModalInputBlock(true);
+		SetKeyboardFocus();
+		if (DismissPrompt)
+		{
+			DismissPrompt->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		// HoldTimer 시작 안 함, Enter까지 대기
+	}
+	else
+	{
+		SetVisibility(ESlateVisibility::HitTestInvisible);
+		SetModalInputBlock(false);
+		if (DismissPrompt)
+		{
+			DismissPrompt->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(HoldTimer, this, &URetrieveSystemMessageWidget::HandleHoldExpired,
+			                                  FMath::Max(0.5f, CurrentEntry.Duration), false);
+		}
 	}
 }
 
@@ -175,4 +225,45 @@ void URetrieveSystemMessageWidget::HandleHideFinished()
 	bShowing = false;
 	SetVisibility(ESlateVisibility::Collapsed);
 	PumpNext();
+}
+
+void URetrieveSystemMessageWidget::SetModalInputBlock(bool bEngage)
+{
+	if (bEngage == bModalInputActive)
+	{
+		return;
+	}
+	bModalInputActive = bEngage;
+
+	ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(GetOwningPlayer());
+	if (!PC)
+	{
+		return;
+	}
+	if (bEngage)
+	{
+		PC->EnterModalMessageInput(this);
+	}
+	else
+	{
+		PC->ExitModalMessageInput();
+	}
+}
+
+void URetrieveSystemMessageWidget::FocusSelfNextTick()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	TWeakObjectPtr<URetrieveSystemMessageWidget> WeakThis(this);
+	World->GetTimerManager().SetTimerForNextTick([WeakThis]()
+	{
+		URetrieveSystemMessageWidget* Self = WeakThis.Get();
+		if (Self && Self->bShowing && Self->bHasCurrent && Self->CurrentEntry.bRequiresDismiss)
+		{
+			Self->SetKeyboardFocus();
+		}
+	});
 }

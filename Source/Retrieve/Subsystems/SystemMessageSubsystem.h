@@ -7,6 +7,7 @@
 
 struct FSystemMessageRow;
 struct FRetrieveSystemMessagePayload;
+struct FRetrieveQuestStepPayload;
 
 /**
  * 큐에 쌓이는 대기 메시지 하나. 표시에 필요한 값(Text, Duration) + 표시 후 이력 기록에 쓸 행 이름(RowName)을 담습니다.
@@ -18,6 +19,8 @@ struct FSystemMessageEntry
 	float Duration = 4.f;
 	FName RowName = NAME_None;
 	bool bPlayOnce = false;
+	bool bRequiresDismiss = false;
+
 };
 
 /**
@@ -38,6 +41,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI|System")
 	void RequestMessageByKey(FGameplayTag KeyTag);
+	
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI|System")
+	void RequestMessagesByKey(FGameplayTag KeyTag);
 
 	bool HasPending() const { return Queue.Num() > 0; }
 	bool DequeueNext(FSystemMessageEntry& OutEntry);
@@ -52,6 +58,13 @@ public:
 protected:
 	/** 원시 경로: 채널 broadcast를 받아 텍스트만 큐잉(자격 검사, 1회 표시 없음). */
 	void HandleRawMessage(FGameplayTag Channel, const FRetrieveSystemMessagePayload& Message);
+
+	/** Push 경로: 스텝 완료(OnStepTag 매칭) 시 해당 배치를 딜레이 후 큐잉한다. (클라이언트 로컬) */
+	void HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Message);
+	/** KeyTag 배치(또는 KeyTag 없는 단일 행)를 Delay 뒤에 발동하도록 예약. Delay<=0이면 즉시. */
+	void ScheduleStepMessage(FGameplayTag KeyTag, FName RowName, float Delay);
+	/** 예약된 발동 시점 실행: KeyTag가 있으면 RequestMessagesByKey, 없으면 RequestMessageById. */
+	void FireStepMessage(FGameplayTag KeyTag, FName RowName);
 
 	/** 원시 경로 적재(행 이름 없음). */
 	void EnqueueRaw(const FText& Text, float Duration);
@@ -74,8 +87,11 @@ private:
 	TMap<FName, double> LastShownTime;
 
 	FGameplayMessageListenerHandle SystemMessageHandle;
+	FGameplayMessageListenerHandle StepChangedHandle;
 	FSimpleMulticastDelegate OnQueuedDelegate;
 
+	TArray<FTimerHandle> StepMessageTimers;
+
 	/** 큐 상한. 넘치면 가장 오래된 대기 항목부터 버립니다. */
-	int32 MaxQueued = 5;
+	int32 MaxQueued = 10;
 };

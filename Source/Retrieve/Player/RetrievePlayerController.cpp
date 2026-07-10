@@ -425,6 +425,27 @@ void ARetrievePlayerController::RequestNewGame()
 	Server_RequestNewGame();
 }
 
+void ARetrievePlayerController::EnterModalMessageInput(UUserWidget* MessageWidget)
+{
+	FInputModeUIOnly Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	if (MessageWidget)
+	{
+		Mode.SetWidgetToFocus(MessageWidget->TakeWidget());
+	}
+	SetInputMode(Mode);
+	bShowMouseCursor = false;
+}
+
+void ARetrievePlayerController::ExitModalMessageInput()
+{
+	// 로딩 커버가 떠 있으면 UIOnly가 유지됨
+	if (const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+	{
+		UpdateInputMode(GS->GetSessionState());
+	}
+}
+
 void ARetrievePlayerController::RequestContinueGame()
 {
 	Server_RequestContinueGame();
@@ -1601,18 +1622,6 @@ void ARetrievePlayerController::CloseConversation()
 		if (URetrieveDialogueComponent* DC = CurrentDialogueNPC->FindComponentByClass<URetrieveDialogueComponent>())
 		{
 			DC->ReturnToIdle();
-
-			// TODO: Stage 1 한정 로직. 추후 삭제 및 수정할것.
-			if (HasAuthority() && DC->CompleteStepOnConversationEnd.IsValid())
-			{
-				if (ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
-				{
-					if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
-					{
-						Quest->CompleteStep(DC->CompleteStepOnConversationEnd);
-					}
-				}
-			}
 
 			if (HasAuthority())
 			{

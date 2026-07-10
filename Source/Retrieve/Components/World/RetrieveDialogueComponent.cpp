@@ -2,7 +2,6 @@
 
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimInstance.h"
-#include "Character/LumenCharacter.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/World/RetrieveInteractionResponseComponent.h"
@@ -259,7 +258,6 @@ void URetrieveDialogueComponent::OpenConversationFor(AActor* Instigator)
 	{
 		return;
 	}
-
 	// 순찰 중인 NPC라면 대화 중 걸어다니지 않도록 정지
 	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
 	{
@@ -269,15 +267,7 @@ void URetrieveDialogueComponent::OpenConversationFor(AActor* Instigator)
 		}
 	}
 
-	// TODO: 일반화하기. Cast를 IRetrieverConversationSpeaker로 교체할것.
-	FText ResolvedSpeaker = SpeakerDisplayName;
-	if (const ALumenCharacter* Lumen = Cast<ALumenCharacter>(GetOwner()))
-	{
-		if (!Lumen->DisplayName.IsEmpty())
-		{
-			ResolvedSpeaker = Lumen->DisplayName;
-		}
-	}
+	const FText ResolvedSpeaker = SpeakerDisplayName;
 
 	if (UWorld* World = GetWorld())
 	{

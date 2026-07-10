@@ -2053,6 +2053,20 @@ struct RETRIEVE_API FDialogueRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	int32 Priority = 0;
 	
+	// ---- Result
+	/** 마지막 라인 종료 시 완료되는 태그 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (Categories = "Quest.Step"))
+	FGameplayTag CompletesStep;
+	
+	// ---- Flow
+	/** 자격이 있는 경우, 이 행의 Lines가 기본 인사말을 대체합니다. 가장 높은 Priority가 우선됩니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	bool bReplacesGreeting = false;
+	
+	/** 후속 토픽(FollowUpRows)이 없으면 마지막 라인에서 Goodbye 선택 없이 자동으로 종료됩니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	bool bAutoEndAfterLines = false;
+	
 	// ---- Story 행 전용
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue|Story")
 	TArray<FName> FollowUpRows; // 이 대사 이후 Topic이 표시될 행 이름; 비어있으면 끝
@@ -2087,9 +2101,17 @@ struct RETRIEVE_API FBarkRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
 	FText SpeakerName;
 
-	/** 실제로 출력할 대사. 여러 줄을 넣으면 발동할 때마다 그중 하나를 무작위로 골라 대사에 변화를 줍니다. */
+	/** 실제로 출력할 대사. 기본(bSequentialLines=false)은 발동할 때마다 그중 하나를 무작위로 골라 대사에 변화를 줍니다.
+	 *  bSequentialLines=true면 무작위 대신 적힌 순서대로 전부 한 줄씩 이어서 재생합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark", meta = (MultiLine = true))
 	TArray<FText> Lines;
+
+	/**
+	 * true면 Lines를 무작위로 하나 고르지 않고, 적힌 순서대로 전부 한 줄씩 이어서 재생합니다(연속 대사/독백용).
+	 * 여러 줄을 한 번에 큐에 적재하므로 사이에 다른 Bark가 끼어들지 않습니다. 주로 OnQuestStep 대사에 사용합니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
+	bool bSequentialLines = false;
 
 	/** 자막이 화면에 떠 있는 시간(초). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark", meta = (ClampMin = "0.5"))
@@ -2127,6 +2149,10 @@ struct RETRIEVE_API FBarkRow : public FTableRowBase
 	/** (선택) 자막이 뜰 때 함께 재생할 오디오 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark")
 	TSoftObjectPtr<USoundBase> Cue;
+
+	/** OnQuestStep 발동 전용. 스텝 완료 시점으로부터 이 시간(초) 뒤에 대사를 발동합니다. 0이면 즉시. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bark", meta = (ClampMin = "0.0"))
+	float TriggerDelaySeconds = 0.0f;
 };
 
 /**
@@ -2150,6 +2176,13 @@ struct RETRIEVE_API FSystemMessageRow : public FTableRowBase
 	bool bPlayOnce = false;
 
 	/**
+	 * true면 Duration 타이머로 자동으로 사라지지 않고 플레이어가 Enter를 눌러야 다음으로 넘어갑니다.
+	 * 표시되는 동안 이동/카메라 입력이 잠깁니다(튜토리얼 게이트용). false면 기존처럼 Duration 후 자동 소멸.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
+	bool bRequiresDismiss = false;
+
+	/**
 	 * 같은 행을 다시 표시하기까지의 최소 간격(초). e.g. 8이면 마지막 표시 후 8초 안에 또 요청돼도 무시됩니다.
 	 * 같은 힌트가 연달아 도배되는 것을 막습니다. 0이면 제한 없음.
 	 */
@@ -2164,7 +2197,7 @@ struct RETRIEVE_API FSystemMessageRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
 	FGameplayTag KeyTag;
 
-	/** 같은 KeyTag를 공유하는 행들 중 무엇을 고를지 정하는 우선순위. 해당 KeyTag를 쓰는 행이 하나뿐이면 기본값 0을 유지하세요. */
+	/** 같은 KeyTag를 공유하는 행들 중 어떤 순서로 큐잉할지 정하는 우선순위. 숫자가 작을수록 먼저 표시됩니다. 해당 KeyTag를 쓰는 행이 하나뿐이면 기본값 0을 유지하세요. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
 	int32 Priority = 0;
 
@@ -2175,6 +2208,16 @@ struct RETRIEVE_API FSystemMessageRow : public FTableRowBase
 	/** 발동 조건(금지). 이 스텝 중 하나라도 완료되면 이 시스템 메세지는 더 이상 뜨지 않습니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage")
 	FGameplayTagContainer ForbiddenSteps;
+
+	/**
+	 * (선택) 이 스텝이 완료되면 이 메시지를 자동으로 발동합니다. 같은 KeyTag를 공유하는 행들은 Priority 순으로 한꺼번에 큐잉됩니다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage", meta = (Categories = "Quest.Step"))
+	FGameplayTag OnStepTag;
+
+	/** OnStepTag 발동 전용. 스텝 완료 시점으로부터 이 시간(초) 뒤에 큐잉합니다. 0이면 즉시. 같은 배치는 같은 값으로 두세요. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SystemMessage", meta = (ClampMin = "0.0"))
+	float TriggerDelaySeconds = 0.0f;
 };
 
 // ---- 버프/디버프 UI DataTable ------------------------------------------------

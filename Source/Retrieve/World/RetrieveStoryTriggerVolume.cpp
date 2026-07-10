@@ -1,9 +1,11 @@
 #include "World/RetrieveStoryTriggerVolume.h"
 
+#include "Bark/BarkSubsystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Subsystems/SystemMessageSubsystem.h"
 
 ARetrieveStoryTriggerVolume::ARetrieveStoryTriggerVolume()
 {
@@ -59,6 +61,38 @@ void ARetrieveStoryTriggerVolume::HandleBeginOverlap(UPrimitiveComponent* Overla
 		{
 			Quest->CompleteStep(CompleteStepTag);
 			bDidSomething = true;
+		}
+	}
+
+	// 3) 시스템 메시지
+	if (SystemMessageKeysOnEnter.Num() > 0)
+	{
+		if (USystemMessageSubsystem* SystemMessage = World->GetSubsystem<USystemMessageSubsystem>())
+		{
+			for (const FGameplayTag& Key : SystemMessageKeysOnEnter)
+			{
+				if (Key.IsValid())
+				{
+					SystemMessage->RequestMessagesByKey(Key);
+					bDidSomething = true;
+				}
+			}
+		}
+	}
+
+	// 4) Bark
+	if (BarkKeysOnEnter.Num() > 0)
+	{
+		if (UBarkSubsystem* Bark = World->GetSubsystem<UBarkSubsystem>())
+		{
+			for (const FGameplayTag& Key : BarkKeysOnEnter)
+			{
+				if (Key.IsValid())
+				{
+					Bark->RequestBarkByKey(Key);
+					bDidSomething = true;
+				}
+			}
 		}
 	}
 

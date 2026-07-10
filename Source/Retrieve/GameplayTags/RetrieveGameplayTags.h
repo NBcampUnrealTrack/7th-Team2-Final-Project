@@ -365,6 +365,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Monster_Died);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Game_QueenDefeated);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Enemy_PlayerSpotted);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Enemy_SpawnGroupCleared);
 
 	// ---- Message channels: UI Buff
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_Buff_Apply);
@@ -486,14 +487,17 @@ namespace RetrieveGameplayTags
 
 	// Stage 1 (main quest) per-objective steps
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Cave);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Village);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_ExitedCave);
 
-	// ---- Quest definitions (DT_Quest QuestIds)
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_OpenYourEyes);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ACenturyLater);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ReclaimFire);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ReclaimWater);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ReclaimWind);
+	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_WakingFromTheDeep);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheForgottenForest);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_AStoryLeftBehind);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheCorruptedGuardianFire);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheCorruptedGuardianWind);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheCorruptedGuardianWater);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ToTheEdge);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_StormTheCastle);
 
 	// ---- Dialogue

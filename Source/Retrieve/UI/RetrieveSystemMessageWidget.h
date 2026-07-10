@@ -21,7 +21,9 @@ class RETRIEVE_API URetrieveSystemMessageWidget : public UUserWidget
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual void NativeOnFocusLost(const FFocusEvent& InFocusEvent) override;
+	
 	/** OnQueued 콜백, 새 항목이 오면 표시를 시도합니다. */
 	void HandleQueued();
 
@@ -39,6 +41,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> MessageText;
+	
+	/** "Press Enter" 안내. 해제 필수 메시지에서만 표시됩니다. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> DismissPrompt;
 
 	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
 	TObjectPtr<UWidgetAnimation> ShowAnim;
@@ -47,6 +53,9 @@ protected:
 	TObjectPtr<UWidgetAnimation> HideAnim;
 
 private:
+	void SetModalInputBlock(bool bEngage);
+	void FocusSelfNextTick();
+	
 	TWeakObjectPtr<USystemMessageSubsystem> Subsystem;
 
 	/** 현재 표시 중인 항목. 시네마틱/파괴 시 큐로 되돌립니다. 위젯이 가진 유일한 메시지 상태. */
@@ -55,7 +64,8 @@ private:
 	bool bShowing = false;
 	bool bCinematicActive = false;
 	bool bRevealBlocked = false;
-
+	bool bModalInputActive = false;
+	
 	FDelegateHandle QueuedHandle;
 	FGameplayMessageListenerHandle CinematicHandle;
 	FGameplayMessageListenerHandle RevealHandle;

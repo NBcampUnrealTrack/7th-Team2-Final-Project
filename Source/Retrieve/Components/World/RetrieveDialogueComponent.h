@@ -86,10 +86,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
 	TArray<FText> DefaultGreetingLines;
 
-	/** 이 NPC와의 대화가 끝날 때(Goodbye/ESC 포함) 이 퀘스트 스텝을 완료합니다. TODO: 튜토리얼 전용, 추후 삭제 예정. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue", meta = (Categories = "Quest.Step"))
-	FGameplayTag CompleteStepOnConversationEnd;
-
 	// ── 애니메이션 (Details 패널에서 설정) ──────────────────────────────────
 
 	/** 대화 외 평상시 루프 재생할 유휴 애니메이션 */

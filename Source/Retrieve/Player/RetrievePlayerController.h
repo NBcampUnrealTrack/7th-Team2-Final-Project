@@ -96,6 +96,12 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestNewGame();
+	
+	/** 해제 필수 시스템 메시지 표시 중 입력 잠금 */
+	void EnterModalMessageInput(UUserWidget* MessageWidget);
+	
+	/** 해제 필수 큐가 비면 세션 상태 기준으로 입력 모드를 복구 */
+	void ExitModalMessageInput();
 
 	/**
 	 * 메뉴 - 이어하기 진입점. 가장 최근 저장 슬롯을 서버가 판별해 로드합니다

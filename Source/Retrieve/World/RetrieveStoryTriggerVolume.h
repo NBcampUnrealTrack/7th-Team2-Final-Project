@@ -35,6 +35,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story", meta = (Categories = "Quest.Step"))
 	FGameplayTag CompleteStepTag;
 
+	/** 진입 시(호스트 로컬) 순서대로 발동할 시스템 메시지 KeyTag들(선택).
+	 *  각 태그를 RequestMessagesByKey로 발동 -> 같은 태그를 쓰는 자격 있는 행 전부가
+	 *  Priority 오름차순(숫자가 작을수록 먼저)으로 큐에 쌓입니다.
+	 *  (dismiss-required 행이면 Enter로 하나씩 넘기는 큐가 됩니다). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story")
+	TArray<FGameplayTag> SystemMessageKeysOnEnter;
+
+	/** 진입 시(호스트 로컬) 순서대로 발동할 Bark KeyTag들(선택).
+	 * 각 태그를 RequestBarkByKey로 개별 발동 -> BarkViewModel FIFO 큐에 순서대로 쌓여 한 줄씩 연속 재생됩니다.
+	 * 각 대사는 고유 KeyTag를 가진 Manual 행이어야 합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story")
+	TArray<FGameplayTag> BarkKeysOnEnter;
+
 	/** true면 1회만 발동합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story")
 	bool bOnce = true;
