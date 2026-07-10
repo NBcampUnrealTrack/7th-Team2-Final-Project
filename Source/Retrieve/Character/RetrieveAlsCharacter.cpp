@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
+#include "AlsAnimationInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
 #include "Components/Pawn/RetrieveCharacterMovementComponent.h"
@@ -74,6 +75,20 @@ void ARetrieveAlsCharacter::ApplyRetrieveSettingsOverrides()
 
 void ARetrieveAlsCharacter::Tick(float DeltaTime)
 {
+	// ALS 부모 Tick은 AnimationInstance 캐시(TWeakObjectPtr, PostInitializeComponents에서 1회 캐싱)가
+	// 무효면 조용히 조기 리턴한다 → RefreshView 정지 = 카메라(뷰 회전) 영구 동결.
+	// 시퀀서 종료 복원 등으로 메인 메시의 애님 인스턴스가 재생성되면 캐시가 옛 인스턴스를 가리키다
+	// GC 시점에 갑자기 무효화되므로("어느 순간부터 카메라 고정" 버그), 매 틱 저렴하게 재검증해 자기 치유한다.
+	if (!AnimationInstance.IsValid())
+	{
+		AnimationInstance = Cast<UAlsAnimationInstance>(GetMesh()->GetAnimInstance());
+
+		// 자기 치유 흔적(드물게 발생 — 시퀀서/GC로 옛 인스턴스가 수거된 직후). 기본 출력엔 안 뜸.
+		UE_LOG(LogRetrieveWorld, Verbose,
+		       TEXT("ALS AnimationInstance 캐시 무효 → 재캐싱 (%s)"),
+		       *GetNameSafe(AnimationInstance.Get()));
+	}
+
 	Super::Tick(DeltaTime);
 
 	const URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();

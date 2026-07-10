@@ -34,6 +34,13 @@ void ARetrieveStoryTriggerVolume::HandleBeginOverlap(UPrimitiveComponent* Overla
 		return;
 	}
 
+	// 시네마틱 중에는 발동하지 않는다 — 시퀀서가 폰을 움직여 볼륨을 밟는 경우 오발동/일회성(bFired) 소모 방지.
+	// bFired를 건드리지 않으므로 시네마틱 종료 후 다시 진입하면 정상 발동한다.
+	if (GS->GetCinematicState().IsActive())
+	{
+		return;
+	}
+
 	// 호스트 폰이 진입한 경우에만 발동. Lumen과 마찬가지로 진행은 호스트를 따른다.
 	// TODO(coop): 공유 내러티브 시 비호스트 클라이언트도 로컬에서 관전하도록 확장.
 	APawn* OverlappingPawn = Cast<APawn>(OtherActor);

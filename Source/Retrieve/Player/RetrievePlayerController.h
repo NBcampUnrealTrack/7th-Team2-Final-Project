@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Components/SlateWrapperTypes.h"
 #include "Core/RetrieveSessionState.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerController.h"
@@ -97,10 +98,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestNewGame();
 	
-	/** 해제 필수 시스템 메시지 표시 중 입력 잠금 */
+	/** 해제 필수 시스템 메시지 표시 중 입력 잠금 (UIOnly + 위젯 포커스, Enter로만 해제). */
 	void EnterModalMessageInput(UUserWidget* MessageWidget);
-	
-	/** 해제 필수 큐가 비면 세션 상태 기준으로 입력 모드를 복구 */
+
+	/** 해제 필수 큐가 비면 세션 상태 기준으로 입력 모드를 복구. */
 	void ExitModalMessageInput();
 
 	/**
@@ -124,6 +125,22 @@ public:
 	/** 게임 종료(애플리케이션 종료). 포즈 팝업에서 호출. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestQuitGame();
+
+	/** 창 포커스 상실/입력 모드 전환 시 엔진이 호출. 키 릴리즈(Completed) 이벤트 유실로
+	 * Hold 게이트 태그(State.Player.Sprinting)가 고착되는 것을 함께 정리한다. */
+	virtual void FlushPressedKeys() override;
+
+protected:
+	/** 앱(창) 활성화 복귀 시 순수 게임플레이 상황이면 입력 모드/Ignore 잔류를 재정립.
+	 * 창 전환으로 look 입력이 죽는(입력 모드 잔류) 문제의 방어. UI 컨텍스트 활성 시엔 개입하지 않음. */
+	void HandleAppActivationChanged(bool bIsActive);
+	FDelegateHandle AppActivationHandle;
+
+	/** 해제 필수 시스템 메시지 모달 입력 잠금이 활성인지(Enter/Exit ModalMessageInput가 관리).
+	 * 창 복귀 재정립(HandleAppActivationChanged)이 이 잠금을 깨지 않도록 판정에만 사용. */
+	bool bModalMessageInputActive = false;
+
+public:
 
 protected:
 	void HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState);
@@ -245,6 +262,18 @@ protected:
 	/** InGame 상태에서만 활성화되는 토스트 알림 위젯 인스턴스 */
 	UPROPERTY()
 	TObjectPtr<UUserWidget> ActiveToastManager;
+
+	/** 시네마틱 중 뷰포트의 모든 최상위 위젯(HUD 루트, 퀵슬롯, 토스트 등 직접 AddToViewport된 것 전부)을
+	 * 일괄 숨김/복원합니다. 예외: 로딩 커버, CinematicSubsystem의 오버레이(예외 UI).
+	 * Channel.Cinematic.Changed 기반이라 재생 주체(서브시스템/치트)와 무관하게 동작합니다. */
+	void SetHUDHiddenForCinematic(bool bHideForCinematic);
+
+	/** 시네마틱 재생 중인지(GameState CinematicState 기준). InputKey는 뷰포트 직행 경로라 DisableInput의
+	 * 영향을 받지 않으므로, 그 경로로 열리는 UI(ESC 시스템 메뉴/퀵슬롯 휠)는 이걸로 직접 차단합니다. */
+	bool IsCinematicActive() const;
+
+	/** 시네마틱 숨김을 적용한 위젯과 원래 가시성. 도중 위젯 파괴에 대비해 약참조. */
+	TArray<TPair<TWeakObjectPtr<UUserWidget>, ESlateVisibility>> CinematicHiddenWidgets;
 #pragma endregion
 
 #pragma region Panels & Minimap

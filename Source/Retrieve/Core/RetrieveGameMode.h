@@ -3,9 +3,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
+#include "Subsystems/RetrieveCinematicSubsystem.h" // FRetrieveCinematicPlayParams (OpeningCinematicParams)
 #include "RetrieveGameMode.generated.h"
 
 class ARetrieveGameState;
+class ULevelSequence;
 class URetrieveOpeningSequenceAsset;
 struct FPlayerDiedPayload;
 struct FRetrieveRevealGatePayload;
@@ -70,6 +72,9 @@ protected:
 	void ScheduleNextOpeningBeat();
 	void FireOpeningBeat();
 
+	/** OpeningCinematic이 설정되어 있으면 CinematicSubsystem으로 재생을 시작합니다. 재생이 시작되면 true. */
+	bool TryPlayOpeningCinematic();
+
 	/** 애셋이 작성되지 않은 경우에도 Awakening을 발생시켜 첫 퀘스트가 시작되게 합니다. */
 	void FallbackStartFirstQuest();
 
@@ -82,8 +87,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
 	TObjectPtr<URetrieveOpeningSequenceAsset> OpeningSequence;
 
+	/** New Game 오프닝 컷씬(레벨 시퀀스). 설정 시 로딩 커버가 걷힌 직후 재생됩니다. BP_RetrieveGameMode에서 할당. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
+	TSoftObjectPtr<ULevelSequence> OpeningCinematic;
+
+	/** 오프닝 컷씬 재생 옵션. BGM/환경음 억제(bSuppressMusic/bSuppressAmbience), 입력 차단,
+	 * 오버레이 위젯(자막/스킵 안내) 등을 BP_RetrieveGameMode에서 조정합니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
+	FRetrieveCinematicPlayParams OpeningCinematicParams;
+
 	/** 인트로 컷씬이 끝날 때까지 메시지/퀘스트 비트를 게이팅합니다.
-	 * 인트로 Level Sequence가 생기기 전까지 false로 유지하세요. */
+	 * OpeningCinematic 재생이 실제로 시작된 경우에만 적용됩니다(재생 실패 시 비트가 즉시 시작). */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Opening")
 	bool bWaitForIntroCinematic = false;
 

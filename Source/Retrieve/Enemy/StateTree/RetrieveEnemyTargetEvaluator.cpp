@@ -73,6 +73,14 @@ namespace
 		});
 	}
 
+	// 시네마틱 재생 중(State.Player.Cinematic 태그)인 액터는 타겟팅에서 제외 — 연출 중 어그로/공격 방지.
+	bool IsCinematicSuppressedActor(AActor* Actor)
+	{
+		const IAbilitySystemInterface* ASCInterface = Cast<IAbilitySystemInterface>(Actor);
+		UAbilitySystemComponent* ASC = ASCInterface ? ASCInterface->GetAbilitySystemComponent() : nullptr;
+		return ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Cinematic);
+	}
+
 }
 
 bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
@@ -166,7 +174,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (Pawn && IsValid(InstanceData.TargetPlayer))
 	{
-		if (IsDeadOrDyingActor(InstanceData.TargetPlayer))
+		// 시네마틱이 시작된 타겟은 사망과 동일하게 즉시 놓아준다(공격/포위 유지 방지)
+		if (IsDeadOrDyingActor(InstanceData.TargetPlayer) || IsCinematicSuppressedActor(InstanceData.TargetPlayer))
 		{
 			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
 			{
@@ -360,7 +369,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	for (AActor* Actor : PerceivedActors)
 	{
-		if (!Actor || IsDeadOrDyingActor(Actor))
+		if (!Actor || IsDeadOrDyingActor(Actor) || IsCinematicSuppressedActor(Actor))
 		{
 			continue;
 		}
@@ -495,7 +504,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			if (AActor* Alerted = EnemyChar->AlertedTarget)
 			{
-				if (!IsDeadOrDyingActor(Alerted))
+				if (!IsDeadOrDyingActor(Alerted) && !IsCinematicSuppressedActor(Alerted))
 				{
 					InstanceData.TargetPlayer = Alerted;
 					InstanceData.bTargetLost = false;

@@ -12,6 +12,7 @@
 #include "Quest/QuestBranchComponent.h"
 #include "Save/RetrieveSaveSubsystem.h"
 #include "Subsystems/QuestNotificationSubsystem.h"
+#include "Subsystems/RetrieveCinematicSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -290,6 +291,16 @@ void ARetrieveGameMode::HandlePlayerDied(FGameplayTag Channel, const FPlayerDied
 	 * 호스트 사망 시에는 세션을 해산할것 (평행 우주 모델)
 	 */
 	
+	// 시네마틱 재생 중 사망(해저드/잔류 투사체 등)이면 재생을 먼저 정리한다 —
+	// 시퀀서와 Result 화면이 카메라/UI를 두고 싸우지 않도록. 미재생 시 no-op.
+	if (UWorld* World = GetWorld())
+	{
+		if (URetrieveCinematicSubsystem* Cinematic = World->GetSubsystem<URetrieveCinematicSubsystem>())
+		{
+			Cinematic->StopCinematic();
+		}
+	}
+
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		GS->TransitionTo(ERetrieveSessionState::Result);
@@ -337,13 +348,17 @@ void ARetrieveGameMode::ArmOpeningSequence()
 
 void ARetrieveGameMode::StartOpeningSequence()
 {
+	// New Game 전용 경로(HandleNewGame -> Reveal)에서만 도달하므로 여기서 컷씬을 시작 (호스트 로컬) // TODO(coop)
+	const bool bCinematicPlaying = TryPlayOpeningCinematic();
+
 	if (!OpeningSequence || OpeningSequence->Beats.Num() == 0)
 	{
 		FallbackStartFirstQuest(); // 에셋 작성X -> 바로 첫 퀘스트 시작
 		return;
 	}
 
-	if (bWaitForIntroCinematic)
+	// 컷씬 재생이 실제로 시작된 경우에만 종료 대기 게이팅 (실패/미설정 시 비트 즉시 시작 -> 영원 대기 방지)
+	if (bCinematicPlaying && bWaitForIntroCinematic)
 	{
 		if (UWorld* World = GetWorld())
 		{
@@ -365,6 +380,23 @@ void ARetrieveGameMode::StartOpeningSequence()
 
 	OpeningBeatIndex = 0;
 	ScheduleNextOpeningBeat();
+}
+
+bool ARetrieveGameMode::TryPlayOpeningCinematic()
+{
+	if (OpeningCinematic.IsNull())
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	URetrieveCinematicSubsystem* CinematicSubsystem = World ? World->GetSubsystem<URetrieveCinematicSubsystem>() : nullptr;
+	if (!CinematicSubsystem)
+	{
+		return false;
+	}
+
+	return CinematicSubsystem->PlayCinematicSoft(OpeningCinematic, OpeningCinematicParams);
 }
 
 void ARetrieveGameMode::ScheduleNextOpeningBeat()

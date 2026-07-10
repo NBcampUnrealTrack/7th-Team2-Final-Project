@@ -35,7 +35,9 @@ public class Retrieve : ModuleRules
 			"FieldNotification",
 			"ALS",
 			"MotionWarping",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"LevelSequence",
+			"MovieScene"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
