@@ -502,7 +502,7 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 
 	// ── 토스트 매니저: InGame 상태에서만 활성화 ──────────────────────
 	// HUD(ActiveTopLevelWidget)와 독립적으로 관리된다.
-	// ZOrder=10 으로 HUD(기본 0) 위에 렌더링.
+	// ZOrder=60 으로 HUD(0)·패널(50) 위에 렌더링.
 	if (ActiveToastManager)
 	{
 		ActiveToastManager->RemoveFromParent();
@@ -514,7 +514,7 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 		ActiveToastManager = CreateWidget<UUserWidget>(this, ToastManagerClass);
 		if (ActiveToastManager)
 		{
-			ActiveToastManager->AddToViewport(10);
+			ActiveToastManager->AddToViewport(60);
 		}
 	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
@@ -737,7 +737,7 @@ void ARetrievePlayerController::ShowLoadingScreen()
 		return;
 	}
 
-	// HUD (0), 토스트 (10), 패널 (50) 위의 ZOrder
+	// HUD (0), 패널 (50), 토스트 (60) 위의 ZOrder
 	ActiveLoadingScreen->AddToViewport(100);
 	bLoadingCoverActive = true;
 	BroadcastRevealGate(true); // 토스트/메시지 억제

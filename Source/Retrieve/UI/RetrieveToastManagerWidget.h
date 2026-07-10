@@ -16,7 +16,7 @@ class UInventoryComponent;
  * HUD 담당자와 작업 범위가 충돌하지 않는다.
  *
  * ─ 동작 흐름 ─────────────────────────────────────────────────────────────
- * PlayerController → (InGame 상태 진입 시) CreateWidget + AddToViewport(ZOrder=10)
+ * PlayerController → (InGame 상태 진입 시) CreateWidget + AddToViewport(ZOrder=60)
  * NativeConstruct  → 0.3초 후 InventoryComponent.OnItemAdded 바인딩
  *                    (BeginPlay 초기화 타이밍의 OnItemAdded 스팸 방지)
  * OnInventoryItemAdded → WBP_ItemPickupToast 생성 → ActiveToasts 큐 관리

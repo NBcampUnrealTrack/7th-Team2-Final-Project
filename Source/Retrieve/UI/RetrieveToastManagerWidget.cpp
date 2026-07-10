@@ -135,7 +135,7 @@ void URetrieveToastManagerWidget::OnInventoryItemAdded(
 	}
 
 	ActiveToasts.Add(Toast);
-	Toast->AddToViewport(10);
+	Toast->AddToViewport(60);
 
 	// ── ToastLifetime초 후 자동 제거 ──────────────────────────────
 	// TWeakObjectPtr 캡처: GC가 Toast를 회수해도 dangling pointer 방지
