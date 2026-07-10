@@ -71,7 +71,7 @@ public:
 
 	/** 대기 큐에 담을 수 있는 최대 대사 수. 넘치면 가장 오래된 대사부터 버립니다(FIFO). */
 	UPROPERTY(EditAnywhere, Category = "Retrieve|Bark")
-	int32 MaxQueued = 5;
+	int32 MaxQueued = 10;
 
 protected:
 	void HandleBarkRequested(FGameplayTag Channel, const FRetrieveBarkPayload& Payload);

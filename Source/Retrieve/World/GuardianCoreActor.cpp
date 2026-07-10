@@ -34,24 +34,21 @@ void AGuardianCoreActor::HandleCoreInteracted(AActor* InteractionInstigator)
 		return;
 	}
 
-	UQuestBranchComponent* Quest = nullptr;
-	if (const UWorld* World = GetWorld())
-	{
-		if (const ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
-		{
-			Quest = GS->GetQuestBranchComponent();
-		}
-	}
-
+	UWorld* World = GetWorld();
+	ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	UQuestBranchComponent* Quest = GS ? GS->GetQuestBranchComponent() : nullptr;
 	if (!Quest)
 	{
 		return;
 	}
 
 	Quest->CompleteStep(GuardianDefeatedStep); // 전제조건이 충족된 경우에만 성공
-	if (Quest->IsStepCompleted(GuardianDefeatedStep))
+	if (!Quest->IsStepCompleted(GuardianDefeatedStep))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GuardianCore] %s: '%s' 완료, 코어 획득"), *GetName(), *GuardianDefeatedStep.ToString());
-		Destroy();
+		return;
 	}
+
+	GS->ApplyGuardianCoreEmpowerment(GuardianDefeatedStep, GS->GetHostPawn());
+	UE_LOG(LogTemp, Warning, TEXT("[GuardianCore] %s: '%s' 완료 + 강화, 코어 획득"), *GetName(), *GuardianDefeatedStep.ToString());
+	Destroy();
 }

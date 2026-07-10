@@ -63,11 +63,16 @@ public:
 	const UDataTable* GetQuestTable() const { return QuestTable; }
 	const UDataTable* GetBarkTable() const { return BarkTable; }
 	const UDataTable* GetSystemMessageTable() const { return SystemMessageTable; }
+	
+	TArray<FRetrieveDialogueTopic> BuildFollowUpTopics(const FDialogueRow& Row) const;
 
 	void RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics, bool bShared = true,
-	                     bool bHoldUntilReplaced = false);
+	                     bool bHoldUntilReplaced = false, FGameplayTag CompletesStep = FGameplayTag(),
+	                     bool bAutoEndAfterLines = false);
 	void AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign);
 	void ApplySigilTopic(const FDialogueRow& Row, APawn* Sovereign);
+	void ApplyGuardianCoreEmpowerment(FGameplayTag GuardianDefeatedStep, APawn* Sovereign);
+
 	void ClearDialogue();
 	void SetActiveSpeaker(const FText& InSpeakerName);
 	void SetCinematicActive(bool bInActive);
@@ -139,7 +144,6 @@ protected:
 	void OnRep_CinematicState();
 	
 	const FDialogueRow* FindDialogueRow(FGameplayTag TopicId) const;
-	TArray<FRetrieveDialogueTopic> BuildFollowUpTopics(const FDialogueRow& Row) const;
 	
 	static bool IsLegalTransition(ERetrieveSessionState From, ERetrieveSessionState To);
 	

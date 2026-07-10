@@ -50,9 +50,9 @@ public:
 	virtual void Deinitialize() override;
 
 protected:
-	void HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Payload);
-	void HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Payload);
-	void HandleDialogueChanged(FGameplayTag Channel, const FRetrieveDialogueChangedPayload& Payload);
+	void HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Message);
+	void HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Message);
+	void HandleDialogueChanged(FGameplayTag Channel, const FRetrieveDialogueChangedPayload& Message);
 
 	void ScanAmbient();
 
@@ -61,7 +61,11 @@ protected:
 	bool IsLocalPlayerInCombat() const;
 	void FireRow(FName RowName, const FBarkRow& Row, UBarkSpeakerComponent* ViaSpeaker);
 	FRetrieveBarkPayload BuildPayload(const FBarkRow& Row);
+	FRetrieveBarkPayload BuildPayloadForLine(const FBarkRow& Row, const FText& Line) const;
 	void BroadcastBarkLocal(const FRetrieveBarkPayload& Payload) const;
+
+	/** OnQuestStep 대사를 (지연 후) 실제로 발동. bSequentialLines면 Lines를 순서대로 전부, 아니면 기존처럼 한 줄만 큐잉합니다. */
+	void FireStepBark(FName RowName);
 
 	const UDataTable* GetBarkTable() const;
 	bool IsStepCompleted(FGameplayTag StepTag) const;
@@ -93,6 +97,9 @@ private:
 	FGameplayMessageListenerHandle DialogueHandle;
 
 	FTimerHandle ScanTimerHandle;
+
+	/** OnQuestStep 대사의 지연 발동용 타이머들 (Deinitialize에서 정리). */
+	TArray<FTimerHandle> StepBarkTimers;
 
 	/** 발화 후보를 찾는 스캔 주기 */
 	float ScanInterval = 2.5f;

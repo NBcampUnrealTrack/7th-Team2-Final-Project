@@ -34,14 +34,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
 	TArray<FText> DefaultGreetingLines;
 
-	/** 1회성 첫 만남 인사말. IntroSeenStep이 완료되기 전까지 DefaultGreetingLines 대신 재생됩니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
-	TArray<FText> IntroLines;
-
-	/** IntroLines를 1회성으로 만드는 게이트. 이 스텝이 완료되면 이후로는 DefaultGreetingLines를 사용합니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue", meta = (Categories = "Quest.Step"))
-	FGameplayTag IntroSeenStep;
-
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Lumen")
 	TObjectPtr<ULumenFollowComponent> FollowComponent;

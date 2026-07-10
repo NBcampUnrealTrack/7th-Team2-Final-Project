@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "RetrieveGameplayMessageTypes.generated.h"
 
 /**
@@ -69,4 +70,24 @@ struct RETRIEVE_API FEnemyPlayerSpottedPayload
 
 	UPROPERTY(BlueprintReadOnly)
 	TWeakObjectPtr<AActor> InstigatorEnemy;
+};
+
+/**
+ * Channel.Enemy.SpawnGroupCleared 페이로드.
+ * 스포너(ASpawnerBase)의 살아있는 스폰 집합이 모두 사망한 경우 발행.
+ * 퀘스트, 구역 게이트 등 외부 시스템이 SpawnGroupId로 필터링해 해당 구역 클리어를 처리한다.
+ * 스포너는 퀘스트에 의존하지 않으므로 Quest.Step을 알지 못한다. 매핑은 구독자 쪽에서 한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FSpawnGroupClearedPayload
+{
+	GENERATED_BODY()
+
+	/** 스포너 그룹 식별자. 구독자가 매칭에 사용. */
+	UPROPERTY(BlueprintReadOnly)
+	FGameplayTag SpawnGroupId;
+
+	/** 신호를 발행한 스포너. */
+	UPROPERTY(BlueprintReadOnly)
+	TWeakObjectPtr<AActor> Spawner;
 };

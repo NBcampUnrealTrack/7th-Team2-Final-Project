@@ -11,6 +11,7 @@
 #include "Components/Enemy/BossHPBarComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
+#include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 
 ASpawnerBase::ASpawnerBase()
 {
@@ -311,6 +312,28 @@ bool ASpawnerBase::IsPlayerInRange() const
 	return false;
 }
 
+bool ASpawnerBase::HasAnyLiveSpawn() const
+{
+	// SpawnedPawns가 아니라 EntryPawns를 본다: 플레이어가 범위를 벗어나 DespawnAll이
+	// SpawnedPawns를 비운 뒤(생존 개체는 비활성 상태로 EntryPawns에 유지) 지연 사망(DoT 등)이 일어나면
+	// SpawnedPawns.Num()==0을 클리어로 오판할 수 있기 때문.
+	for (const TWeakObjectPtr<APawn>& WeakPawn : EntryPawns)
+	{
+		APawn* Pawn = WeakPawn.Get();
+		if (!Pawn)
+		{
+			continue;
+		}
+
+		URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
+		if (!HealthComp || !HealthComp->IsDeadOrDying())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool ASpawnerBase::IsPlayerInSpawnRange() const
 {
 	if (!SpawnSphereComp)
@@ -405,6 +428,19 @@ void ASpawnerBase::OnEnemyDeath(AActor* Actor)
 	if (UBossHPBarComponent* BossHPBar = Cast<AActor>(Actor)->FindComponentByClass<UBossHPBarComponent>())
 	{
 		BossHPBar->Hide();
+	}
+
+	// SpawnGroupId가 지정된 스포너에 한해, 살아있는 스폰이 모두 사망하면 "그룹 클리어" 신호를 발행한다.
+	if (SpawnGroupId.IsValid() && !HasAnyLiveSpawn())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			FSpawnGroupClearedPayload Payload;
+			Payload.SpawnGroupId = SpawnGroupId;
+			Payload.Spawner = this;
+			UGameplayMessageSubsystem::Get(World).BroadcastMessage(
+				RetrieveGameplayTags::Channel_Enemy_SpawnGroupCleared, Payload);
+		}
 	}
 
 	if (!bAllowRespawn)

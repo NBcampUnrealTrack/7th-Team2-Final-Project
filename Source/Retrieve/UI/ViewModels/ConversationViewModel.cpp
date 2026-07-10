@@ -1,6 +1,5 @@
 #include "UI/ViewModels/ConversationViewModel.h"
 
-#include "Character/LumenCharacter.h"
 #include "Components/World/RetrieveDialogueComponent.h"
 #include "Components/World/RetrieveShopComponent.h"
 #include "Core/RetrieveGameState.h"
@@ -45,6 +44,8 @@ void UConversationViewModel::Initialize(UWorld* World, APlayerController* InOwni
 			Seed.Topics = State.Topics;
 			Seed.bSharedNarrative = State.bSharedNarrative;
 			Seed.bHoldUntilReplaced = State.bHoldUntilReplaced;
+			Seed.CompletesStep = State.CompletesStep;
+			Seed.bAutoEndAfterLines = State.bAutoEndAfterLines;
 			HandleLineRequested(RetrieveGameplayTags::Channel_Dialogue_LineRequested, Seed);
 		}
 	}
@@ -74,6 +75,8 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 	Lines.Reset();
 	SpeakerName = FText::GetEmpty();
 	LineIndex = 0;
+	CurrentCompletesStep = FGameplayTag();
+	bCurrentAutoEndAfterLines = false;
 
 	UWorld* World = OwningPlayerController.IsValid() ? OwningPlayerController->GetWorld() : WorldPtr.Get();
 	ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
@@ -81,25 +84,11 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 	const UDataTable* Table = GS ? GS->GetDialogueTable() : nullptr;
 
 	FGameplayTag SpeakerTag;
-	if (const ALumenCharacter* Lumen = Cast<ALumenCharacter>(NPC))
+	if (const URetrieveDialogueComponent* DialogueComponent = NPC ? NPC->FindComponentByClass<URetrieveDialogueComponent>() : nullptr)
 	{
-		SpeakerTag = Lumen->SpeakerTag;
-		SpeakerName = Lumen->DisplayName;
-		// 1회성 첫 만남 인사말: 게이트 스텝이 유효하고 아직 완료되지 않았을 때만 IntroLines를 우선 재생.
-		const bool bUseIntro = Lumen->IntroLines.Num() > 0
-			&& Lumen->IntroSeenStep.IsValid()
-			&& Quest && !Quest->IsStepCompleted(Lumen->IntroSeenStep);
-		Lines = bUseIntro ? Lumen->IntroLines : Lumen->DefaultGreetingLines;
-	}
-
-	if (!SpeakerTag.IsValid())
-	{
-		if (URetrieveDialogueComponent* DialogueComp = NPC ? NPC->FindComponentByClass<URetrieveDialogueComponent>() : nullptr)
-		{
-			SpeakerTag = DialogueComp->SpeakerTag;
-			SpeakerName = DialogueComp->SpeakerDisplayName;
-			Lines = DialogueComp->DefaultGreetingLines;
-		}
+		SpeakerTag = DialogueComponent->SpeakerTag;
+		SpeakerName = DialogueComponent->SpeakerDisplayName;
+		Lines = DialogueComponent->DefaultGreetingLines;
 	}
 
 	if (Table && Quest && SpeakerTag.IsValid())
@@ -130,10 +119,37 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 		{
 			return A.Order != B.Order ? A.Order < B.Order : A.Priority < B.Priority;
 		});
-
+		
+		// bReplacesGreeting 행 중 가장 높은 Priority가 기본 그리팅 대신 오프닝 제공
+		const FDialogueRow* OpeningRow = nullptr;
 		for (const FDialogueRow* Row : Eligible)
 		{
-			Topics.Add(FRetrieveDialogueTopic{Row->TopicId, Row->Label, true, Row->Kind});
+			if (Row->bReplacesGreeting && (!OpeningRow || Row->Priority > OpeningRow->Priority))
+			{
+				OpeningRow = Row;
+			}
+		}
+
+		bool bExclusiveOpening = false;
+		if (OpeningRow)
+		{
+			Lines = OpeningRow->Lines; // 인사말 대체
+			CurrentCompletesStep = OpeningRow->CompletesStep;
+			bCurrentAutoEndAfterLines = OpeningRow->bAutoEndAfterLines;
+			Topics = GS->BuildFollowUpTopics(*OpeningRow); // 이 행의 후속 토픽
+			bExclusiveOpening = OpeningRow->bAutoEndAfterLines && OpeningRow->FollowUpRows.Num() == 0;
+		}
+
+		if (!bExclusiveOpening)
+		{
+			for (const FDialogueRow* Row : Eligible)
+			{
+				if (Row->bReplacesGreeting)
+				{
+					continue;
+				}
+				Topics.Add(FRetrieveDialogueTopic{Row->TopicId, Row->Label, true, Row->Kind});
+			}
 		}
 	}
 
@@ -197,17 +213,36 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 	AppendGoodbyeIfMissing();
 	bTopicsEnabled = OwningPlayerController.IsValid() && OwningPlayerController->HasAuthority();
 	BroadcastBeatFields();
+	
+	if (GetShowChoices())
+	{
+		HandleBeatEnded();
+	}
 }
 
 void UConversationViewModel::Advance()
 {
 	if (GetShowChoices())
 	{
+		if (bCurrentAutoEndAfterLines && !HasSelectableTopics())
+		{
+			if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(OwningPlayerController.Get()))
+			{
+				RetrievePC->CloseConversation();
+			}
+		}
 		return; // 이미 마지막 라인 (토픽 표시 중)
 	}
+	
 	++LineIndex;
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetCurrentLine);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetShowChoices);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetShowTopicsPanel);
+	
+	if (GetShowChoices())
+	{
+		HandleBeatEnded(); // 마지막 라인 도달 = 비트 종료
+	}
 }
 
 void UConversationViewModel::OnTopicSelected(FGameplayTag TopicId)
@@ -269,6 +304,8 @@ void UConversationViewModel::HandleLineRequested(FGameplayTag Channel, const FRe
 	SpeakerName = Message.SpeakerName;
 	Lines = Message.Lines;
 	Topics = Message.Topics;
+	CurrentCompletesStep = Message.CompletesStep;
+	bCurrentAutoEndAfterLines = Message.bAutoEndAfterLines;
 	LineIndex = 0;
 	AppendGoodbyeIfMissing();
 
@@ -276,6 +313,26 @@ void UConversationViewModel::HandleLineRequested(FGameplayTag Channel, const FRe
 		HasAuthority());
 
 	BroadcastBeatFields();
+	
+	if (GetShowChoices())
+	{
+		HandleBeatEnded();
+	}
+}
+
+void UConversationViewModel::HandleBeatEnded()
+{
+	if (CurrentCompletesStep.IsValid() && OwningPlayerController.IsValid() && OwningPlayerController->HasAuthority())
+	{
+		UWorld* World = OwningPlayerController->GetWorld();
+		if (ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr)
+		{
+			if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+			{
+				Quest->CompleteStep(CurrentCompletesStep);
+			}
+		}
+	}
 }
 
 void UConversationViewModel::AppendGoodbyeIfMissing()
@@ -283,11 +340,16 @@ void UConversationViewModel::AppendGoodbyeIfMissing()
 	const bool bHasGoodbye = Topics.ContainsByPredicate(
 		[](const FRetrieveDialogueTopic& Topic) { return !Topic.TopicId.IsValid(); });
 
+	if (bCurrentAutoEndAfterLines && !HasSelectableTopics())
+	{
+		return;
+	}
+	
 	if (!bHasGoodbye)
 	{
 		Topics.Add(FRetrieveDialogueTopic{
 			FGameplayTag(),
-			LOCTEXT("Goodbye", "Goodbye"), true, ETopicKind::Story
+			LOCTEXT("Goodbye", "대화 종료"), true, ETopicKind::Story
 		});
 	}
 }
@@ -299,6 +361,11 @@ void UConversationViewModel::BroadcastBeatFields()
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetShowChoices);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetTopics);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetTopicsEnabled);
+}
+
+bool UConversationViewModel::HasSelectableTopics() const
+{
+	return Topics.ContainsByPredicate([](const FRetrieveDialogueTopic& Topic) { return Topic.TopicId.IsValid(); });
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -15,7 +15,9 @@
 #include "Save/RetrieveSaveSubsystem.h"
 #include "World/GuardianCoreSpawnerComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
+#include "Components/World/RetrieveDialogueComponent.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 
 ARetrieveGameState::ARetrieveGameState(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
@@ -151,7 +153,8 @@ void ARetrieveGameState::SetActiveSpeaker(const FText& InSpeakerName)
 }
 
 void ARetrieveGameState::RequestDialogue(const TArray<FText>& Lines, const TArray<FRetrieveDialogueTopic>& Topics,
-                                         bool bShared, bool bHoldUntilReplaced)
+                                         bool bShared, bool bHoldUntilReplaced, FGameplayTag CompletesStep,
+                                         bool bAutoEndAfterLines)
 {
 	if (!HasAuthority())
 	{
@@ -165,6 +168,8 @@ void ARetrieveGameState::RequestDialogue(const TArray<FText>& Lines, const TArra
 	Next.bSharedNarrative = bShared;
 	Next.Serial = DialogueState.Serial + 1;
 	Next.bHoldUntilReplaced = bHoldUntilReplaced;
+	Next.CompletesStep = CompletesStep;
+	Next.bAutoEndAfterLines = bAutoEndAfterLines;
 
 	DialogueState = Next;
 	OnRep_DialogueState();
@@ -197,6 +202,8 @@ void ARetrieveGameState::OnRep_DialogueState()
 	Message.Topics = DialogueState.Topics;
 	Message.bSharedNarrative = DialogueState.bSharedNarrative;
 	Message.bHoldUntilReplaced = DialogueState.bHoldUntilReplaced;
+	Message.CompletesStep = DialogueState.CompletesStep;
+	Message.bAutoEndAfterLines = DialogueState.bAutoEndAfterLines;
 
 	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Dialogue_LineRequested,
 	                                                       Message);
@@ -218,7 +225,7 @@ void ARetrieveGameState::AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign)
 	switch (Row->Kind)
 	{
 	case ETopicKind::Story:
-		RequestDialogue(Row->Lines, BuildFollowUpTopics(*Row), true);
+		RequestDialogue(Row->Lines, BuildFollowUpTopics(*Row), true, false, Row->CompletesStep, Row->bAutoEndAfterLines);
 		break;
 
 	case ETopicKind::Command:
@@ -232,7 +239,7 @@ void ARetrieveGameState::AdvanceDialogue(FGameplayTag TopicId, APawn* Sovereign)
 				UGameplayMessageSubsystem::Get(World).BroadcastMessage(Row->CommandChannel, Message);
 			}
 		}
-		RequestDialogue(Row->Lines, {}, true);
+		RequestDialogue(Row->Lines, {}, true, false, Row->CompletesStep, Row->bAutoEndAfterLines);
 		break;
 
 	case ETopicKind::Sigil:
@@ -284,7 +291,45 @@ void ARetrieveGameState::ApplySigilTopic(const FDialogueRow& Row, APawn* Soverei
 	}
 
 	// 3. 이어서 대화
-	RequestDialogue(Row.Lines, {}, true);
+	RequestDialogue(Row.Lines, {}, true, false, FGameplayTag(), true); // bAutoEndAfterLines = true
+}
+
+void ARetrieveGameState::ApplyGuardianCoreEmpowerment(FGameplayTag GuardianDefeatedStep, APawn* Sovereign)
+{
+	if (!HasAuthority() || !DialogueTable || !GuardianDefeatedStep.IsValid())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+
+	if (World && Sovereign)
+	{
+		for (TActorIterator<APawn> It(World); It; ++It)
+		{
+			URetrieveDialogueComponent* DialogueComponent = It->FindComponentByClass<URetrieveDialogueComponent>();
+			if (DialogueComponent && DialogueComponent->SpeakerTag.MatchesTagExact(RetrieveGameplayTags::Speaker_Lumen))
+			{
+				DialogueComponent->HandleInteract(Sovereign);
+				break;
+			}
+		}
+	}
+
+	static const FString ContextString(TEXT("GameState_GuardianCoreEmpowerment"));
+	TArray<FDialogueRow*> AllRows;
+	DialogueTable->GetAllRows<FDialogueRow>(ContextString, AllRows);
+	for (const FDialogueRow* Row : AllRows)
+	{
+		if (Row && Row->Kind == ETopicKind::Sigil && Row->RequiresStep == GuardianDefeatedStep)
+		{
+			ApplySigilTopic(*Row, Sovereign);
+			return;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[GameState] GuardianCore 강화: '%s'에 대응하는 행 없음"),
+		*GuardianDefeatedStep.ToString());
 }
 
 const FDialogueRow* ARetrieveGameState::FindDialogueRow(FGameplayTag TopicId) const

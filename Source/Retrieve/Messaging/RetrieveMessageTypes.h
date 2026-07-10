@@ -327,6 +327,14 @@ struct FRetrieveDialogueState
 	/** RequestDialogue/ClearDialogue 호출마다 증가. 콘텐츠가 동일해도 OnRep이 발생하도록 함. */
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
 	int32 Serial = 0;
+	
+	/** 이 비트의 라인이 끝나면 완료할 스텝 (호스트 전용).*/
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FGameplayTag CompletesStep;
+	
+	/** 마지막 라인에서 자동 종료. */
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bAutoEndAfterLines = false;
 };
 
 /** Channel.Dialogue.LineRequested 로컬 페이로드. */
@@ -349,6 +357,12 @@ struct FRetrieveDialoguePayload
 
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
 	bool bHoldUntilReplaced = false;
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	FGameplayTag CompletesStep;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Dialogue")
+	bool bAutoEndAfterLines = false;
 };
 
 /** 최소한의 시네마틱 상태. */

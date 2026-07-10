@@ -358,6 +358,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Monster_Died, "Channel.Monster.Died");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Game_QueenDefeated, "Channel.Game.QueenDefeated");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_PlayerSpotted, "Channel.Enemy.PlayerSpotted");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Enemy_SpawnGroupCleared, "Channel.Enemy.SpawnGroupCleared");
 	
 	// ---- Message channels: UI Buff
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_Buff_Apply,   "Channel.UI.Buff.Apply");
@@ -477,14 +478,17 @@ namespace RetrieveGameplayTags
 
 	// Stage 1 (main quest) per-objective steps
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Cave, "Quest.Step.TalkedToLumen.Cave");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Village, "Quest.Step.TalkedToLumen.Village");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_ExitedCave, "Quest.Step.ExitedCave");
 
-	// ---- Quest definitions (DT_Quest QuestIds)
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_OpenYourEyes, "Quest.Main.OpenYourEyes");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ACenturyLater, "Quest.Main.ACenturyLater");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimFire, "Quest.Main.ReclaimFire");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimWater, "Quest.Main.ReclaimWater");
-	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ReclaimWind, "Quest.Main.ReclaimWind");
+	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_WakingFromTheDeep, "Quest.Main.WakingFromTheDeep");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheForgottenForest, "Quest.Main.TheForgottenForest");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_AStoryLeftBehind, "Quest.Main.AStoryLeftBehind");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheCorruptedGuardianFire, "Quest.Main.TheCorruptedGuardianFire");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheCorruptedGuardianWind, "Quest.Main.TheCorruptedGuardianWind");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheCorruptedGuardianWater, "Quest.Main.TheCorruptedGuardianWater");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ToTheEdge, "Quest.Main.ToTheEdge");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_StormTheCastle, "Quest.Main.StormTheCastle");
 	
 	// ---- Dialogue

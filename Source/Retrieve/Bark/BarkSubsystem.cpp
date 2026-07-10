@@ -9,6 +9,7 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
+#include "TimerManager.h"
 
 bool UBarkSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
 {
@@ -43,7 +44,12 @@ void UBarkSubsystem::Deinitialize()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ScanTimerHandle);
+		for (FTimerHandle& Handle : StepBarkTimers)
+		{
+			World->GetTimerManager().ClearTimer(Handle);
+		}
 	}
+	StepBarkTimers.Reset();
 	Speakers.Reset();
 	SpeakerReadyTime.Reset();
 }
@@ -67,11 +73,12 @@ void UBarkSubsystem::UnregisterSpeaker(UBarkSpeakerComponent* Speaker)
 
 // ---- Listeners ------------------------------------------------------------
 
-void UBarkSubsystem::HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Payload)
+void UBarkSubsystem::HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Message)
 {
 	// 각 클라이언트가 Channel.Quest.StepChanged를 로컬로 듣고 자신의 클라이언트에서 발동 (상태는 이미 복제됨)
 	const UDataTable* Table = GetBarkTable();
-	if (!Table)
+	UWorld* World = GetWorld();
+	if (!Table || !World)
 	{
 		return;
 	}
@@ -81,23 +88,37 @@ void UBarkSubsystem::HandleStepChanged(FGameplayTag Channel, const FRetrieveQues
 	for (const FName& RowName : RowNames)
 	{
 		const FBarkRow* Row = Table->FindRow<FBarkRow>(RowName, ContextString, false);
-		if (Row && Row->Trigger == EBarkTrigger::OnQuestStep && Row->KeyTag.IsValid() && Row->KeyTag == Payload.StepTag
+		if (Row && Row->Trigger == EBarkTrigger::OnQuestStep && Row->KeyTag.IsValid() && Row->KeyTag == Message.StepTag
 			&& IsRowEligible(RowName, *Row))
 		{
-			FireRow(RowName, *Row, nullptr);
-			break; // 한 스텝당 한 줄
+			// 스텝당 한 행. 연속 대사는 그 행의 bSequentialLines로 처리
+			// TODO(coop): Lumen 동기화 대사는 추후 호스트가 모든 클라이언트에 맞춰 재생. 현재는 클라이언트 로컬.
+			const float Delay = Row->TriggerDelaySeconds;
+			if (Delay <= 0.f)
+			{
+				FireStepBark(RowName);
+			}
+			else
+			{
+				FTimerHandle Handle;
+				World->GetTimerManager().SetTimer(
+					Handle, FTimerDelegate::CreateWeakLambda(this, [this, RowName]() { FireStepBark(RowName); }), Delay,
+					false);
+				StepBarkTimers.Add(Handle);
+			}
+			break;
 		}
 	}
 }
 
-void UBarkSubsystem::HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Payload)
+void UBarkSubsystem::HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Message)
 {
-	bCinematicActive = Payload.bActive;
+	bCinematicActive = Message.bActive;
 }
 
-void UBarkSubsystem::HandleDialogueChanged(FGameplayTag Channel, const FRetrieveDialogueChangedPayload& Payload)
+void UBarkSubsystem::HandleDialogueChanged(FGameplayTag Channel, const FRetrieveDialogueChangedPayload& Message)
 {
-	bDialogueActive = Payload.bActive;
+	bDialogueActive = Message.bActive;
 }
 
 // ---- Ambient arbiter ------------------------------------------------------
@@ -302,15 +323,15 @@ bool UBarkSubsystem::IsLocalPlayerInCombat() const
 
 void UBarkSubsystem::FireRow(FName RowName, const FBarkRow& Row, UBarkSpeakerComponent* ViaSpeaker)
 {
-	const FRetrieveBarkPayload Payload = BuildPayload(Row);
+	const FRetrieveBarkPayload Message = BuildPayload(Row);
 
 	if (ViaSpeaker)
 	{
-		ViaSpeaker->RouteBark(Payload); // AmbientRandom
+		ViaSpeaker->RouteBark(Message); // AmbientRandom
 	}
 	else
 	{
-		BroadcastBarkLocal(Payload); // OnQuestStep / Manual
+		BroadcastBarkLocal(Message); // OnQuestStep / Manual
 	}
 
 	if (Row.bPlayOnce)
@@ -322,11 +343,11 @@ void UBarkSubsystem::FireRow(FName RowName, const FBarkRow& Row, UBarkSpeakerCom
 
 FRetrieveBarkPayload UBarkSubsystem::BuildPayload(const FBarkRow& Row)
 {
-	FRetrieveBarkPayload Payload;
-	Payload.SpeakerTag = Row.SpeakerTag;
-	Payload.SpeakerName = Row.SpeakerName;
-	Payload.Duration = Row.Duration;
-	Payload.Cue = Row.Cue;
+	FRetrieveBarkPayload Message;
+	Message.SpeakerTag = Row.SpeakerTag;
+	Message.SpeakerName = Row.SpeakerName;
+	Message.Duration = Row.Duration;
+	Message.Cue = Row.Cue;
 
 	if (Row.Lines.Num() > 0)
 	{
@@ -341,10 +362,65 @@ FRetrieveBarkPayload UBarkSubsystem::BuildPayload(const FBarkRow& Row)
 		const int32 Pick = (Candidates.Num() > 0)
 			                   ? Candidates[FMath::RandRange(0, Candidates.Num() - 1)]
 			                   : FMath::RandRange(0, Row.Lines.Num() - 1);
-		Payload.Line = Row.Lines[Pick];
-		LastLine = Payload.Line.ToString();
+		Message.Line = Row.Lines[Pick];
+		LastLine = Message.Line.ToString();
 	}
-	return Payload;
+	return Message;
+}
+
+FRetrieveBarkPayload UBarkSubsystem::BuildPayloadForLine(const FBarkRow& Row, const FText& Line) const
+{
+	FRetrieveBarkPayload Message;
+	Message.SpeakerTag = Row.SpeakerTag;
+	Message.SpeakerName = Row.SpeakerName;
+	Message.Duration = Row.Duration;
+	Message.Cue = Row.Cue;
+	Message.Line = Line;
+	return Message;
+}
+
+void UBarkSubsystem::FireStepBark(FName RowName)
+{
+	const UDataTable* Table = GetBarkTable();
+	if (!Table)
+	{
+		return;
+	}
+	static const FString ContextString(TEXT("BarkStepFire"));
+	const FBarkRow* Row = Table->FindRow<FBarkRow>(RowName, ContextString, false);
+	if (!Row)
+	{
+		return;
+	}
+	if (!IsRowEligible(RowName, *Row))
+	{
+		return;
+	}
+
+	if (Row->bSequentialLines && Row->Lines.Num() > 0)
+	{
+		// 여러 줄을 한 번에 순서대로 큐에 적재
+		for (int32 i = 0; i < Row->Lines.Num(); ++i)
+		{
+			FRetrieveBarkPayload Message = BuildPayloadForLine(*Row, Row->Lines[i]);
+			if (i != 0)
+			{
+				Message.Cue = nullptr; // 오디오 큐는 첫 줄에서만 재생 (행에 큐가 하나뿐임...)
+			}
+			BroadcastBarkLocal(Message);
+		}
+		if (Row->bPlayOnce)
+		{
+			PlayedOnceRows.Add(RowName);
+		}
+		LastFiredRow = RowName;
+		LastLine = Row->Lines.Last().ToString();
+	}
+	else
+	{
+		// 단일 줄: 기존 경로 그대로 (무작위 한 줄 + bPlayOnce/LastFired 처리)
+		FireRow(RowName, *Row, nullptr);
+	}
 }
 
 void UBarkSubsystem::BroadcastBarkLocal(const FRetrieveBarkPayload& Payload) const

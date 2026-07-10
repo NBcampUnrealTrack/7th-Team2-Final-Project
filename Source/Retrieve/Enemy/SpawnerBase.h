@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
+#include "GameplayTagContainer.h"
 #include "SpawnerBase.generated.h"
 
 class URetrievePawnData;
@@ -62,6 +63,9 @@ private:
 	/** 트리거 액터(플레이어)가 현재 DespawnSphere 범위 안에 있는지. */
 	bool IsPlayerInRange() const;
 
+	/** EntryPawns 중 유효하고 사망하지 않은 스폰이 하나라도 있는지. false면 그룹이 전멸한 것. */
+	bool HasAnyLiveSpawn() const;
+
 	/** 트리거 액터(플레이어)가 현재 SpawnSphere 범위 안에 있는지 */
 	bool IsPlayerInSpawnRange() const;
 
@@ -87,7 +91,16 @@ private:
 public:
 	UPROPERTY(EditAnywhere, Category="Spawner")
 	bool bAllowRespawn = true;
-	
+
+	/**
+	 * (선택) 이 스포너가 이루는 스폰 그룹의 식별자.
+	 * 지정할 경우 살아있는 스폰이 모두 사망할 때 Channel.Enemy.SpawnGroupCleared 신호에 이 값을 실어 발행한다.
+	 * 퀘스트/구역 게이트 등 외부 시스템이 이 값으로 자신의 그룹을 매칭한다(스포너는 퀘스트에 의존하지 않음).
+	 * 설정하지 않는 경우 소비자가 없으므로 신호를 발행하지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Spawner")
+	FGameplayTag SpawnGroupId;
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Spawner")
 	TObjectPtr<USceneComponent> RootComp;

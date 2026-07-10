@@ -29,6 +29,9 @@ public:
 	bool GetShowChoices() const { return Lines.Num() == 0 || LineIndex >= Lines.Num() - 1; }
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|Dialogue")
+	bool GetShowTopicsPanel() const { return GetShowChoices() && Topics.Num() > 0; }
+	
+	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|Dialogue")
 	TArray<FRetrieveDialogueTopic> GetTopics() const { return Topics; }
 
 	/** 표시 중인 토픽 개수(숫자키 유효성 판단·번호 라벨 표시용). */
@@ -68,8 +71,10 @@ protected:
 
 private:
 	void HandleLineRequested(FGameplayTag Channel, const FRetrieveDialoguePayload& Message);
+	void HandleBeatEnded();
 	void AppendGoodbyeIfMissing();
 	void BroadcastBeatFields();
+	bool HasSelectableTopics() const;
 
 	FGameplayMessageListenerHandle ListenerHandle;
 	TWeakObjectPtr<UWorld> WorldPtr;
@@ -86,4 +91,10 @@ private:
 
 	int32 LineIndex = 0;
 	bool bTopicsEnabled = true;
+	
+	/** 현재 재생 중인 비트가 끝날 때 완료할 스텝 (호스트 전용). */
+	FGameplayTag CurrentCompletesStep;
+	
+	/** 현재 비트에서 캐시된 bAutoEndAfterLines. 후속 선택지가 없고 자동 종료형일 때, 마지막 라인에서 Enter로 대화를 닫습니다. */
+	bool bCurrentAutoEndAfterLines = false;
 };
