@@ -32,6 +32,9 @@ void URetrieveMusicSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	SessionListenerHandle = Msg.RegisterListener(
 		RetrieveGameplayTags::Channel_Session_StateChanged,
 		this, &URetrieveMusicSubsystem::HandleSessionStateChanged);
+	PlayerDiedListenerHandle = Msg.RegisterListener(
+		RetrieveGameplayTags::Channel_Player_Died,
+		this, &URetrieveMusicSubsystem::HandlePlayerDied);
 
 	// 전환 메시지를 놓쳐도 안전하도록 현재 세션 상태를 직접 읽어 초기 BGM을 결정한다.
 	if (const ARetrieveGameState* GS = InWorld.GetGameState<ARetrieveGameState>())
@@ -58,6 +61,10 @@ void URetrieveMusicSubsystem::Deinitialize()
 	if (SessionListenerHandle.IsValid())
 	{
 		SessionListenerHandle.Unregister();
+	}
+	if (PlayerDiedListenerHandle.IsValid())
+	{
+		PlayerDiedListenerHandle.Unregister();
 	}
 
 	if (UWorld* World = GetWorld())
@@ -143,6 +150,21 @@ void URetrieveMusicSubsystem::HandlePlayerSpotted(FGameplayTag Channel, const FE
 			World->GetTimerManager().SetTimer(EngagementPollTimer, this,
 				&URetrieveMusicSubsystem::PollEngagement, EngagementPollInterval, /*bLoop=*/true);
 		}
+	}
+}
+
+void URetrieveMusicSubsystem::HandlePlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Payload)
+{
+	// 사망 = 교전 종료. 남은 교전 집합/폴링을 정리하고 전투곡을 끈다.
+	EngagedEnemies.Reset();
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EngagementPollTimer);
+	}
+	if (bCombatMusicActive)
+	{
+		bCombatMusicActive = false;
+		UpdateMusic();
 	}
 }
 

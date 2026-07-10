@@ -4,6 +4,7 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/Enemy/BossHPBarComponent.h"
 #include "Engine/HitResult.h"
 #include "GameFramework/Pawn.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -97,6 +98,7 @@ void ARetrieveArenaBlockActor::OnPlayerSpotted(FGameplayTag Channel, const FEnem
 
 	// 여기서 바로 결계를 걸지 않는다. 보스가 문/벽 너머로 플레이어를 먼저 인지해도,
 	// 플레이어가 EntryTrigger(아레나 입구를 지난 지점)를 실제로 통과할 때만 잠근다.
+	CachedBoss = Payload.InstigatorEnemy; 
 	PendingSpottedPlayer = Payload.SpottedActor;
 	bWaitingForPlayerEntry = true;
 }
@@ -153,6 +155,17 @@ bool ARetrieveArenaBlockActor::IsArenaBoss(const AActor* Actor, const FVector& L
 	return true;
 }
 
+void ARetrieveArenaBlockActor::SetBossHPBarVisible(bool bVisible)
+{
+	if (AActor* Boss = CachedBoss.Get())
+	{
+		if (UBossHPBarComponent* BossHPBar = Boss->FindComponentByClass<UBossHPBarComponent>())
+		{
+			bVisible ? BossHPBar->Show() : BossHPBar->Hide();
+		}
+	}
+}
+
 void ARetrieveArenaBlockActor::LockArena()
 {
 	if (bIsLocked || bCleared)
@@ -173,6 +186,7 @@ void ARetrieveArenaBlockActor::LockArena()
 	}
 
 	OnArenaActivated();
+	SetBossHPBarVisible(true);
 }
 
 void ARetrieveArenaBlockActor::UnlockArena()
@@ -193,6 +207,7 @@ void ARetrieveArenaBlockActor::UnlockArena()
 		BarrierMID->SetScalarParameterValue(TEXT("UnlockTime"), GetWorld()->GetTimeSeconds());
 	}
 	OnArenaDeactivated();
+	SetBossHPBarVisible(false);
 
 	GetWorldTimerManager().SetTimer(HideTimerHandle, this,
 		&ARetrieveArenaBlockActor::HideBarrier, UnlockDuration, false);

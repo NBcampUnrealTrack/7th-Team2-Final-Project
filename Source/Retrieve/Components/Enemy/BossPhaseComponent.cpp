@@ -40,10 +40,29 @@ void UBossPhaseComponent::Initialize(UDataTable* InBossStatsTable, FName InBossS
 	// HealthComponent OnHealthChanged 구독 (델리게이트 시그니처: float NewHealth)
 	if (ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(GetOwner()))
 	{
+		// 1페이즈(초기) 행 이름 캐시 — 재조우 시 ResetToPhase1이 이 값으로 복구한다.
+		Phase1DataRowName = Boss->GetMonsterDataRowName();
+
 		if (URetrieveHealthComponent* HC = Boss->GetHealthComponent())
 		{
 			HC->OnHealthChanged.AddDynamic(this, &UBossPhaseComponent::OnHealthChanged);
 		}
+	}
+}
+
+void UBossPhaseComponent::ResetToPhase1()
+{
+	CurrentPhase = 1;
+
+	// 초기 행 이름은 조합("_Phase1")하지 않고 Initialize에서 캐시한 실제 값으로 복구한다.
+	if (Phase1DataRowName.IsNone())
+	{
+		return;
+	}
+
+	if (ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(GetOwner()))
+	{
+		Boss->UpdateMonsterDataRow(Phase1DataRowName);
 	}
 }
 

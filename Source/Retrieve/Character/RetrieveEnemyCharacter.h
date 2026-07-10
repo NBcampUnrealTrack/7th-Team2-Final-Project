@@ -125,6 +125,10 @@ protected:
 
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 
+	/** 재조우(리스폰/재활성) 시 이전 교전 상태(공격·히트박스·상태이상·쿨다운·몽타주 등)를 초기화한다.
+	 *  파생 클래스가 확장 가능(보스는 페이즈 리셋 추가). */
+	virtual void ResetRespawnState();
+
 	void OnDeadTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnChaseTagChanged(const FGameplayTag Tag, int32 Count);
 	void OnAttackTagChanged(const FGameplayTag Tag, int32 Count);

@@ -108,6 +108,17 @@ void ARetrieveBossCharacter::HandleDeathStarted(AActor* OwningActor)
 	}
 }
 
+void ARetrieveBossCharacter::ResetRespawnState()
+{
+	Super::ResetRespawnState();
+
+	// 재조우 시 보스를 1페이즈로 되돌린다.
+	if (BossPhaseComponent)
+	{
+		BossPhaseComponent->ResetToPhase1();
+	}
+}
+
 void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 {
 	// 보호된 부모 필드에 직접 접근 가능 (같은 상속 계층)

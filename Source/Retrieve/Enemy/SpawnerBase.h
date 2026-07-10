@@ -62,6 +62,9 @@ private:
 	/** 트리거 액터(플레이어)가 현재 DespawnSphere 범위 안에 있는지. */
 	bool IsPlayerInRange() const;
 
+	/** 트리거 액터(플레이어)가 현재 SpawnSphere 범위 안에 있는지 */
+	bool IsPlayerInSpawnRange() const;
+
 	/** 플레이어가 DespawnSphere 밖으로 나간 사망 엔트리들에 대해 RespawnDelay 타이머를 시작한다. */
 	void StartPendingRespawnTimers();
 

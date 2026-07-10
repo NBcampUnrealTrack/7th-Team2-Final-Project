@@ -220,6 +220,13 @@ void UEnemyCombatComponent::StopCurrentPattern()
 	ClearFocusTarget();
 }
 
+void UEnemyCombatComponent::ResetCooldowns()
+{
+	CooldownExpiry.Empty();
+	SpecialAttackEvaluationLockUntilTime = 0.f;
+	SpecialAttackRetryCooldownUntilTime = 0.f;
+}
+
 bool UEnemyCombatComponent::IsPatternActive() const
 {
 	if (bSequencePatternActive)

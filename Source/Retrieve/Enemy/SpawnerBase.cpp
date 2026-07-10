@@ -144,7 +144,7 @@ void ASpawnerBase::SpawnAll()
 			// 생존 + 비활성 → 재활성화
 			else if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 			{
-				Enemy->ActivateEnemy(SpawnTransform, false);
+				Enemy->ActivateEnemy(SpawnTransform, true);
 			}
 		}
 		else
@@ -173,17 +173,6 @@ void ASpawnerBase::SpawnAll()
 	}
 
 	bIsSpawned = true;
-
-	for (const TWeakObjectPtr<APawn>& WeakPawn : SpawnedPawns)
-	{
-		if (APawn* Pawn = WeakPawn.Get())
-		{
-			if (UBossHPBarComponent* BossHPBar = Pawn->FindComponentByClass<UBossHPBarComponent>())
-			{
-				BossHPBar->Show();
-			}
-		}
-	}
 }
 
 void ASpawnerBase::DespawnAll()
@@ -247,16 +236,17 @@ void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 	const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
 	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Enemy Respawn Start!"), *GetName());
 		Enemy->ActivateEnemy(SpawnTransform, true);
-		SpawnedPawns.Add(Pawn);
-		if (bIsSpawned)
+		
+		if (!IsPlayerInSpawnRange())
 		{
-			if (UBossHPBarComponent* BossHPBar = Enemy->FindComponentByClass<UBossHPBarComponent>())
-			{
-				BossHPBar->Show();
-			}
+			Enemy->DeactivateEnemy();
+			bIsSpawned = false;
+			return;
 		}
+		
+		SpawnedPawns.Add(Pawn);
+		bIsSpawned = true;
 	}
 }
 
@@ -321,8 +311,29 @@ bool ASpawnerBase::IsPlayerInRange() const
 	return false;
 }
 
+bool ASpawnerBase::IsPlayerInSpawnRange() const
+{
+	if (!SpawnSphereComp)
+	{
+		return false;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	SpawnSphereComp->GetOverlappingActors(OverlappingActors);
+
+	for (AActor* Actor : OverlappingActors)
+	{
+		if (IsTriggerActor(Actor))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void ASpawnerBase::OnSpawnSphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+                                             UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (!IsTriggerActor(OtherActor))
 	{
