@@ -63,14 +63,6 @@ public:
 	bool bMuteWhenUnfocused = true;
 
 	// ── Controls (비-리바인드) ───────────────────────────────────
-	/** 감도 모드(배타). true=통합값만, false=X/Y만 적용. */
-	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
-	bool bUseUnifiedSensitivity = true;
-
-	/** 통합 모드에서 쓰는 단일 마우스 감도(양축 공통). */
-	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
-	float MouseSensitivity = 1.f;
-
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
 	float MouseSensitivityX = 1.f;
 

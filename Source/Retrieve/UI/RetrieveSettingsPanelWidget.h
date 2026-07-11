@@ -51,13 +51,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Settings")
 	void OnSettingsApplied();
 
-	/** 감도 모드(통합/세부) 변경·갱신 시 BP 통지 — UI가 통합 vs X/Y 슬라이더 활성/회색을 처리한다. */
-	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Settings")
-	void OnSensitivityModeChanged(bool bUnified);
-
-	UFUNCTION(BlueprintPure, Category = "Retrieve|Settings")
-	bool IsUnifiedSensitivityMode() const;
-
 	// ── 해상도/창 모드 확인 트랜잭션 ─────────────────────────────
 	/** Apply로 해상도·창 모드가 바뀌면 호출된다. BP가 확인 팝업(WBP_SettingsConfirmResolution 등)을 띄운다. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Retrieve|Settings")
@@ -213,11 +206,8 @@ private:
 	UFUNCTION() void HandleFrameLimitChanged(float Value);
 	UFUNCTION() void HandleGammaChanged(float Value);
 
-	UFUNCTION() void HandleMouseSensitivityChanged(float Value);
 	UFUNCTION() void HandleMouseXChanged(float Value);
 	UFUNCTION() void HandleMouseYChanged(float Value);
-	UFUNCTION() void HandleSensModeUnified();
-	UFUNCTION() void HandleSensModeDetailed();
 	UFUNCTION() void HandlePadSensitivityChanged(float Value);
 	UFUNCTION() void HandleInvertYChanged(bool bChecked);
 	UFUNCTION() void HandleVibrationChanged(bool bChecked);

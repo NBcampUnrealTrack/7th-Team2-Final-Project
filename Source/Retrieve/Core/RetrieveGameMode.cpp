@@ -82,8 +82,12 @@ void ARetrieveGameMode::OnWorldReadyForGameplay()
 	GS->TransitionTo(ERetrieveSessionState::MainMenu);
 	RetrieveDiagCheckpoint(TEXT("GameMode::OnWorldReadyForGameplay - MainMenu state set"));
 
-	if (bSkipMainMenuOnBoot)
+	if (bDeveloperSkipIntroFlow || bSkipMainMenuOnBoot)
 	{
+		if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(GetWorld()->GetFirstPlayerController()))
+		{
+			RetrievePC->SetDeveloperSkipIntroFlow(bDeveloperSkipIntroFlow);
+		}
 		BootstrapNewGameQuest();
 		GS->TransitionTo(ERetrieveSessionState::InGame);
 	}

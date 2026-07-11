@@ -73,6 +73,8 @@ protected:
 public:
 	ARetrievePlayerState* GetRetrievePlayerState() const;
 
+	void SetDeveloperSkipIntroFlow(bool bEnabled);
+
 	UFUNCTION(Server, Reliable)
 	void Server_RequestNewGame();
 

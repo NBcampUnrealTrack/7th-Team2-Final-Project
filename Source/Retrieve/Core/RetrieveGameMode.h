@@ -51,9 +51,13 @@ protected:
 	/** 호스트 전용. 살아있는 폰을 RespawnTransform 위치에서 부활시킵니다*/
 	void RespawnPlayerAtTransform(APlayerController* Requestor, const FTransform& RespawnTransform);
 
-	/** 개발/테스트 편의 플래그. true이면 부팅 시 메인 메뉴를 건너뛰고 즉시 게임플레이를 시작합니다. 기본값 false = 메뉴 표시. */
+	/** PIE 테스트에서 메뉴·진입 로딩·오프닝 시네마틱을 모두 건너뛰는 개발자 모드입니다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dev")
-	bool bSkipMainMenuOnBoot = true;
+	bool bDeveloperSkipIntroFlow = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Dev")
+	/** 로딩 화면은 남기고 진행하는 개발자 모드입니다. */
+	bool bSkipMainMenuOnBoot = false;
 	
 	FGameplayMessageListenerHandle PlayerDiedListener;
 

@@ -285,10 +285,8 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 
 	const FVector2D Value = InputActionValue.Get<FVector2D>();
 	const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
-	// 배타: 통합 모드=통합값만(양축 공통), 세부 모드=X/Y만.
-	const bool bUnified = !Settings || Settings->bUseUnifiedSensitivity;
-	const float SensitivityX = bUnified ? (Settings ? Settings->MouseSensitivity : 1.f) : Settings->MouseSensitivityX;
-	const float SensitivityY = bUnified ? (Settings ? Settings->MouseSensitivity : 1.f) : Settings->MouseSensitivityY;
+	const float SensitivityX = Settings ? Settings->MouseSensitivityX : 1.f;
+	const float SensitivityY = Settings ? Settings->MouseSensitivityY : 1.f;
 	const float PitchSign = Settings && Settings->bInvertMouseY ? -1.f : 1.f;
 
 	if (Value.X != 0.0f)
