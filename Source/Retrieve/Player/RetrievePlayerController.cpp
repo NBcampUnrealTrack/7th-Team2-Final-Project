@@ -688,6 +688,10 @@ void ARetrievePlayerController::UpdateInputMode(ERetrieveSessionState NewState)
 	case ERetrieveSessionState::MainMenu:
 	case ERetrieveSessionState::Result:
 		{
+			// 게임 입력(GameOnly) → UIOnly로 나가면 눌려있던 이동/스프린트의 Completed(릴리즈)가 유실되어
+			// 리스폰(Result→InGame) 후 입력 없이 계속 전진하는 고착이 생긴다. 나가기 직전에 눌림 상태를 정리한다.
+			FlushPressedKeys();
+
 			FInputModeUIOnly Mode;
 			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			if (ActiveTopLevelWidget)
