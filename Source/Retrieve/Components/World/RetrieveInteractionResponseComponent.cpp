@@ -1068,10 +1068,11 @@ void URetrieveInteractionResponseComponent::HandleInteractionManagerEnd(uint8 Re
 	// 而ㅼ뒪? ?꾨＼?꾪듃 ?④린湲?(?깃났/痍⑥냼/?ㅽ뙣 臾닿?)
 
 
-	if (InteractorPawn && ShouldPlayMontageDuringInteraction())
+	// 홀드 방식일 때만 End에서 몽타주를 정지한다(취소/실패 포함, 홀드 구간용 재생이므로).
+	// 탭 방식은 Begin과 End가 같은 순간이라 여기서 정지하면 모션이 전혀 안 보인다 —
+	// Begin에서 시작한 몽타주를 끝까지 재생하게 두면 여는 모션과 뚜껑/보상이 자연스럽게 겹친다.
+	if (InteractorPawn && ShouldPlayMontageDuringInteraction() && GetEffectiveHoldInteraction())
 	{
-		// 성공이면 이 호출 다음에 보상 적용과 BP 뚜껑 오픈 이벤트가 실행된다.
-		// 취소/실패일 때도 Begin에서 시작한 몽타주가 남지 않도록 정지한다.
 		Multicast_StopInteractionAnim(
 			InteractorPawn,
 			GetEffectiveMontage(),
@@ -1085,6 +1086,29 @@ void URetrieveInteractionResponseComponent::HandleInteractionManagerEnd(uint8 Re
 			TEXT("[Retrieve|Interaction] Result=%d??SuccessResultValue=%d? ?щ씪 ?곹샇?묒슜 臾댁떆"),
 			Result, SuccessResultValue);
 		return;
+	}
+
+	// 탭 + 상호작용 모션 타입(OpenChest 등): Begin에서 시작한 여는 모션이 대상에 손을 뻗는
+	// 시점(모션 길이의 절반)까지 보상 적용(뚜껑/토스트)을 늦춰 "모션 먼저 → 열림/보상" 순서로 연출한다.
+	// 홀드 방식은 홀드 구간이 이미 그 역할을 하므로 기존대로 즉시 적용한다.
+	if (ShouldPlayMontageDuringInteraction() && !GetEffectiveHoldInteraction())
+	{
+		const float Delay = FMath::Clamp(GetEffectiveInteractionAnimationDuration() * 0.5f, 0.2f, 1.5f);
+		if (UWorld* World = GetWorld(); World && Delay > KINDA_SMALL_NUMBER)
+		{
+			FTimerHandle ApplyDelayHandle;
+			TWeakObjectPtr<APawn> WeakPawn(InteractorPawn);
+			World->GetTimerManager().SetTimer(ApplyDelayHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this, WeakPawn]()
+				{
+					if (APawn* Pawn = WeakPawn.Get())
+					{
+						HandleInteractionApplied(Pawn);
+					}
+				}),
+				Delay, false);
+			return;
+		}
 	}
 
 	HandleInteractionApplied(InteractorPawn);
