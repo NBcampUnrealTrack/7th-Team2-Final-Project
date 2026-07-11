@@ -114,9 +114,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue|Rewards")
 	TArray<FRetrieveDialogueItemReward> ItemRewardPool;
 
+	/** 랜덤 보상 최대 지급 횟수(이 NPC 기준, 세션 동안 유지). 대화 횟수와 무관하게 이 횟수까지만 지급. 0 이하 = 무제한. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue|Rewards", meta = (ClampMin = "0"))
+	int32 MaxItemRewardGrants = 3;
+
 	/** 대화 종료 시 PlayerController(서버 권한)에서 호출. 확률 굴림 후 성공하면 Instigator 인벤토리에 아이템을 지급한다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Dialogue|Rewards")
 	bool TryGrantItemReward(AActor* Instigator);
+
+	// ── 가위바위보 내기 (Details 패널에서 설정) ──────────────────────────────
+
+	/** true면 대화 선택지에 "내기하기(가위바위보)"가 추가된다. 3연승 시 RpsRewardPool에서 보상 지급. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue|Bet")
+	bool bEnableRpsBet = false;
+
+	/** 3연승 보상 후보(가중치 선택). 좋은 보상을 넣는다. 비어 있으면 축하 대사만 나온다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue|Bet")
+	TArray<FRetrieveDialogueItemReward> RpsRewardPool;
+
+	/** 3연승 보상 최대 지급 횟수(이 NPC 기준, 세션 동안 유지). 소진되면 내기 토픽이 숨겨진다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue|Bet", meta = (ClampMin = "0"))
+	int32 MaxRpsRewardGrants = 2;
+
+	/** 내기 토픽을 노출할 수 있는지(활성 + 보상 잔여). ConversationViewModel이 대화 선택지 구성 시 조회. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Dialogue|Bet")
+	bool CanOfferRpsBet() const;
+
+	/**
+	 * 내기 관련 토픽(Dialogue.Bet.*)이면 서버 권한으로 처리하고 true를 반환한다.
+	 * PlayerController::Server_RequestDialogueAdvance에서 DT_Dialogue 조회 전에 호출된다.
+	 */
+	bool HandleRpsBetTopic(FGameplayTag TopicId, APawn* PlayerPawn);
 
 	/** 대화 시작 시 PlayerController에서 호출 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Dialogue|Animation")
@@ -152,4 +180,25 @@ private:
 	TObjectPtr<USkeletalMeshComponent> CachedMesh;
 
 	FTimerHandle AnimReturnTimerHandle;
+
+	/** 가중치 기반으로 Pool에서 하나를 골라 Instigator 인벤토리에 지급한다. */
+	bool GrantWeightedReward(const TArray<FRetrieveDialogueItemReward>& Pool, AActor* Instigator) const;
+
+	/** 저장 키로 쓸 SpeakerTag 결정(컴포넌트 SpeakerTag → 루멘 캐릭터 SpeakerTag 순). */
+	FGameplayTag ResolveSpeakerTagForSave() const;
+
+	/** 저장 파일(WorldState) 기준 지급 횟수 조회. 키/서브시스템이 없으면 세션 카운터 폴백. */
+	int32 GetRewardGrantCount(bool bRpsBet) const;
+
+	/** 지급 횟수 +1 — 저장 파일에 영속화(+세션 폴백 카운터도 함께 증가). */
+	void IncrementRewardGrantCount(bool bRpsBet);
+
+	/** 랜덤 보상 지급 횟수 세션 폴백(SpeakerTag 미설정 NPC용). */
+	int32 ItemRewardGrantCount = 0;
+
+	/** 3연승 보상 지급 횟수 세션 폴백. */
+	int32 RpsRewardGrantCount = 0;
+
+	/** 현재 내기 세션의 연승 수. 대화 시작 시 리셋. */
+	int32 RpsWinStreak = 0;
 };

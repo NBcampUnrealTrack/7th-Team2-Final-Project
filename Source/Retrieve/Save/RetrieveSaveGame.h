@@ -38,6 +38,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	bool bLumenEngraved = false;
 
+	/** NPC 대화 랜덤 보상 지급 횟수 (SpeakerTag별, 월드 공유 진행 상태. NPC당 최대 횟수 제한용) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TMap<FGameplayTag, int32> DialogueRewardGrantCounts;
+
+	/** 가위바위보 내기 3연승 보상 지급 횟수 (SpeakerTag별, 월드 공유 진행 상태) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TMap<FGameplayTag, int32> RpsRewardGrantCounts;
+
 	// ── 슬롯 메타데이터 (UI 표시용) ─────────────────────────────────────────────
 
 	/** 슬롯 인덱스 (0~MaxSaveSlots-1). WorldState 슬롯은 -1 */

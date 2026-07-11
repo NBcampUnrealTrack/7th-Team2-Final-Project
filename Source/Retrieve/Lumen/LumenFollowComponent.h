@@ -8,6 +8,7 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "LumenFollowComponent.generated.h"
 
+class ACharacter;
 class APawn;
 class UAbilitySystemComponent;
 class UAnimMontage;
@@ -54,6 +55,15 @@ public:
 
 	/** 호스트의 뒤쪽 + 왼쪽 배치 오프셋. Follow Task와 Recall GA가 공유합니다. */
 	static FVector ComputeBehindLeftOffset(const AActor* Host, float InOffsetBack, float InOffsetLeft);
+
+	/**
+	 * 호스트 곁 착지 "월드 위치"를 지면에 투영해 반환합니다(텔레포트용).
+	 * 호스트 Z를 그대로 쓰면 경사지에서 착지 XY의 지형이 더 높을 때 캡슐이 지형에 파묻히므로,
+	 * 착지 XY의 실제 지면을 트레이스해 캡슐을 그 위에 앉힙니다. 지면이 없으면(미로딩)
+	 * 호스트 높이 + 여유를 반환하고 이후는 지면 가드가 처리합니다.
+	 */
+	static FVector ComputeSafeLandingBehindHost(const AActor* Host, const ACharacter* LumenCharacter,
+		float InOffsetBack, float InOffsetLeft);
 
 	// Follow Tuning
 	float GetFollowDistance() const { return FollowDistance; }

@@ -162,6 +162,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool IsLumenEngraved() const;
 
+	// ── NPC 보상 지급 카운터 (SpeakerTag별, 월드 공유 진행 상태) ─────────
+
+	/** SpeakerTag 기준 보상 지급 횟수 조회. bRpsBet=true면 가위바위보 내기 보상 카운터. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	int32 GetNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet) const;
+
+	/** 지급 횟수 +1 후 WorldState 슬롯에 자동 저장(모닥불 활성화와 동일 패턴). */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void IncrementNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet);
+
 	// ── 빠른 이동 (World Partition) ───────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|FastTravel")
@@ -219,11 +229,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|FastTravel")
 	FOnFastTravelCompleted OnFastTravelCompleted;
 
+	/**
+	 * 빠른 이동/불러오기/리스폰 공용: 도착 위치로 텔레포트하고 월드 파티션 스트리밍이
+	 * 안정될 때까지 이동·충돌을 잠근 뒤 지면에 스냅한다(미로딩 낙하 방지).
+	 * 리스폰(GameMode::RespawnPlayerAtTransform)에서도 재사용한다.
+	 */
+	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
+
 private:
 	void FinishFastTravel();
-
-	/** 빠른 이동/불러오기 공용: 도착 위치로 텔레포트하고 스트리밍이 안정될 때까지 대기한다. */
-	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
 
 	/** 불러오기 등에서 SaveSubsystem이 직접 로딩화면을 띄운다(빠른 이동은 WorldMapWidget이 띄움). */
 	void ShowLoadingScreen(APlayerController* PC);

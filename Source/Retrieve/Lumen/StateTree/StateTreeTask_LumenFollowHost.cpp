@@ -69,8 +69,9 @@ EStateTreeRunStatus FStateTreeTask_LumenFollowHost::Tick(FStateTreeExecutionCont
 		InstanceData.StuckRecoverSeconds);
 	if (bRecover)
 	{
-		const FVector Landing = Host->GetActorLocation() + ULumenFollowComponent::ComputeBehindLeftOffset(
-			Host, Comp->GetOffsetBack(), Comp->GetOffsetLeft());
+		// 착지점을 지면에 투영한다 — 호스트 Z를 그대로 쓰면 경사지에서 캡슐이 지형에 파묻힌다.
+		const FVector Landing = ULumenFollowComponent::ComputeSafeLandingBehindHost(
+			Host, Cast<ACharacter>(Pawn), Comp->GetOffsetBack(), Comp->GetOffsetLeft());
 		AIController->StopMovement();
 		Pawn->SetActorLocation(Landing, false);
 		const float Yaw = (Host->GetActorLocation() - Landing).Rotation().Yaw;

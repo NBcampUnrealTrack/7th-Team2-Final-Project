@@ -16,6 +16,113 @@
 #include "Player/RetrievePlayerController.h"
 #include "TimerManager.h"
 #include "EnvironmentQuery/EnvQueryManager.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
+// 참고: 상호작용 프롬프트 "시선 게이트"(플레이어가 바라볼 때만 노출)는 루멘 전용이었다가
+// 대화 NPC 공통 기능으로 승격되어 RetrieveDialogueComponent(루멘도 보유)로 이동했다.
+
+namespace
+{
+	// ── 지면 가드 ───────────────────────────────────────────────────────────
+	// 게임 시작/리스폰/빠른 이동 직후 루멘 위치의 월드 파티션 셀이 아직 로드되지 않아
+	// 루멘이 땅 밑으로 꺼지는 문제 방지. 발밑에 지면이 없으면(미로딩) 이동·중력을 잠그고,
+	// 지면이 로드되면 그 위로 스냅한 뒤 이동을 재개한다. 이미 추락했으면 호스트 곁으로 회수.
+	// (BP_LumenCharacter에 WorldPartitionStreamingSourceComponent를 추가해 셀 로딩도 유도한다.)
+	// 상태를 파일 로컬에 두는 이유: 헤더/레이아웃 변경 없이 Live Coding으로 반영 가능.
+	TMap<TWeakObjectPtr<ULumenFollowComponent>, FTimerHandle> GLumenGroundGuardTimers;
+	TSet<TWeakObjectPtr<AActor>> GLumenGroundFrozen;
+
+	void EvaluateLumenGroundGuard(ULumenFollowComponent* Comp)
+	{
+		ACharacter* Lumen = Comp ? Cast<ACharacter>(Comp->GetOwner()) : nullptr;
+		UWorld* World = Lumen ? Lumen->GetWorld() : nullptr;
+		if (!World || !Lumen->HasAuthority())
+		{
+			return;
+		}
+		UCharacterMovementComponent* Move = Lumen->GetCharacterMovement();
+
+		APawn* Host = nullptr;
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			Host = GS->GetHostPawn();
+		}
+
+		// 1) 이미 추락했으면 호스트 곁(뒤-왼쪽 오프셋)으로 회수한다.
+		//    (2000은 너무 관대해 지면 아래 1~19m 구간에 갇힌 채 방치될 수 있었다 → 800으로 강화)
+		if (Host && Lumen->GetActorLocation().Z < Host->GetActorLocation().Z - 800.f)
+		{
+			Lumen->SetActorLocation(
+				ULumenFollowComponent::ComputeSafeLandingBehindHost(Host, Lumen, Comp->GetOffsetBack(), Comp->GetOffsetLeft()),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			if (Move)
+			{
+				Move->StopMovementImmediately();
+			}
+			UE_LOG(LogTemp, Log, TEXT("[LumenGroundGuard] %s: 호스트보다 800 이상 아래로 추락 → 호스트 곁으로 회수"),
+				*Lumen->GetName());
+		}
+
+		// 2) 발밑 지면 로드 여부 확인(위 100 ~ 아래 5000 라인 트레이스)
+		const FVector Location = Lumen->GetActorLocation();
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(LumenGroundGuard), /*bTraceComplex*/ false, Lumen);
+		if (Host)
+		{
+			QueryParams.AddIgnoredActor(Host);
+		}
+		FHitResult Hit;
+		const bool bGroundLoaded = World->LineTraceSingleByChannel(
+			Hit,
+			Location + FVector(0.f, 0.f, 100.f),
+			Location - FVector(0.f, 0.f, 5000.f),
+			ECC_Visibility,
+			QueryParams);
+
+		const bool bFrozen = GLumenGroundFrozen.Contains(Lumen);
+		if (!bGroundLoaded)
+		{
+			if (!bFrozen && Move)
+			{
+				// MOVE_None은 중력이 적용되지 않아 지면이 없어도 떨어지지 않는다(빠른 이동과 동일 수법).
+				Move->StopMovementImmediately();
+				Move->DisableMovement();
+				GLumenGroundFrozen.Add(Lumen);
+				UE_LOG(LogTemp, Log, TEXT("[LumenGroundGuard] %s: 발밑 지면 미로딩 → 이동/중력 잠금"),
+					*Lumen->GetName());
+			}
+
+			// 얼어 있는 동안에는 매 틱 호스트 곁에 붙여 둔다.
+			// 호스트 주변 셀이 가장 먼저 로드되므로 지면을 가장 빨리 되찾는 위치이고,
+			// 이미 지면 아래로 가라앉아 트레이스 시작점(+100)이 지하에 묻히는 바람에
+			// 영영 해동되지 못하는 상태도 방지한다(빠른 이동/리스폰 직후의 잔여 낙하 대응).
+			if (Host)
+			{
+				Lumen->SetActorLocation(
+					ULumenFollowComponent::ComputeSafeLandingBehindHost(Host, Lumen, Comp->GetOffsetBack(), Comp->GetOffsetLeft()),
+					false, nullptr, ETeleportType::TeleportPhysics);
+			}
+		}
+		else if (bFrozen)
+		{
+			// 지면 로드 완료: 지면 위로 스냅(파묻힘 방지, 위 방향으로만) 후 이동 재개.
+			const float HalfHeight = Lumen->GetCapsuleComponent()
+				? Lumen->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
+			const FVector SnapLocation = Hit.Location + FVector(0.f, 0.f, HalfHeight + 2.f);
+			if (Location.Z < SnapLocation.Z)
+			{
+				Lumen->SetActorLocation(SnapLocation, false, nullptr, ETeleportType::TeleportPhysics);
+			}
+			if (Move)
+			{
+				Move->SetMovementMode(MOVE_Walking);
+			}
+			GLumenGroundFrozen.Remove(Lumen);
+			UE_LOG(LogTemp, Log, TEXT("[LumenGroundGuard] %s: 지면 로드 확인 → 지면 위 스냅 + 이동 재개"),
+				*Lumen->GetName());
+		}
+	}
+}
 
 ULumenFollowComponent::ULumenFollowComponent()
 {
@@ -66,6 +173,15 @@ void ULumenFollowComponent::BeginPlay()
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
 		World->GetTimerManager().SetTimer(IdleTimerHandle, this, &ULumenFollowComponent::TickIdle, 1.0f, true);
+
+		// 지면 가드: 월드 파티션 미로딩으로 인한 낙하를 감지·방지한다(권한 측 이동 제어).
+		FTimerHandle& GuardHandle = GLumenGroundGuardTimers.FindOrAdd(this);
+		World->GetTimerManager().SetTimer(GuardHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				EvaluateLumenGroundGuard(this);
+			}),
+			0.25f, true);
 	}
 }
 
@@ -83,7 +199,14 @@ void ULumenFollowComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			MessageSubsystem.UnregisterListener(RecallHandle);
 		}
 		World->GetTimerManager().ClearTimer(IdleTimerHandle);
+
+		if (FTimerHandle* GuardHandle = GLumenGroundGuardTimers.Find(this))
+		{
+			World->GetTimerManager().ClearTimer(*GuardHandle);
+			GLumenGroundGuardTimers.Remove(this);
+		}
 	}
+	GLumenGroundFrozen.Remove(GetOwner());
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -109,6 +232,47 @@ FVector ULumenFollowComponent::ComputeBehindLeftOffset(const AActor* Host, float
 	const FVector Forward = Host->GetActorForwardVector();
 	const FVector Right = Host->GetActorRightVector();
 	return Forward * -InOffsetBack + Right * -InOffsetLeft;
+}
+
+FVector ULumenFollowComponent::ComputeSafeLandingBehindHost(const AActor* Host, const ACharacter* LumenCharacter,
+	float InOffsetBack, float InOffsetLeft)
+{
+	if (!Host)
+	{
+		return LumenCharacter ? LumenCharacter->GetActorLocation() : FVector::ZeroVector;
+	}
+
+	FVector Landing = Host->GetActorLocation() + ComputeBehindLeftOffset(Host, InOffsetBack, InOffsetLeft);
+
+	const float HalfHeight = (LumenCharacter && LumenCharacter->GetCapsuleComponent())
+		? LumenCharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+		: 90.f;
+
+	if (UWorld* World = Host->GetWorld())
+	{
+		// 착지 XY의 실제 지면에 캡슐을 앉힌다. 호스트 Z를 그대로 쓰면 경사지(오르막)에서
+		// 캡슐이 지형에 파묻힌 채 배치되고, 깊이 박히면 밀어내기 한계를 넘어 허리까지 낀다.
+		FCollisionQueryParams Query(SCENE_QUERY_STAT(LumenSafeLanding), /*bTraceComplex*/ false);
+		Query.AddIgnoredActor(Host);
+		if (LumenCharacter)
+		{
+			Query.AddIgnoredActor(LumenCharacter);
+		}
+
+		FHitResult Hit;
+		const FVector Start = Landing + FVector(0.f, 0.f, 300.f);
+		const FVector End = Landing - FVector(0.f, 0.f, 600.f);
+		if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query)
+			&& Hit.ImpactNormal.Z > 0.35f)
+		{
+			Landing.Z = Hit.ImpactPoint.Z + HalfHeight + 2.f;
+			return Landing;
+		}
+	}
+
+	// 지면을 못 찾으면(미로딩 등) 호스트 높이 + 여유 — 이후는 지면 가드가 처리한다.
+	Landing.Z = Host->GetActorLocation().Z + 50.f;
+	return Landing;
 }
 
 // ---- State Tree write-through --------------------------------------------------------------------
@@ -158,8 +322,9 @@ void ULumenFollowComponent::HandleRecallBroadcast(const FRetrieveLumenCommandPay
 		{
 			if (APawn* Host = ResolveHostPawn())
 			{
-				const FVector Target = Host->GetActorLocation()
-					+ ComputeBehindLeftOffset(Host, OffsetBack, OffsetLeft);
+				// 경사지에서 파묻히지 않도록 착지점을 지면에 투영한다.
+				const FVector Target = ComputeSafeLandingBehindHost(
+					Host, Cast<ACharacter>(GetOwner()), OffsetBack, OffsetLeft);
 				GetOwner()->SetActorLocation(Target, false);
 
 				const float Yaw = (Host->GetActorLocation() - Target).Rotation().Yaw;
