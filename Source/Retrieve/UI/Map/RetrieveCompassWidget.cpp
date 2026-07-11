@@ -13,6 +13,8 @@
 #include "Fonts/FontMeasure.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
+#include "Blueprint/WidgetTree.h"
 #include "Layout/Clipping.h"
 
 // ── 내부 상수 ────────────────────────────────────────────────────────────────
@@ -389,8 +391,29 @@ void URetrieveCompassWidget::UpdateWidgetMarkers(const FGeometry& MyGeometry)
 				if (UUserWidget* MarkerWidget = GetOrCreatePooledMarker(MarkerKey, UserWaypointMarkerWidgetClass))
 				{
 					SetPooledMarkerTransform(MarkerWidget, MarkerCenter, MarkerSize);
-					// 나침반 위젯 클래스의 WaypointMarkerColor로 틴트 (미니맵과 동일한 지정 방식).
-					MarkerWidget->SetColorAndOpacity(WaypointMarkerColor);
+					// 웨이포인트마다 부여된 색(WP.Color)으로 틴트 — 월드맵·미니맵과 색 연동.
+					// (이전에는 위젯 고정 WaypointMarkerColor라 순서별 색 구분이 반영되지 않았다.)
+					// 플러그인 마커 위젯(Map_FantasyWarrior_Icon_Objective_01)의 내부 이미지 브러시에
+					// 골드 고정 틴트가 박혀 있어 WP.Color와 곱해지면 월드맵과 색이 달라진다.
+					// 내부 이미지 틴트를 흰색으로 중화해 최종 색 = WP.Color(월드맵과 동일)로 만든다.
+					if (UWidgetTree* Tree = MarkerWidget->WidgetTree)
+					{
+						Tree->ForEachWidget([](UWidget* Child)
+						{
+							if (UImage* Img = Cast<UImage>(Child))
+							{
+								if (Img->GetBrush().TintColor.GetSpecifiedColor() != FLinearColor::White)
+								{
+									Img->SetBrushTintColor(FSlateColor(FLinearColor::White));
+								}
+								if (Img->GetColorAndOpacity() != FLinearColor::White)
+								{
+									Img->SetColorAndOpacity(FLinearColor::White);
+								}
+							}
+						});
+					}
+					MarkerWidget->SetColorAndOpacity(WP.Color);
 					ActiveMarkerKeys.Add(MarkerKey);
 				}
 			}
