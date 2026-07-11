@@ -1013,6 +1013,7 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_FrameLimit", HandleFrameLimitChanged)
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_Gamma", HandleGammaChanged)
 
+	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseSensitivity", HandleMouseSensitivityChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseX", HandleMouseXChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseY", HandleMouseYChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_PadSens", HandlePadSensitivityChanged)
@@ -1174,9 +1175,11 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	URetrieveGameUserSettings* S = GetUserSettings();
 	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Controls);
 	if (!S || !Page) return;
+	SetSlider(Page, TEXT("Sld_MouseSensitivity"), S->MouseSensitivity);
 	SetSlider(Page, TEXT("Sld_MouseX"), S->MouseSensitivityX);
 	SetSlider(Page, TEXT("Sld_MouseY"), S->MouseSensitivityY);
 	SetSlider(Page, TEXT("Sld_PadSens"), S->GamepadSensitivityX);
+	SetText(Page, TEXT("Val_MouseSensitivity"), NumberText(S->MouseSensitivity, 1));
 	SetText(Page, TEXT("Val_MouseX"), NumberText(S->MouseSensitivityX, 1));
 	SetText(Page, TEXT("Val_MouseY"), NumberText(S->MouseSensitivityY, 1));
 	SetText(Page, TEXT("Val_PadSens"), NumberText(S->GamepadSensitivityX, 1));
@@ -2048,6 +2051,7 @@ void URetrieveSettingsPanelWidget::HandleGammaChanged(float V) { if (bRefreshing
 #define DEFINE_FLOAT_SETTING_HANDLER(Func, Field, Category, PageCategory, Label, Digits) \
 	void URetrieveSettingsPanelWidget::Func(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->Field = V; \
 	SetText(GetPage(PageCategory), TEXT(Label), NumberText(V, Digits)); APPLY_PREVIEW(Category); } }
+DEFINE_FLOAT_SETTING_HANDLER(HandleMouseSensitivityChanged, MouseSensitivity, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseSensitivity", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseXChanged, MouseSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseX", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseYChanged, MouseSensitivityY, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseY", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandlePadSensitivityChanged, GamepadSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_PadSens", 1)

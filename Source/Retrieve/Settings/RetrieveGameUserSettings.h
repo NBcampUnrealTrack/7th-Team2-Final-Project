@@ -63,6 +63,10 @@ public:
 	bool bMuteWhenUnfocused = true;
 
 	// ── Controls (비-리바인드) ───────────────────────────────────
+	/** 통합(전체) 마우스 감도 배율. 실제 감도 = MouseSensitivity × 축별(X/Y) 값. */
+	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
+	float MouseSensitivity = 1.f;
+
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
 	float MouseSensitivityX = 1.f;
 
@@ -143,8 +147,9 @@ public:
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Graphics")
 	float GammaLevel = 2.2f;
 
+	/** 기본 OFF — 멀미 완화. */
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Graphics")
-	bool bMotionBlur = true;
+	bool bMotionBlur = false;
 
 	// ── 창 모드 BP 래퍼 ──────────────────────────────────────────
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Graphics")

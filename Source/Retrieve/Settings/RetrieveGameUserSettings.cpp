@@ -26,6 +26,7 @@ void URetrieveGameUserSettings::SetToDefaults()
 	VoiceVolume = 1.f;
 	bMuteWhenUnfocused = true;
 
+	MouseSensitivity = 1.f;
 	MouseSensitivityX = 1.f;
 	MouseSensitivityY = 1.f;
 	bInvertMouseY = false;
@@ -53,7 +54,7 @@ void URetrieveGameUserSettings::SetToDefaults()
 	SubtitleBackgroundOpacity = 0.5f;
 
 	GammaLevel = 2.2f;
-	bMotionBlur = true;
+	bMotionBlur = false;
 }
 
 void URetrieveGameUserSettings::LoadSettings(bool bForceReload)
@@ -87,6 +88,7 @@ void URetrieveGameUserSettings::ResetCategoryToDefaults(ERetrieveSettingsCategor
 		bMuteWhenUnfocused = Defaults->bMuteWhenUnfocused;
 		break;
 	case ERetrieveSettingsCategory::Controls:
+		MouseSensitivity = Defaults->MouseSensitivity;
 		MouseSensitivityX = Defaults->MouseSensitivityX;
 		MouseSensitivityY = Defaults->MouseSensitivityY;
 		bInvertMouseY = Defaults->bInvertMouseY;
@@ -143,6 +145,7 @@ void URetrieveGameUserSettings::ValidateRetrieveSettings()
 	Clamp01(UIVolume);
 	Clamp01(VoiceVolume);
 
+	MouseSensitivity = FMath::Clamp(MouseSensitivity, 0.1f, 3.f);
 	MouseSensitivityX = FMath::Clamp(MouseSensitivityX, 0.1f, 3.f);
 	MouseSensitivityY = FMath::Clamp(MouseSensitivityY, 0.1f, 3.f);
 	GamepadSensitivityX = FMath::Clamp(GamepadSensitivityX, 0.1f, 3.f);

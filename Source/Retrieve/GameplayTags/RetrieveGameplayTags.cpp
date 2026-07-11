@@ -446,6 +446,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Gameplay cues: Combat (타격 임팩트 — 데미지 GE의 GameplayCue 컴포넌트로 실행)
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Combat_Hit, "GameplayCue.Combat.Hit");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Combat_HitFlash, "GameplayCue.Combat.HitFlash");
 
 	// ---- UI VFX
 	UE_DEFINE_GAMEPLAY_TAG(UI_VFX_Panel_Open, "UI.VFX.Panel.Open");

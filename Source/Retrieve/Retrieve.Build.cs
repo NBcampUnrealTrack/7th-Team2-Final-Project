@@ -34,6 +34,7 @@ public class Retrieve : ModuleRules
 			"ModelViewViewModel",
 			"FieldNotification",
 			"ALS",
+			"ALSCamera",
 			"MotionWarping",
 			"DeveloperSettings",
 			"LevelSequence",
