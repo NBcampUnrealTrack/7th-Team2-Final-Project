@@ -82,11 +82,15 @@ echo (Requires Visual Studio Build Tools to compile the C++ source)
 echo.
 
 REM --------------------------------------------------------------
-REM 아래 두 cvar는 Shipping 전용 크래시 회피용이라 DefaultEngine.ini에
-REM 직접 넣지 않고 여기서 -ini: 오버라이드로 패키징 결과물에만 굽는다.
-REM (DefaultEngine.ini에 넣으면 에디터 PIE에도 적용돼 부팅이 느려짐.)
-REM   - r.TextureStreaming=0            : Shipping 렌더 에셋 스트리밍 매니저 access violation 회피
-REM   - s.AsyncLoadingThreadEnabled=False : 비동기 로딩 스레드의 Blueprint CDO 재구성 레이스 크래시 회피
+REM Shipping 전용 크래시 회피 cvar(r.TextureStreaming=0,
+REM s.AsyncLoadingThreadEnabled=False)는 DefaultEngine.ini에 있다.
+REM 과거 여기서 -ini: 오버라이드로 넘겼었는데(#261), BuildCookRun의
+REM -ini: 인자는 쿠커 프로세스에만 적용되고 pak에 스테이징되는
+REM DefaultEngine.ini에는 구워지지 않는다. 그 결과 패키지 런타임에서
+REM 텍스처 스트리밍이 다시 켜져 레벨 배치물 텍스처가 저해상도 밉으로
+REM 뭉개져 회색으로 보이는 회귀가 있었다. -ini: 오버라이드를 다시
+REM 추가하지 말 것. (에디터는 [SystemSettings]를 읽지 않으므로
+REM DefaultEngine.ini에 둬도 에디터/PIE 성능에는 영향 없음.)
 REM --------------------------------------------------------------
 
 call "%ENGINE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
@@ -98,8 +102,6 @@ call "%ENGINE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
     -archivedirectory="%ARCHIVE_DIR%" ^
     -nocompileeditor -skipbuildeditor ^
     -CrashReporter ^
-    -ini:Engine:[SystemSettings]:r.TextureStreaming=0 ^
-    -ini:Engine:[/Script/Engine.StreamingSettings]:s.AsyncLoadingThreadEnabled=False ^
     -utf8output
 
 set "RESULT=%errorlevel%"
