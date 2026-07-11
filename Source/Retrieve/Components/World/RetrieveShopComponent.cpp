@@ -12,7 +12,7 @@ namespace
 {
 	/** owner에서 이름이 "InteractionTarget"인 컴포넌트를 찾아 InteractionEnabled를 reflection으로 토글한다.
 	 *  상점 UI가 열려있는 동안 이 NPC의 상호작용 프롬프트를 숨기고, 닫히면 복원하는 데 사용된다. */
-	void SetInteractionTargetEnabled(AActor* Owner, bool bEnabled)
+	void SetShopInteractionTargetEnabled(AActor* Owner, bool bEnabled)
 	{
 		if (!Owner)
 		{
@@ -114,7 +114,7 @@ void URetrieveShopComponent::OpenShop(AActor* InstigatorActor)
 	}
 
 	// 상점 UI가 열려있는 동안 이 NPC의 상호작용 프롬프트를 숨긴다 (닫힐 때 PlayerController가 복원).
-	SetInteractionTargetEnabled(GetOwner(), false);
+	SetShopInteractionTargetEnabled(GetOwner(), false);
 
 	OnShopOpenRequested.Broadcast(ShopDefinition, PC);
 }
