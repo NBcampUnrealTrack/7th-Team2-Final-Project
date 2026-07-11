@@ -280,6 +280,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			InstanceData.bSpecialAttackable = false;
 			InstanceData.bAttackable = false;
+			InstanceData.bAttackApproachable = false;
 		}
 		else if (InstanceData.CachedCombatComponent->IsSpecialAttackEvaluationLocked())
 		{
@@ -597,6 +598,13 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				&& bAttackPatternAvailable
 				&& (bUsePatternRangeForNormalAttack || InstanceData.DistanceToTarget <= InstanceData.AttackableRange);
 
+			// Attack 상태 진입 전용 판정. bAttackPatternAvailable(=MaxActivationRange 기준)만 확인해서
+			// AttackableRange 안으로 접근하는 동안(Attack Task 내부 이동)에도 Attack 상태를 유지할 수 있게 한다.
+			const bool bNormalAttackApproachable = bCanRequestToken
+				&& !bPatternActive
+				&& !bShouldSuppressNormalAttackWhileFlying
+				&& bAttackPatternAvailable;
+
 			// 특수 공격 가능 여부 — 일반/보스는 원본 동작 그대로(일반 공격 가능 여부와 독립적으로
 			// 쿨다운/락만으로 판정). 에픽도 동일하게 쿨다운 완료 시 발동 가능.
 			const bool bRawSpecialAttackable = bHasValidTarget
@@ -618,6 +626,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					&& EncircleSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
 				InstanceData.bHasToken = bEpicHasToken;
 				InstanceData.bAttackable = bNormalAttackable;
+				InstanceData.bAttackApproachable = bNormalAttackApproachable;
 			}
 			else
 			{
@@ -625,12 +634,14 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				// StateTree 전이 우선순위가 선택을 담당한다.
 				InstanceData.bHasAerialPhase = false;
 				InstanceData.bAttackable = bNormalAttackable;
+				InstanceData.bAttackApproachable = bNormalAttackApproachable;
 			}
 		}
 		else
 		{
 			InstanceData.bHasToken   = false;
 			InstanceData.bAttackable = false;
+			InstanceData.bAttackApproachable = false;
 			InstanceData.bSpecialAttackable = false;
 			InstanceData.bHasAerialPhase = false;
 		}
@@ -639,6 +650,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	{
 		InstanceData.bHasToken   = false;
 		InstanceData.bAttackable = false;
+		InstanceData.bAttackApproachable = false;
 		InstanceData.bSpecialAttackable = false;
 		InstanceData.bHasAerialPhase = false;
 	}

@@ -125,10 +125,9 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 		return EStateTreeRunStatus::Failed;
 	}
 
-	if (!InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer))
-	{
-		return EStateTreeRunStatus::Failed;
-	}
+	// Evaluator가 이미 bAttackApproachable(MaxActivationRange 기준)로 패턴 유효성을 검사했다.
+	// 여기서 다시 검사하면 0.2초 갱신 간격 차이로 진입 직후 즉시 실패할 수 있어 제거한다.
+	// 실제 공격 요청 직전(Tick)에서 최종적으로 다시 검사한다.
 
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetPlayer, Pawn))
@@ -171,16 +170,22 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			&& EnemyCharacter->ShouldUsePatternRangeForNormalAttack()
 			&& InstanceData.CachedCombatComponent.IsValid()
 			&& InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
-		if (InstanceData.DistanceToTarget > AttackStartRange && !bCanUseCurrentPatternRange)
+
+		// Evaluator의 DistanceToTarget/ChaseLocation은 0.2초 간격 값이라
+		// 접근/스윙 판정에는 매 프레임 최신 플레이어 위치·거리를 다시 계산해서 쓴다.
+		const FVector AttackMoveTarget = InstanceData.TargetPlayer->GetActorLocation();
+		const float CurrentDistanceToTarget = FVector::Dist2D(Pawn->GetActorLocation(), AttackMoveTarget);
+
+		if (CurrentDistanceToTarget > AttackStartRange && !bCanUseCurrentPatternRange)
 		{
 			InstanceData.TimeInSoftAttackRange = 0.f;
-			
+
 			if (AAIController* AIC = Pawn->GetController<AAIController>())
 			{
 				const bool bCanMove = InstanceData.CachedCombatComponent.IsValid()
 					&& !InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
 
-				if (bCanMove && !InstanceData.ChaseLocation.IsNearlyZero())
+				if (bCanMove)
 				{
 					SetChaseAnimationTag(Pawn, true);
 
@@ -196,20 +201,20 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 					const float MoveDeltaSq = FVector::DistSquared2D(
 						InstanceData.LastMoveRequestLocation,
-						InstanceData.ChaseLocation);
+						AttackMoveTarget);
 
-					if (InstanceData.LastMoveRequestLocation.IsNearlyZero() 
+					if (InstanceData.LastMoveRequestLocation.IsNearlyZero()
 						|| MoveDeltaSq > FMath::Square(50.f))
 					{
 						AIC->MoveToLocation(
-							InstanceData.ChaseLocation,
+							AttackMoveTarget,
 							InstanceData.MoveAcceptableRadius,
 							true,
 							true,
 							true,
 							false);
 
-						InstanceData.LastMoveRequestLocation = InstanceData.ChaseLocation;
+						InstanceData.LastMoveRequestLocation = AttackMoveTarget;
 					}
 				}
 				else
@@ -217,13 +222,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 					SetChaseAnimationTag(Pawn, false);
 				}
 			}
-			
+
 			return EStateTreeRunStatus::Running;
 		}
 
 		SetChaseAnimationTag(Pawn, false);
 
-		if (InstanceData.DistanceToTarget > InstanceData.AttackRange && !bCanUseCurrentPatternRange)
+		if (CurrentDistanceToTarget > InstanceData.AttackRange && !bCanUseCurrentPatternRange)
 		{
 			InstanceData.TimeInSoftAttackRange += DeltaTime;
 			if (InstanceData.TimeInSoftAttackRange < InstanceData.AttackStartDelay)

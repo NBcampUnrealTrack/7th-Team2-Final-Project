@@ -79,7 +79,12 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bAttackable = false;
-	
+
+	// Attack 상태 진입 전용 — MaxActivationRange 기준(AttackableRange보다 넓음).
+	// Attack Task가 진입 후 실제 사거리까지 접근할 수 있도록 별도로 둔다.
+	UPROPERTY(EditAnywhere, Category = "Output")
+	bool bAttackApproachable = false;
+
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bSpecialAttackable = false;
 	
