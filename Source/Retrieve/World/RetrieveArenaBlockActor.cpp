@@ -53,6 +53,10 @@ void ARetrieveArenaBlockActor::BeginPlay()
 	DiedHandle = MsgSubsys.RegisterListener<FMonsterDiedPayload>(
 		RetrieveGameplayTags::Channel_Monster_Died,
 		this, &ARetrieveArenaBlockActor::OnMonsterDied);
+
+	PlayerDiedHandle = MsgSubsys.RegisterListener<FPlayerDiedPayload>(
+		RetrieveGameplayTags::Channel_Player_Died,
+		this, &ARetrieveArenaBlockActor::OnPlayerDied);
 }
 
 void ARetrieveArenaBlockActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -76,6 +80,10 @@ void ARetrieveArenaBlockActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (DiedHandle.IsValid())
 	{
 		MsgSubsys.UnregisterListener(DiedHandle);
+	}
+	if (PlayerDiedHandle.IsValid())
+	{
+		MsgSubsys.UnregisterListener(PlayerDiedHandle);
 	}
 
 	GetWorldTimerManager().ClearTimer(HideTimerHandle);
@@ -135,6 +143,20 @@ void ARetrieveArenaBlockActor::OnMonsterDied(FGameplayTag Channel, const FMonste
 	bCleared = true;
 	bWaitingForPlayerEntry = false;
 
+	UnlockArena();
+}
+
+void ARetrieveArenaBlockActor::OnPlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Payload)
+{
+	// 보스가 이미 처치됐으면 관여하지 않는다.
+	if (bCleared)
+	{
+		return;
+	}
+
+	// 플레이어 사망 → 결계 해제 + 재진입 대기 초기화(다시 들어오면 재잠금 = 재도전).
+	bWaitingForPlayerEntry = false;
+	PendingSpottedPlayer = nullptr;
 	UnlockArena();
 }
 
