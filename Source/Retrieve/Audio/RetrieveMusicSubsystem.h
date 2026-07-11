@@ -15,6 +15,7 @@ class ARetrieveMusicZoneVolume;
 struct FEnemyPlayerSpottedPayload;
 struct FRetrieveSessionStatePayload;
 struct FPlayerDiedPayload;
+struct FRetrieveCinematicStatePayload;
 
 /**
  * BGM 중앙 관리자. 두 개의 UAudioComponent 슬롯을 번갈아 크로스페이드한다.
@@ -61,6 +62,8 @@ private:
 	void HandlePlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Payload);
 	/** 세션 상태(메뉴/게임플레이/결과) 전환에 맞춰 BGM 컨텍스트를 바꾼다. */
 	void HandleSessionStateChanged(FGameplayTag Channel, const FRetrieveSessionStatePayload& Payload);
+	/** 시네마틱 종료 시 존 오버랩 재평가를 재개(오프닝이 시작 존 진입을 놓치는 것 보정). */
+	void HandleCinematicStateChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Payload);
 
 	/**
 	 * InGame 진입 시, 플레이어가 이미 존 볼륨 안에 있으면(시작 지점 등) 오버랩 이벤트가
@@ -100,6 +103,7 @@ private:
 	FGameplayMessageListenerHandle SpottedListenerHandle;
 	FGameplayMessageListenerHandle SessionListenerHandle;
 	FGameplayMessageListenerHandle PlayerDiedListenerHandle;
+	FGameplayMessageListenerHandle CinematicListenerHandle;
 
 	// 현재 세션 상태. 메뉴/로딩이면 게임플레이(존/전투) 판정을 건너뛴다.
 	ERetrieveSessionState CurrentSessionState = ERetrieveSessionState::Loading;
