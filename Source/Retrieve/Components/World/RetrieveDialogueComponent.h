@@ -86,6 +86,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
 	TArray<FText> DefaultGreetingLines;
 
+	/**
+	 * 이 NPC의 상호작용 프롬프트 문구(기본 "대화하기"). 시선 게이트가 상호작용 존을 재활성화할 때,
+	 * 매니저(InteractionTarget)의 InteractionText가 비어 있거나 플러그인 기본값 "Interact"이면
+	 * 이 문구로 교체한다. 레벨 배치 인스턴스에 옛 "Interact"가 직렬화돼 BP 기본값을 가리는 경우를
+	 * 런타임에 교정하기 위한 것이며, "Interact"가 아닌 정당한 커스텀 문구(상점 등)는 덮어쓰지 않는다.
+	 * 비우면 교정하지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Dialogue")
+	FText InteractionPromptText;
+
+	const FText& GetInteractionPromptText() const { return InteractionPromptText; }
+
 	// ── 애니메이션 (Details 패널에서 설정) ──────────────────────────────────
 
 	/** 대화 외 평상시 루프 재생할 유휴 애니메이션 */

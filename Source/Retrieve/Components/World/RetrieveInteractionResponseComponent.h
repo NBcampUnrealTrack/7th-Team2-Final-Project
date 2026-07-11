@@ -159,6 +159,22 @@ public:
 		meta = (DisplayName = "프롬프트 텍스트 Override"))
 	FText PromptTextOverride;
 
+	/**
+	 * 홀드/반복 상호작용 진행 중(플러그인 기본값 "Interacting") 표시할 문구. 대상별로 바꿔 쓸 수 있다.
+	 * 비우면 교체하지 않는다. 매니저 InteractionText 맵에서 값이 "Interacting"인 상태 항목만 교체한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "진행 중 텍스트"))
+	FText InteractingText;
+
+	/**
+	 * 상호작용 완료 시(플러그인 기본값 "Completed") 표시할 문구. 대상별로 바꿔 쓸 수 있다.
+	 * 비우면 교체하지 않는다. 매니저 InteractionText 맵에서 값이 "Completed"인 상태 항목만 교체한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
+		meta = (DisplayName = "완료 텍스트"))
+	FText CompletedText;
+
 	/** 이 액터만 프롬프트 아이콘을 직접 덮어쓰고 싶을 때 사용한다. None이면 자동 계산값을 쓴다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Interaction|Prompt",
 		meta = (DisplayName = "프롬프트 아이콘 Override"))

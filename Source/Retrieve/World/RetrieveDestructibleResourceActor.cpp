@@ -4,8 +4,13 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
+#include "TimerManager.h"
 
 ARetrieveDestructibleResourceActor::ARetrieveDestructibleResourceActor()
 {
@@ -30,6 +35,22 @@ ARetrieveDestructibleResourceActor::ARetrieveDestructibleResourceActor()
 	RewardComponent = CreateDefaultSubobject<URetrieveInteractionResponseComponent>(TEXT("RewardComponent"));
 	RewardComponent->bAutoBindInteractionManager = false;
 	RewardComponent->bDestroyOwnerOnApplied = false;
+}
+
+void ARetrieveDestructibleResourceActor::BeginPlay()
+{
+	Super::BeginPlay();
+	if (IntactMesh)
+	{
+		HitBaseRelativeTransform = IntactMesh->GetRelativeTransform();
+		bHitBaseTransformCaptured = true;
+	}
+}
+
+void ARetrieveDestructibleResourceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopHitShake();
+	Super::EndPlay(EndPlayReason);
 }
 
 void ARetrieveDestructibleResourceActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -96,6 +117,7 @@ void ARetrieveDestructibleResourceActor::ApplyBrokenVisual(const FVector& Impact
 		return;
 	}
 	bBreakVisualPlayed = true;
+	StopHitShake();
 
 	IntactMesh->SetVisibility(false, true);
 	IntactMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -126,7 +148,115 @@ void ARetrieveDestructibleResourceActor::MulticastPlayHitFeedback_Implementation
 		? static_cast<float>(HitCount) / static_cast<float>(RequiredHitCount)
 		: 0.0f;
 
+	PlayDefaultHitFeedback(ImpactPoint, ImpactNormal, HitCount, HitProgress);
 	PlayHitFeedback(ImpactPoint, ImpactNormal, HitCount, HitProgress);
+}
+
+void ARetrieveDestructibleResourceActor::PlayDefaultHitFeedback(
+	const FVector& ImpactPoint,
+	const FVector& ImpactNormal,
+	int32 HitCount,
+	float HitProgress)
+{
+	StartHitShake(ImpactNormal, HitCount, HitProgress);
+
+	if (UNiagaraSystem* System = HitImpactVFX.LoadSynchronous())
+	{
+		const float ProgressScale = FMath::Lerp(0.85f, 1.15f, FMath::Clamp(HitProgress, 0.0f, 1.0f));
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			this,
+			System,
+			ImpactPoint,
+			ImpactNormal.Rotation(),
+			FVector(HitImpactVFXScale * ProgressScale));
+	}
+
+	if (USoundBase* Sound = HitImpactSound.LoadSynchronous())
+	{
+		const float Pitch = 0.96f + 0.025f * static_cast<float>(HitCount % 4);
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, ImpactPoint, 0.8f, Pitch);
+	}
+}
+
+void ARetrieveDestructibleResourceActor::StartHitShake(
+	const FVector& ImpactNormal,
+	int32 HitCount,
+	float HitProgress)
+{
+	UWorld* World = GetWorld();
+	if (!IntactMesh || !World || HitShakeDuration <= 0.0f)
+	{
+		return;
+	}
+
+	if (!bHitBaseTransformCaptured)
+	{
+		HitBaseRelativeTransform = IntactMesh->GetRelativeTransform();
+		bHitBaseTransformCaptured = true;
+	}
+
+	HitShakeLocalDirection = IntactMesh->GetComponentTransform()
+		.InverseTransformVectorNoScale(-ImpactNormal)
+		.GetSafeNormal();
+	if (HitShakeLocalDirection.IsNearlyZero())
+	{
+		HitShakeLocalDirection = FVector::BackwardVector;
+	}
+	HitShakeStartTime = World->GetTimeSeconds();
+	HitShakeStrength = FMath::Lerp(0.85f, 1.25f, FMath::Clamp(HitProgress, 0.0f, 1.0f));
+	HitShakeSeed = HitCount;
+
+	World->GetTimerManager().ClearTimer(HitShakeTimer);
+	World->GetTimerManager().SetTimer(
+		HitShakeTimer,
+		this,
+		&ARetrieveDestructibleResourceActor::UpdateHitShake,
+		1.0f / 60.0f,
+		true);
+	UpdateHitShake();
+}
+
+void ARetrieveDestructibleResourceActor::UpdateHitShake()
+{
+	UWorld* World = GetWorld();
+	if (!IntactMesh || !bHitBaseTransformCaptured || !World)
+	{
+		StopHitShake();
+		return;
+	}
+
+	const float Elapsed = World->GetTimeSeconds() - HitShakeStartTime;
+	const float Alpha = FMath::Clamp(Elapsed / HitShakeDuration, 0.0f, 1.0f);
+	if (Alpha >= 1.0f)
+	{
+		StopHitShake();
+		return;
+	}
+
+	const float Envelope = 1.0f - Alpha;
+	const float Oscillation = FMath::Sin(Alpha * UE_PI * 5.0f) * Envelope * HitShakeStrength;
+	const FVector Location = HitBaseRelativeTransform.GetLocation()
+		+ HitShakeLocalDirection * HitShakeDistance * Oscillation;
+	const float RotationSign = (HitShakeSeed & 1) == 0 ? 1.0f : -1.0f;
+	const FRotator RotationOffset(
+		HitShakeRotationDegrees * Oscillation,
+		HitShakeRotationDegrees * 0.35f * Oscillation * RotationSign,
+		HitShakeRotationDegrees * 0.7f * Oscillation * RotationSign);
+	const FQuat Rotation = HitBaseRelativeTransform.GetRotation() * RotationOffset.Quaternion();
+
+	IntactMesh->SetRelativeLocationAndRotation(Location, Rotation);
+}
+
+void ARetrieveDestructibleResourceActor::StopHitShake()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HitShakeTimer);
+	}
+	if (IntactMesh && bHitBaseTransformCaptured)
+	{
+		IntactMesh->SetRelativeTransform(HitBaseRelativeTransform);
+	}
 }
 
 void ARetrieveDestructibleResourceActor::MulticastPlayBreak_Implementation(FVector_NetQuantize ImpactPoint)

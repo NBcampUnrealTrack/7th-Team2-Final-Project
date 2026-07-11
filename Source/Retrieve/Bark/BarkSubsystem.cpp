@@ -91,7 +91,8 @@ void UBarkSubsystem::HandleStepChanged(FGameplayTag Channel, const FRetrieveQues
 		if (Row && Row->Trigger == EBarkTrigger::OnQuestStep && Row->KeyTag.IsValid() && Row->KeyTag == Message.StepTag
 			&& IsRowEligible(RowName, *Row))
 		{
-			// 스텝당 한 행. 연속 대사는 그 행의 bSequentialLines로 처리
+			// 같은 스텝에 매칭되는 행이 여럿이면 전부 각자의 TriggerDelaySeconds로 독립적으로 예약
+			// (한 행 안의 여러 줄 연속 대사는 그 행의 bSequentialLines로 처리)
 			// TODO(coop): Lumen 동기화 대사는 추후 호스트가 모든 클라이언트에 맞춰 재생. 현재는 클라이언트 로컬.
 			const float Delay = Row->TriggerDelaySeconds;
 			if (Delay <= 0.f)
@@ -106,7 +107,6 @@ void UBarkSubsystem::HandleStepChanged(FGameplayTag Channel, const FRetrieveQues
 					false);
 				StepBarkTimers.Add(Handle);
 			}
-			break;
 		}
 	}
 }

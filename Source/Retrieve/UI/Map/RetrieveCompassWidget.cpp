@@ -603,6 +603,36 @@ int32 URetrieveCompassWidget::NativePaint(
 		}
 	}
 
+	UWorld* World = GetWorld();
+	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
+
+	// 정적 DA(WorldMapIconData)는 RefreshFromLevel로 라이브 액터 위치를 그대로 굽기 때문에,
+	// 그 액터가 로드돼 있으면 정적/라이브 두 경로가 같은 자리에 이중으로 그린다.
+	// 특히 오버라이드 아이콘은 정적=레지스트리 기본, 라이브=오버라이드로 서로 달라 두 개로 보였음.
+	// → 라이브 아이콘이 근처에 있으면 정적 엔트리를 건너뛴다(라이브 경로 전담).
+	TArray<TPair<ERetrieveMapIconType, FVector>> LiveIconSpots;
+	if (MapSub)
+	{
+		for (const URetrieveMapIconComponent* Icon : MapSub->GetIcons())
+		{
+			if (IsValid(Icon) && IsValid(Icon->GetOwner()) && Icon->bShowOnMinimap)
+			{
+				LiveIconSpots.Emplace(Icon->IconType, Icon->GetOwner()->GetActorLocation());
+			}
+		}
+	}
+	auto HasLiveIconNear = [&LiveIconSpots](ERetrieveMapIconType Type, const FVector& Loc)
+	{
+		for (const TPair<ERetrieveMapIconType, FVector>& Spot : LiveIconSpots)
+		{
+			if (Spot.Key == Type && FVector::DistSquared2D(Spot.Value, Loc) < FMath::Square(100.0f))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
 	// 월드맵 등록 아이콘
 	if (WorldMapIconData && IconRegistry)
 	{
@@ -633,11 +663,16 @@ int32 URetrieveCompassWidget::NativePaint(
 			const float IconX = BearingToX(BearingDeg, CameraYaw, Width);
 			if (IconX < 0.0f) { continue; }
 
+			if (HasLiveIconNear(Entry.IconType, Entry.WorldLocation)) { continue; }
+
 			const FRetrieveMapIconRow& Row = IconRegistry->FindRow(Entry.IconType);
 
-			UTexture2D* IconTexture = Row.IconTexture;
-			const FLinearColor IconColor = Row.IconColor;
-			const float IconSize = FMath::Max(Row.IconSize * CompassIconSizeScale, 8.0f);
+			// 정적 엔트리에 구운 개별 오버라이드 반영(월드맵 DrawWorldIcon과 동일 규칙)
+			UTexture2D* IconTexture =
+				(Entry.bOverrideIcon && Entry.OverrideTexture) ? Entry.OverrideTexture.Get() : Row.IconTexture.Get();
+			const FLinearColor IconColor = Entry.bOverrideIcon ? Entry.OverrideColor : Row.IconColor;
+			const float IconSize = FMath::Max(
+				(Entry.bOverrideIcon ? Entry.OverrideSize : Row.IconSize) * CompassIconSizeScale, 8.0f);
 
 			const FVector2D IconSz(IconSize, IconSize);
 			const FVector2D DrawPos(
@@ -665,10 +700,6 @@ int32 URetrieveCompassWidget::NativePaint(
 			);
 		}
 	}
-
-	// 웨이포인트 마커
-	UWorld* World = GetWorld();
-	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 
 	// 라이브 아이콘(적뿐 아니라 상호작용 대상 — 모닥불/상점/POI/전초기지 등 미니맵과 동일 소스)
 	// 중 bOverrideIcon=true로 등록해둔 개체. 풀링된 EnemyMarkerWidgetClass는 에너미 전용 고정

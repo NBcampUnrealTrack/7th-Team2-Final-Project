@@ -45,8 +45,64 @@ namespace
 		return nullptr;
 	}
 
-	/** NPC의 상호작용 존 콜리전을 켜고 끈다(중복 호출은 무시). */
-	void SetNpcInteractionEnabled(AActor* Npc, const bool bEnable)
+	/**
+	 * 매니저(InteractionTarget)의 InteractionText 맵에서 값이 비어 있거나 플러그인 기본값
+	 * "Interact"인 항목만 Desired로 교체한다. 정당하게 설정된 다른 문구(상점 등)는 건드리지 않는다.
+	 * 시선 게이트가 존을 재활성화하면 플러그인이 위젯을 다시 만들며 (레벨 인스턴스에 직렬화된)
+	 * "Interact"로 뜨는 문제를, 오버랩 이벤트가 발생하기 전에 미리 교정하기 위한 것.
+	 */
+	void ForceManagerInteractionText(UActorComponent* Manager, const FText& Desired)
+	{
+		if (!Manager || Desired.IsEmpty())
+		{
+			return;
+		}
+		FMapProperty* TextMapProp = FindFProperty<FMapProperty>(Manager->GetClass(), FName("InteractionText"));
+		if (!TextMapProp)
+		{
+			return;
+		}
+		FTextProperty* ValueTextProp = CastField<FTextProperty>(TextMapProp->ValueProp);
+		if (!ValueTextProp)
+		{
+			return;
+		}
+		void* MapPtr = TextMapProp->ContainerPtrToValuePtr<void>(Manager);
+		FScriptMapHelper MapHelper(TextMapProp, MapPtr);
+
+		auto IsPlaceholder = [](const FText& Cur)
+		{
+			const FString S = Cur.ToString();
+			return S.IsEmpty() || S.Equals(TEXT("Interact"), ESearchCase::IgnoreCase);
+		};
+
+		if (MapHelper.Num() > 0)
+		{
+			for (int32 Idx = 0; Idx < MapHelper.GetMaxIndex(); ++Idx)
+			{
+				if (!MapHelper.IsValidIndex(Idx))
+				{
+					continue;
+				}
+				const FText Cur = ValueTextProp->GetPropertyValue(MapHelper.GetValuePtr(Idx));
+				if (IsPlaceholder(Cur))
+				{
+					ValueTextProp->SetPropertyValue(MapHelper.GetValuePtr(Idx), Desired);
+				}
+			}
+		}
+		else if (FIntProperty* KeyIntProp = CastField<FIntProperty>(TextMapProp->KeyProp))
+		{
+			// 맵이 비어 있으면(플러그인이 기본값만 쓰는 경우) 0번 키에 원하는 문구를 넣는다.
+			const int32 NewIdx = MapHelper.AddDefaultValue_Invalid_NeedsRehash();
+			KeyIntProp->SetPropertyValue(MapHelper.GetKeyPtr(NewIdx), 0);
+			ValueTextProp->SetPropertyValue(MapHelper.GetValuePtr(NewIdx), Desired);
+			MapHelper.Rehash();
+		}
+	}
+
+	/** NPC의 상호작용 존 콜리전을 켜고 끈다(중복 호출은 무시). 켤 때는 위젯이 뜨기 전에 프롬프트 문구를 교정한다. */
+	void SetNpcInteractionEnabled(AActor* Npc, const bool bEnable, const FText& PromptText)
 	{
 		if (!Npc)
 		{
@@ -75,6 +131,10 @@ namespace
 
 		if (bEnable)
 		{
+			// 콜리전을 켜면 이미 겹친 플레이어에게 곧바로 BeginOverlap이 발생하며 플러그인이 위젯을
+			// 생성한다. 그 오버랩이 InteractionText를 읽기 "전에" 문구를 교정해야 "Interact" 잔존을 막는다.
+			ForceManagerInteractionText(Manager, PromptText);
+
 			// 진입 순서대로: Outer 먼저 → Inner. (걸어 들어올 때와 같은 이벤트 순서 보장)
 			OuterZone->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 			InnerZone->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -116,7 +176,7 @@ namespace
 		// 이 게이트가 0.15초마다 다시 켜던 문제(대화 중 "대화하기" 잔존)의 근본 수정.
 		if (PC->GetViewTarget() != Pawn)
 		{
-			SetNpcInteractionEnabled(Npc, false);
+			SetNpcInteractionEnabled(Npc, false, Comp->GetInteractionPromptText());
 			return;
 		}
 
@@ -138,13 +198,14 @@ namespace
 		const bool bEnable = bCurrentlyEnabled
 			? (PawnDot > 0.25f && CamDot > 0.25f)
 			: (PawnDot > 0.45f && CamDot > 0.45f);
-		SetNpcInteractionEnabled(Npc, bEnable);
+		SetNpcInteractionEnabled(Npc, bEnable, Comp->GetInteractionPromptText());
 	}
 }
 
 URetrieveDialogueComponent::URetrieveDialogueComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	InteractionPromptText = FText::FromString(TEXT("대화하기"));
 }
 
 void URetrieveDialogueComponent::BeginPlay()
@@ -225,6 +286,9 @@ void URetrieveDialogueComponent::ConfigureInteractionTarget()
 		{
 			FloatProp->SetPropertyValue_InContainer(Comp, 0.0f);
 		}
+
+		// 최초 프롬프트 문구도 교정한다(레벨 인스턴스에 직렬화된 "Interact" 방지). 이후 재활성화는 시선 게이트가 처리.
+		ForceManagerInteractionText(Comp, InteractionPromptText);
 
 		UE_LOG(LogTemp, Log,
 			TEXT("[DialogueComp] %s: InteractionTarget FinishMethod=%d(%s), ReactivationDuration=0"),
