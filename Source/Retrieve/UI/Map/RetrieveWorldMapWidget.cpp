@@ -12,6 +12,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Widget.h"
 #include "Components/PanelWidget.h"
 #include "Engine/Texture2D.h"
@@ -74,6 +75,40 @@ void URetrieveWorldMapWidget::NativeConstruct()
 
 	SetVisibility(ESlateVisibility::Visible);
 	SetClipping(EWidgetClipping::ClipToBoundsAlways);
+	// Reserve side gutters for the legend and controls. Keep the source map aspect ratio.
+	// (MapOffsets는 아래 MapViewportPadding에서도 쓰므로 if 블록 밖에 선언한다.)
+	const FMargin MapOffsets(240.0f, 84.0f, 240.0f, 54.0f);
+
+	// 레전드/컨트롤 패널이 없는 WBP에서만 슬롯 오프셋을 코드로 적용한다.
+	// (여는 중괄호가 빠져 함수가 조기 종료되던 것을 복구 — 아래 단독 '}'가 이 블록의 닫는 괄호)
+	if (!GetWidgetFromName(TEXT("Panel_MapLegend")) && !GetWidgetFromName(TEXT("Panel_MapControls")))
+	{
+	if (MapViewport)
+	{
+		if (UCanvasPanelSlot* MapSlot = Cast<UCanvasPanelSlot>(MapViewport->Slot))
+		{
+			MapSlot->SetOffsets(MapOffsets);
+		}
+	}
+	if (UWidget* MapShadow = GetWidgetFromName(TEXT("IMG_MapScrollShadow")))
+	{
+		if (UCanvasPanelSlot* ShadowSlot = Cast<UCanvasPanelSlot>(MapShadow->Slot))
+		{
+			ShadowSlot->SetOffsets(FMargin(224.0f, 48.0f, 224.0f, 18.0f));
+		}
+	}
+	if (UWidget* MapPaper = GetWidgetFromName(TEXT("IMG_MapScrollPaper")))
+	{
+		if (UCanvasPanelSlot* PaperSlot = Cast<UCanvasPanelSlot>(MapPaper->Slot))
+		{
+			PaperSlot->SetOffsets(FMargin(232.0f, 56.0f, 232.0f, 26.0f));
+		}
+	}
+
+	}
+	// Fit the complete source texture inside the viewport instead of stretching it.
+	bStretchMapToViewport = false;
+	MapViewportPadding = MapOffsets;
 	ZoomLevel    = MinZoom;
 	ViewCenterUV = FVector2D(0.5f, 0.5f);
 	bPendingCenterOnPlayer = true;
@@ -640,6 +675,146 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	}
 
 	OutDrawElements.PopClip();
+	if (GetWidgetFromName(TEXT("Panel_MapLegend")) || GetWidgetFromName(TEXT("Panel_MapControls")))
+	{
+		return CurrentLayer;
+	}
+	// Side panels stay outside the clipped map viewport and use the real map icons.
+	const float UIScale = URetrieveUISettingsLibrary::GetUIScale();
+	const FSlateFontInfo PanelTitleFont = FCoreStyle::GetDefaultFontStyle("Bold", FMath::RoundToInt(15.0f * UIScale));
+	const FSlateFontInfo PanelBodyFont = FCoreStyle::GetDefaultFontStyle("Regular", FMath::RoundToInt(11.0f * UIScale));
+	const FSlateFontInfo PanelKeyFont = FCoreStyle::GetDefaultFontStyle("Bold", FMath::RoundToInt(10.0f * UIScale));
+	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("WhiteBrush");
+
+	auto DrawPanel = [&](const FVector2D& Position, const FVector2D& Size)
+	{
+		FSlateDrawElement::MakeBox(OutDrawElements, ++CurrentLayer,
+			AllottedGeometry.ToPaintGeometry(FVector2f(Size), FSlateLayoutTransform(FVector2f(Position))),
+			WhiteBrush, ESlateDrawEffect::None, FLinearColor(0.015f, 0.010f, 0.006f, 0.88f));
+		FSlateDrawElement::MakeBox(OutDrawElements, ++CurrentLayer,
+			AllottedGeometry.ToPaintGeometry(FVector2f(Size - FVector2D(4.0f, 4.0f)),
+				FSlateLayoutTransform(FVector2f(Position + FVector2D(2.0f, 2.0f)))),
+			WhiteBrush, ESlateDrawEffect::None, FLinearColor(0.10f, 0.065f, 0.035f, 0.92f));
+	};
+
+	auto DrawPanelText = [&](const FString& Text, const FVector2D& Position, const FVector2D& Size,
+		const FSlateFontInfo& Font, const FLinearColor& Color)
+	{
+		FSlateDrawElement::MakeText(OutDrawElements, ++CurrentLayer,
+			AllottedGeometry.ToPaintGeometry(FVector2f(Size), FSlateLayoutTransform(FVector2f(Position))),
+			Text, Font, ESlateDrawEffect::None, Color);
+	};
+
+	auto DrawLegendIcon = [&](UTexture2D* Texture, const FLinearColor& Tint, const FVector2D& Position)
+	{
+		FSlateBrush IconBrush;
+		if (Texture) { IconBrush.SetResourceObject(Texture); }
+		IconBrush.ImageSize = FVector2D(22.0f, 22.0f);
+		FSlateDrawElement::MakeBox(OutDrawElements, ++CurrentLayer,
+			AllottedGeometry.ToPaintGeometry(FVector2f(22.0f, 22.0f), FSlateLayoutTransform(FVector2f(Position))),
+			Texture ? &IconBrush : WhiteBrush, ESlateDrawEffect::None,
+			Texture ? Tint : FLinearColor(1.0f, 0.72f, 0.22f, 1.0f));
+	};
+
+	auto GetLegendLabel = [](ERetrieveMapIconType IconType) -> const TCHAR*
+	{
+		switch (IconType)
+		{
+		case ERetrieveMapIconType::POI:         return TEXT("?? ??");
+		case ERetrieveMapIconType::Lumen:       return TEXT("??");
+		case ERetrieveMapIconType::Boss:        return TEXT("??");
+		case ERetrieveMapIconType::Outpost:     return TEXT("????");
+		case ERetrieveMapIconType::FirstWeapon: return TEXT("? ??");
+		case ERetrieveMapIconType::Bonfire:     return TEXT("???");
+		case ERetrieveMapIconType::Shop:        return TEXT("??");
+		case ERetrieveMapIconType::Enemy:       return TEXT("?");
+		default:                                return TEXT("??");
+		}
+	};
+
+	TArray<ERetrieveMapIconType> LegendTypes;
+	if (WorldMapIconData)
+	{
+		for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
+		{
+			if (Entry.IconType != ERetrieveMapIconType::None && Entry.IconType != ERetrieveMapIconType::Player)
+			{
+				LegendTypes.AddUnique(Entry.IconType);
+			}
+		}
+	}
+	if (LegendTypes.Num() == 0)
+	{
+		LegendTypes.Add(ERetrieveMapIconType::POI);
+		LegendTypes.Add(ERetrieveMapIconType::Bonfire);
+	}
+	if (LegendTypes.Num() > 7) { LegendTypes.SetNum(7); }
+
+	const float PanelTop = FMath::Max(96.0f, MapViewTopLeft.Y + 14.0f);
+	const float LeftPanelWidth = FMath::Min(214.0f, MapViewTopLeft.X - 28.0f);
+	const float RightPanelX = MapViewTopLeft.X + MapViewSize.X + 18.0f;
+	const float RightPanelWidth = FMath::Min(224.0f, WidgetSize.X - RightPanelX - 24.0f);
+
+	if (LeftPanelWidth >= 150.0f)
+	{
+		const FVector2D LeftPanelPos(14.0f, PanelTop);
+		const FVector2D LeftPanelSize(LeftPanelWidth, 86.0f + 31.0f * (LegendTypes.Num() + 1));
+		DrawPanel(LeftPanelPos, LeftPanelSize);
+		DrawPanelText(TEXT("?? ??"), LeftPanelPos + FVector2D(16.0f, 12.0f),
+			FVector2D(LeftPanelWidth - 28.0f, 24.0f), PanelTitleFont, FLinearColor(1.0f, 0.82f, 0.48f, 1.0f));
+
+		float RowY = LeftPanelPos.Y + 45.0f;
+		DrawLegendIcon(PlayerMarkerTexture, PlayerMarkerColor, FVector2D(LeftPanelPos.X + 16.0f, RowY));
+		DrawPanelText(TEXT("???? ??"), FVector2D(LeftPanelPos.X + 48.0f, RowY + 3.0f),
+			FVector2D(LeftPanelWidth - 60.0f, 24.0f), PanelBodyFont, FLinearColor::White);
+		RowY += 31.0f;
+
+		for (const ERetrieveMapIconType IconType : LegendTypes)
+		{
+			FRetrieveMapIconRow FallbackRow;
+			const FRetrieveMapIconRow* Row = &FallbackRow;
+			if (IconRegistry) { Row = &IconRegistry->FindRow(IconType); }
+			const FLinearColor IconColor = IconType == ERetrieveMapIconType::Bonfire ? BonfireActivatedColor : Row->IconColor;
+			DrawLegendIcon(Row->IconTexture, IconColor, FVector2D(LeftPanelPos.X + 16.0f, RowY));
+			DrawPanelText(GetLegendLabel(IconType), FVector2D(LeftPanelPos.X + 48.0f, RowY + 3.0f),
+				FVector2D(LeftPanelWidth - 60.0f, 24.0f), PanelBodyFont, FLinearColor::White);
+			RowY += 31.0f;
+		}
+	}
+
+	if (RightPanelWidth >= 160.0f)
+	{
+		const FVector2D RightPanelPos(RightPanelX, PanelTop);
+		const FVector2D RightPanelSize(RightPanelWidth, 272.0f);
+		DrawPanel(RightPanelPos, RightPanelSize);
+		DrawPanelText(TEXT("?? ??"), RightPanelPos + FVector2D(16.0f, 12.0f),
+			FVector2D(RightPanelWidth - 28.0f, 24.0f), PanelTitleFont, FLinearColor(1.0f, 0.82f, 0.48f, 1.0f));
+
+		const FVector2D KeyPos(RightPanelPos.X + 16.0f, RightPanelPos.Y + 50.0f);
+		const FVector2D TextPos(RightPanelPos.X + 70.0f, RightPanelPos.Y + 53.0f);
+		const FLinearColor BodyColor(0.96f, 0.92f, 0.84f, 1.0f);
+
+		DrawPanel(KeyPos, FVector2D(42.0f, 25.0f));
+		DrawPanelText(TEXT("?"), KeyPos + FVector2D(12.0f, 3.0f), FVector2D(28.0f, 20.0f), PanelKeyFont, BodyColor);
+		DrawPanelText(TEXT("?? / ??"), TextPos, FVector2D(RightPanelWidth - 84.0f, 24.0f), PanelBodyFont, BodyColor);
+
+		DrawPanel(KeyPos + FVector2D(0.0f, 36.0f), FVector2D(42.0f, 25.0f));
+		DrawPanelText(TEXT("???"), KeyPos + FVector2D(3.0f, 39.0f), FVector2D(36.0f, 20.0f), PanelKeyFont, BodyColor);
+		DrawPanelText(TEXT("?? ? ???: ?? ??"), TextPos + FVector2D(0.0f, 36.0f),
+			FVector2D(RightPanelWidth - 84.0f, 40.0f), PanelBodyFont, BodyColor);
+
+		DrawPanel(KeyPos + FVector2D(0.0f, 82.0f), FVector2D(42.0f, 25.0f));
+		DrawPanelText(TEXT("T"), KeyPos + FVector2D(15.0f, 85.0f), FVector2D(20.0f, 20.0f), PanelKeyFont, BodyColor);
+		DrawPanelText(TEXT("?? ?? ??"), TextPos + FVector2D(0.0f, 82.0f),
+			FVector2D(RightPanelWidth - 84.0f, 24.0f), PanelBodyFont, BodyColor);
+
+		DrawLegendIcon(nullptr, BonfireActivatedColor, KeyPos + FVector2D(10.0f, 128.0f));
+		DrawPanelText(TEXT("?? ??? ?? ??"), TextPos + FVector2D(0.0f, 124.0f),
+			FVector2D(RightPanelWidth - 84.0f, 24.0f), PanelBodyFont, BodyColor);
+		DrawPanelText(TEXT("?? ??"), TextPos + FVector2D(0.0f, 146.0f),
+			FVector2D(RightPanelWidth - 84.0f, 24.0f), PanelBodyFont, BodyColor);
+	}
+
 	return CurrentLayer;
 }
 
@@ -811,7 +986,7 @@ FReply URetrieveWorldMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, con
 {
 	const FKey PressedKey = InKeyEvent.GetKey();
 
-	// T: 커서 위치에 웨이포인트 추가
+	// T: 커서 위치에 웨이포인트 토글(근처에 있으면 삭제, 없으면 추가)
 	if (PressedKey == EKeys::T)
 	{
 		UWorld* World = GetWorld();
@@ -844,9 +1019,34 @@ FReply URetrieveWorldMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, con
 			return FReply::Unhandled();
 		}
 
+		// 커서 근처에 이미 마커가 있으면 그 마커를 삭제한다(T 토글: 같은 위치에서 다시 누르면 제거).
+		// 반경은 마커 크기 기준(최소 18px)이라 마커 위에 커서를 올려 누르는 느낌으로 동작한다.
+		const float RemoveRadiusPx = FMath::Max(WaypointMarkerSize, 18.0f);
+		for (const FUserWaypoint& WP : MapSub->GetUserWaypoints())
+		{
+			const FVector2D WpScreen = UVToScreen(MapSub->WorldToUV(WP.WorldLocation), Center, ScaledW, ScaledH);
+			if (FVector2D::Distance(WpScreen, LocalCursorPos) <= RemoveRadiusPx)
+			{
+				MapSub->RemoveUserWaypointById(WP.WaypointId);
+				return FReply::Handled();
+			}
+		}
+
 		const FVector WaypointWorld = MapSub->UVToWorld(WaypointUV);
-		// 지정한 웨이포인트 색상을 WP.Color로 전달 → 월드맵·미니맵·나침반 모두 이 색상 사용(연동).
-		MapSub->AddUserWaypoint(WaypointWorld, FText::GetEmpty(), WaypointMarkerColor);
+
+		// 마커가 여러 개일 때 구분되도록 순서(현재 개수) 기반 팔레트 색을 부여한다.
+		// WP.Color는 월드맵·미니맵·나침반이 공유하므로 세 곳 모두 같은 색으로 연동된다.
+		static const FLinearColor WaypointPalette[] = {
+			FLinearColor(1.00f, 0.45f, 0.10f), // 주황
+			FLinearColor(0.20f, 0.80f, 1.00f), // 하늘
+			FLinearColor(0.40f, 1.00f, 0.40f), // 연두
+			FLinearColor(1.00f, 0.90f, 0.20f), // 노랑
+			FLinearColor(0.90f, 0.40f, 1.00f), // 보라
+			FLinearColor(1.00f, 0.30f, 0.30f), // 빨강
+		};
+		const FLinearColor NewColor =
+			WaypointPalette[MapSub->GetUserWaypoints().Num() % UE_ARRAY_COUNT(WaypointPalette)];
+		MapSub->AddUserWaypoint(WaypointWorld, FText::GetEmpty(), NewColor);
 		return FReply::Handled();
 	}
 
