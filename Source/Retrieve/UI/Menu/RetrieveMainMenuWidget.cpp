@@ -4,12 +4,12 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Player/RetrievePlayerController.h"
 #include "Save/RetrieveSaveSubsystem.h"
+#include "Settings/RetrieveGameUserSettings.h"
+#include "UI/Sound/RetrieveUISoundTypes.h"
 
 void URetrieveMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-
-	// "아무 키나 누르세요" + 화살표 내비게이션을 위한 키보드 입력 받기
 	SetIsFocusable(true);
 
 	if (NewGameButton)
@@ -32,6 +32,13 @@ void URetrieveMainMenuWidget::NativeConstruct()
 	{
 		QuitButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleQuitClicked);
 	}
+
+	RegisterSoundButton(NewGameButton);
+	RegisterSoundButton(ContinueButton);
+	RegisterSoundButton(LoadGameButton);
+	RegisterSoundButton(OptionsButton);
+	RegisterSoundButton(CreditsButton);
+	RegisterSoundButton(QuitButton);
 
 	bSaveDataExists = false;
 	if (const UGameInstance* GI = GetGameInstance())
@@ -62,7 +69,9 @@ FReply URetrieveMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeomet
 {
 	if (!bTitleCardDismissed)
 	{
-		DismissTitleCard();
+		bTitleCardDismissed = true;
+		PlayUISound(ERetrieveUISoundEvent::PanelOpen);
+		PlayTitleDismissTransition();
 		return FReply::Handled();
 	}
 
@@ -79,7 +88,9 @@ FReply URetrieveMainMenuWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 {
 	if (!bTitleCardDismissed)
 	{
-		DismissTitleCard();
+		bTitleCardDismissed = true;
+		PlayUISound(ERetrieveUISoundEvent::PanelOpen);
+		PlayTitleDismissTransition();
 		return FReply::Handled();
 	}
 
@@ -125,8 +136,6 @@ void URetrieveMainMenuWidget::HandleLoadGameClicked()
 
 void URetrieveMainMenuWidget::HandleOptionsClicked()
 {
-	// 메인메뉴에서 설정창을 연다. 닫을 때의 입력모드 복원은 PlayerController가
-	// SessionState(MainMenu)에 맞춰 UIOnly+커서를 유지하도록 이미 처리한다.
 	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
 	{
 		PC->OpenSettingsPanel();
@@ -151,7 +160,6 @@ void URetrieveMainMenuWidget::ShowTitleCard()
 		TitleCardRoot->SetVisibility(ESlateVisibility::Visible);
 	}
 
-	// 다음 키나 클릭이 위의 preview 핸들러에서 잡힐 수 있도록 루트에 포커스 유지
 	FocusNextTick(this);
 	OnTitleCardShown();
 }
@@ -169,14 +177,24 @@ void URetrieveMainMenuWidget::ShowMenuPane()
 		MenuPaneRoot->SetVisibility(ESlateVisibility::Visible);
 	}
 
-	// 첫 번째 동작 항목에 즉시 키보드 선택 포커스
 	FocusNextTick(NewGameButton ? static_cast<UWidget*>(NewGameButton) : static_cast<UWidget*>(this));
 	OnMenuPaneShown();
 }
 
-void URetrieveMainMenuWidget::DismissTitleCard()
+void URetrieveMainMenuWidget::PlayTitleDismissTransition_Implementation()
 {
 	ShowMenuPane();
+}
+
+void URetrieveMainMenuWidget::FinishTitleTransition()
+{
+	ShowMenuPane();
+}
+
+bool URetrieveMainMenuWidget::IsReduceMotionEnabled() const
+{
+	const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+	return Settings && Settings->bReduceMotion;
 }
 
 void URetrieveMainMenuWidget::FocusNextTick(TWeakObjectPtr<UWidget> Target)
