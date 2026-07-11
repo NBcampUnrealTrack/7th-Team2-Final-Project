@@ -31,6 +31,7 @@ struct FRetrieveSettingsSnapshot
 	float VoiceVolume = 1.f;
 	bool bMuteWhenUnfocused = true;
 
+	float MouseSensitivity = 1.f;
 	float MouseSensitivityX = 1.f;
 	float MouseSensitivityY = 1.f;
 	bool bInvertMouseY = false;
@@ -81,6 +82,7 @@ struct FRetrieveSettingsSnapshot
 		VoiceVolume = S->VoiceVolume;
 		bMuteWhenUnfocused = S->bMuteWhenUnfocused;
 
+		MouseSensitivity = S->MouseSensitivity;
 		MouseSensitivityX = S->MouseSensitivityX;
 		MouseSensitivityY = S->MouseSensitivityY;
 		bInvertMouseY = S->bInvertMouseY;
@@ -135,6 +137,7 @@ struct FRetrieveSettingsSnapshot
 		S->VoiceVolume = VoiceVolume;
 		S->bMuteWhenUnfocused = bMuteWhenUnfocused;
 
+		S->MouseSensitivity = MouseSensitivity;
 		S->MouseSensitivityX = MouseSensitivityX;
 		S->MouseSensitivityY = MouseSensitivityY;
 		S->bInvertMouseY = bInvertMouseY;

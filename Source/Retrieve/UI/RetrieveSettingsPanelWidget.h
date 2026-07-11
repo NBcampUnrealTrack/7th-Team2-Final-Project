@@ -209,6 +209,7 @@ private:
 	UFUNCTION() void HandleFrameLimitChanged(float Value);
 	UFUNCTION() void HandleGammaChanged(float Value);
 
+	UFUNCTION() void HandleMouseSensitivityChanged(float Value);
 	UFUNCTION() void HandleMouseXChanged(float Value);
 	UFUNCTION() void HandleMouseYChanged(float Value);
 	UFUNCTION() void HandlePadSensitivityChanged(float Value);

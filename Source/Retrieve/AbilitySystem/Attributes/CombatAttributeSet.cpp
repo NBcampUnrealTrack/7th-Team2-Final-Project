@@ -12,6 +12,16 @@
 #include "Perception/AISense_Damage.h"
 #include "Character/RetrieveEnemyCharacter.h"
 #include "Components/ActorComponent.h"
+#include "GameplayCueFunctionLibrary.h"
+#include "HAL/IConsoleManager.h"
+
+// 타격감용 전역 기본 넉백(SetByCaller 넉백 없는 히트. 보스/플레이어/DoT 제외). 콘솔 라이브 튜닝.
+static TAutoConsoleVariable<float> CVarDefaultHitKnockback(
+	TEXT("retrieve.Combat.DefaultHitKnockback"), 150.f,
+	TEXT("기본 히트 넉백 강도. 0=끔."));
+static TAutoConsoleVariable<float> CVarDefaultHitKnockbackUpward(
+	TEXT("retrieve.Combat.DefaultHitKnockbackUpward"), 0.f,
+	TEXT("기본 히트 넉백의 상향 성분."));
 
 UCombatAttributeSet::UCombatAttributeSet()
 {
@@ -363,6 +373,13 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	AActor* TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
 	if (IsValid(TargetActor) == false) return;
 
+	FGameplayTagContainer SourceTags;
+	Data.EffectSpec.GetAllAssetTags(SourceTags);
+
+	// DoT(화상 등)는 틱마다 넉백/플래시/Flinch 반복되지 않도록 아래에서 제외.
+	const bool bIsDamageOverTime =
+		SourceTags.HasTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burn);
+
 	// 데미지 GE가 SetByCaller로 넉백 강도를 실었으면 공격자→피격자 방향으로 자동 넉백.
 	// FinalDamage>0 경로(PostGameplayEffectExecute)에서만 호출되므로 가드/패리/무적 시엔 자동 스킵된다.
 	const float KbStrength = Data.EffectSpec.GetSetByCallerMagnitude(
@@ -376,14 +393,34 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 			const float CancelTargetActionsValue = Data.EffectSpec.GetSetByCallerMagnitude(
 				RetrieveGameplayTags::Data_Knockback_CancelTargetActions,
 				false, 0.f);
-			
+
 			FRetrieveKnockbackParams Params;
 			Params.Strength = KbStrength;
 			Params.UpwardStrength = KbUp;
 			Params.bCancelTargetActions = CancelTargetActionsValue > 0.f;;
-			
+
 			URetrieveKnockbackLibrary::ApplyPlanarKnockbackFromActor(
 				TargetCharacter, AttackerActor, Params);
+		}
+	}
+	else if (TargetActor != AttackerActor && !bIsDamageOverTime)
+	{
+		// SetByCaller 넉백 없는 일반 히트 → 전역 기본 넉백(몬스터만; 보스/면역 제외).
+		const float DefaultStrength = CVarDefaultHitKnockback.GetValueOnGameThread();
+		const APawn* TargetPawn = Cast<APawn>(TargetActor);
+		const bool bSkipDefaultKnockback =
+			(TargetPawn && TargetPawn->IsPlayerControlled()) ||
+			Data.Target.HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+		if (DefaultStrength > 0.f && !bSkipDefaultKnockback)
+		{
+			if (ACharacter* TargetCharacter = Cast<ACharacter>(TargetActor))
+			{
+				FRetrieveKnockbackParams Params;
+				Params.Strength = DefaultStrength;
+				Params.UpwardStrength = CVarDefaultHitKnockbackUpward.GetValueOnGameThread();
+				URetrieveKnockbackLibrary::ApplyPlanarKnockbackFromActor(
+					TargetCharacter, AttackerActor, Params);
+			}
 		}
 	}
 
@@ -394,10 +431,6 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		DamageDone,
 		AttackerActor->GetActorLocation(),
 		TargetActor->GetActorLocation());
-
-	// 공격자 GE에 붙여둔 태그로 강도 판정
-	FGameplayTagContainer SourceTags;
-	Data.EffectSpec.GetAllAssetTags(SourceTags);
 
 	FGameplayTag AttackerEventTag;
 	for (const FGameplayTag& Tag : SourceTags)
@@ -452,13 +485,20 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	{
 		EventData.EventTag = AttackerEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(AttackerActor, AttackerEventTag, EventData);
+
+		// 피격 몬스터 오버레이 플래시(코스메틱 큐, 서버→클라 복제). 플레이어/DoT 제외.
+		const APawn* TargetPawn = Cast<APawn>(TargetActor);
+		if (!bIsDamageOverTime && !(TargetPawn && TargetPawn->IsPlayerControlled()))
+		{
+			FGameplayCueParameters CueParams;
+			CueParams.EffectContext = Context;
+			CueParams.RawMagnitude = DamageDone;
+			UGameplayCueFunctionLibrary::ExecuteGameplayCueOnActor(
+				TargetActor, RetrieveGameplayTags::GameplayCue_Combat_HitFlash, CueParams);
+		}
 	}
 
-	// Burn 등 지속 데미지(DoT)는 데미지만 적용하고 피격 반응(움찔/몽타주)은 발생시키지 않는다.
-	// 틱마다 Hit 이벤트가 나가면 매 틱 Flinch가 걸리므로 타겟 Hit 이벤트만 건너뛴다.
-	const bool bIsDamageOverTime =
-		AttackerEventTag.MatchesTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burn);
-
+	// DoT는 피격 반응(Flinch) 생략 — 틱마다 반복 방지.
 	if (TargetActor != AttackerActor && !bIsDamageOverTime)
 	{
 		EventData.EventTag = TargetEventTag;
