@@ -3,6 +3,7 @@
 #include "Components/TextBlock.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
 #include "Player/RetrievePlayerController.h"
 
 void URetrieveSystemMessageWidget::NativeConstruct()
@@ -159,6 +160,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 	
 	if (!SystemMessageSubsystem || !SystemMessageSubsystem->DequeueNext(NextEntry))
 	{
+		SetTutorialFeedbackActive(false);
 		SetModalInputBlock(false); // 큐가 비면 잡고 있던 입력 잠금 해제
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
@@ -182,6 +184,11 @@ void URetrieveSystemMessageWidget::PumpNext()
 	if (CurrentEntry.bRequiresDismiss)
 	{
 		SetVisibility(ESlateVisibility::Visible); // 포커스/키 입력을 받으려면 Visible
+		SetTutorialFeedbackActive(true);
+		if (USoundBase* OpenSound = TutorialOpenSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, OpenSound, TutorialOpenSoundVolume);
+		}
 		SetModalInputBlock(true);
 		SetKeyboardFocus();
 		if (DismissPrompt)
@@ -192,6 +199,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 	}
 	else
 	{
+		SetTutorialFeedbackActive(false);
 		SetVisibility(ESlateVisibility::HitTestInvisible);
 		SetModalInputBlock(false);
 		if (DismissPrompt)
@@ -209,6 +217,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 void URetrieveSystemMessageWidget::HandleHoldExpired()
 {
 	// 현재 항목은 전체 표시 시간을 채웠으므로 소비 완료, 페이드아웃이 끝난 뒤 다음 항목으로 넘어감
+	SetTutorialFeedbackActive(false);
 	bHasCurrent = false;
 	if (HideAnim)
 	{
@@ -225,6 +234,38 @@ void URetrieveSystemMessageWidget::HandleHideFinished()
 	bShowing = false;
 	SetVisibility(ESlateVisibility::Collapsed);
 	PumpNext();
+}
+
+void URetrieveSystemMessageWidget::SetTutorialFeedbackActive(bool bActive)
+{
+	// 점멸은 RenderTransform 스케일 펄스로 구동한다(NativeTick). 이 위젯은 상위 HUD 캐싱에
+	// 걸려 RenderOpacity 변화가 화면에 반영되지 않으므로 opacity 애니메이션은 쓰지 않는다.
+	bTutorialPulseActive = bActive;
+	TutorialPulseElapsed = 0.f;
+
+	if (TutorialPulseBorder)
+	{
+		TutorialPulseBorder->SetVisibility(
+			bActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		TutorialPulseBorder->SetRenderScale(FVector2D(1.f, 1.f));
+		TutorialPulseBorder->SetRenderOpacity(1.f);
+	}
+}
+
+void URetrieveSystemMessageWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (bTutorialPulseActive && TutorialPulseBorder)
+	{
+		// 1.0 → 1+Amplitude → 1.0 을 Period 주기로 부드럽게 반복(중심 피벗 기준 맥동).
+		constexpr float Period = 0.75f;    // 한 맥동 주기(초)
+		constexpr float Amplitude = 0.06f; // 최대 확대 비율(6%)
+		TutorialPulseElapsed += InDeltaTime;
+		const float Phase = (TutorialPulseElapsed / Period) * 2.f * PI;
+		const float Scale = 1.f + Amplitude * 0.5f * (1.f - FMath::Cos(Phase));
+		TutorialPulseBorder->SetRenderScale(FVector2D(Scale, Scale));
+	}
 }
 
 void URetrieveSystemMessageWidget::SetModalInputBlock(bool bEngage)
@@ -263,6 +304,15 @@ void URetrieveSystemMessageWidget::FocusSelfNextTick()
 		URetrieveSystemMessageWidget* Self = WeakThis.Get();
 		if (Self && Self->bShowing && Self->bHasCurrent && Self->CurrentEntry.bRequiresDismiss)
 		{
+			// 세션 상태 전환(UpdateInputMode)이 모달 잠금을 해제하고 GameOnly로 바꾸면
+			// 포커스만 되찾아서는 Enter가 위젯에 오지 않아 메시지를 닫을 수 없다.
+			// → 모달 입력 모드(UIOnly+위젯 포커스)를 다시 세운다.
+			//   (위젯 쪽 bModalInputActive 플래그는 그대로 true이므로 SetModalInputBlock을
+			//    거치지 않고 PC에 직접 재진입한다.)
+			if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(Self->GetOwningPlayer()))
+			{
+				PC->EnterModalMessageInput(Self);
+			}
 			Self->SetKeyboardFocus();
 		}
 	});

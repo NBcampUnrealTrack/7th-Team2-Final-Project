@@ -157,6 +157,10 @@ URetrieveInteractionResponseComponent::URetrieveInteractionResponseComponent()
 	// ?대씪?댁뼵????Server RPC ?쇱슦?낆씠 ?꾩슂?섎?濡?而댄룷?뚰듃 ?먯껜 蹂듭젣 ?쒖꽦??
 	// owner ?≫꽣??bReplicates = true?ъ빞 ?쒕떎 (?≫꽣 BP??Class Defaults?먯꽌 ?ㅼ젙).
 	SetIsReplicatedByDefault(true);
+
+	// 상태 텍스트 한글 기본값(플러그인 기본 "Interacting"/"Completed" 대체). 대상별로 Details에서 바꿀 수 있다.
+	InteractingText = FText::FromString(TEXT("상호작용 중..."));
+	CompletedText = FText::FromString(TEXT("완료"));
 }
 
 void URetrieveInteractionResponseComponent::BeginPlay()
@@ -814,18 +818,38 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 
 			if (MapHelper.Num() > 0)
 			{
+				// InteractionText는 Enum_InteractionState(가용/진행중/완료/…) 키 맵이다.
+				// 값 기반으로 처리한다(키 순서에 의존하지 않음):
+				//  - "Interacting"/"Completed"(플러그인 기본 영어) → 지정 한글 상태 문구로 교체
+				//  - 그 외 첫 항목 = 가용(프롬프트) 상태로 간주해 프롬프트 문구 적용(기존 동작 유지)
+				//  - 나머지 상태 항목은 건드리지 않는다.
+				bool bPromptSet = false;
 				for (int32 Idx = 0; Idx < MapHelper.GetMaxIndex(); ++Idx)
 				{
-					if (MapHelper.IsValidIndex(Idx))
+					if (!MapHelper.IsValidIndex(Idx))
 					{
-						ValueTextProp->SetPropertyValue(
-							MapHelper.GetValuePtr(Idx), PromptData.Text);
-						UE_LOG(LogTemp, Verbose,
-							TEXT("[Retrieve|Interaction] %s: InteractionText[0]=\"%s\" ?곸슜"),
-							*OwnerName, *PromptData.Text.ToString());
-						break;
+						continue;
+					}
+					const FString CurStateText =
+						ValueTextProp->GetPropertyValue(MapHelper.GetValuePtr(Idx)).ToString();
+					// 플러그인 기본값이 BP마다 "Interacting"/"Interacting.." 등으로 달라 접두사로 판정한다.
+					if (!InteractingText.IsEmpty() && CurStateText.StartsWith(TEXT("Interacting"), ESearchCase::IgnoreCase))
+					{
+						ValueTextProp->SetPropertyValue(MapHelper.GetValuePtr(Idx), InteractingText);
+					}
+					else if (!CompletedText.IsEmpty() && CurStateText.StartsWith(TEXT("Completed"), ESearchCase::IgnoreCase))
+					{
+						ValueTextProp->SetPropertyValue(MapHelper.GetValuePtr(Idx), CompletedText);
+					}
+					else if (!bPromptSet)
+					{
+						ValueTextProp->SetPropertyValue(MapHelper.GetValuePtr(Idx), PromptData.Text);
+						bPromptSet = true;
 					}
 				}
+				UE_LOG(LogTemp, Verbose,
+					TEXT("[Retrieve|Interaction] %s: InteractionText 상태별 적용(prompt=\"%s\")"),
+					*OwnerName, *PromptData.Text.ToString());
 			}
 			else
 			{

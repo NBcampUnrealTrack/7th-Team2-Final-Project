@@ -6,6 +6,7 @@
 #include "RetrieveSystemMessageWidget.generated.h"
 
 class UTextBlock;
+class USoundBase;
 struct FRetrieveCinematicStatePayload;
 struct FRetrieveRevealGatePayload;
 
@@ -21,6 +22,7 @@ class RETRIEVE_API URetrieveSystemMessageWidget : public UUserWidget
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual void NativeOnFocusLost(const FFocusEvent& InFocusEvent) override;
 	
@@ -52,11 +54,37 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
 	TObjectPtr<UWidgetAnimation> HideAnim;
 
+	/** Enter로 닫는 튜토리얼 메시지의 식별용 점멸 테두리입니다. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> TutorialPulseBorder;
+
+	/**
+	 * 이 위젯은 상위 HUD의 인밸리데이션 캐싱에 걸려 RenderOpacity 변화가 화면에 반영되지 않는다.
+	 * (opacity 애니메이션은 값만 바뀌고 그려지지 않음이 실측으로 확인됨.) 반면 RenderTransform은
+	 * 매 프레임 적용되므로, 점멸은 UMG 애니메이션 대신 NativeTick에서 스케일 펄스로 구동한다.
+	 * TutorialPulseAnim은 더 이상 사용하지 않으며 남겨둔 레거시 바인딩이다.
+	 */
+	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
+	TObjectPtr<UWidgetAnimation> TutorialPulseAnim;
+
+	/** 튜토리얼 메시지가 처음 열릴 때 한 번 재생되는 UI 사운드입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Tutorial Feedback")
+	TSoftObjectPtr<USoundBase> TutorialOpenSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/Audio/UI/V3/SFX_UI_PanelClose_V3.SFX_UI_PanelClose_V3")));
+
+	UPROPERTY(EditDefaultsOnly, Category = "Tutorial Feedback", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TutorialOpenSoundVolume = 0.3f;
+
 private:
 	void SetModalInputBlock(bool bEngage);
 	void FocusSelfNextTick();
-	
+	void SetTutorialFeedbackActive(bool bActive);
+
 	TWeakObjectPtr<USystemMessageSubsystem> Subsystem;
+
+	/** 튜토리얼 점멸(스케일 펄스) 상태. NativeTick에서 TutorialPulseBorder를 맥동시킨다. */
+	bool bTutorialPulseActive = false;
+	float TutorialPulseElapsed = 0.f;
 
 	/** 현재 표시 중인 항목. 시네마틱/파괴 시 큐로 되돌립니다. 위젯이 가진 유일한 메시지 상태. */
 	FSystemMessageEntry CurrentEntry;

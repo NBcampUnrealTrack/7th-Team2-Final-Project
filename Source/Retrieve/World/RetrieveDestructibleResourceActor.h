@@ -8,6 +8,8 @@
 #include "RetrieveDestructibleResourceActor.generated.h"
 
 class UGeometryCollectionComponent;
+class UNiagaraSystem;
+class USoundBase;
 class UStaticMeshComponent;
 class URetrieveInteractionResponseComponent;
 
@@ -24,6 +26,8 @@ class RETRIEVE_API ARetrieveDestructibleResourceActor : public AActor, public IR
 public:
 	ARetrieveDestructibleResourceActor();
 
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual bool ReceiveRetrieveAttackHit_Implementation(
@@ -67,6 +71,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Chaos")
 	float BrokenLifeSpan = 5.0f;
 
+	/** 일반 타격 시 충격 지점에 재생할 기본 Niagara 효과. BP에서 자원별로 교체할 수 있다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback")
+	TSoftObjectPtr<UNiagaraSystem> HitImpactVFX = TSoftObjectPtr<UNiagaraSystem>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/Blueprints/VFX/Hit/NS_Hit_Impact.NS_Hit_Impact")));
+
+	/** 일반 타격 시 재생할 기본 공간 음향. BP에서 자원별로 교체할 수 있다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback")
+	TSoftObjectPtr<USoundBase> HitImpactSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/Audio/SFX/SwordShield/SC_SSH_SwordHit.SC_SSH_SwordHit")));
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.05"))
+	float HitShakeDuration = 0.18f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0"))
+	float HitShakeDistance = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0"))
+	float HitShakeRotationDegrees = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.01"))
+	float HitImpactVFXScale = 0.65f;
+
 protected:
 	/** 파괴 확정 처리(서버 전용): bBroken 설정 → IntactMesh 콜리전 해제 → 보상 지급 → 파괴 연출 전파 */
 	void BreakResource(AActor* Attacker, const FVector& ImpactPoint);
@@ -92,6 +118,18 @@ protected:
 	void PlayBreakFeedback(FVector ImpactPoint);
 
 private:
+	void PlayDefaultHitFeedback(const FVector& ImpactPoint, const FVector& ImpactNormal, int32 HitCount, float HitProgress);
+	void StartHitShake(const FVector& ImpactNormal, int32 HitCount, float HitProgress);
+	void UpdateHitShake();
+	void StopHitShake();
+
 	/** ApplyBrokenVisual 중복 실행 방지(멀티캐스트 + OnRep이 겹쳐도 한 번만 재생) */
 	bool bBreakVisualPlayed = false;
+	bool bHitBaseTransformCaptured = false;
+	FTransform HitBaseRelativeTransform;
+	FVector HitShakeLocalDirection = FVector::BackwardVector;
+	float HitShakeStartTime = 0.0f;
+	float HitShakeStrength = 1.0f;
+	int32 HitShakeSeed = 0;
+	FTimerHandle HitShakeTimer;
 };
