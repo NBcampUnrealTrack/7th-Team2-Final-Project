@@ -515,17 +515,61 @@ protected:
 	// Villager 등 상점이 아닌 NPC와의 대화에서 상점 카메라보다 더 확대하고,
 	// 화면 좌측에 더 가깝게(FrameRightOffset을 낮춰) 배치하기 위한 값.
 
-	/** 대화 포커스 카메라 거리(cm). 상점보다 가까이 당겨 확대감을 준다. */
+	/** 대화 포커스 카메라 거리(cm). 340까지 늘렸더니 시장 가판대 근처 NPC에서 카메라가 구조물과
+	 *  걸려 화면이 깨졌다(충돌 검사가 없는 단순 스폰 배치라 거리를 늘릴수록 근처 지형/가판대에
+	 *  걸릴 위험이 커짐). 280은 검증된 안전 거리라 되돌리고, 상반신 노출은 FOV로만 확보한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
-	float DialogueCameraDistance = 220.0f;
+	float DialogueCameraDistance = 280.0f;
 
-	/** 대화 포커스 카메라 시야각. 상점보다 낮춰 더 확대되게 한다. */
+	/** 대화 포커스 카메라 시야각. 카메라 위치(Distance/Height)는 검증된 값을 유지한 채 이 값만 넓혀서
+	 *  상체 노출 범위를 늘린다(카메라를 움직이지 않으므로 주변 지형 충돌 위험이 없다). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera", meta = (ClampMin = "20.0", ClampMax = "90.0"))
-	float DialogueCameraFOV = 42.0f;
+	float DialogueCameraFOV = 64.0f;
 
-	/** 대화 포커스 카메라의 좌우 프레이밍 오프셋. 상점보다 낮춰(또는 음수로) NPC를 화면 좌측에 가깝게 배치한다. */
+	/** 대화 포커스 카메라의 좌우 프레이밍 오프셋. 음수면 NPC가 화면 좌측에 배치된다(대화창 요소는 우측/하단에 배치되므로). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
-	float DialogueCameraFrameRightOffset = 20.0f;
+	float DialogueCameraFrameRightOffset = -70.0f;
+
+	/** 대화 포커스 카메라 높이(cm, NPC 액터 기준). LookAtHeight보다 확실히 높게 두어 내려다보는 각도를
+	 *  유지해야 시장 가판대 같은 낮은 장애물 너머로 NPC를 비출 수 있다(각도를 눕히면 장애물에 걸린다). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
+	float DialogueCameraHeight = 145.0f;
+
+	/** 대화 카메라가 바라보는 지점의 높이(cm, NPC 액터 기준). ShopCameraLookAtHeight(95)의 원 주석대로
+	 *  이 프로젝트 캐릭터들은 95가 이미 "얼굴/가슴" 높이다(실사 비율보다 작은 스타일라이즈드 캐릭터).
+	 *  145로 올려봤더니 머리 훨씬 위 허공을 보게 되어 오히려 캐릭터가 화면 아래로 밀려나는
+	 *  역효과가 났다 — 검증된 95로 되돌리고, 상체 노출은 FOV로만 확보한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera")
+	float DialogueCameraLookAtHeight = 95.0f;
+
+	// ── 대화 투샷(OTS) 카메라 ─────────────────────────────────────────
+	/** true면 대화 카메라를 플레이어+NPC가 함께 보이는 사선 투샷으로 배치한다. false면 기존 NPC 단독 샷. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot")
+	bool bDialogueTwoShotCamera = true;
+
+	/** 투샷: 플레이어 어깨 뒤로 물러나는 거리(cm, 플레이어→NPC 축 기준). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot")
+	float DialogueTwoShotBackDistance = 240.0f;
+
+	/** 투샷: 축에서 옆으로 비껴나는 거리(cm). +면 플레이어가 화면 좌측 전경, NPC가 우중앙에 잡힌다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot")
+	float DialogueTwoShotSideOffset = 130.0f;
+
+	/** 투샷 카메라 높이(cm, 플레이어 기준). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot")
+	float DialogueTwoShotCameraHeight = 120.0f;
+
+	/** 투샷 시선 지점의 플레이어→NPC 보간 비율(0=플레이어, 1=NPC). 클수록 NPC가 프레임 중심에 온다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float DialogueTwoShotLookAtBias = 0.65f;
+
+	/** 투샷 시선 높이(cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot")
+	float DialogueTwoShotLookAtHeight = 85.0f;
+
+	/** 투샷 시야각. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Dialogue|Camera|TwoShot", meta = (ClampMin = "20.0", ClampMax = "90.0"))
+	float DialogueTwoShotFOV = 55.0f;
 
 	/** 현재 상점 카메라(NPC 포커스)가 활성 상태인지 */
 	bool bShopCameraActive = false;
@@ -549,7 +593,14 @@ protected:
 	 */
 	void FocusCameraOnActor(AActor* TargetActor, TOptional<float> OrbitYawOverride = TOptional<float>(),
 		TOptional<float> DistanceOverride = TOptional<float>(), TOptional<float> FOVOverride = TOptional<float>(),
-		TOptional<float> FrameRightOffsetOverride = TOptional<float>());
+		TOptional<float> FrameRightOffsetOverride = TOptional<float>(),
+		TOptional<float> HeightOverride = TOptional<float>(), TOptional<float> LookAtHeightOverride = TOptional<float>());
+
+	/**
+	 * 대화용 투샷 카메라: 플레이어 어깨 뒤 사선에서 플레이어와 NPC가 함께 보이도록 배치한다.
+	 * (플레이어 폰을 숨기지 않는다 — NPC 단독 샷과 달리 두 인물이 모두 프레임에 들어와야 한다.)
+	 */
+	void FocusDialogueTwoShotCamera(AActor* TargetActor);
 
 	/** 플레이어 폰으로 뷰 타깃을 복귀한다. */
 	void RestorePlayerCameraView();
