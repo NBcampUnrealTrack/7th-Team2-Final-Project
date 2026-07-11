@@ -255,6 +255,18 @@ void ARetrievePlayerController::BeginPlay()
 			}
 		});
 
+	// 시네마틱 시작/종료 시 HUD를 숨기고/복원한다(대화는 열고 닫는 지점에서 직접 갱신).
+	CinematicHUDVisibilityHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveCinematicStatePayload>(
+		RetrieveGameplayTags::Channel_Cinematic_Changed,
+		[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
+	(FGameplayTag /*Channel*/, const FRetrieveCinematicStatePayload& /*Payload*/)
+		{
+			if (ARetrievePlayerController* PC = WeakThis.Get())
+			{
+				PC->UpdateHUDNarrativeVisibility();
+			}
+		});
+
 	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
 		const ERetrieveSessionState Current = GS->GetSessionState();
@@ -299,6 +311,15 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicCloseHandle);
 		}
 		CinematicCloseHandle = FGameplayMessageListenerHandle();
+	}
+
+	if (CinematicHUDVisibilityHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicHUDVisibilityHandle);
+		}
+		CinematicHUDVisibilityHandle = FGameplayMessageListenerHandle();
 	}
 
 	if (ActiveTopLevelWidget)
@@ -600,6 +621,11 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 			if (NewState == ERetrieveSessionState::InGame)
 			{
 				EnsureHUDViewModel();
+
+				// 새 HUD 위젯 기준으로 내러티브(대화/시네마틱) 숨김 상태를 재평가한다.
+				// (오프닝 시네마틱 재생 중 HUD가 생성되는 경우 즉시 숨겨진다.)
+				bHUDHiddenForNarrative = false;
+				UpdateHUDNarrativeVisibility();
 			}
 		}
 	}
@@ -1791,6 +1817,9 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = true;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+
+	// 대화 중에는 HUD를 숨긴다(종료 시 CloseConversation에서 복원).
+	UpdateHUDNarrativeVisibility();
 }
 
 void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGameplayTag TopicId)
@@ -1865,6 +1894,42 @@ void ARetrievePlayerController::CloseConversation()
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+
+	// 대화 종료: 시네마틱도 진행 중이 아니면 HUD를 복원한다.
+	UpdateHUDNarrativeVisibility();
+}
+
+void ARetrievePlayerController::UpdateHUDNarrativeVisibility()
+{
+	if (!ActiveTopLevelWidget)
+	{
+		bHUDHiddenForNarrative = false;
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	// 인게임 HUD가 아닐 때(메인 메뉴/결과 화면)는 건드리지 않는다.
+	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+
+	const bool bCinematicActive = GS->GetCinematicState().IsActive();
+	const bool bDialogueActive = ConversationInstance != nullptr;
+	const bool bShouldHide = bCinematicActive || bDialogueActive;
+
+	if (bShouldHide && !bHUDHiddenForNarrative)
+	{
+		SavedHUDVisibilityForNarrative = ActiveTopLevelWidget->GetVisibility();
+		ActiveTopLevelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		bHUDHiddenForNarrative = true;
+	}
+	else if (!bShouldHide && bHUDHiddenForNarrative)
+	{
+		ActiveTopLevelWidget->SetVisibility(SavedHUDVisibilityForNarrative);
+		bHUDHiddenForNarrative = false;
+	}
 }
 
 void ARetrievePlayerController::EnsureHUDViewModel()

@@ -242,6 +242,18 @@ protected:
 	/** VM을 해제합니다. HUD 위젯 제거 시 호출됩니다. */
 	void ClearHUDViewModel();
 
+	/**
+	 * 대화/시네마틱 재생 중에는 인게임 HUD(ActiveTopLevelWidget)를 숨기고,
+	 * 둘 다 끝나면 원래 가시성으로 복원한다. 대화 열기/닫기, 시네마틱 상태 변경,
+	 * HUD 재생성 시점에 호출된다.
+	 */
+	void UpdateHUDNarrativeVisibility();
+
+	/** 시네마틱 상태 변경 시 HUD 표시를 갱신하는 상시 리스너(BeginPlay 등록). */
+	FGameplayMessageListenerHandle CinematicHUDVisibilityHandle;
+	bool bHUDHiddenForNarrative = false;
+	ESlateVisibility SavedHUDVisibilityForNarrative = ESlateVisibility::SelfHitTestInvisible;
+
 	UPROPERTY()
 	TObjectPtr<UHUDViewModel> HUDViewModelInstance;
 
