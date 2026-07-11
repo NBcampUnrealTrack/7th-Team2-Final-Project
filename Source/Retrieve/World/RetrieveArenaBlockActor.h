@@ -14,6 +14,7 @@ class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 struct FEnemyPlayerSpottedPayload;
 struct FMonsterDiedPayload;
+struct FPlayerDiedPayload;
 
 /**
  * 보스 아레나 결계 액터.
@@ -82,6 +83,9 @@ private:
 	/** 보스 사망 → 결계 해제 */
 	void OnMonsterDied(FGameplayTag Channel, const FMonsterDiedPayload& Payload);
 
+	/** 플레이어 사망 → 결계 해제 (재진입 시 재잠금 = 재도전) */
+	void OnPlayerDied(FGameplayTag Channel, const FPlayerDiedPayload& Payload);
+
 	/** 메시지에 실려 온 액터/위치가 이 아레나의 보스인지 판별 */
 	bool IsArenaBoss(const AActor* Actor, const FVector& Location) const;
 
@@ -138,6 +142,7 @@ protected:
 private:
 	FGameplayMessageListenerHandle SpottedHandle;
 	FGameplayMessageListenerHandle DiedHandle;
+	FGameplayMessageListenerHandle PlayerDiedHandle;
 
 	/** 디졸브 종료 후 숨김 타이머 */
 	FTimerHandle HideTimerHandle;
