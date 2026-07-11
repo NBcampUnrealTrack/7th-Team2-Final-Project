@@ -35,6 +35,9 @@ void URetrieveMusicSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	PlayerDiedListenerHandle = Msg.RegisterListener(
 		RetrieveGameplayTags::Channel_Player_Died,
 		this, &URetrieveMusicSubsystem::HandlePlayerDied);
+	CinematicListenerHandle = Msg.RegisterListener(
+		RetrieveGameplayTags::Channel_Cinematic_Changed,
+		this, &URetrieveMusicSubsystem::HandleCinematicStateChanged);
 
 	// 전환 메시지를 놓쳐도 안전하도록 현재 세션 상태를 직접 읽어 초기 BGM을 결정한다.
 	if (const ARetrieveGameState* GS = InWorld.GetGameState<ARetrieveGameState>())
@@ -65,6 +68,10 @@ void URetrieveMusicSubsystem::Deinitialize()
 	if (PlayerDiedListenerHandle.IsValid())
 	{
 		PlayerDiedListenerHandle.Unregister();
+	}
+	if (CinematicListenerHandle.IsValid())
+	{
+		CinematicListenerHandle.Unregister();
 	}
 
 	if (UWorld* World = GetWorld())
@@ -180,6 +187,21 @@ void URetrieveMusicSubsystem::HandleSessionStateChanged(FGameplayTag Channel, co
 		ZoneSyncTriesLeft = 10; // 0.3초 × 10 ≈ 3초간 재평가(폰 안착 대기)
 		SyncPlayerZoneOverlap();
 	}
+}
+
+void URetrieveMusicSubsystem::HandleCinematicStateChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Payload)
+{
+	// 오프닝 등 시네마틱이 끝나는 순간 존 진입 재평가를 다시 돌린다.
+	// 시네마틱 재생 중(입력/이동 잠금·연출 위치 이동)에 InGame 진입 시의 3초 오버랩 재평가 창이 만료되면,
+	// 플레이어가 시작부터 존 안(예: 동굴, Sound=None)에 있어도 EnterMusicZone이 안 불려 UpdateMusic이
+	// 기본 BGM으로 떨어진다. 종료 시 재평가를 재개해 뒤늦게라도 존에 진입시킨다(무음 복원).
+	if (Payload.bActive || CurrentSessionState != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+
+	ZoneSyncTriesLeft = 10; // 0.3초 × 10 ≈ 3초간 재평가(연출 종료 후 폰 안착 대기)
+	SyncPlayerZoneOverlap();
 }
 
 void URetrieveMusicSubsystem::SyncPlayerZoneOverlap()
