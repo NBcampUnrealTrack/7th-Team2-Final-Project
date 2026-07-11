@@ -23,6 +23,7 @@ namespace RetrieveSettingAvailability
 	inline constexpr bool bInteractMode       = false; // 작업 13 상호작용 토글/홀드 전
 	inline constexpr bool bLockOnMode         = false; // 작업 10 락온 토글/홀드 전
 	inline constexpr bool bAimAssist          = false; // 작업 14 Aim Assist 설계 전
+	inline constexpr bool bGamepadOptions     = false; // 게임패드 미지원 빌드(패드 입력 미구현). 지원 시 true로 전환
 
 	/** 페이지 내 옵션 행(Row_*) 1개에 대한 가용성 항목. */
 	struct FOptionRow
@@ -42,6 +43,8 @@ namespace RetrieveSettingAvailability
 			{ ERetrieveSettingsCategory::Gameplay,      TEXT("Row_SubtitleScale"), bSubtitleScale },
 			{ ERetrieveSettingsCategory::Gameplay,      TEXT("Row_TutorialHints"), bTutorialHints },
 			{ ERetrieveSettingsCategory::Controls,      TEXT("Row_LockOn"),        bLockOnMode },
+			{ ERetrieveSettingsCategory::Controls,      TEXT("Row_PadSens"),       bGamepadOptions },
+			{ ERetrieveSettingsCategory::Controls,      TEXT("Row_Vibration"),     bGamepadOptions },
 			{ ERetrieveSettingsCategory::Accessibility, TEXT("Row_UIScale"),       bUIScale },
 			{ ERetrieveSettingsCategory::Accessibility, TEXT("Row_HighContrast"),  bHighContrast },
 			{ ERetrieveSettingsCategory::Accessibility, TEXT("Row_Interact"),      bInteractMode },

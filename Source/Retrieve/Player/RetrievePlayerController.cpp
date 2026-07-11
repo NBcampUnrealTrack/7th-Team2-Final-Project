@@ -30,6 +30,7 @@
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 #include "UI/ViewModels/ConversationViewModel.h"
 #include "UI/ViewModels/QuestTrackerViewModel.h"
 #include "UI/HUD/RetrieveBossHPBarWidget.h"
@@ -1113,6 +1114,9 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	NewPanel->AddToViewport(PanelZOrder);
 	CenterActiveWorldMapPanel();
 
+	// 고대비 HUD가 켜져 있으면 새로 열린 패널에도 즉시 적용한다(꺼져 있으면 no-op).
+	URetrieveUISettingsLibrary::ApplyHighContrastToTree(NewPanel);
+
 	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(NewPanel->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -1210,6 +1214,12 @@ void ARetrievePlayerController::OpenControlsGuide()
 
 	// 시스템 메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
 	OpenExclusivePanel(PanelClass, EKeys::Escape);
+
+	// 리바인드된 키가 다이어그램에 반영되도록 C++에서 직접 갱신한다(WBP 그래프 배선에 의존하지 않음).
+	if (ActivePanel)
+	{
+		URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(ActivePanel);
+	}
 }
 
 void ARetrievePlayerController::CloseActivePanel()

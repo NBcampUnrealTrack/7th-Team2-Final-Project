@@ -6,8 +6,9 @@
 #include "GA_BowAim.generated.h"
 
 class UAbilityTask_WaitInputRelease;
+class UAbilityTask_WaitInputPress;
 /**
- * 
+ *
  */
 UCLASS()
 class RETRIEVE_API UGA_BowAim : public URetrieveGameplayAbility
@@ -40,9 +41,17 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
+	// 토글 모드에서 조준 해제용 재입력을 기다릴 때 호출된다.
+	UFUNCTION()
+	void HandleToggleOffInputPressed(float TimeWaited);
+
 private:
 	UPROPERTY(Transient)
 	UAbilityTask_WaitInputRelease* WaitInputReleaseTask;
+
+	// 토글 모드(우클릭 1회로 진입, 다시 1회로 해제)에서 두 번째 입력을 기다리는 태스크.
+	UPROPERTY(Transient)
+	UAbilityTask_WaitInputPress* WaitInputPressTask;
 
 	// 조준 종료 시 같은 CameraBoom에 override 해제를 요청하기 위한 약참조.
 	// 카메라 구도는 로컬 표현이므로 서버/원격 캐릭터에는 별도 상태를 남기지 않는다.

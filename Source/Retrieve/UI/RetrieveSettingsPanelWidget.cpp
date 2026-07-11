@@ -14,13 +14,21 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/CheckBox.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/SizeBox.h"
+#include "Components/SizeBoxSlot.h"
 #include "Components/Slider.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputAction.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "InputMappingContext.h"
 #include "PlayerMappableKeySettings.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
@@ -94,6 +102,12 @@ namespace
 
 	FText QualityText(const int32 Quality)
 	{
+		// GetOverallScalabilityLevel은 하위 품질이 서로 다르면 -1(혼합)을 반환한다.
+		// 낮음으로 잘못 표기하지 않도록 별도 표기한다.
+		if (Quality < 0)
+		{
+			return FText::FromString(TEXT("사용자 지정"));
+		}
 		static const TCHAR* Labels[] = { TEXT("낮음"), TEXT("중간"), TEXT("높음"), TEXT("에픽") };
 		return FText::FromString(Labels[FMath::Clamp(Quality, 0, 3)]);
 	}
@@ -139,6 +153,319 @@ namespace
 			Property->SetObjectPropertyValue_InContainer(Action, MappingSettings);
 		}
 	}
+
+	/**
+	 * 리바인드 가능한 액션 정의 목록. IA_Move/IA_Look처럼 축 입력(WASD, 마우스)은
+	 * 단일 키 리바인드 UI에 맞지 않아 제외한다.
+	 * LabelWidgetName/RebindButtonWidgetName에 해당하는 위젯이 WBP_SettingsPage_Controls에
+	 * 없으면 FindWidget이 안전하게 no-op하므로, 행을 WBP에 추가하는 즉시 자동으로 노출된다.
+	 */
+	struct FRebindActionDef
+	{
+		const TCHAR* ActionAssetName;
+		const TCHAR* AssetPath;
+		const TCHAR* MappingName;
+		const TCHAR* DisplayLabel;
+		const TCHAR* KeyTextWidgetName;
+		const TCHAR* RebindButtonWidgetName;
+	};
+
+	const TArray<FRebindActionDef>& GetRebindActionDefs()
+	{
+		// 공격(IA_Attack)은 목록에서 제외: 마우스 좌클릭 고정(조작키 안내의 마우스 아이콘 표기를
+		// 바꿀 수 없어 리바인드를 막는다). Key_Attack 행은 RefreshKeyBindings에서 "고정" 표기.
+		static const TArray<FRebindActionDef> Defs = {
+			{ TEXT("IA_Roll"),         TEXT("/Game/Retrieve/Input/Actions/IA_Roll.IA_Roll"),                 TEXT("Retrieve.Dodge"),       TEXT("회피"),     TEXT("Key_Dodge"),        TEXT("KeyBtn_Dodge") },
+			{ TEXT("IA_LockOn"),       TEXT("/Game/Retrieve/Input/Actions/IA_LockOn.IA_LockOn"),             TEXT("Retrieve.LockOn"),      TEXT("락온"),     TEXT("Key_LockOn"),       TEXT("KeyBtn_LockOn") },
+			{ TEXT("IA_Sprint"),       TEXT("/Game/Retrieve/Input/Actions/IA_Sprint.IA_Sprint"),             TEXT("Retrieve.Sprint"),      TEXT("질주"),     TEXT("Key_Sprint"),       TEXT("KeyBtn_Sprint") },
+			{ TEXT("IA_Jump"),         TEXT("/Game/Retrieve/Input/Actions/IA_Jump.IA_Jump"),                 TEXT("Retrieve.Jump"),        TEXT("점프"),     TEXT("Key_Jump"),         TEXT("KeyBtn_Jump") },
+			{ TEXT("IA_Interaction"),  TEXT("/Game/Retrieve/Input/Actions/IA_Interaction.IA_Interaction"),   TEXT("Retrieve.Interact"),    TEXT("상호작용"), TEXT("Key_Interaction"),  TEXT("KeyBtn_Interaction") },
+			{ TEXT("IA_HeavyAttack"),  TEXT("/Game/Retrieve/Input/Actions/IA_HeavyAttack.IA_HeavyAttack"),   TEXT("Retrieve.HeavyAttack"), TEXT("강공격"),   TEXT("Key_HeavyAttack"),  TEXT("KeyBtn_HeavyAttack") },
+			{ TEXT("IA_Guard"),        TEXT("/Game/Retrieve/Input/Actions/IA_Guard.IA_Guard"),               TEXT("Retrieve.Guard"),       TEXT("가드"),     TEXT("Key_Guard"),        TEXT("KeyBtn_Guard") },
+			{ TEXT("IA_Crouch"),       TEXT("/Game/Retrieve/Input/Actions/IA_Crouch.IA_Crouch"),             TEXT("Retrieve.Crouch"),      TEXT("웅크리기"), TEXT("Key_Crouch"),       TEXT("KeyBtn_Crouch") },
+			{ TEXT("IA_Burst"),        TEXT("/Game/Retrieve/Input/Actions/IA_Burst.IA_Burst"),               TEXT("Retrieve.Burst"),       TEXT("버스트"),   TEXT("Key_Burst"),        TEXT("KeyBtn_Burst") },
+			{ TEXT("IA_Absorb"),       TEXT("/Game/Retrieve/Input/Actions/IA_Absorb.IA_Absorb"),             TEXT("Retrieve.Absorb"),      TEXT("흡수"),     TEXT("Key_Absorb"),       TEXT("KeyBtn_Absorb") },
+			{ TEXT("IA_RecallLumen"),  TEXT("/Game/Retrieve/Input/Actions/IA_RecallLumen.IA_RecallLumen"),   TEXT("Retrieve.RecallLumen"), TEXT("루멘 소환"),TEXT("Key_RecallLumen"),  TEXT("KeyBtn_RecallLumen") },
+			{ TEXT("IA_ElementMode1"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode1.IA_ElementMode1"), TEXT("Retrieve.Element1"),    TEXT("원소 1"),   TEXT("Key_Element1"),     TEXT("KeyBtn_Element1") },
+			{ TEXT("IA_ElementMode2"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode2.IA_ElementMode2"), TEXT("Retrieve.Element2"),    TEXT("원소 2"),   TEXT("Key_Element2"),     TEXT("KeyBtn_Element2") },
+			{ TEXT("IA_ElementMode3"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode3.IA_ElementMode3"), TEXT("Retrieve.Element3"),    TEXT("원소 3"),   TEXT("Key_Element3"),     TEXT("KeyBtn_Element3") },
+		};
+		return Defs;
+	}
+
+	/**
+	 * 트리거(짧게/길게)만 다르고 같은 물리 키를 공유하도록 설계된 액션 그룹.
+	 * 그룹 내 한 액션을 리바인드하면 나머지도 같은 키로 함께 이동하고, 서로는 중복 검사에서 제외된다.
+	 * 현재: 회피(짧게)/질주(길게) = Shift.
+	 */
+	TArray<FName> GetLinkedRebindActionNames(const FName ActionAssetName)
+	{
+		static const TArray<TArray<FName>> Groups = {
+			{ FName(TEXT("IA_Roll")), FName(TEXT("IA_Sprint")) },
+		};
+		for (const TArray<FName>& Group : Groups)
+		{
+			if (Group.Contains(ActionAssetName))
+			{
+				return Group;
+			}
+		}
+		return { ActionAssetName };
+	}
+
+	/** 연동 그룹 액션의 키 표기 뒤에 붙는 트리거 구분(같은 키가 두 행에 보이는 이유를 설명). */
+	FString GetRebindDisplaySuffix(const FName ActionAssetName)
+	{
+		if (ActionAssetName == TEXT("IA_Roll"))   return TEXT(" (짧게)");
+		if (ActionAssetName == TEXT("IA_Sprint")) return TEXT(" (길게)");
+		return FString();
+	}
+
+	/** 액션 에셋 이름으로 활성 프로필에서 키보드 매핑 이름을 찾는다. 없으면 NAME_None. */
+	FName FindMappingNameForAction(const UEnhancedPlayerMappableKeyProfile* Profile, const FName ActionAssetName)
+	{
+		if (!Profile)
+		{
+			return NAME_None;
+		}
+		for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
+		{
+			for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
+			{
+				const UInputAction* Action = Mapping.GetAssociatedInputAction();
+				if (Action && Action->GetFName() == ActionAssetName && !Mapping.GetCurrentKey().IsGamepadKey())
+				{
+					return Pair.Key;
+				}
+			}
+		}
+		return NAME_None;
+	}
+
+	void CopyHBoxSlot(const UHorizontalBoxSlot* From, UHorizontalBoxSlot* To)
+	{
+		if (!From || !To) return;
+		To->SetSize(From->GetSize());
+		To->SetHorizontalAlignment(From->GetHorizontalAlignment());
+		To->SetVerticalAlignment(From->GetVerticalAlignment());
+		To->SetPadding(From->GetPadding());
+	}
+
+	void CopyVBoxSlot(const UVerticalBoxSlot* From, UVerticalBoxSlot* To)
+	{
+		if (!From || !To) return;
+		To->SetSize(From->GetSize());
+		To->SetHorizontalAlignment(From->GetHorizontalAlignment());
+		To->SetVerticalAlignment(From->GetVerticalAlignment());
+		To->SetPadding(From->GetPadding());
+	}
+
+	/** 키 재설정 버튼 폭에 맞도록 마우스/보조키 표시 이름을 짧은 표기로 바꾼다. */
+	FString ShortKeyDisplayName(const FKey& Key)
+	{
+		if (Key == EKeys::LeftMouseButton)   return TEXT("좌클릭");
+		if (Key == EKeys::RightMouseButton)  return TEXT("우클릭");
+		if (Key == EKeys::MiddleMouseButton) return TEXT("휠클릭");
+		if (Key == EKeys::LeftShift || Key == EKeys::RightShift)     return TEXT("Shift");
+		if (Key == EKeys::LeftControl || Key == EKeys::RightControl) return TEXT("Ctrl");
+		if (Key == EKeys::LeftAlt || Key == EKeys::RightAlt)         return TEXT("Alt");
+		if (Key == EKeys::SpaceBar)  return TEXT("Space");
+		if (Key == EKeys::CapsLock)  return TEXT("Caps");
+		if (Key == EKeys::BackSpace) return TEXT("Back");
+		return Key.GetDisplayName().ToString();
+	}
+
+	// 조작 페이지 스타일 정규화.
+	// 1) 활 조준 방식 라벨/설명: 툴로 추가되며 엔진 기본(큰 흰 글씨)이라 On/Off 버튼을 침범 →
+	//    Y축 반전 행의 폰트/색을 복사해 통일하고 설명을 On/Off 의미에 맞게 바꾼다.
+	// 2) 키 재설정 버튼: 기존 행과 런타임 생성 행의 틴트가 달라 보이므로 전 행을 흰색(기본)으로,
+	//    버튼 폭도 하나로 통일해 키 이름이 프레임을 넘지 않게 한다.
+	void NormalizeControlsPageStyle(UUserWidget* Page)
+	{
+		if (!Page)
+		{
+			return;
+		}
+
+		if (const UTextBlock* RefLbl = FindWidget<UTextBlock>(Page, TEXT("Lbl_InvertY")))
+		{
+			if (UTextBlock* Lbl = FindWidget<UTextBlock>(Page, TEXT("Lbl_BowAimToggle")))
+			{
+				Lbl->SetFont(RefLbl->GetFont());
+				Lbl->SetColorAndOpacity(RefLbl->GetColorAndOpacity());
+			}
+		}
+		if (const UTextBlock* RefDsc = FindWidget<UTextBlock>(Page, TEXT("Dsc_InvertY")))
+		{
+			if (UTextBlock* Dsc = FindWidget<UTextBlock>(Page, TEXT("Dsc_BowAimToggle")))
+			{
+				Dsc->SetFont(RefDsc->GetFont());
+				Dsc->SetColorAndOpacity(RefDsc->GetColorAndOpacity());
+				Dsc->SetText(FText::FromString(TEXT("On: 한 번 클릭으로 조준 유지 / Off: 우클릭 누르는 동안 조준")));
+			}
+		}
+
+		// 버튼 폭: 템플릿(KB_Dodge)에 고정폭이 있으면 그 값을, 없으면 240을 전 행에 적용한다.
+		float ButtonWidth = 240.f;
+		if (const USizeBox* TemplateKB = FindWidget<USizeBox>(Page, TEXT("KB_Dodge")))
+		{
+			if (TemplateKB->GetWidthOverride() > 0.f)
+			{
+				ButtonWidth = TemplateKB->GetWidthOverride();
+			}
+		}
+
+		auto NormalizeRow = [Page, ButtonWidth](const TCHAR* ButtonName, const TCHAR* KeyTextName)
+		{
+			if (UButton* Button = FindWidget<UButton>(Page, ButtonName))
+			{
+				Button->SetColorAndOpacity(FLinearColor::White);
+				Button->SetBackgroundColor(FLinearColor::White);
+				Button->SetRenderOpacity(1.f);
+			}
+			if (UTextBlock* KeyText = FindWidget<UTextBlock>(Page, KeyTextName))
+			{
+				if (USizeBox* KB = Cast<USizeBox>(KeyText->GetParent()))
+				{
+					KB->SetWidthOverride(ButtonWidth);
+				}
+			}
+		};
+		NormalizeRow(TEXT("KeyBtn_Attack"), TEXT("Key_Attack"));
+		for (const FRebindActionDef& Def : GetRebindActionDefs())
+		{
+			NormalizeRow(Def.RebindButtonWidgetName, Def.KeyTextWidgetName);
+		}
+	}
+
+	// WBP_SettingsPage_Controls에 아직 배치되지 않은 리바인드 행을 런타임에 생성한다.
+	// 기존 회피 행(Row_Key_Dodge)을 템플릿 삼아 폰트/버튼 스타일/슬롯 배치를 그대로 복사하므로
+	// 디자인이 유지되고, Key_*, KeyBtn_* 이름 규약 덕에 기존 배선(BindPageEvents)과
+	// 표기 갱신(RefreshKeyBindings)이 그대로 동작한다. WBP에 실제 행을 배치하면 그 행이 우선한다.
+	void EnsureRebindRows(UUserWidget* Page)
+	{
+		if (!Page || !Page->WidgetTree)
+		{
+			return;
+		}
+
+		UHorizontalBox* TemplateRow = FindWidget<UHorizontalBox>(Page, TEXT("Row_Key_Dodge"));
+		UTextBlock* TemplateLabel = FindWidget<UTextBlock>(Page, TEXT("Lbl_KeyDodge"));
+		UButton* TemplateButton = FindWidget<UButton>(Page, TEXT("KeyBtn_Dodge"));
+		USizeBox* TemplateSizeBox = FindWidget<USizeBox>(Page, TEXT("KB_Dodge"));
+		UTextBlock* TemplateKeyText = FindWidget<UTextBlock>(Page, TEXT("Key_Dodge"));
+		UVerticalBox* List = TemplateRow ? Cast<UVerticalBox>(TemplateRow->GetParent()) : nullptr;
+		if (!TemplateRow || !TemplateLabel || !TemplateButton || !TemplateKeyText || !List)
+		{
+			return;
+		}
+
+		UWidgetTree* Tree = Page->WidgetTree;
+		bool bAddedAny = false;
+		for (const FRebindActionDef& Def : GetRebindActionDefs())
+		{
+			if (FindWidget<UTextBlock>(Page, Def.KeyTextWidgetName))
+			{
+				continue; // WBP에 이미 배치된 행
+			}
+			bAddedAny = true;
+
+			UHorizontalBox* Row = Tree->ConstructWidget<UHorizontalBox>(
+				UHorizontalBox::StaticClass(), FName(*(FString(TEXT("Row_")) + Def.KeyTextWidgetName)));
+
+			// 왼쪽: 액션 이름 라벨(템플릿 폰트/색 복사)
+			UVerticalBox* LabelBox = Tree->ConstructWidget<UVerticalBox>();
+			UTextBlock* Label = Tree->ConstructWidget<UTextBlock>();
+			Label->SetText(FText::FromString(Def.DisplayLabel));
+			Label->SetFont(TemplateLabel->GetFont());
+			Label->SetColorAndOpacity(TemplateLabel->GetColorAndOpacity());
+			UVerticalBoxSlot* LabelSlot = LabelBox->AddChildToVerticalBox(Label);
+			CopyVBoxSlot(Cast<UVerticalBoxSlot>(TemplateLabel->Slot), LabelSlot);
+			CopyHBoxSlot(Cast<UHorizontalBoxSlot>(TemplateLabel->GetParent()->Slot),
+				Row->AddChildToHorizontalBox(LabelBox));
+
+			// 오른쪽: 키 버튼(템플릿 버튼 스타일/크기 복사)
+			UButton* Button = Tree->ConstructWidget<UButton>(
+				UButton::StaticClass(), FName(Def.RebindButtonWidgetName));
+			Button->SetStyle(TemplateButton->GetStyle());
+
+			USizeBox* SizeBox = Tree->ConstructWidget<USizeBox>();
+			if (TemplateSizeBox)
+			{
+				if (TemplateSizeBox->GetWidthOverride() > 0.f)
+				{
+					SizeBox->SetWidthOverride(TemplateSizeBox->GetWidthOverride());
+				}
+				if (TemplateSizeBox->GetHeightOverride() > 0.f)
+				{
+					SizeBox->SetHeightOverride(TemplateSizeBox->GetHeightOverride());
+				}
+				if (TemplateSizeBox->GetMinDesiredWidth() > 0.f)
+				{
+					SizeBox->SetMinDesiredWidth(TemplateSizeBox->GetMinDesiredWidth());
+				}
+			}
+
+			UTextBlock* KeyText = Tree->ConstructWidget<UTextBlock>(
+				UTextBlock::StaticClass(), FName(Def.KeyTextWidgetName));
+			KeyText->SetFont(TemplateKeyText->GetFont());
+			KeyText->SetColorAndOpacity(TemplateKeyText->GetColorAndOpacity());
+			KeyText->SetJustification(ETextJustify::Center);
+			KeyText->SetText(FText::FromString(TEXT("미지정")));
+
+			SizeBox->AddChild(KeyText);
+			if (USizeBoxSlot* FromSlot = Cast<USizeBoxSlot>(TemplateKeyText->Slot))
+			{
+				if (USizeBoxSlot* ToSlot = Cast<USizeBoxSlot>(KeyText->Slot))
+				{
+					ToSlot->SetPadding(FromSlot->GetPadding());
+					ToSlot->SetHorizontalAlignment(FromSlot->GetHorizontalAlignment());
+					ToSlot->SetVerticalAlignment(FromSlot->GetVerticalAlignment());
+				}
+			}
+			Button->AddChild(SizeBox);
+			if (TemplateSizeBox)
+			{
+				if (const UButtonSlot* FromSlot = Cast<UButtonSlot>(TemplateSizeBox->Slot))
+				{
+					if (UButtonSlot* ToSlot = Cast<UButtonSlot>(SizeBox->Slot))
+					{
+						ToSlot->SetPadding(FromSlot->GetPadding());
+						ToSlot->SetHorizontalAlignment(FromSlot->GetHorizontalAlignment());
+						ToSlot->SetVerticalAlignment(FromSlot->GetVerticalAlignment());
+					}
+				}
+			}
+			CopyHBoxSlot(Cast<UHorizontalBoxSlot>(TemplateButton->Slot),
+				Row->AddChildToHorizontalBox(Button));
+
+			// 리스트에 추가(행 간 여백은 템플릿 행 슬롯에서 복사)
+			CopyVBoxSlot(Cast<UVerticalBoxSlot>(TemplateRow->Slot), List->AddChildToVerticalBox(Row));
+		}
+
+		// "활 조준 방식" 행이 리바인드 행들 뒤에 오도록 맨 끝으로 옮긴다(슬롯 속성 보존).
+		if (bAddedAny)
+		{
+			UWidget* BowRow = Page->GetWidgetFromName(TEXT("Row_BowAimToggle"));
+			if (BowRow && BowRow->GetParent() == List)
+			{
+				const UVerticalBoxSlot* OldSlot = Cast<UVerticalBoxSlot>(BowRow->Slot);
+				const FSlateChildSize Size = OldSlot ? OldSlot->GetSize() : FSlateChildSize();
+				const EHorizontalAlignment HAlign = OldSlot ? OldSlot->GetHorizontalAlignment() : HAlign_Fill;
+				const EVerticalAlignment VAlign = OldSlot ? OldSlot->GetVerticalAlignment() : VAlign_Fill;
+				const FMargin Padding = OldSlot ? OldSlot->GetPadding() : FMargin(0.f);
+
+				List->RemoveChild(BowRow);
+				if (UVerticalBoxSlot* NewSlot = List->AddChildToVerticalBox(BowRow))
+				{
+					NewSlot->SetSize(Size);
+					NewSlot->SetHorizontalAlignment(HAlign);
+					NewSlot->SetVerticalAlignment(VAlign);
+					NewSlot->SetPadding(Padding);
+				}
+			}
+		}
+	}
 }
 
 void URetrieveSettingsPanelWidget::NativeConstruct()
@@ -148,6 +475,9 @@ void URetrieveSettingsPanelWidget::NativeConstruct()
 	BindPageEvents();
 	ApplyRuntimeStyle();
 	ApplyOptionAvailability();
+
+	// 리바인드 허용 키 판정이 조작키 안내 다이어그램에 실제 그려진 키 기준으로 동작하도록 캐시를 구축한다.
+	URetrieveUISettingsLibrary::EnsureControlsGuideKeyCache(GetOwningPlayer());
 
 	// 접근성(고대비) 등 설정 변경 시 화면 스타일을 즉시 갱신하도록 구독한다.
 	if (URetrieveSettingsSubsystem* Subsystem = GetSettingsSubsystem())
@@ -251,14 +581,18 @@ FName URetrieveSettingsPanelWidget::GetConflictingAction(const FKey& Key) const
 	const UEnhancedPlayerMappableKeyProfile* Profile = InputSettings ? InputSettings->GetActiveKeyProfile() : nullptr;
 	if (!Profile) return NAME_None;
 
+	// 연동 그룹(회피/질주)은 함께 이동하므로 그룹 전체를 중복 검사에서 제외한다.
+	const TArray<FName> LinkedActions = GetLinkedRebindActionNames(PendingActionAssetName);
+
 	for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
 	{
 		if (Pair.Key == PendingMappingName) continue;
 		for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
 		{
+			const UInputAction* Action = Mapping.GetAssociatedInputAction();
+			if (Action && LinkedActions.Contains(Action->GetFName())) continue;
 			if (Mapping.GetCurrentKey() == Key && !Mapping.GetCurrentKey().IsGamepadKey())
 			{
-				const UInputAction* Action = Mapping.GetAssociatedInputAction();
 				return Action ? Action->GetFName() : Pair.Key;
 			}
 		}
@@ -276,11 +610,30 @@ static FString ActionToKorean(const FName& ActionName)
 	return S;
 }
 
+void URetrieveSettingsPanelWidget::CancelRebindWithWarning(const FString& Message)
+{
+	SetText(GetPage(ERetrieveSettingsCategory::Controls), PendingKeyLabelName, FText::FromString(Message));
+
+	// 이전 타이머 초기화 후 2초 뒤 원래 키 표기로 복원
+	GetWorld()->GetTimerManager().ClearTimer(RebindWarningTimerHandle);
+	GetWorld()->GetTimerManager().SetTimer(RebindWarningTimerHandle,
+		FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			RefreshKeyBindings();
+		}),
+		2.0f, false);
+
+	PendingMappingName = NAME_None;
+	PendingActionAssetName = NAME_None;
+	PendingKeyLabelName = NAME_None;
+}
+
 void URetrieveSettingsPanelWidget::FinishRebindWithKey(const FKey& NewKey)
 {
 	if (NewKey == EKeys::Escape)
 	{
 		PendingMappingName = NAME_None;
+		PendingActionAssetName = NAME_None;
 		PendingKeyLabelName = NAME_None;
 		RefreshKeyBindings();
 		return;
@@ -291,45 +644,64 @@ void URetrieveSettingsPanelWidget::FinishRebindWithKey(const FKey& NewKey)
 		return;
 	}
 
+	// 마우스 입력은 할당 금지: 조작키 안내의 마우스 다이어그램은 아이콘·문구가 고정이라 반영할 수 없다.
+	if (NewKey.IsMouseButton())
+	{
+		CancelRebindWithWarning(TEXT("⚠ 마우스 키는 할당 불가"));
+		return;
+	}
+
+	// 조작키 안내 키보드 다이어그램에 슬롯이 있는 키만 허용한다(설정↔안내 항상 일치).
+	if (!URetrieveUISettingsLibrary::IsControlsGuideDisplayableKey(NewKey))
+	{
+		CancelRebindWithWarning(TEXT("⚠ 사용할 수 없는 키"));
+		return;
+	}
+
 	// 중복 키 검사
 	const FName ConflictAction = GetConflictingAction(NewKey);
 	if (!ConflictAction.IsNone())
 	{
-		const FString Warning = FString::Printf(TEXT("⚠ 이미 사용 중: %s"), *ActionToKorean(ConflictAction));
-		SetText(GetPage(ERetrieveSettingsCategory::Controls), PendingKeyLabelName, FText::FromString(Warning));
-
-		// 이전 타이머 초기화 후 2초 뒤 복원
-		GetWorld()->GetTimerManager().ClearTimer(RebindWarningTimerHandle);
-		GetWorld()->GetTimerManager().SetTimer(RebindWarningTimerHandle,
-			FTimerDelegate::CreateWeakLambda(this, [this]()
-			{
-				RefreshKeyBindings();
-			}),
-			2.0f, false);
-
-		PendingMappingName = NAME_None;
-		PendingKeyLabelName = NAME_None;
+		CancelRebindWithWarning(FString::Printf(TEXT("⚠ 이미 사용 중: %s"), *ActionToKorean(ConflictAction)));
 		return;
 	}
 
 	if (UEnhancedInputUserSettings* InputSettings = GetEnhancedInputUserSettings())
 	{
-		FMapPlayerKeyArgs Args;
-		Args.MappingName = PendingMappingName;
-		Args.Slot = EPlayerMappableKeySlot::First;
-		Args.NewKey = NewKey;
-		Args.bCreateMatchingSlotIfNeeded = true;
-		FGameplayTagContainer FailureReason;
-		InputSettings->MapPlayerKey(Args, FailureReason);
-		if (FailureReason.IsEmpty())
+		// 연동 그룹(회피/질주 = Shift 짧게/길게)은 같은 키로 함께 이동한다.
+		// 트리거(Tap/Hold)는 IMC 매핑 쪽에 있으므로 키만 바꿔도 짧게/길게 동작이 유지된다.
+		const UEnhancedPlayerMappableKeyProfile* Profile = InputSettings->GetActiveKeyProfile();
+		bool bAnyMapped = false;
+		for (const FName& LinkedAction : GetLinkedRebindActionNames(PendingActionAssetName))
+		{
+			const FName MappingName = (LinkedAction == PendingActionAssetName)
+				? PendingMappingName
+				: FindMappingNameForAction(Profile, LinkedAction);
+			if (MappingName.IsNone())
+			{
+				continue;
+			}
+
+			FMapPlayerKeyArgs Args;
+			Args.MappingName = MappingName;
+			Args.Slot = EPlayerMappableKeySlot::First;
+			Args.NewKey = NewKey;
+			Args.bCreateMatchingSlotIfNeeded = true;
+			FGameplayTagContainer FailureReason;
+			InputSettings->MapPlayerKey(Args, FailureReason);
+			bAnyMapped |= FailureReason.IsEmpty();
+		}
+		if (bAnyMapped)
 		{
 			InputSettings->ApplySettings();
 			InputSettings->AsyncSaveSettings();
-			SetText(GetPage(ERetrieveSettingsCategory::Controls), PendingKeyLabelName, NewKey.GetDisplayName());
 		}
 	}
 	PendingMappingName = NAME_None;
+	PendingActionAssetName = NAME_None;
 	PendingKeyLabelName = NAME_None;
+	// 연동 그룹의 다른 행 표기까지 함께 갱신되도록 전체 목록을 다시 그린다.
+	RefreshKeyBindings();
 }
 
 URetrieveSettingsSubsystem* URetrieveSettingsPanelWidget::GetSettingsSubsystem() const
@@ -523,7 +895,58 @@ void URetrieveSettingsPanelWidget::ResetCurrentCategory()
 	{
 		Subsystem->ResetCategory(CurrentCategory);
 	}
+
+	// 키맵핑은 GameUserSettings가 아니라 EnhancedInputUserSettings에 저장되므로 별도로 복원한다.
+	if (CurrentCategory == ERetrieveSettingsCategory::Controls)
+	{
+		ResetKeyBindingsToDefaults();
+	}
+
 	RefreshCurrentPage();
+}
+
+void URetrieveSettingsPanelWidget::ResetKeyBindingsToDefaults()
+{
+	UEnhancedInputUserSettings* InputSettings = GetEnhancedInputUserSettings();
+	const UEnhancedPlayerMappableKeyProfile* Profile = InputSettings ? InputSettings->GetActiveKeyProfile() : nullptr;
+	if (!Profile)
+	{
+		return;
+	}
+
+	// 리바인드 대기 상태가 남아 있으면 정리한다(복원 후 옛 대기 상태로 키가 씌워지는 것 방지).
+	PendingMappingName = NAME_None;
+	PendingActionAssetName = NAME_None;
+	PendingKeyLabelName = NAME_None;
+
+	// 수정하면서 순회하지 않도록 복원 대상을 먼저 수집한다.
+	TArray<TPair<FName, FKey>> ToRestore;
+	for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
+	{
+		for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
+		{
+			if (!Mapping.GetCurrentKey().IsGamepadKey() && Mapping.IsCustomized())
+			{
+				ToRestore.Emplace(Pair.Key, Mapping.GetDefaultKey());
+			}
+		}
+	}
+	if (ToRestore.IsEmpty())
+	{
+		return;
+	}
+
+	for (const TPair<FName, FKey>& Restore : ToRestore)
+	{
+		FMapPlayerKeyArgs Args;
+		Args.MappingName = Restore.Key;
+		Args.Slot = EPlayerMappableKeySlot::First;
+		Args.NewKey = Restore.Value;
+		FGameplayTagContainer FailureReason;
+		InputSettings->MapPlayerKey(Args, FailureReason);
+	}
+	InputSettings->ApplySettings();
+	InputSettings->AsyncSaveSettings();
 }
 
 UUserWidget* URetrieveSettingsPanelWidget::GetPage(const ERetrieveSettingsCategory Category) const
@@ -598,9 +1021,31 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_TOGGLE(C::Controls, HandleControlsToggleChanged)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Prev", HandleLockOnPrev)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Next", HandleLockOnNext)
-	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Attack", HandleRebindAttack)
+	// 공격은 마우스 좌클릭 고정: 리바인드 버튼을 비활성화한다(행은 참고용으로 남김).
+	if (UButton* AttackButton = FindWidget<UButton>(GetPage(C::Controls), TEXT("KeyBtn_Attack")))
+	{
+		AttackButton->SetIsEnabled(false);
+	}
+	// WBP에 아직 배치되지 않은 리바인드 행을 템플릿(회피 행) 복제로 생성한다.
+	// 아래 KeyBtn_* 배선이 이름으로 찾으므로 반드시 배선 전에 만들어야 한다.
+	EnsureRebindRows(GetPage(C::Controls));
+	// 활 조준 방식 라벨 폰트, 버튼 틴트/폭을 전 행 통일(기존 행·생성 행 색상 차이 제거).
+	NormalizeControlsPageStyle(GetPage(C::Controls));
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Dodge", HandleRebindDodge)
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_LockOn", HandleRebindLockOn)
+	// 아래는 WBP에 해당 Row_Key_*/KeyBtn_* 위젯이 추가되는 즉시 자동으로 동작한다(없으면 안전하게 no-op).
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Sprint", HandleRebindSprint)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Jump", HandleRebindJump)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Interaction", HandleRebindInteract)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_HeavyAttack", HandleRebindHeavyAttack)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Guard", HandleRebindGuard)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Crouch", HandleRebindCrouch)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Burst", HandleRebindBurst)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Absorb", HandleRebindAbsorb)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_RecallLumen", HandleRebindRecallLumen)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element1", HandleRebindElement1)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element2", HandleRebindElement2)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element3", HandleRebindElement3)
 
 	BIND_PAGE_SLIDER(C::Audio, "Sld_Master", HandleMasterChanged)
 	BIND_PAGE_SLIDER(C::Audio, "Sld_Music", HandleMusicChanged)
@@ -693,7 +1138,9 @@ void URetrieveSettingsPanelWidget::RefreshGraphics()
 	if (!S || !Page) return;
 	SetText(Page, TEXT("Val_WindowMode"), WindowModeText(S->GetRetrieveWindowMode()));
 	{
-		const FIntPoint Res = S->GetScreenResolution();
+		// 테두리 없는 창은 항상 데스크톱 해상도로 동작하므로 실제 적용 값을 보여준다.
+		const bool bBorderless = S->GetRetrieveWindowMode() == ERetrieveWindowMode::WindowedFullscreen;
+		const FIntPoint Res = bBorderless ? S->GetDesktopResolution() : S->GetScreenResolution();
 		SetText(Page, TEXT("Val_Resolution"), FText::FromString(FString::Printf(TEXT("%d x %d"), Res.X, Res.Y)));
 	}
 	SetText(Page, TEXT("Val_Quality"), QualityText(S->GetOverallScalabilityLevel()));
@@ -738,6 +1185,24 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	SetToggleByKey(Page, TEXT("Controls_InvertY"), S->bInvertMouseY);
 	SetToggleByKey(Page, TEXT("Controls_Vibration"), S->bGamepadVibration);
 	SetText(Page, TEXT("Val_LockOn"), FText::FromString(S->bLockOnToggleMode ? TEXT("토글") : TEXT("홀드")));
+	SetToggleByKey(Page, TEXT("Controls_BowAimToggle"), S->bBowAimToggleMode);
+
+	// 슬라이더 행 아키타입(URetrieveSettingRowSlider) 값 갱신. Range는 BindControlsRows에서 이미 설정됨.
+	if (Page->WidgetTree)
+	{
+		Page->WidgetTree->ForEachWidget([S](UWidget* W)
+		{
+			if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+			{
+				if      (Row->RowKey == TEXT("Controls_MouseX"))  Row->SetRawValueSilently(S->MouseSensitivityX);
+				else if (Row->RowKey == TEXT("Controls_MouseY"))  Row->SetRawValueSilently(S->MouseSensitivityY);
+				else if (Row->RowKey == TEXT("Controls_PadSens")) Row->SetRawValueSilently(S->GamepadSensitivityX);
+				// 통합 행: X==Y면 그 값, 개별 조절로 달라졌으면 평균을 표시(조절하는 순간 X/Y가 다시 동기화됨).
+				else if (Row->RowKey == TEXT("Controls_MouseAll"))
+					Row->SetRawValueSilently((S->MouseSensitivityX + S->MouseSensitivityY) * 0.5f);
+			}
+		});
+	}
 	RefreshKeyBindings();
 }
 
@@ -761,12 +1226,10 @@ UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSe
 	}
 	if (InputSettings)
 	{
-		EnsurePlayerMappableAction(
-			TEXT("/Game/Retrieve/Input/Actions/IA_Attack.IA_Attack"), TEXT("Retrieve.Attack"), FText::FromString(TEXT("공격")));
-		EnsurePlayerMappableAction(
-			TEXT("/Game/Retrieve/Input/Actions/IA_Roll.IA_Roll"), TEXT("Retrieve.Dodge"), FText::FromString(TEXT("회피")));
-		EnsurePlayerMappableAction(
-			TEXT("/Game/Retrieve/Input/Actions/IA_LockOn.IA_LockOn"), TEXT("Retrieve.LockOn"), FText::FromString(TEXT("락온")));
+		for (const FRebindActionDef& Def : GetRebindActionDefs())
+		{
+			EnsurePlayerMappableAction(Def.AssetPath, Def.MappingName, FText::FromString(Def.DisplayLabel));
+		}
 		if (const UInputMappingContext* Context = LoadObject<UInputMappingContext>(
 			nullptr, TEXT("/Game/Retrieve/Input/IMC_Default.IMC_Default")))
 		{
@@ -785,33 +1248,88 @@ void URetrieveSettingsPanelWidget::RefreshKeyBindings()
 		return;
 	}
 
-	struct FKeyRow { FName Action; FName Label; };
-	static const FKeyRow Rows[] = {
-		{TEXT("IA_Attack"), TEXT("Key_Attack")},
-		{TEXT("IA_Roll"), TEXT("Key_Dodge")},
-		{TEXT("IA_LockOn"), TEXT("Key_LockOn")}
-	};
 	const UEnhancedPlayerMappableKeyProfile* Profile = InputSettings->GetActiveKeyProfile();
 	if (!Profile)
 	{
 		return;
 	}
-	for (const FKeyRow& Row : Rows)
+
+	// 공격은 마우스 좌클릭 고정. 리바인드 UI가 열려 있던 과거 버전에서 다른 키로 바꿔 저장한
+	// 프로필이 남아있을 수 있으므로, 커스터마이즈된 공격 매핑을 발견하면 기본 키로 복원한다.
+	for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
 	{
+		for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
+		{
+			const UInputAction* Action = Mapping.GetAssociatedInputAction();
+			if (Action && Action->GetFName() == TEXT("IA_Attack") && Mapping.IsCustomized())
+			{
+				FMapPlayerKeyArgs Args;
+				Args.MappingName = Pair.Key;
+				Args.Slot = EPlayerMappableKeySlot::First;
+				Args.NewKey = Mapping.GetDefaultKey();
+				FGameplayTagContainer FailureReason;
+				InputSettings->MapPlayerKey(Args, FailureReason);
+				if (FailureReason.IsEmpty())
+				{
+					InputSettings->ApplySettings();
+					InputSettings->AsyncSaveSettings();
+				}
+			}
+		}
+	}
+	SetText(Page, TEXT("Key_Attack"), FText::FromString(TEXT("좌클릭 (고정)")));
+
+	for (const FRebindActionDef& Def : GetRebindActionDefs())
+	{
+		// WBP에 아직 이 행이 없으면 SetText가 안전하게 no-op한다.
 		FText Display = FText::FromString(TEXT("미지정"));
+		bool bMouseLocked = false;
 		for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
 		{
 			for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
 			{
 				const UInputAction* Action = Mapping.GetAssociatedInputAction();
-				if (Action && Action->GetFName() == Row.Action && !Mapping.GetCurrentKey().IsGamepadKey())
+				if (Action && Action->GetFName() == FName(Def.ActionAssetName) && !Mapping.GetCurrentKey().IsGamepadKey())
 				{
-					Display = Mapping.GetCurrentKey().GetDisplayName();
+					// 기본키가 마우스인 액션(강공격 등)은 리바인드 잠금: 조작키 안내의 마우스
+					// 다이어그램이 고정 표기라 옮겨 그릴 수 없다. 과거 버전에서 다른 키로 바꿔
+					// 저장한 프로필이 남아있으면 기본 키로 복원한다(IA_Attack과 동일한 정책).
+					if (Mapping.GetDefaultKey().IsMouseButton())
+					{
+						bMouseLocked = true;
+						if (Mapping.IsCustomized())
+						{
+							FMapPlayerKeyArgs Args;
+							Args.MappingName = Pair.Key;
+							Args.Slot = EPlayerMappableKeySlot::First;
+							Args.NewKey = Mapping.GetDefaultKey();
+							FGameplayTagContainer FailureReason;
+							InputSettings->MapPlayerKey(Args, FailureReason);
+							if (FailureReason.IsEmpty())
+							{
+								InputSettings->ApplySettings();
+								InputSettings->AsyncSaveSettings();
+							}
+						}
+						Display = FText::FromString(
+							FString::Printf(TEXT("%s (고정)"), *ShortKeyDisplayName(Mapping.GetDefaultKey())));
+					}
+					else
+					{
+						// 연동 그룹(회피/질주)은 같은 키가 두 행에 보이므로 짧게/길게 구분을 덧붙인다.
+						Display = FText::FromString(
+							ShortKeyDisplayName(Mapping.GetCurrentKey()) +
+							GetRebindDisplaySuffix(FName(Def.ActionAssetName)));
+					}
 					break;
 				}
 			}
 		}
-		SetText(Page, Row.Label, Display);
+		SetText(Page, Def.KeyTextWidgetName, Display);
+		if (UButton* RebindButton = FindWidget<UButton>(Page, Def.RebindButtonWidgetName))
+		{
+			RebindButton->SetIsEnabled(!bMouseLocked);
+		}
 	}
 }
 
@@ -828,6 +1346,8 @@ void URetrieveSettingsPanelWidget::BeginRebind(const FName ActionAssetName, cons
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(RebindWarningTimerHandle);
 
 	PendingMappingName = NAME_None;
+	PendingActionAssetName = NAME_None;
+	FKey MappingDefaultKey;
 	for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
 	{
 		for (const FPlayerKeyMapping& Mapping : Pair.Value.Mappings)
@@ -836,12 +1356,21 @@ void URetrieveSettingsPanelWidget::BeginRebind(const FName ActionAssetName, cons
 			if (Action && Action->GetFName() == ActionAssetName && !Mapping.GetCurrentKey().IsGamepadKey())
 			{
 				PendingMappingName = Pair.Key;
+				MappingDefaultKey = Mapping.GetDefaultKey();
 				break;
 			}
 		}
 		if (!PendingMappingName.IsNone()) break;
 	}
 
+	// 기본키가 마우스인 액션은 리바인드 불가(버튼도 비활성이지만 이중 안전장치).
+	if (!PendingMappingName.IsNone() && MappingDefaultKey.IsMouseButton())
+	{
+		PendingMappingName = NAME_None;
+		return;
+	}
+
+	PendingActionAssetName = PendingMappingName.IsNone() ? NAME_None : ActionAssetName;
 	PendingKeyLabelName = LabelWidgetName;
 	SetText(GetPage(ERetrieveSettingsCategory::Controls), LabelWidgetName,
 		FText::FromString(PendingMappingName.IsNone() ? TEXT("매핑 설정 필요") : TEXT("키를 누르세요")));
@@ -978,14 +1507,16 @@ void URetrieveSettingsPanelWidget::HandleGraphicsRowChanged(FName RowKey, float 
 
 static FText ControlsRowLabel(const FName Key)
 {
-	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("마우스 감도 X"));
-	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("마우스 감도 Y"));
+	if (Key == TEXT("Controls_MouseAll")) return FText::FromString(TEXT("마우스 감도"));
+	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("ㄴ X 감도"));
+	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("ㄴ Y 감도"));
 	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("게임패드 감도"));
 	return FText::GetEmpty();
 }
 
 static FText ControlsRowDesc(const FName Key)
 {
+	if (Key == TEXT("Controls_MouseAll")) return FText::FromString(TEXT("통합 회전 감도"));
 	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("좌우 회전 감도"));
 	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("상하 회전 감도"));
 	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("스틱 회전 감도"));
@@ -1001,6 +1532,17 @@ void URetrieveSettingsPanelWidget::BindControlsRows()
 		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
 		{
 			Row->SetLabelTexts(ControlsRowLabel(Row->RowKey), ControlsRowDesc(Row->RowKey));
+			// 감도 행은 0.1..3.0 실값 범위를 쓴다(내부 슬라이더는 여전히 0..1).
+			// 예전엔 Range가 없어 0..1 정규화값이 그대로 감도값으로 저장되던 버그가 있었다.
+			if (Row->RowKey == TEXT("Controls_MouseAll")
+				|| Row->RowKey == TEXT("Controls_MouseX") || Row->RowKey == TEXT("Controls_MouseY")
+				|| Row->RowKey == TEXT("Controls_PadSens"))
+			{
+				Row->RangeMin = 0.1f;
+				Row->RangeMax = 3.0f;
+				Row->bDisplayAsPercent = false;
+				Row->DisplayDecimals = 1;
+			}
 			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleControlsRowChanged);
 		}
 	});
@@ -1009,9 +1551,30 @@ void URetrieveSettingsPanelWidget::BindControlsRows()
 void URetrieveSettingsPanelWidget::HandleControlsRowChanged(FName RowKey, float Value)
 {
 	if (bRefreshingControls) return;
+	// Value는 Row의 Range로 이미 실값(0.1..3.0)에 매핑되어 들어온다.
 	if      (RowKey == TEXT("Controls_MouseX"))   HandleMouseXChanged(Value);
 	else if (RowKey == TEXT("Controls_MouseY"))   HandleMouseYChanged(Value);
 	else if (RowKey == TEXT("Controls_PadSens")) HandlePadSensitivityChanged(Value);
+	else if (RowKey == TEXT("Controls_MouseAll"))
+	{
+		// 통합 감도: X/Y를 같은 값으로 동기화(개별 조절로 달라졌어도 다시 맞춰짐).
+		HandleMouseXChanged(Value);
+		HandleMouseYChanged(Value);
+		// 하위 X/Y 행 슬라이더 표시도 이벤트 없이 동기화.
+		if (UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Controls); Page && Page->WidgetTree)
+		{
+			Page->WidgetTree->ForEachWidget([Value](UWidget* W)
+			{
+				if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+				{
+					if (Row->RowKey == TEXT("Controls_MouseX") || Row->RowKey == TEXT("Controls_MouseY"))
+					{
+						Row->SetRawValueSilently(Value);
+					}
+				}
+			});
+		}
+	}
 }
 
 // ─── Gameplay rows ───────────────────────────────────────────────────────────
@@ -1041,6 +1604,19 @@ void URetrieveSettingsPanelWidget::BindGameplayRows()
 		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
 		{
 			Row->SetLabelTexts(GameplayRowLabel(Row->RowKey), GameplayRowDesc(Row->RowKey));
+			// 예전엔 Range가 없어 0..1 정규화값이 그대로 FOV(도)/배율에 저장되던 버그가 있었다.
+			if (Row->RowKey == TEXT("Gameplay_SubtitleScale"))
+			{
+				Row->RangeMin = 0.5f; Row->RangeMax = 2.0f; Row->bDisplayAsPercent = false; Row->DisplayDecimals = 0;
+			}
+			else if (Row->RowKey == TEXT("Gameplay_FOV"))
+			{
+				Row->RangeMin = 70.f; Row->RangeMax = 110.f; Row->bDisplayAsPercent = false; Row->DisplayDecimals = 0;
+			}
+			else if (Row->RowKey == TEXT("Gameplay_CameraShake"))
+			{
+				Row->RangeMin = 0.f; Row->RangeMax = 1.f; Row->bDisplayAsPercent = true;
+			}
 			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleGameplayRowChanged);
 		}
 	});
@@ -1049,6 +1625,7 @@ void URetrieveSettingsPanelWidget::BindGameplayRows()
 void URetrieveSettingsPanelWidget::HandleGameplayRowChanged(FName RowKey, float Value)
 {
 	if (bRefreshingControls) return;
+	// Value는 Row의 Range로 이미 실값(자막 배율/FOV 도/흔들림 배율)에 매핑되어 들어온다.
 	if      (RowKey == TEXT("Gameplay_SubtitleScale")) HandleSubtitleScaleChanged(Value);
 	else if (RowKey == TEXT("Gameplay_FOV"))           HandleFOVChanged(Value);
 	else if (RowKey == TEXT("Gameplay_CameraShake"))   HandleCameraShakeChanged(Value);
@@ -1068,7 +1645,7 @@ static FText AccessibilityRowLabel(const FName Key)
 static FText AccessibilityRowDesc(const FName Key)
 {
 	if (Key == TEXT("Accessibility_CBStrength")) return FText::FromString(TEXT("색맹 보정 세기"));
-	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 글자·요소 크기"));
+	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 글자·요소 크기 (85~115%)"));
 	if (Key == TEXT("Accessibility_AimAssist"))  return FText::FromString(TEXT("조준 보조 강도"));
 	if (Key == TEXT("Accessibility_SubtitleBG")) return FText::FromString(TEXT("자막 배경 불투명도"));
 	return FText::GetEmpty();
@@ -1083,6 +1660,14 @@ void URetrieveSettingsPanelWidget::BindAccessibilityRows()
 		if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
 		{
 			Row->SetLabelTexts(AccessibilityRowLabel(Row->RowKey), AccessibilityRowDesc(Row->RowKey));
+			if (Row->RowKey == TEXT("Accessibility_UIScale"))
+			{
+				// 값 박스에 슬라이더 위치(0~100)가 아니라 실제 스케일 %(85~115)가 보이도록 매핑한다.
+				Row->RangeMin = 85.f;
+				Row->RangeMax = 115.f;
+				Row->bDisplayAsPercent = false;
+				Row->DisplayDecimals = 0;
+			}
 			Row->OnRowValueChanged.AddUniqueDynamic(this, &URetrieveSettingsPanelWidget::HandleAccessibilityRowChanged);
 		}
 	});
@@ -1093,7 +1678,7 @@ void URetrieveSettingsPanelWidget::HandleAccessibilityRowChanged(FName RowKey, f
 	if (bRefreshingControls) return;
 	// WBP_SettingRow_Slider는 0..1을 준다. 각 설정의 실제 범위로 매핑 후 기존 핸들러 호출.
 	if      (RowKey == TEXT("Accessibility_CBStrength")) HandleColorBlindStrengthChanged(Value * 10.f);
-	else if (RowKey == TEXT("Accessibility_UIScale"))    HandleUIScaleChanged(0.85f + Value * 0.30f);
+	else if (RowKey == TEXT("Accessibility_UIScale"))    HandleUIScaleChanged(Value / 100.f); // 행 Range가 85~115(%)
 	else if (RowKey == TEXT("Accessibility_AimAssist"))  HandleAimAssistChanged(Value);
 	else if (RowKey == TEXT("Accessibility_SubtitleBG")) HandleSubtitleBackgroundChanged(Value);
 }
@@ -1131,6 +1716,20 @@ void URetrieveSettingsPanelWidget::RefreshGameplay()
 	SetText(Page, TEXT("Val_SubtitleScale"), PercentText(S->SubtitleTextScale));
 	SetText(Page, TEXT("Val_FOV"), NumberText(S->FieldOfView));
 	SetText(Page, TEXT("Val_CameraShake"), PercentText(S->CameraShakeScale));
+
+	// 슬라이더 행 아키타입(URetrieveSettingRowSlider) 값 갱신. Range는 BindGameplayRows에서 이미 설정됨.
+	if (Page->WidgetTree)
+	{
+		Page->WidgetTree->ForEachWidget([S](UWidget* W)
+		{
+			if (URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W))
+			{
+				if      (Row->RowKey == TEXT("Gameplay_SubtitleScale")) Row->SetRawValueSilently(S->SubtitleTextScale);
+				else if (Row->RowKey == TEXT("Gameplay_FOV"))           Row->SetRawValueSilently(S->FieldOfView);
+				else if (Row->RowKey == TEXT("Gameplay_CameraShake"))   Row->SetRawValueSilently(S->CameraShakeScale);
+			}
+		});
+	}
 }
 
 void URetrieveSettingsPanelWidget::RefreshAccessibility()
@@ -1148,7 +1747,7 @@ void URetrieveSettingsPanelWidget::RefreshAccessibility()
 			URetrieveSettingRowSlider* Row = Cast<URetrieveSettingRowSlider>(W);
 			if (!Row) return;
 			if      (Row->RowKey == TEXT("Accessibility_CBStrength")) Row->SetValueSilently(S->ColorBlindStrength / 10.f);
-			else if (Row->RowKey == TEXT("Accessibility_UIScale"))    Row->SetValueSilently((S->UITextScale - 0.85f) / 0.30f);
+			else if (Row->RowKey == TEXT("Accessibility_UIScale"))    Row->SetRawValueSilently(S->UITextScale * 100.f);
 			else if (Row->RowKey == TEXT("Accessibility_AimAssist"))  Row->SetValueSilently(S->AimAssistStrength);
 			else if (Row->RowKey == TEXT("Accessibility_SubtitleBG")) Row->SetValueSilently(S->SubtitleBackgroundOpacity);
 		});
@@ -1167,9 +1766,7 @@ void URetrieveSettingsPanelWidget::ApplyRuntimeStyle()
 	const URetrieveUITheme* Theme = URetrieveUISettingsLibrary::GetActiveUITheme();
 	const FLinearColor BarColor = Theme ? Theme->PanelBorder : FLinearColor(0.30f, 0.24f, 0.12f, 1.f);
 	const FLinearColor HandleColor = Theme ? Theme->SliderHandle : FLinearColor(0.90f, 0.74f, 0.38f, 1.f);
-	const FLinearColor DarkChip = Theme ? Theme->PanelBackground : FLinearColor(0.12f, 0.10f, 0.07f, 0.55f);
-	// 색 덮어쓰기(슬라이더 바/핸들, 좌우/리바인드 버튼 배경)는 고대비 테마에서만.
-	// 기본 테마에선 WBP 디자인을 유지한다.
+	// 색 덮어쓰기(슬라이더 바/핸들)는 고대비 테마에서만. 기본 테마에선 WBP 디자인을 유지한다.
 	if (bHighContrast)
 	for (int32 CategoryIndex = 0; CategoryIndex < static_cast<int32>(ERetrieveSettingsCategory::MAX); ++CategoryIndex)
 	{
@@ -1189,17 +1786,9 @@ void URetrieveSettingsPanelWidget::ApplyRuntimeStyle()
 				Slider->SetSliderHandleColor(HandleColor);
 			}
 		}
-		static const FName ButtonNames[] = {
-			TEXT("Btn_WindowMode_Prev"), TEXT("Btn_WindowMode_Next"), TEXT("Btn_Quality_Prev"), TEXT("Btn_Quality_Next"),
-			TEXT("Btn_Shadow_Prev"), TEXT("Btn_Shadow_Next"), TEXT("Btn_Texture_Prev"), TEXT("Btn_Texture_Next"),
-			TEXT("Btn_Effects_Prev"), TEXT("Btn_Effects_Next"), TEXT("Btn_LockOn_Prev"), TEXT("Btn_LockOn_Next"),
-			TEXT("Btn_Language_Prev"), TEXT("Btn_Language_Next"), TEXT("Btn_ColorBlind_Prev"), TEXT("Btn_ColorBlind_Next"),
-			TEXT("Btn_Interact_Prev"), TEXT("Btn_Interact_Next"), TEXT("Btn_Attack"), TEXT("Btn_Dodge"), TEXT("Btn_LockOn")
-		};
-		for (const FName Name : ButtonNames)
-		{
-			if (UButton* Button = FindWidget<UButton>(Page, Name)) Button->SetBackgroundColor(DarkChip);
-		}
+		// (과거) 화살표 버튼 배경을 DarkChip으로 덮던 코드는 제거했다.
+		// 하드코딩 목록이라 일부 버튼만 검게 칠해 비일관적이었고, 고대비 가독성은 이제
+		// ApplyHighContrastToAllWidgets의 전역 텍스트 그림자가 담당한다(버튼은 WBP 디자인 유지).
 	}
 
 	auto SetRange = [this](const ERetrieveSettingsCategory Category, const FName Name, const float Min, const float Max)
@@ -1307,23 +1896,71 @@ void URetrieveSettingsPanelWidget::HandleSettingChanged(ERetrieveSettingsCategor
 	const int32 V = WrapIndex(S->Getter() + Delta, 4); S->Setter(V); \
 	APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); RefreshCurrentPage(); } }
 
-void URetrieveSettingsPanelWidget::HandleWindowModePrev() { if (URetrieveGameUserSettings* S = GetUserSettings()) { const auto V = static_cast<ERetrieveWindowMode>(WrapIndex(static_cast<int32>(S->GetRetrieveWindowMode()) - 1, 3)); S->SetRetrieveWindowMode(V); SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_WindowMode"), WindowModeText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
-void URetrieveSettingsPanelWidget::HandleWindowModeNext() { if (URetrieveGameUserSettings* S = GetUserSettings()) { const auto V = static_cast<ERetrieveWindowMode>(WrapIndex(static_cast<int32>(S->GetRetrieveWindowMode()) + 1, 3)); S->SetRetrieveWindowMode(V); SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_WindowMode"), WindowModeText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); } }
+void URetrieveSettingsPanelWidget::HandleWindowModePrev() { if (URetrieveGameUserSettings* S = GetUserSettings()) { const auto V = static_cast<ERetrieveWindowMode>(WrapIndex(static_cast<int32>(S->GetRetrieveWindowMode()) - 1, 3)); S->SetRetrieveWindowMode(V); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); RefreshCurrentPage(); /* 해상도 표시가 창 모드에 따라 달라지므로 함께 갱신 */ } }
+void URetrieveSettingsPanelWidget::HandleWindowModeNext() { if (URetrieveGameUserSettings* S = GetUserSettings()) { const auto V = static_cast<ERetrieveWindowMode>(WrapIndex(static_cast<int32>(S->GetRetrieveWindowMode()) + 1, 3)); S->SetRetrieveWindowMode(V); APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics); RefreshCurrentPage(); /* 해상도 표시가 창 모드에 따라 달라지므로 함께 갱신 */ } }
 
 namespace
 {
-	static const FIntPoint SupportedResolutions[] = {
-		{1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160}
-	};
-	static const int32 ResolutionCount = UE_ARRAY_COUNT(SupportedResolutions);
+	// 지원 해상도: RHI가 보고하는 모니터 실측 전체화면 해상도(첫 사용 시 1회 구축).
+	// 목록을 얻지 못하면 흔한 16:9 목록으로 폴백한다. 하드코딩 목록은 모니터가 지원하지
+	// 않는 해상도를 제안해 "이상한 해상도로 설정되는" 원인이었다.
+	const TArray<FIntPoint>& GetSupportedResolutionList()
+	{
+		static TArray<FIntPoint> Resolutions;
+		if (Resolutions.Num() == 0)
+		{
+			TArray<FIntPoint> FromRHI;
+			if (UKismetSystemLibrary::GetSupportedFullscreenResolutions(FromRHI))
+			{
+				for (const FIntPoint& R : FromRHI)
+				{
+					// 너무 작은 해상도는 UI가 깨져 제외한다.
+					if (R.X >= 1280 && R.Y >= 720)
+					{
+						Resolutions.AddUnique(R);
+					}
+				}
+			}
+			if (Resolutions.Num() == 0)
+			{
+				Resolutions = { {1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160} };
+			}
+			Resolutions.Sort([](const FIntPoint& A, const FIntPoint& B)
+			{
+				return A.X != B.X ? A.X < B.X : A.Y < B.Y;
+			});
+		}
+		return Resolutions;
+	}
 
 	int32 FindCurrentResolutionIndex(const FIntPoint& Current)
 	{
-		for (int32 i = 0; i < ResolutionCount; ++i)
+		const TArray<FIntPoint>& List = GetSupportedResolutionList();
+		// 정확히 일치하는 항목이 없으면(OS 배율 창 등) 가장 가까운 해상도로 스냅한다.
+		// 예전에는 무조건 1920x1080으로 간주해 한 칸 이동이 엉뚱한 해상도로 점프했다.
+		int32 BestIndex = 0;
+		int64 BestDist = MAX_int64;
+		for (int32 i = 0; i < List.Num(); ++i)
 		{
-			if (SupportedResolutions[i] == Current) return i;
+			if (List[i] == Current)
+			{
+				return i;
+			}
+			const int64 Dx = List[i].X - Current.X;
+			const int64 Dy = List[i].Y - Current.Y;
+			const int64 Dist = Dx * Dx + Dy * Dy;
+			if (Dist < BestDist)
+			{
+				BestDist = Dist;
+				BestIndex = i;
+			}
 		}
-		return 1; // 기본값: 1920x1080
+		return BestIndex;
+	}
+
+	FText ResolutionText(const FIntPoint& Res)
+	{
+		return FText::FromString(FString::Printf(TEXT("%d x %d"), Res.X, Res.Y));
 	}
 }
 
@@ -1331,12 +1968,16 @@ void URetrieveSettingsPanelWidget::HandleResolutionPrev()
 {
 	if (URetrieveGameUserSettings* S = GetUserSettings())
 	{
-		const int32 Idx = WrapIndex(FindCurrentResolutionIndex(S->GetScreenResolution()) - 1, ResolutionCount);
-		const FIntPoint Next = SupportedResolutions[Idx];
-		S->SetScreenResolution(Next);
+		// 테두리 없는 창은 항상 데스크톱 해상도를 쓰므로 선택이 무의미하다.
+		if (S->GetRetrieveWindowMode() == ERetrieveWindowMode::WindowedFullscreen)
+		{
+			return;
+		}
+		const TArray<FIntPoint>& List = GetSupportedResolutionList();
+		const int32 Idx = WrapIndex(FindCurrentResolutionIndex(S->GetScreenResolution()) - 1, List.Num());
+		S->SetScreenResolution(List[Idx]);
 		// Apply는 하지 않는다 — 즉시 적용 시 창 크기가 바뀌어 UI가 잘린다. Apply 버튼 클릭 시 적용된다.
-		SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Resolution"),
-			FText::FromString(FString::Printf(TEXT("%d x %d"), Next.X, Next.Y)));
+		SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Resolution"), ResolutionText(List[Idx]));
 	}
 }
 
@@ -1344,16 +1985,53 @@ void URetrieveSettingsPanelWidget::HandleResolutionNext()
 {
 	if (URetrieveGameUserSettings* S = GetUserSettings())
 	{
-		const int32 Idx = WrapIndex(FindCurrentResolutionIndex(S->GetScreenResolution()) + 1, ResolutionCount);
-		const FIntPoint Next = SupportedResolutions[Idx];
-		S->SetScreenResolution(Next);
+		if (S->GetRetrieveWindowMode() == ERetrieveWindowMode::WindowedFullscreen)
+		{
+			return;
+		}
+		const TArray<FIntPoint>& List = GetSupportedResolutionList();
+		const int32 Idx = WrapIndex(FindCurrentResolutionIndex(S->GetScreenResolution()) + 1, List.Num());
+		S->SetScreenResolution(List[Idx]);
 		// Apply는 하지 않는다 — 즉시 적용 시 창 크기가 바뀌어 UI가 잘린다. Apply 버튼 클릭 시 적용된다.
-		SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Resolution"),
-			FText::FromString(FString::Printf(TEXT("%d x %d"), Next.X, Next.Y)));
+		SetText(GetPage(ERetrieveSettingsCategory::Graphics), TEXT("Val_Resolution"), ResolutionText(List[Idx]));
 	}
 }
-DEFINE_QUALITY_HANDLER(HandleQualityPrev, GetOverallScalabilityLevel, SetOverallScalabilityLevel, -1, "Val_Quality")
-DEFINE_QUALITY_HANDLER(HandleQualityNext, GetOverallScalabilityLevel, SetOverallScalabilityLevel, 1, "Val_Quality")
+namespace
+{
+	// 전체 품질이 "사용자 지정"(-1, 하위 품질 혼합)일 때는 노출된 하위 품질의 평균을
+	// 현재 단계로 간주하고 스텝한다. SetOverallScalabilityLevel이 하위 품질을 모두 맞춘다.
+	int32 EffectiveOverallQuality(const URetrieveGameUserSettings* S)
+	{
+		const int32 Overall = S->GetOverallScalabilityLevel();
+		if (Overall >= 0)
+		{
+			return Overall;
+		}
+		const float Avg = (S->GetShadowQuality() + S->GetTextureQuality() + S->GetVisualEffectQuality()) / 3.f;
+		return FMath::Clamp(FMath::RoundToInt(Avg), 0, 3);
+	}
+}
+
+void URetrieveSettingsPanelWidget::HandleQualityPrev()
+{
+	if (URetrieveGameUserSettings* S = GetUserSettings())
+	{
+		S->SetOverallScalabilityLevel(WrapIndex(EffectiveOverallQuality(S) - 1, 4));
+		APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics);
+		RefreshCurrentPage();
+	}
+}
+
+void URetrieveSettingsPanelWidget::HandleQualityNext()
+{
+	if (URetrieveGameUserSettings* S = GetUserSettings())
+	{
+		S->SetOverallScalabilityLevel(WrapIndex(EffectiveOverallQuality(S) + 1, 4));
+		APPLY_PREVIEW(ERetrieveSettingsCategory::Graphics);
+		RefreshCurrentPage();
+	}
+}
+
 DEFINE_QUALITY_HANDLER(HandleShadowPrev, GetShadowQuality, SetShadowQuality, -1, "Val_Shadow")
 DEFINE_QUALITY_HANDLER(HandleShadowNext, GetShadowQuality, SetShadowQuality, 1, "Val_Shadow")
 DEFINE_QUALITY_HANDLER(HandleTexturePrev, GetTextureQuality, SetTextureQuality, -1, "Val_Texture")
@@ -1377,9 +2055,24 @@ void URetrieveSettingsPanelWidget::HandleInvertYChanged(bool b) { if (bRefreshin
 void URetrieveSettingsPanelWidget::HandleVibrationChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bGamepadVibration = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleLockOnPrev() { HandleLockOnNext(); }
 void URetrieveSettingsPanelWidget::HandleLockOnNext() { if (auto* S = GetUserSettings()) { S->bLockOnToggleMode = !S->bLockOnToggleMode; SetText(GetPage(ERetrieveSettingsCategory::Controls), TEXT("Val_LockOn"), FText::FromString(S->bLockOnToggleMode ? TEXT("토글") : TEXT("홀드"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
-void URetrieveSettingsPanelWidget::HandleRebindAttack() { BeginRebind(TEXT("IA_Attack"), TEXT("Key_Attack")); }
-void URetrieveSettingsPanelWidget::HandleRebindDodge() { BeginRebind(TEXT("IA_Roll"), TEXT("Key_Dodge")); }
-void URetrieveSettingsPanelWidget::HandleRebindLockOn() { BeginRebind(TEXT("IA_LockOn"), TEXT("Key_LockOn")); }
+void URetrieveSettingsPanelWidget::HandleBowAimModeChanged(bool bToggleMode) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bBowAimToggleMode = bToggleMode; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
+#define DEFINE_REBIND_HANDLER(Func, ActionAssetName, KeyTextWidgetName) \
+	void URetrieveSettingsPanelWidget::Func() { BeginRebind(TEXT(ActionAssetName), TEXT(KeyTextWidgetName)); }
+DEFINE_REBIND_HANDLER(HandleRebindDodge, "IA_Roll", "Key_Dodge")
+DEFINE_REBIND_HANDLER(HandleRebindLockOn, "IA_LockOn", "Key_LockOn")
+DEFINE_REBIND_HANDLER(HandleRebindSprint, "IA_Sprint", "Key_Sprint")
+DEFINE_REBIND_HANDLER(HandleRebindJump, "IA_Jump", "Key_Jump")
+DEFINE_REBIND_HANDLER(HandleRebindInteract, "IA_Interaction", "Key_Interaction")
+DEFINE_REBIND_HANDLER(HandleRebindHeavyAttack, "IA_HeavyAttack", "Key_HeavyAttack")
+DEFINE_REBIND_HANDLER(HandleRebindGuard, "IA_Guard", "Key_Guard")
+DEFINE_REBIND_HANDLER(HandleRebindCrouch, "IA_Crouch", "Key_Crouch")
+DEFINE_REBIND_HANDLER(HandleRebindBurst, "IA_Burst", "Key_Burst")
+DEFINE_REBIND_HANDLER(HandleRebindAbsorb, "IA_Absorb", "Key_Absorb")
+DEFINE_REBIND_HANDLER(HandleRebindRecallLumen, "IA_RecallLumen", "Key_RecallLumen")
+DEFINE_REBIND_HANDLER(HandleRebindElement1, "IA_ElementMode1", "Key_Element1")
+DEFINE_REBIND_HANDLER(HandleRebindElement2, "IA_ElementMode2", "Key_Element2")
+DEFINE_REBIND_HANDLER(HandleRebindElement3, "IA_ElementMode3", "Key_Element3")
+#undef DEFINE_REBIND_HANDLER
 
 #define DEFINE_AUDIO_HANDLER(Func, Channel, Label) \
 	void URetrieveSettingsPanelWidget::Func(float V) { if (bRefreshingControls) return; if (auto* Subsystem = GetSettingsSubsystem()) { \
@@ -1427,6 +2120,7 @@ void URetrieveSettingsPanelWidget::HandleControlsToggleChanged(FName RowKey, boo
 	if (bRefreshingControls) return;
 	if (RowKey == TEXT("Controls_InvertY"))   HandleInvertYChanged(bValue);
 	else if (RowKey == TEXT("Controls_Vibration")) HandleVibrationChanged(bValue);
+	else if (RowKey == TEXT("Controls_BowAimToggle")) HandleBowAimModeChanged(bValue);
 }
 
 void URetrieveSettingsPanelWidget::HandleAudioToggleChanged(FName RowKey, bool bValue)

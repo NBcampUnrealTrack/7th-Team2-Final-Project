@@ -115,9 +115,13 @@ private:
 	UEnhancedInputUserSettings* GetEnhancedInputUserSettings() const;
 	void RefreshKeyBindings();
 	void BeginRebind(FName ActionAssetName, FName LabelWidgetName);
+	/** 커스터마이즈된 키보드 매핑을 전부 기본 키로 복원한다(조작 카테고리 기본값 복원에서 호출). */
+	void ResetKeyBindingsToDefaults();
 
 	bool bRefreshingControls = false;
 	FName PendingMappingName;
+	/** 리바인드 중인 액션 에셋 이름(IA_*). 연동 그룹(회피/질주=Shift 짧게/길게) 처리에 사용. */
+	FName PendingActionAssetName;
 	FName PendingKeyLabelName;
 	FTimerHandle RebindWarningTimerHandle;
 
@@ -147,6 +151,8 @@ private:
 	void FinishRebindWithKey(const FKey& NewKey);
 	/** NewKey 를 이미 쓰고 있는 다른 매핑 이름을 반환. 없으면 NAME_None. */
 	FName GetConflictingAction(const FKey& Key) const;
+	/** 리바인드를 취소하고 경고 문구를 2초간 표시한 뒤 원래 키 표기로 복원한다. */
+	void CancelRebindWithWarning(const FString& Message);
 
 	UFUNCTION() void HandleGraphicsTab();
 	UFUNCTION() void HandleControlsTab();
@@ -210,9 +216,22 @@ private:
 	UFUNCTION() void HandleVibrationChanged(bool bChecked);
 	UFUNCTION() void HandleLockOnPrev();
 	UFUNCTION() void HandleLockOnNext();
-	UFUNCTION() void HandleRebindAttack();
+	UFUNCTION() void HandleBowAimModeChanged(bool bToggleMode);
+	// 공격 리바인드 핸들러는 제거됨: 공격은 마우스 좌클릭 고정(조작키 안내의 마우스 아이콘 표기 유지).
 	UFUNCTION() void HandleRebindDodge();
 	UFUNCTION() void HandleRebindLockOn();
+	UFUNCTION() void HandleRebindSprint();
+	UFUNCTION() void HandleRebindJump();
+	UFUNCTION() void HandleRebindInteract();
+	UFUNCTION() void HandleRebindHeavyAttack();
+	UFUNCTION() void HandleRebindGuard();
+	UFUNCTION() void HandleRebindCrouch();
+	UFUNCTION() void HandleRebindBurst();
+	UFUNCTION() void HandleRebindAbsorb();
+	UFUNCTION() void HandleRebindRecallLumen();
+	UFUNCTION() void HandleRebindElement1();
+	UFUNCTION() void HandleRebindElement2();
+	UFUNCTION() void HandleRebindElement3();
 
 	UFUNCTION() void HandleMasterChanged(float Value);
 	UFUNCTION() void HandleMusicChanged(float Value);

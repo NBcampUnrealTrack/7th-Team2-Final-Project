@@ -39,6 +39,13 @@ void URetrieveSettingRowSlider::SetValueSilently(float Value01)
 	Refresh(Value01);
 }
 
+void URetrieveSettingRowSlider::SetRawValueSilently(float RawValue)
+{
+	const float Range = RangeMax - RangeMin;
+	const float Value01 = FMath::IsNearlyZero(Range) ? 0.f : FMath::Clamp((RawValue - RangeMin) / Range, 0.f, 1.f);
+	SetValueSilently(Value01);
+}
+
 void URetrieveSettingRowSlider::SetLabelTexts(const FText& Label, const FText& Desc)
 {
 	if (LabelText)
@@ -56,13 +63,28 @@ float URetrieveSettingRowSlider::GetValue01() const
 	return Slider ? Slider->GetValue() : 0.f;
 }
 
+float URetrieveSettingRowSlider::GetRawValue() const
+{
+	return FMath::Lerp(RangeMin, RangeMax, GetValue01());
+}
+
 void URetrieveSettingRowSlider::Refresh(float Value01)
 {
 	Value01 = FMath::Clamp(Value01, 0.f, 1.f);
 
 	if (ValueText)
 	{
-		ValueText->SetText(FText::AsNumber(FMath::RoundToInt(Value01 * 100.f)));
+		if (bDisplayAsPercent)
+		{
+			ValueText->SetText(FText::AsNumber(FMath::RoundToInt(Value01 * 100.f)));
+		}
+		else
+		{
+			FNumberFormattingOptions Opts;
+			Opts.MinimumFractionalDigits = DisplayDecimals;
+			Opts.MaximumFractionalDigits = DisplayDecimals;
+			ValueText->SetText(FText::AsNumber(FMath::Lerp(RangeMin, RangeMax, Value01), &Opts));
+		}
 	}
 
 	// 값 박스를 트랙상의 값 위치로 이동. 고정 px 대신 상대 앵커(0~1)를 써서
@@ -88,7 +110,7 @@ void URetrieveSettingRowSlider::HandleSliderChanged(float Value)
 	Refresh(Value);
 	if (!bSuppressBroadcast)
 	{
-		OnRowValueChanged.Broadcast(RowKey, Value);
+		OnRowValueChanged.Broadcast(RowKey, FMath::Lerp(RangeMin, RangeMax, Value));
 	}
 }
 

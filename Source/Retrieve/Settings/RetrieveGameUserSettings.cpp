@@ -33,6 +33,7 @@ void URetrieveGameUserSettings::SetToDefaults()
 	GamepadSensitivityY = 1.f;
 	bGamepadVibration = true;
 	bLockOnToggleMode = true;
+	bBowAimToggleMode = false;
 
 	GameCulture.Reset();
 	bSubtitlesEnabled = true;
@@ -93,6 +94,7 @@ void URetrieveGameUserSettings::ResetCategoryToDefaults(ERetrieveSettingsCategor
 		GamepadSensitivityY = Defaults->GamepadSensitivityY;
 		bGamepadVibration = Defaults->bGamepadVibration;
 		bLockOnToggleMode = Defaults->bLockOnToggleMode;
+		bBowAimToggleMode = Defaults->bBowAimToggleMode;
 		break;
 	case ERetrieveSettingsCategory::Gameplay:
 		GameCulture = Defaults->GameCulture;
