@@ -3,6 +3,7 @@
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PawnMovementComponent.h"
@@ -624,6 +625,17 @@ void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerControl
 		return;
 	}
 
+	// 빠른 이동 목적지도 리스폰 체크포인트로 기록한다("마지막 사용 모닥불" 의미).
+	// (기존에는 휴식 시에만 기록되어, 빠른 이동만 한 뒤 죽으면 시작 지역으로 리스폰되는 문제가 있었다.
+	//  SetLastCheckpointBonfire는 호스트 권한에서만 반영된다 — 싱글/호스트 기준.)
+	if (UWorld* World = GetWorld())
+	{
+		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		{
+			GS->SetLastCheckpointBonfire(BonfireId);
+		}
+	}
+
 	// 빠른 이동: 도착 화톳불의 ArrivalPoint로 재계산하도록 BonfireId 전달.
 	// (오버레이는 호출 측 WorldMapWidget이 표시하므로 여기서는 별도 표시 안 함.)
 	BeginStreamedTeleport(PC, ArrivalTransform, BonfireId);
@@ -683,6 +695,15 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 		// MOVE_None 상태에서는 중력이 적용되지 않으므로 지면이 없어도 떨어지지 않는다.
 		CharMove->DisableMovement();
 	}
+
+	// 복원 목표 정화: 사망 직후 리스폰처럼 이동/충돌이 일시적으로 꺼진 순간에 캡처되면
+	// 도착 후 MOVE_None·충돌 꺼짐이 "복원"되어 조작 불능이나 지면 통과(땅꺼짐)가 된다.
+	// (죽음 처리 HandleDeathStarted가 DisableMovement를 걸고, ALS 래그돌 복구 타이밍과 경합)
+	if (PendingFastTravelPrevMovementMode == MOVE_None)
+	{
+		PendingFastTravelPrevMovementMode = MOVE_Walking;
+	}
+	bPendingFastTravelHadCollision = true;
 
 	// 스트리밍/지면 스냅이 끝날 때까지 물리/충돌로 인한 밀림·낙하를 막는다.
 	Pawn->SetActorEnableCollision(false);
@@ -832,12 +853,13 @@ void URetrieveSaveSubsystem::PerformFastTravelArrival()
 		TraceParams.AddIgnoredActor(PC);
 	}
 
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
-
+	// 채널 트레이스(Visibility)를 쓴다. 이전의 ObjectType=WorldStatic 필터는 캠프 구조물처럼
+	// WorldStatic이 아닌 바닥 메시(예: Wind 캠프의 HISM 데크)를 통과해 그 아래 지형에 스냅했고,
+	// 플레이어가 구조물 속에 ~1m 파묻힌 채 배치되는 "리스폰/빠른이동 땅꺼짐"의 원인이었다.
+	// (상호작용 존 스피어 등 오버랩류는 아래의 bBlockingHit 필터가 걸러낸다.)
 	TArray<FHitResult> GroundHits;
-	const bool bHit = World->LineTraceMultiByObjectType(
-		GroundHits, TraceStart, TraceEnd, ObjectParams, TraceParams);
+	const bool bHit = World->LineTraceMultiByChannel(
+		GroundHits, TraceStart, TraceEnd, ECC_Visibility, TraceParams);
 
 	bool bFoundGround = false;
 	FHitResult BestGroundHit;
@@ -862,15 +884,28 @@ void URetrieveSaveSubsystem::PerformFastTravelArrival()
 
 	if (bFoundGround)
 	{
-		const float HalfHeight = Pawn->GetSimpleCollisionHalfHeight();
+		// 주의: 스트리밍 텔레포트 동안 액터 충돌이 꺼져 있어(GetActorEnableCollision=false)
+		// GetSimpleCollisionHalfHeight()가 0을 반환한다 — 캐릭터 "중심"이 지면 위 3cm에 놓여
+		// 캡슐 반높이만큼(약 90cm) 파묻히던 리스폰/빠른이동 땅꺼짐의 진짜 원인.
+		// 캡슐 컴포넌트에서 직접 읽는다.
+		float HalfHeight = Pawn->GetSimpleCollisionHalfHeight();
+		if (const ACharacter* PawnCharacter = Cast<ACharacter>(Pawn))
+		{
+			if (const UCapsuleComponent* Capsule = PawnCharacter->GetCapsuleComponent())
+			{
+				HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+			}
+		}
 		FVector SnappedLocation = ArrivalLocation;
 		SnappedLocation.Z = BestGroundHit.ImpactPoint.Z + HalfHeight + GroundClearance;
 		SafeTransform.SetLocation(SnappedLocation);
 
 		UE_LOG(LogTemp, Log,
-			TEXT("[SaveSubsystem] FastTravel 지면 스냅 성공 — BonfireId=%s HitActor=%s Final=%s NormalZ=%.2f"),
+			TEXT("[SaveSubsystem] FastTravel 지면 스냅 성공(v2/채널트레이스) — BonfireId=%s HitActor=%s HitComp=%s ImpactZ=%.1f Final=%s NormalZ=%.2f"),
 			*BonfireId.ToString(),
 			*GetNameSafe(BestGroundHit.GetActor()),
+			*GetNameSafe(BestGroundHit.GetComponent()),
+			BestGroundHit.ImpactPoint.Z,
 			*SnappedLocation.ToString(),
 			BestGroundHit.ImpactNormal.Z);
 	}

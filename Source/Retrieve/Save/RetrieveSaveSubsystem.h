@@ -219,11 +219,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|FastTravel")
 	FOnFastTravelCompleted OnFastTravelCompleted;
 
+	/**
+	 * 빠른 이동/불러오기/리스폰 공용: 도착 위치로 텔레포트하고 월드 파티션 스트리밍이
+	 * 안정될 때까지 이동·충돌을 잠근 뒤 지면에 스냅한다(미로딩 낙하 방지).
+	 * 리스폰(GameMode::RespawnPlayerAtTransform)에서도 재사용한다.
+	 */
+	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
+
 private:
 	void FinishFastTravel();
-
-	/** 빠른 이동/불러오기 공용: 도착 위치로 텔레포트하고 스트리밍이 안정될 때까지 대기한다. */
-	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
 
 	/** 불러오기 등에서 SaveSubsystem이 직접 로딩화면을 띄운다(빠른 이동은 WorldMapWidget이 띄움). */
 	void ShowLoadingScreen(APlayerController* PC);

@@ -313,6 +313,14 @@ void ARetrieveGameMode::RespawnPlayerAtTransform(APlayerController* Requestor, c
 	if (ARetrieveAlsCombatCharacter* CombatPawn = Cast<ARetrieveAlsCombatCharacter>(Pawn))
 	{
 		CombatPawn->Revive(RespawnTransform);
+
+		// 리스폰 지점 셀이 아직 로드되지 않아 땅으로 꺼지는 것을 막는다.
+		// 빠른 이동과 동일한 스트리밍 대기(이동·충돌 잠금 → 임시 스트리밍 소스 → 지면 스냅)를 재사용.
+		UGameInstance* GI = GetGameInstance();
+		if (URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr)
+		{
+			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None);
+		}
 	}
 }
 

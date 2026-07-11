@@ -438,6 +438,13 @@ bool ARetrieveBonfireActor::ActivateBonfire()
 
 	ApplyActivatedState(true);
 
+	// 점화한 모닥불도 리스폰 체크포인트로 기록한다("마지막 사용 모닥불" 의미).
+	// (기존에는 휴식 시에만 기록되어, 점화만 한 뒤 죽으면 시작 지역으로 리스폰되는 문제가 있었다.)
+	if (ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
+	{
+		GS->SetLastCheckpointBonfire(BonfireId);
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[BonfireActor] 화톳불 활성화 — BonfireId=%s"), *BonfireId.ToString());
 
 	// 첫 활성화 → HUD 알림용 델리게이트 브로드캐스트
