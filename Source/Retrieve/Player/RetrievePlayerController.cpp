@@ -30,6 +30,7 @@
 #include "UI/Map/RetrieveMinimapWidget.h"
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 #include "UI/ViewModels/ConversationViewModel.h"
 #include "UI/ViewModels/QuestTrackerViewModel.h"
 #include "UI/HUD/RetrieveBossHPBarWidget.h"
@@ -255,6 +256,18 @@ void ARetrievePlayerController::BeginPlay()
 			}
 		});
 
+	// 시네마틱 시작/종료 시 HUD를 숨기고/복원한다(대화는 열고 닫는 지점에서 직접 갱신).
+	CinematicHUDVisibilityHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveCinematicStatePayload>(
+		RetrieveGameplayTags::Channel_Cinematic_Changed,
+		[WeakThis = TWeakObjectPtr<ARetrievePlayerController>(this)]
+	(FGameplayTag /*Channel*/, const FRetrieveCinematicStatePayload& /*Payload*/)
+		{
+			if (ARetrievePlayerController* PC = WeakThis.Get())
+			{
+				PC->UpdateHUDNarrativeVisibility();
+			}
+		});
+
 	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
 		const ERetrieveSessionState Current = GS->GetSessionState();
@@ -299,6 +312,15 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicCloseHandle);
 		}
 		CinematicCloseHandle = FGameplayMessageListenerHandle();
+	}
+
+	if (CinematicHUDVisibilityHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicHUDVisibilityHandle);
+		}
+		CinematicHUDVisibilityHandle = FGameplayMessageListenerHandle();
 	}
 
 	if (ActiveTopLevelWidget)
@@ -600,6 +622,11 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 			if (NewState == ERetrieveSessionState::InGame)
 			{
 				EnsureHUDViewModel();
+
+				// 새 HUD 위젯 기준으로 내러티브(대화/시네마틱) 숨김 상태를 재평가한다.
+				// (오프닝 시네마틱 재생 중 HUD가 생성되는 경우 즉시 숨겨진다.)
+				bHUDHiddenForNarrative = false;
+				UpdateHUDNarrativeVisibility();
 			}
 		}
 	}
@@ -1087,6 +1114,9 @@ void ARetrievePlayerController::OpenExclusivePanel(TSubclassOf<URetrieveGamePane
 	NewPanel->AddToViewport(PanelZOrder);
 	CenterActiveWorldMapPanel();
 
+	// 고대비 HUD가 켜져 있으면 새로 열린 패널에도 즉시 적용한다(꺼져 있으면 no-op).
+	URetrieveUISettingsLibrary::ApplyHighContrastToTree(NewPanel);
+
 	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(NewPanel->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -1184,6 +1214,12 @@ void ARetrievePlayerController::OpenControlsGuide()
 
 	// 시스템 메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
 	OpenExclusivePanel(PanelClass, EKeys::Escape);
+
+	// 리바인드된 키가 다이어그램에 반영되도록 C++에서 직접 갱신한다(WBP 그래프 배선에 의존하지 않음).
+	if (ActivePanel)
+	{
+		URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(ActivePanel);
+	}
 }
 
 void ARetrievePlayerController::CloseActivePanel()
@@ -1268,7 +1304,8 @@ void ARetrievePlayerController::RemoveActivePanelImmediately()
 }
 
 void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor, TOptional<float> OrbitYawOverride,
-	TOptional<float> DistanceOverride, TOptional<float> FOVOverride, TOptional<float> FrameRightOffsetOverride)
+	TOptional<float> DistanceOverride, TOptional<float> FOVOverride, TOptional<float> FrameRightOffsetOverride,
+	TOptional<float> HeightOverride, TOptional<float> LookAtHeightOverride)
 {
 	UWorld* World = GetWorld();
 	if (!TargetActor || !World)
@@ -1284,13 +1321,15 @@ void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor, TOptiona
 	const float Distance = DistanceOverride.IsSet() ? DistanceOverride.GetValue() : ShopCameraDistance;
 	const float FOV = FOVOverride.IsSet() ? FOVOverride.GetValue() : ShopCameraFOV;
 	const float FrameRightOffset = FrameRightOffsetOverride.IsSet() ? FrameRightOffsetOverride.GetValue() : ShopCameraFrameRightOffset;
+	const float Height = HeightOverride.IsSet() ? HeightOverride.GetValue() : ShopCameraHeight;
+	const float LookAtHeight = LookAtHeightOverride.IsSet() ? LookAtHeightOverride.GetValue() : ShopCameraLookAtHeight;
 
 	const FVector NpcLoc = TargetActor->GetActorLocation();
 	const FVector Forward = TargetActor->GetActorForwardVector();
 	const FVector Dir = Forward.RotateAngleAxis(OrbitYaw, FVector::UpVector);
 	const FVector CamLoc = NpcLoc + Dir * Distance
-		+ FVector(0.0f, 0.0f, ShopCameraHeight);
-	const FVector BaseLookAt = NpcLoc + FVector(0.0f, 0.0f, ShopCameraLookAtHeight);
+		+ FVector(0.0f, 0.0f, Height);
+	const FVector BaseLookAt = NpcLoc + FVector(0.0f, 0.0f, LookAtHeight);
 	const FRotator BaseCamRot = (BaseLookAt - CamLoc).Rotation();
 	const FVector CameraRight = FRotationMatrix(BaseCamRot).GetUnitAxis(EAxis::Y);
 	const FVector LookAt = BaseLookAt - CameraRight * FrameRightOffset;
@@ -1334,6 +1373,73 @@ void ARetrievePlayerController::FocusCameraOnActor(AActor* TargetActor, TOptiona
 		{
 			ControlledPawn->SetActorHiddenInGame(true);
 		}
+	}
+}
+
+void ARetrievePlayerController::FocusDialogueTwoShotCamera(AActor* TargetActor)
+{
+	UWorld* World = GetWorld();
+	APawn* PlayerPawn = GetPawn();
+	if (!TargetActor || !World || !PlayerPawn)
+	{
+		return;
+	}
+
+	const FVector PlayerLoc = PlayerPawn->GetActorLocation();
+	const FVector NpcLoc = TargetActor->GetActorLocation();
+
+	// 플레이어→NPC 수평 축. 두 액터 위치만 사용하므로 메시 정면-액터 Forward 불일치와 무관하다.
+	FVector Axis = NpcLoc - PlayerLoc;
+	Axis.Z = 0.f;
+	const float PairDistance = Axis.Size();
+	const FVector AxisDir = PairDistance > 1.f ? Axis / PairDistance : FVector(PlayerPawn->GetActorForwardVector().GetSafeNormal2D());
+	const FVector AxisRight = FVector::CrossProduct(FVector::UpVector, AxisDir); // 축 진행 방향의 오른쪽
+
+	// 플레이어 어깨 뒤 + 축 오른쪽으로 비껴난 위치 → 플레이어는 좌측 전경, NPC는 우중앙(참조 구도).
+	const FVector CamLoc = PlayerLoc
+		- AxisDir * DialogueTwoShotBackDistance
+		+ AxisRight * DialogueTwoShotSideOffset
+		+ FVector(0.f, 0.f, DialogueTwoShotCameraHeight);
+
+	// 시선은 플레이어와 NPC 사이(NPC 쪽으로 치우침) — 두 인물이 모두 프레임에 들어온다.
+	const FVector LookAt = FMath::Lerp(PlayerLoc, NpcLoc, DialogueTwoShotLookAtBias)
+		+ FVector(0.f, 0.f, DialogueTwoShotLookAtHeight);
+	const FRotator CamRot = (LookAt - CamLoc).Rotation();
+
+	// NPC 단독 샷과 같은 카메라 액터를 재사용한다.
+	if (!ShopFocusCameraActor)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ShopFocusCameraActor = World->SpawnActor<ACameraActor>(
+			ACameraActor::StaticClass(), CamLoc, CamRot, SpawnParams);
+	}
+	else
+	{
+		ShopFocusCameraActor->SetActorLocationAndRotation(CamLoc, CamRot);
+	}
+	if (!ShopFocusCameraActor)
+	{
+		return;
+	}
+	if (UCameraComponent* CameraComponent = ShopFocusCameraActor->GetCameraComponent())
+	{
+		CameraComponent->SetFieldOfView(DialogueTwoShotFOV);
+	}
+
+	SetViewTargetWithBlend(ShopFocusCameraActor, ShopCameraBlendTime,
+		EViewTargetBlendFunction::VTBlend_Cubic, 0.0f, false);
+	bShopCameraActive = true;
+
+	// 다른 NPC들의 상호작용 프롬프트가 화면에 뜨지 않도록 숨긴다(단독 샷과 동일).
+	HideAllInteractionTargetsForCamera();
+
+	// 투샷에서는 플레이어가 프레임의 절반이므로 절대 숨기지 않는다.
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		ControlledPawn->SetActorHiddenInGame(false);
 	}
 }
 
@@ -1769,9 +1875,23 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	}
 
 	// 상점 NPC와 동일하게, 대화 시작 시 카메라를 NPC 정면으로 블렌드한다.
-	// Villager 계열은 메시 정면이 액터 Forward와 일치하므로(상점 NPC와 반대) OrbitYaw=0을 명시하고,
-	// 상점보다 더 확대해 화면 좌측에 가깝게 배치하도록 Dialogue* 오버라이드를 넘긴다.
-	FocusCameraOnActor(NPC, 0.0f, DialogueCameraDistance, DialogueCameraFOV, DialogueCameraFrameRightOffset);
+	// Villager 계열은 메시 정면이 액터 Forward와 일치하므로(상점 NPC와 반대) OrbitYaw=0을 쓰고,
+	// 상점 NPC(URetrieveShopComponent 보유)는 메시 정면이 반대이므로 OrbitYaw 오버라이드를 생략해
+	// FocusCameraOnActor가 ShopCameraOrbitYaw(기본 180)로 폴백하게 둔다.
+	// (이전엔 여기서 항상 0.0f를 넘겨 상점 NPC와의 대화 시작 화면이 후면으로 잡히는 회귀가 있었다.)
+	if (bDialogueTwoShotCamera)
+	{
+		// 참조 구도: 플레이어 어깨 뒤 사선에서 두 인물이 함께 보이는 투샷.
+		FocusDialogueTwoShotCamera(NPC);
+	}
+	else
+	{
+		const bool bIsShopNPC = NPC && NPC->FindComponentByClass<URetrieveShopComponent>() != nullptr;
+		TOptional<float> DialogueOrbitYawOverride = bIsShopNPC ? TOptional<float>() : TOptional<float>(0.0f);
+		// 상점보다 더 확대해 화면 좌측에 가깝게 배치하도록 Dialogue* 오버라이드를 넘긴다.
+		FocusCameraOnActor(NPC, DialogueOrbitYawOverride, DialogueCameraDistance, DialogueCameraFOV, DialogueCameraFrameRightOffset,
+			DialogueCameraHeight, DialogueCameraLookAtHeight);
+	}
 
 	if (UMVVMSubsystem* MVVM = GEngine ? GEngine->GetEngineSubsystem<UMVVMSubsystem>() : nullptr)
 	{
@@ -1791,6 +1911,9 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = true;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+
+	// 대화 중에는 HUD를 숨긴다(종료 시 CloseConversation에서 복원).
+	UpdateHUDNarrativeVisibility();
 }
 
 void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGameplayTag TopicId)
@@ -1865,6 +1988,42 @@ void ARetrievePlayerController::CloseConversation()
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+
+	// 대화 종료: 시네마틱도 진행 중이 아니면 HUD를 복원한다.
+	UpdateHUDNarrativeVisibility();
+}
+
+void ARetrievePlayerController::UpdateHUDNarrativeVisibility()
+{
+	if (!ActiveTopLevelWidget)
+	{
+		bHUDHiddenForNarrative = false;
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	// 인게임 HUD가 아닐 때(메인 메뉴/결과 화면)는 건드리지 않는다.
+	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+
+	const bool bCinematicActive = GS->GetCinematicState().IsActive();
+	const bool bDialogueActive = ConversationInstance != nullptr;
+	const bool bShouldHide = bCinematicActive || bDialogueActive;
+
+	if (bShouldHide && !bHUDHiddenForNarrative)
+	{
+		SavedHUDVisibilityForNarrative = ActiveTopLevelWidget->GetVisibility();
+		ActiveTopLevelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		bHUDHiddenForNarrative = true;
+	}
+	else if (!bShouldHide && bHUDHiddenForNarrative)
+	{
+		ActiveTopLevelWidget->SetVisibility(SavedHUDVisibilityForNarrative);
+		bHUDHiddenForNarrative = false;
+	}
 }
 
 void ARetrievePlayerController::EnsureHUDViewModel()

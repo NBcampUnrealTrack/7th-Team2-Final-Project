@@ -84,6 +84,10 @@ public:
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
 	bool bLockOnToggleMode = true;
 
+	/** true = 활 조준을 우클릭 1회로 켜고 다시 1회로 끄는 토글 방식. false(기본) = 우클릭을 누르고 있는 동안만 조준(홀드). */
+	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Controls")
+	bool bBowAimToggleMode = false;
+
 	// ── Gameplay ─────────────────────────────────────────────────
 	/** 빈 문자열이면 기본(현재) 컬처 유지. */
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Gameplay")

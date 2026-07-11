@@ -79,6 +79,11 @@ void URetrieveAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag
 	}
 }
 
+void URetrieveAbilitySystemComponent::ClearInputHeldForSpec(const FGameplayAbilitySpecHandle& SpecHandle)
+{
+	InputHeldSpecHandles.Remove(SpecHandle);
+}
+
 bool URetrieveAbilitySystemComponent::HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const
 {
 	if (!InputTag.IsValid())

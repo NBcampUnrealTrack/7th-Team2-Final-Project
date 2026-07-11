@@ -61,6 +61,13 @@ public:
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	void AbilityInputTagReleased(const FGameplayTag& InputTag);
 
+	/**
+	 * 어빌리티가 물리 키를 아직 떼지 않은 상태에서 스스로 조기 종료할 때(예: 토글 해제) 호출한다.
+	 * InputHeldSpecHandles에 남아있으면 같은 프레임의 WhileInputActive 재시도가 즉시 재발동시키므로,
+	 * 토글 종료 시점에 이 목록에서 미리 빼내 그 재발동을 막는다.
+	 */
+	void ClearInputHeldForSpec(const FGameplayAbilitySpecHandle& SpecHandle);
+
 	// 이 입력 인텐트로 발동 가능한(grant된) 어빌리티가 하나라도 있는가.
 	// chord 등 입력 치환 전에 "치환 대상이 실제로 존재하는지" 확인용(없는 클래스 입력 먹통 방지).
 	bool HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const;

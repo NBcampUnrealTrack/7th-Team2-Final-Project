@@ -1,6 +1,7 @@
 #include "Settings/RetrieveSettingsSubsystem.h"
 #include "Settings/RetrieveGameUserSettings.h"
 #include "Settings/RetrieveSettingsConfig.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -125,6 +126,9 @@ void URetrieveSettingsSubsystem::ApplyWorldSettings(UWorld* World)
 		// 사운드의 SoundClass는 DA_AudioRouting의 [Apply Routing To Assets] 버튼으로 에셋에 미리 구워둔다.
 		// 따라서 런타임에는 로드/분류 없이 믹스만 적용한다.
 		ApplyAudioInternal(S, World);
+
+		// 레벨 전환으로 새로 만들어진 HUD 위젯에도 고대비를 적용한다.
+		URetrieveUISettingsLibrary::ApplyHighContrastToAllWidgets(World);
 	}
 }
 
@@ -148,7 +152,11 @@ void URetrieveSettingsSubsystem::ApplyUISettings()
 {
 	// UI 크기는 부팅(ApplyGlobalSettings)과 Apply/Reset 확정 시점에만 적용한다.
 	// (슬라이더 드래그 미리보기로 화면이 흔들리지 않도록 여기서는 적용하지 않는다.)
-	// 고대비/모션 억제는 위젯이 RetrieveUISettingsLibrary로 읽으므로 갱신 신호만 보낸다.
+
+	// 고대비: 현재 떠 있는 모든 UMG(HUD·패널 포함)에 즉시 적용/해제한다.
+	URetrieveUISettingsLibrary::ApplyHighContrastToAllWidgets(GetSubsystemWorld());
+
+	// 테마를 직접 읽는 위젯(RetrieveThemedBarWidget 등)을 위한 갱신 신호.
 	OnSettingChanged.Broadcast(ERetrieveSettingsCategory::Accessibility);
 }
 
