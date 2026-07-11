@@ -2007,12 +2007,15 @@ void ARetrievePlayerController::CloseConversation()
 	// 해제 코드가 남아 있으면, 대화창 정리 한 번에 상시 리스너(BeginPlay 등록)가 죽어서
 	// 이후 시네마틱의 HUD 일괄 숨김/대화창 닫기가 통째로 동작하지 않는다. 해제는 EndPlay에서 수행한다.
 
+	// 대화 종료: 시네마틱도 진행 중이 아니면 HUD를 복원한다.
+	// (HUD 가시성을 먼저 되돌려야, 아래 DialogueChanged 브로드캐스트로 시스템 메시지 위젯이
+	//  다시 표시될 때 부모 HUD가 이미 Visible이라 SetKeyboardFocus가 정상적으로 걸린다.
+	//  순서가 반대면 접힌 부모 밑에서 포커스가 실패해 Enter로 메시지를 못 닫는다.)
+	UpdateHUDNarrativeVisibility();
+
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
-
-	// 대화 종료: 시네마틱도 진행 중이 아니면 HUD를 복원한다.
-	UpdateHUDNarrativeVisibility();
 }
 
 void ARetrievePlayerController::UpdateHUDNarrativeVisibility()

@@ -34,6 +34,13 @@ void URetrieveSystemMessageWidget::NativeConstruct()
 		RevealHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveRevealGatePayload>(
 			RetrieveGameplayTags::Channel_UI_RevealGate, this,
 			&URetrieveSystemMessageWidget::HandleRevealGate);
+
+		// 대화 중에는 HUD 전체가 접히므로(UpdateHUDNarrativeVisibility) 위젯이 포커스/모달 입력을
+		// 잃는다. 시네마틱과 동일하게 억제해 현재 항목을 큐로 되돌리고, 대화 종료 후 처음부터
+		// 다시 표시하며 포커스·모달 입력을 재수립한다.
+		DialogueHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveDialogueChangedPayload>(
+			RetrieveGameplayTags::Channel_UI_DialogueChanged, this,
+			&URetrieveSystemMessageWidget::HandleDialogueChanged);
 	}
 
 	// 위젯이 막 생성됨: 그동안 큐에 쌓여 있던 항목을 바로 표시하기 시작
@@ -46,6 +53,7 @@ void URetrieveSystemMessageWidget::NativeDestruct()
 	{
 		UGameplayMessageSubsystem::Get(World).UnregisterListener(CinematicHandle);
 		UGameplayMessageSubsystem::Get(World).UnregisterListener(RevealHandle);
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(DialogueHandle);
 		World->GetTimerManager().ClearTimer(HoldTimer);
 	}
 	if (USystemMessageSubsystem* SystemMessageSubsystem = Subsystem.Get())
@@ -148,9 +156,39 @@ void URetrieveSystemMessageWidget::HandleRevealGate(FGameplayTag Channel, const 
 	}
 }
 
+void URetrieveSystemMessageWidget::HandleDialogueChanged(FGameplayTag Channel,
+                                                         const FRetrieveDialogueChangedPayload& Message)
+{
+	bDialogueActive = Message.bActive;
+	if (bDialogueActive)
+	{
+		// 억제 시작: 시네마틱과 동일 경로. 홀드 타이머 정지, 현재 항목을 큐로 되돌리고 숨김.
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(HoldTimer);
+		}
+		StopAllAnimations();
+		if (bHasCurrent)
+		{
+			if (USystemMessageSubsystem* SystemMessageSubsystem = Subsystem.Get())
+			{
+				SystemMessageSubsystem->RequeueFront(CurrentEntry); // 대화 종료 후 처음부터 다시 표시.
+			}
+			bHasCurrent = false;
+		}
+		bShowing = false;
+		SetModalInputBlock(false);
+		SetVisibility(ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		PumpNext(); // 억제 해제: 되돌린 항목부터 재개(포커스·모달 입력 재수립).
+	}
+}
+
 void URetrieveSystemMessageWidget::PumpNext()
 {
-	if (bShowing || bCinematicActive || bRevealBlocked)
+	if (bShowing || bCinematicActive || bRevealBlocked || bDialogueActive)
 	{
 		return; // 표시 중이거나 억제 중: 현재 상태 유지
 	}
@@ -160,7 +198,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 	
 	if (!SystemMessageSubsystem || !SystemMessageSubsystem->DequeueNext(NextEntry))
 	{
-		SetTutorialFeedbackActive(false);
+		SetTutorialFeedbackActive(false, false); // 큐 비움: 보더도 숨김
 		SetModalInputBlock(false); // 큐가 비면 잡고 있던 입력 잠금 해제
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
@@ -184,7 +222,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 	if (CurrentEntry.bRequiresDismiss)
 	{
 		SetVisibility(ESlateVisibility::Visible); // 포커스/키 입력을 받으려면 Visible
-		SetTutorialFeedbackActive(true);
+		SetTutorialFeedbackActive(true, true); // 해제형: 보더 + 점멸
 		if (USoundBase* OpenSound = TutorialOpenSound.LoadSynchronous())
 		{
 			UGameplayStatics::PlaySound2D(this, OpenSound, TutorialOpenSoundVolume);
@@ -199,7 +237,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 	}
 	else
 	{
-		SetTutorialFeedbackActive(false);
+		SetTutorialFeedbackActive(true, false); // 자동 넘김형: 보더는 정적으로 표시, 점멸 없음
 		SetVisibility(ESlateVisibility::HitTestInvisible);
 		SetModalInputBlock(false);
 		if (DismissPrompt)
@@ -217,7 +255,7 @@ void URetrieveSystemMessageWidget::PumpNext()
 void URetrieveSystemMessageWidget::HandleHoldExpired()
 {
 	// 현재 항목은 전체 표시 시간을 채웠으므로 소비 완료, 페이드아웃이 끝난 뒤 다음 항목으로 넘어감
-	SetTutorialFeedbackActive(false);
+	SetTutorialFeedbackActive(false, false);
 	bHasCurrent = false;
 	if (HideAnim)
 	{
@@ -236,17 +274,19 @@ void URetrieveSystemMessageWidget::HandleHideFinished()
 	PumpNext();
 }
 
-void URetrieveSystemMessageWidget::SetTutorialFeedbackActive(bool bActive)
+void URetrieveSystemMessageWidget::SetTutorialFeedbackActive(bool bShowBorder, bool bPulse)
 {
+	// 배경 보더는 메시지가 떠 있는 동안 항상 표시하고, 점멸(스케일 펄스)은 Enter 해제형에서만 켠다.
 	// 점멸은 RenderTransform 스케일 펄스로 구동한다(NativeTick). 이 위젯은 상위 HUD 캐싱에
 	// 걸려 RenderOpacity 변화가 화면에 반영되지 않으므로 opacity 애니메이션은 쓰지 않는다.
-	bTutorialPulseActive = bActive;
+	bTutorialPulseActive = bShowBorder && bPulse;
 	TutorialPulseElapsed = 0.f;
 
 	if (TutorialPulseBorder)
 	{
 		TutorialPulseBorder->SetVisibility(
-			bActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+			bShowBorder ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		// 점멸을 끈 경우 스케일을 1로 고정해 정적 보더로 표시한다.
 		TutorialPulseBorder->SetRenderScale(FVector2D(1.f, 1.f));
 		TutorialPulseBorder->SetRenderOpacity(1.f);
 	}
