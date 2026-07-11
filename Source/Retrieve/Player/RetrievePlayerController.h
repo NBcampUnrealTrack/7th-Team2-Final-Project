@@ -118,7 +118,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestLoadGameSlot(int32 SlotIndex);
 
-	/** 언스턱/강제 리스폰. 정규 사망 흐름(로딩 커버 포함)으로 마지막 체크포인트에 리스폰. 포즈 팝업에서 호출. */
+	/** 언스턱/강제 리스폰. 정규 사망 흐름(로딩 커버 포함)으로 마지막 체크포인트에 리스폰. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void RequestUnstuck();
 

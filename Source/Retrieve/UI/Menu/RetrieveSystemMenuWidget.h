@@ -9,7 +9,7 @@ class UButton;
 /**
  * 시스템 메뉴(WBP_SystemMenu)의 C++ 베이스.
  * 버튼 OnClicked 배선을 C++에서 처리하므로, WBP는 아래 이름의 버튼만 배치하면 된다(그래프 배선 불필요).
- *   ResumeButton / SettingsButton / MainMenuButton / QuitButton  (모두 BindWidgetOptional)
+ *   ResumeButton / SettingsButton / CommandsButton / RespawnButton / MainMenuButton / QuitButton  (모두 BindWidgetOptional)
  * ESC·Resume은 RequestClose로 닫힌다. 멀티플레이를 추후 지원할 예정이라 게임을 실제로 일시정지하지는 않는다.
  */
 UCLASS(Abstract, Blueprintable)
@@ -32,6 +32,10 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CommandsButton;
 
+	/** "리스폰" — 마지막 체크포인트로 강제 리스폰(언스턱). 맵 끼임/낙사 루프 탈출용. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RespawnButton;
+
 	/** "메인 메뉴로" — SessionState를 MainMenu로 전환. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> MainMenuButton;
@@ -48,6 +52,9 @@ protected:
 
 	UFUNCTION()
 	void HandleCommandsClicked();
+
+	UFUNCTION()
+	void HandleRespawnClicked();
 
 	UFUNCTION()
 	void HandleMainMenuClicked();

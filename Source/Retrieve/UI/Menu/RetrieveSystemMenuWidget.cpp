@@ -19,6 +19,10 @@ void URetrieveSystemMenuWidget::NativeConstruct()
 	{
 		CommandsButton->OnClicked.AddDynamic(this, &ThisClass::HandleCommandsClicked);
 	}
+	if (RespawnButton && !RespawnButton->OnClicked.IsAlreadyBound(this, &ThisClass::HandleRespawnClicked))
+	{
+		RespawnButton->OnClicked.AddDynamic(this, &ThisClass::HandleRespawnClicked);
+	}
 	if (MainMenuButton && !MainMenuButton->OnClicked.IsAlreadyBound(this, &ThisClass::HandleMainMenuClicked))
 	{
 		MainMenuButton->OnClicked.AddDynamic(this, &ThisClass::HandleMainMenuClicked);
@@ -50,6 +54,15 @@ void URetrieveSystemMenuWidget::HandleCommandsClicked()
 	{
 		// OpenControlsGuide → OpenExclusivePanel이 현재 시스템 메뉴 패널을 조작키 안내 화면으로 교체한다.
 		PC->OpenControlsGuide();
+	}
+}
+
+void URetrieveSystemMenuWidget::HandleRespawnClicked()
+{
+	// 강제 리스폰 → 사망 흐름(Result→Retry)이 세션 상태를 전환하며 이 패널을 정리한다(MainMenu와 동일 패턴).
+	if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(GetOwningPlayer()))
+	{
+		PC->RequestUnstuck();
 	}
 }
 
