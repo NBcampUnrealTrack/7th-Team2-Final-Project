@@ -162,6 +162,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool IsLumenEngraved() const;
 
+	// ── NPC 보상 지급 카운터 (SpeakerTag별, 월드 공유 진행 상태) ─────────
+
+	/** SpeakerTag 기준 보상 지급 횟수 조회. bRpsBet=true면 가위바위보 내기 보상 카운터. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	int32 GetNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet) const;
+
+	/** 지급 횟수 +1 후 WorldState 슬롯에 자동 저장(모닥불 활성화와 동일 패턴). */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void IncrementNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet);
+
 	// ── 빠른 이동 (World Partition) ───────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|FastTravel")

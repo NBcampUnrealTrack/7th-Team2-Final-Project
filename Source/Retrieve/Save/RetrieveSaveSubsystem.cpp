@@ -92,6 +92,8 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
 		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
 		SlotSave->ShopRepurchaseHistory      = CurrentSaveGame->ShopRepurchaseHistory;
+		SlotSave->DialogueRewardGrantCounts  = CurrentSaveGame->DialogueRewardGrantCounts;
+		SlotSave->RpsRewardGrantCounts       = CurrentSaveGame->RpsRewardGrantCounts;
 	}
 
 	// LoadSnapshot 기록
@@ -525,6 +527,42 @@ void URetrieveSaveSubsystem::RegisterDefaultBonfire(FName BonfireId, const FTran
 	// 디스크 저장 없이 인메모리로만 등록 → 실제 세이브 파일 오염 방지.
 	CurrentSaveGame->ActivatedBonfireTransforms.Emplace(BonfireId, ArrivalTransform);
 
+}
+
+int32 URetrieveSaveSubsystem::GetNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet) const
+{
+	if (!CurrentSaveGame || !SpeakerTag.IsValid())
+	{
+		return 0;
+	}
+	const TMap<FGameplayTag, int32>& Counts = bRpsBet
+		? CurrentSaveGame->RpsRewardGrantCounts
+		: CurrentSaveGame->DialogueRewardGrantCounts;
+	const int32* Found = Counts.Find(SpeakerTag);
+	return Found ? *Found : 0;
+}
+
+void URetrieveSaveSubsystem::IncrementNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet)
+{
+	if (!SpeakerTag.IsValid())
+	{
+		return;
+	}
+
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	TMap<FGameplayTag, int32>& Counts = bRpsBet
+		? CurrentSaveGame->RpsRewardGrantCounts
+		: CurrentSaveGame->DialogueRewardGrantCounts;
+	Counts.FindOrAdd(SpeakerTag) += 1;
+
+	// 보상 지급은 드문 이벤트이므로 즉시 WorldState 슬롯에 영속화한다(모닥불 활성화와 동일).
+	UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
 }
 
 bool URetrieveSaveSubsystem::GetBonfireTransform(FName BonfireId, FTransform& OutTransform) const

@@ -210,6 +210,22 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 		}
 	}
 
+	// 내기 가능 NPC(bEnableRpsBet, 보상 잔여)면 "내기하기" 토픽을 추가한다.
+	// 실제 진행은 서버에서 DialogueComponent::HandleRpsBetTopic이 처리한다.
+	if (NPC)
+	{
+		if (URetrieveDialogueComponent* BetDC = NPC->FindComponentByClass<URetrieveDialogueComponent>();
+			BetDC && BetDC->CanOfferRpsBet())
+		{
+			Topics.Add(FRetrieveDialogueTopic{
+				RetrieveGameplayTags::Dialogue_Bet_Start,
+				FText::FromString(TEXT("내기하기 (가위바위보)")),
+				true,
+				ETopicKind::Story
+			});
+		}
+	}
+
 	AppendGoodbyeIfMissing();
 	bTopicsEnabled = OwningPlayerController.IsValid() && OwningPlayerController->HasAuthority();
 	BroadcastBeatFields();
@@ -274,16 +290,19 @@ void UConversationViewModel::OnTopicSelected(FGameplayTag TopicId)
 		return;
 	}
 
-	if (PC->HasAuthority())
+	// 서버 RPC는 권한 측(호스트/싱글)에서 호출하면 로컬 즉시 실행되므로 싱글/멀티 동일 경로.
+	// 내기(Dialogue.Bet.*) 처리와 토픽 애니메이션이 이 경로에만 있어, 권한 분기로
+	// GameState::AdvanceDialogue를 직접 부르면 호스트에서 내기 선택지가 무반응이 된다.
+	if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(PC))
+	{
+		RetrievePC->Server_RequestDialogueAdvance(TopicId);
+	}
+	else if (PC->HasAuthority())
 	{
 		if (ARetrieveGameState* GS = PC->GetWorld() ? PC->GetWorld()->GetGameState<ARetrieveGameState>() : nullptr)
 		{
 			GS->AdvanceDialogue(TopicId, PC->GetPawn());
 		}
-	}
-	else if (ARetrievePlayerController* RetrievePC = Cast<ARetrievePlayerController>(PC))
-	{
-		RetrievePC->Server_RequestDialogueAdvance(TopicId);
 	}
 }
 

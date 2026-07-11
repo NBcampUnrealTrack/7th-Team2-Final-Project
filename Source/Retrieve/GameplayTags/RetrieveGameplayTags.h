@@ -390,6 +390,12 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Dialogue_LineRequested);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_Changed);
+
+	// ---- Dialogue: 가위바위보 내기 토픽 (DT_Dialogue 행 없이 DialogueComponent가 직접 처리)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Start);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Rock);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Paper);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Scissors);
 	
 	// ---- Message channels: UI Bark / Dialogue suppression / System Message
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_BarkRequested);
@@ -517,6 +523,26 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Greeting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Weather);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Goodbye);
+
+	// ---- Dialogue: 마을 NPC별 일상/세계관 힌트 대화 (DT_Dialogue 데이터 전용, 코드 미참조)
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Villager_Farmer);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Villager_Elder);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Villager_Hunter);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Villager_Knight);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_NPC_Villager_Miner);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Farmer_Crops);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Farmer_GuardianRumor);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Elder_SealingDay);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Elder_Castle);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Hunter_Forest);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Hunter_Bonfire);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Knight_Fortress);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Knight_SovereignLegend);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Miner_Mine);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Villager_Miner_Plague);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_AboutSelf);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_IronPlague);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_ShopNPC_Gossip);
 
 	// ---- Bark
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bark_Category_Ambient);

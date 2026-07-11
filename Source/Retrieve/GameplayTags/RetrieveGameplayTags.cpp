@@ -386,6 +386,12 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
 
+	// ---- Dialogue: 가위바위보 내기 토픽
+	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Start, "Dialogue.Bet.Start");
+	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Rock, "Dialogue.Bet.Rock");
+	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Paper, "Dialogue.Bet.Paper");
+	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Scissors, "Dialogue.Bet.Scissors");
+
 	// ---- Message channels: UI Bark / Dialogue suppression / System Message
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_BarkRequested, "Channel.UI.BarkRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_DialogueChanged, "Channel.UI.DialogueChanged");
@@ -508,6 +514,26 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Greeting, "Topic.NPC.VillagerTest.Greeting");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Weather, "Topic.NPC.VillagerTest.Weather");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Goodbye, "Topic.NPC.VillagerTest.Goodbye");
+
+	// ---- Dialogue: 마을 NPC별 일상/세계관 힌트 대화 (DT_Dialogue 데이터 전용, 코드 미참조)
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Villager_Farmer, "Speaker.NPC.Villager.Farmer");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Villager_Elder, "Speaker.NPC.Villager.Elder");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Villager_Hunter, "Speaker.NPC.Villager.Hunter");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Villager_Knight, "Speaker.NPC.Villager.Knight");
+	UE_DEFINE_GAMEPLAY_TAG(Speaker_NPC_Villager_Miner, "Speaker.NPC.Villager.Miner");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Farmer_Crops, "Topic.Villager.Farmer.Crops");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Farmer_GuardianRumor, "Topic.Villager.Farmer.GuardianRumor");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Elder_SealingDay, "Topic.Villager.Elder.SealingDay");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Elder_Castle, "Topic.Villager.Elder.Castle");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Hunter_Forest, "Topic.Villager.Hunter.Forest");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Hunter_Bonfire, "Topic.Villager.Hunter.Bonfire");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Knight_Fortress, "Topic.Villager.Knight.Fortress");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Knight_SovereignLegend, "Topic.Villager.Knight.SovereignLegend");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Miner_Mine, "Topic.Villager.Miner.Mine");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Villager_Miner_Plague, "Topic.Villager.Miner.Plague");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_AboutSelf, "Topic.Lumen.AboutSelf");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_IronPlague, "Topic.Lumen.IronPlague");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_ShopNPC_Gossip, "Topic.ShopNPC.Gossip");
 
 	// ---- Bark
 	UE_DEFINE_GAMEPLAY_TAG(Bark_Category_Ambient, "Bark.Category.Ambient");

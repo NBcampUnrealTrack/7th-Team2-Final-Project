@@ -1918,6 +1918,19 @@ void ARetrievePlayerController::Client_OpenConversation_Implementation(AActor* N
 
 void ARetrievePlayerController::Server_RequestDialogueAdvance_Implementation(FGameplayTag TopicId)
 {
+	// 가위바위보 내기 토픽(Dialogue.Bet.*)은 DT_Dialogue 행이 없으므로
+	// 대화 중인 NPC의 DialogueComponent가 직접 처리한다.
+	if (CurrentDialogueNPC)
+	{
+		if (URetrieveDialogueComponent* BetDC = CurrentDialogueNPC->FindComponentByClass<URetrieveDialogueComponent>())
+		{
+			if (BetDC->HandleRpsBetTopic(TopicId, GetPawn()))
+			{
+				return;
+			}
+		}
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())

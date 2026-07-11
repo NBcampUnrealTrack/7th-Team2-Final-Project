@@ -496,7 +496,10 @@ FText URetrieveInteractionResponseComponent::GetEffectiveDisplayText() const
 			return Preset->TypeAsset->DisplayText;
 		}
 	}
-	return INVTEXT("Interact");
+	// 프리셋/오버라이드가 전혀 없으면 빈 텍스트를 반환한다. 과거엔 "Interact"를 반환해
+	// BP에 직접 설정된 Manager InteractionText(예: 루멘 "대화하기")를 덮어쓰는 문제가 있었다.
+	// 빈 값이면 ApplyTypeAssetToManagerInternal이 텍스트 갱신을 건너뛴다.
+	return FText::GetEmpty();
 }
 
 bool URetrieveInteractionResponseComponent::GetEffectiveHoldInteraction() const
@@ -797,7 +800,11 @@ void URetrieveInteractionResponseComponent::ApplyTypeAssetToManagerInternal(UAct
 	}
 
 	// ?? 3) InteractionText 留듭쓽 泥?踰덉㎏ ??ぉ 媛깆떊 ???????????????????????
-	if (FMapProperty* TextMapProp = FindFProperty<FMapProperty>(ManagerClass, FName("InteractionText")))
+	if (PromptData.Text.IsEmpty())
+	{
+		// 유효 텍스트 없음(프리셋·오버라이드 미설정): BP에 디자인된 매니저 문구(예: 루멘 "대화하기")를 보존한다.
+	}
+	else if (FMapProperty* TextMapProp = FindFProperty<FMapProperty>(ManagerClass, FName("InteractionText")))
 	{
 		FTextProperty* ValueTextProp = CastField<FTextProperty>(TextMapProp->ValueProp);
 		if (ValueTextProp)
