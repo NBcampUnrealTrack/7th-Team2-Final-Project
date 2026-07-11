@@ -1002,15 +1002,12 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_FrameLimit", HandleFrameLimitChanged)
 	BIND_PAGE_SLIDER(C::Graphics, "Sld_Gamma", HandleGammaChanged)
 
-	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseSensitivity", HandleMouseSensitivityChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseX", HandleMouseXChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_MouseY", HandleMouseYChanged)
 	BIND_PAGE_SLIDER(C::Controls, "Sld_PadSens", HandlePadSensitivityChanged)
 	BIND_PAGE_CHECK(C::Controls, "Chk_InvertY", HandleInvertYChanged)
 	BIND_PAGE_CHECK(C::Controls, "Chk_Vibration", HandleVibrationChanged)
 	BIND_PAGE_TOGGLE(C::Controls, HandleControlsToggleChanged)
-	BIND_PAGE_BUTTON(C::Controls, "Btn_SensMode_Unified", HandleSensModeUnified)
-	BIND_PAGE_BUTTON(C::Controls, "Btn_SensMode_Detailed", HandleSensModeDetailed)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Prev", HandleLockOnPrev)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Next", HandleLockOnNext)
 	// 공격은 마우스 좌클릭 고정: 리바인드 버튼을 비활성화한다(행은 참고용으로 남김).
@@ -1166,11 +1163,9 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	URetrieveGameUserSettings* S = GetUserSettings();
 	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Controls);
 	if (!S || !Page) return;
-	SetSlider(Page, TEXT("Sld_MouseSensitivity"), S->MouseSensitivity);
 	SetSlider(Page, TEXT("Sld_MouseX"), S->MouseSensitivityX);
 	SetSlider(Page, TEXT("Sld_MouseY"), S->MouseSensitivityY);
 	SetSlider(Page, TEXT("Sld_PadSens"), S->GamepadSensitivityX);
-	SetText(Page, TEXT("Val_MouseSensitivity"), NumberText(S->MouseSensitivity, 1));
 	SetText(Page, TEXT("Val_MouseX"), NumberText(S->MouseSensitivityX, 1));
 	SetText(Page, TEXT("Val_MouseY"), NumberText(S->MouseSensitivityY, 1));
 	SetText(Page, TEXT("Val_PadSens"), NumberText(S->GamepadSensitivityX, 1));
@@ -1198,9 +1193,6 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 		});
 	}
 	RefreshKeyBindings();
-
-	// 페이지 갱신/열림 시 현재 감도 모드를 BP에 통지 → UI가 통합/X·Y 슬라이더 활성·회색 상태 반영.
-	OnSensitivityModeChanged(S->bUseUnifiedSensitivity);
 }
 
 UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSettings() const
@@ -2030,30 +2022,9 @@ void URetrieveSettingsPanelWidget::HandleGammaChanged(float V) { if (bRefreshing
 #define DEFINE_FLOAT_SETTING_HANDLER(Func, Field, Category, PageCategory, Label, Digits) \
 	void URetrieveSettingsPanelWidget::Func(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->Field = V; \
 	SetText(GetPage(PageCategory), TEXT(Label), NumberText(V, Digits)); APPLY_PREVIEW(Category); } }
-DEFINE_FLOAT_SETTING_HANDLER(HandleMouseSensitivityChanged, MouseSensitivity, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseSensitivity", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseXChanged, MouseSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseX", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseYChanged, MouseSensitivityY, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseY", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandlePadSensitivityChanged, GamepadSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_PadSens", 1)
-
-void URetrieveSettingsPanelWidget::HandleSensModeUnified()
-{
-	if (bRefreshingControls) return;
-	if (auto* S = GetUserSettings()) { S->bUseUnifiedSensitivity = true; }
-	RefreshCurrentPage(); // 슬라이더 값 갱신 + OnSensitivityModeChanged 통지(회색 처리는 UI가 BP에서)
-	APPLY_PREVIEW(ERetrieveSettingsCategory::Controls);
-}
-void URetrieveSettingsPanelWidget::HandleSensModeDetailed()
-{
-	if (bRefreshingControls) return;
-	if (auto* S = GetUserSettings()) { S->bUseUnifiedSensitivity = false; }
-	RefreshCurrentPage();
-	APPLY_PREVIEW(ERetrieveSettingsCategory::Controls);
-}
-bool URetrieveSettingsPanelWidget::IsUnifiedSensitivityMode() const
-{
-	const URetrieveGameUserSettings* S = GetUserSettings();
-	return !S || S->bUseUnifiedSensitivity;
-}
 
 void URetrieveSettingsPanelWidget::HandleInvertYChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bInvertMouseY = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleVibrationChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bGamepadVibration = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }

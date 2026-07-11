@@ -472,6 +472,11 @@ void ARetrievePlayerController::AcknowledgePossession(APawn* InPawn)
 	}
 }
 
+void ARetrievePlayerController::SetDeveloperSkipIntroFlow(bool bEnabled)
+{
+	bSkipEntryLoadingScreen = bEnabled;
+}
+
 void ARetrievePlayerController::RequestNewGame()
 {
 	Server_RequestNewGame();
