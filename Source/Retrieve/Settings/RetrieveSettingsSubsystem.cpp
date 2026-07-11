@@ -20,7 +20,6 @@
 #include "Rendering/RenderingCommon.h"
 #include "AudioDevice.h"
 #include "AudioDeviceHandle.h"
-#include "AlsCameraComponent.h"
 
 void URetrieveSettingsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {

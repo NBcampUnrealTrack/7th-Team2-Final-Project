@@ -1,7 +1,5 @@
 #include "UI/RetrieveSettingsPanelWidget.h"
 
-#include "Core/RetrieveGameState.h"
-#include "Player/RetrievePlayerController.h"
 #include "Settings/RetrieveGameUserSettings.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
 #include "Settings/RetrieveSettingAvailability.h"
@@ -491,14 +489,6 @@ void URetrieveSettingsPanelWidget::NativeConstruct()
 		BaselineSnapshot.CaptureFrom(S);
 	}
 
-	// "강제 리스폰" 버튼은 인게임에서만 노출(메인 메뉴 설정에선 숨김)
-	if (UButton* RespawnButton = FindWidget<UButton>(this, TEXT("Btn_Respawn")))
-	{
-		const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr;
-		const bool bInGame = GS && GS->GetSessionState() == ERetrieveSessionState::InGame;
-		RespawnButton->SetVisibility(bInGame ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	}
-
 	SelectCategory(ERetrieveSettingsCategory::Graphics);
 }
 
@@ -974,7 +964,6 @@ void URetrieveSettingsPanelWidget::BindScreenEvents()
 	BIND_SCREEN_BUTTON("Btn_Apply", HandleApply)
 	BIND_SCREEN_BUTTON("Btn_Reset", HandleReset)
 	BIND_SCREEN_BUTTON("Btn_Close", HandleClose)
-	BIND_SCREEN_BUTTON("Btn_Respawn", HandleRespawn)
 #undef BIND_SCREEN_BUTTON
 }
 
@@ -1020,6 +1009,8 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_CHECK(C::Controls, "Chk_InvertY", HandleInvertYChanged)
 	BIND_PAGE_CHECK(C::Controls, "Chk_Vibration", HandleVibrationChanged)
 	BIND_PAGE_TOGGLE(C::Controls, HandleControlsToggleChanged)
+	BIND_PAGE_BUTTON(C::Controls, "Btn_SensMode_Unified", HandleSensModeUnified)
+	BIND_PAGE_BUTTON(C::Controls, "Btn_SensMode_Detailed", HandleSensModeDetailed)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Prev", HandleLockOnPrev)
 	BIND_PAGE_BUTTON(C::Controls, "Btn_LockOn_Next", HandleLockOnNext)
 	// 공격은 마우스 좌클릭 고정: 리바인드 버튼을 비활성화한다(행은 참고용으로 남김).
@@ -1207,6 +1198,9 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 		});
 	}
 	RefreshKeyBindings();
+
+	// 페이지 갱신/열림 시 현재 감도 모드를 BP에 통지 → UI가 통합/X·Y 슬라이더 활성·회색 상태 반영.
+	OnSensitivityModeChanged(S->bUseUnifiedSensitivity);
 }
 
 UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSettings() const
@@ -1868,21 +1862,6 @@ void URetrieveSettingsPanelWidget::HandleApply() { ApplyAndSave(); }
 void URetrieveSettingsPanelWidget::HandleReset() { ResetCurrentCategory(); }
 void URetrieveSettingsPanelWidget::HandleClose() { RequestClose(); }
 
-void URetrieveSettingsPanelWidget::HandleRespawn()
-{
-	const ARetrieveGameState* GS = GetWorld() ? GetWorld()->GetGameState<ARetrieveGameState>() : nullptr;
-	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
-	{
-		return;
-	}
-
-	if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(GetOwningPlayer()))
-	{
-		PC->RequestUnstuck();
-	}
-	RequestClose();
-}
-
 void URetrieveSettingsPanelWidget::HandleSettingChanged(ERetrieveSettingsCategory Category)
 {
 	// 고대비 등 접근성 변경(또는 전체 적용) 시 화면 색상을 즉시 다시 적용한다.
@@ -2055,6 +2034,27 @@ DEFINE_FLOAT_SETTING_HANDLER(HandleMouseSensitivityChanged, MouseSensitivity, ER
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseXChanged, MouseSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseX", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandleMouseYChanged, MouseSensitivityY, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_MouseY", 1)
 DEFINE_FLOAT_SETTING_HANDLER(HandlePadSensitivityChanged, GamepadSensitivityX, ERetrieveSettingsCategory::Controls, ERetrieveSettingsCategory::Controls, "Val_PadSens", 1)
+
+void URetrieveSettingsPanelWidget::HandleSensModeUnified()
+{
+	if (bRefreshingControls) return;
+	if (auto* S = GetUserSettings()) { S->bUseUnifiedSensitivity = true; }
+	RefreshCurrentPage(); // 슬라이더 값 갱신 + OnSensitivityModeChanged 통지(회색 처리는 UI가 BP에서)
+	APPLY_PREVIEW(ERetrieveSettingsCategory::Controls);
+}
+void URetrieveSettingsPanelWidget::HandleSensModeDetailed()
+{
+	if (bRefreshingControls) return;
+	if (auto* S = GetUserSettings()) { S->bUseUnifiedSensitivity = false; }
+	RefreshCurrentPage();
+	APPLY_PREVIEW(ERetrieveSettingsCategory::Controls);
+}
+bool URetrieveSettingsPanelWidget::IsUnifiedSensitivityMode() const
+{
+	const URetrieveGameUserSettings* S = GetUserSettings();
+	return !S || S->bUseUnifiedSensitivity;
+}
+
 void URetrieveSettingsPanelWidget::HandleInvertYChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bInvertMouseY = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleVibrationChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bGamepadVibration = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleLockOnPrev() { HandleLockOnNext(); }
