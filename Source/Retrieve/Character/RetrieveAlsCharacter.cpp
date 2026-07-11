@@ -94,8 +94,18 @@ void ARetrieveAlsCharacter::Tick(float DeltaTime)
 	const URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
 	if (ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming))
 	{
+		bTrackingFall = false; // 수영 중엔 낙차 추적 중단 — 물이 낙하를 끊는다(입수→탈출 시 오탐 방지).
 		RefreshSwimmingRotation(DeltaTime);
 		return;
+	}
+
+	// 낙하 데미지용: 공중에 있는 동안 최고점 Z(정점)를 기록한다. 착지 시 (정점 - 착지Z)로
+	// 실제 낙차를 계산 → 속도 대신 높이 기반이라 종단속도 클램프/넉백 런치에도 정확하다.
+	if (GetLocomotionMode() == AlsLocomotionModeTags::InAir)
+	{
+		const float CurrentZ = GetActorLocation().Z;
+		FallApexZ = bTrackingFall ? FMath::Max(FallApexZ, CurrentZ) : CurrentZ;
+		bTrackingFall = true;
 	}
 	
 	// Crouch 시 ACharacter가 발 위치 유지를 위해 actor.Z를 내림. 그 변화량을 SpringArm Z로 역보정.
@@ -374,11 +384,23 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 	const bool bLanding = GetLocomotionMode() == AlsLocomotionModeTags::Grounded
 		&& PreviousLocomotionMode == AlsLocomotionModeTags::InAir;
 
+	// 이륙(Grounded→InAir): 낙차 추적 시작점을 현재 Z로 초기화한다. 이후 Tick이 정점을 갱신.
+	if (GetLocomotionMode() == AlsLocomotionModeTags::InAir
+		&& PreviousLocomotionMode == AlsLocomotionModeTags::Grounded)
+	{
+		FallApexZ = GetActorLocation().Z;
+		bTrackingFall = true;
+	}
+
 	if (bLanding)
 	{
-		// 착지 순간 하강 속도(양수 변환). ALS 낙법 판정과 동일 시점/소스(LocomotionState.Velocity.Z).
-		const float FallSpeed = -LocomotionState.Velocity.Z;
-		HandleLandingImpact(FallSpeed);
+		// 실제 낙차(정점→착지, cm). 공중에서 Tick이 기록한 최고점 Z 사용.
+		// 속도 대신 높이 → 종단속도 클램프/넉백 런치에도 정확.
+		const float FallHeight = bTrackingFall
+			? FMath::Max(0.f, FallApexZ - GetActorLocation().Z)
+			: 0.f;
+		bTrackingFall = false;
+		HandleLandingImpact(FallHeight);
 	}
 
 	if (bLanding && bSuppressLandingRoll && Settings)
@@ -398,11 +420,11 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 	Super::NotifyLocomotionModeChanged(PreviousLocomotionMode);
 }
 
-void ARetrieveAlsCharacter::HandleLandingImpact(float FallSpeed)
+void ARetrieveAlsCharacter::HandleLandingImpact(float FallHeight)
 {
 	// 깊은 물(수영=MOVE_Flying)은 Grounded 착지가 안 떠서 이 함수 자체가 안 불린다 → 물 가드 불필요.
 	// 얕은 물(Wade=Walking)은 땅처럼 낙하 데미지가 들어간다(의도).
-	if (FallSpeed < FallDamageStartSpeed)
+	if (FallHeight < FallDamageStartHeight)
 	{
 		return; // 착지/낙법은 ALS 기본에 위임
 	}
@@ -414,7 +436,7 @@ void ARetrieveAlsCharacter::HandleLandingImpact(float FallSpeed)
 
 	// 낙법 실패 구간: 낙법 억제 + 낙하 데미지
 	SetSuppressLandingRoll(true);
-	ApplyFallDamage(FallSpeed);
+	ApplyFallDamage(FallHeight);
 
 	// 데미지로 죽지 않았고 의도된 착지가 아니면 낙법 실패 착지 몽타주(비틀거림/경직).
 	// 죽었으면(HP<=0) GA_Die가 사망 Ragdoll을 소유하므로 여기선 스킵한다.
@@ -428,11 +450,11 @@ void ARetrieveAlsCharacter::HandleLandingImpact(float FallSpeed)
 		}
 	}
 
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Impact FallSpeed=%.0f (threshold=%.0f)"),
-		FallSpeed, FallDamageStartSpeed);
+	UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Impact FallHeight=%.0f (threshold=%.0f)"),
+		FallHeight, FallDamageStartHeight);
 }
 
-void ARetrieveAlsCharacter::ApplyFallDamage(float FallSpeed)
+void ARetrieveAlsCharacter::ApplyFallDamage(float FallHeight)
 {
 	if (!HasAuthority())
 	{
@@ -445,8 +467,8 @@ void ARetrieveAlsCharacter::ApplyFallDamage(float FallSpeed)
 		return;
 	}
 
-	// 곡선(방식 B): 임계 초과분에 비례. 즉사 라인 없음 — 데미지가 현재 HP를 넘으면 사망.
-	const float Damage = (FallSpeed - FallDamageStartSpeed) * FallDamageScale;
+	// 곡선: 임계 초과 낙차에 비례(높이 선형 → 속도의 제곱). 즉사 라인 없음 — 데미지가 현재 HP를 넘으면 사망.
+	const float Damage = (FallHeight - FallDamageStartHeight) * FallDamageHeightScale;
 	if (Damage <= 0.f)
 	{
 		return;
@@ -461,7 +483,7 @@ void ARetrieveAlsCharacter::ApplyFallDamage(float FallSpeed)
 		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Fall, Damage);
 		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
 
-		UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Damage=%.1f (FallSpeed=%.0f)"), Damage, FallSpeed);
+		UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Damage=%.1f (FallHeight=%.0f)"), Damage, FallHeight);
 	}
 }
 

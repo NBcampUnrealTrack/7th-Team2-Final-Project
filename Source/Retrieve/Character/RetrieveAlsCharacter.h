@@ -144,13 +144,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Pawn")
 	TObjectPtr<const URetrievePawnData> DefaultPawnData;
 
-	/** 낙하 데미지가 시작되는 하강속도(cm/s). 이 아래는 낙법/착지. Step 5에서 Settings로 이전 예정. */
+	/** 낙하 데미지가 시작되는 낙차(cm). 이 아래는 낙법/착지. 예: 1000 = 10m. Step 5에서 Settings로 이전 예정. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
-	float FallDamageStartSpeed = 1400.f;
+	float FallDamageStartHeight = 1000.f;
 
-	/** 낙하 데미지 곡선 기울기. Damage = (FallSpeed - FallDamageStartSpeed) * Scale. */
+	/** 낙하 데미지 곡선 기울기(cm당). Damage = (FallHeight - FallDamageStartHeight) * Scale. 예: 0.12 ≈ 1m당 12. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
-	float FallDamageScale = 0.2f;
+	float FallDamageHeightScale = 0.12f;
 
 	/** IncomingDamage에 SetByCaller(Data.Damage.Fall)로 낙하 데미지를 싣는 GE. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Fall")
@@ -170,11 +170,17 @@ protected:
 	// 수영 회전 튜너블은 URetrieveSwimSettings(Project Settings > Retrieve > Swim)로 이전됨.
 
 private:
-	/** 착지 순간 하강속도로 낙사/경직 판정. 피해 구간이면 낙법 억제 + 낙하 데미지(Step 2). */
-	void HandleLandingImpact(float FallSpeed);
+	/** 현재 낙하 구간의 최고점 Z(world cm). 공중에서 Tick이 갱신, 착지 시 낙차 계산에 사용. */
+	float FallApexZ = 0.f;
 
-	/** FallSpeed→데미지 환산 후 GE_FallDamage를 self-apply. 서버 권위. */
-	void ApplyFallDamage(float FallSpeed);
+	/** 낙차 추적 중 여부. 이륙(Grounded→InAir) 시 true, 착지 시 false. */
+	bool bTrackingFall = false;
+
+	/** 착지 시 낙차(cm)로 낙사/경직 판정. 피해 구간이면 낙법 억제 + 낙하 데미지(Step 2). */
+	void HandleLandingImpact(float FallHeight);
+
+	/** FallHeight→데미지 환산 후 GE_FallDamage를 self-apply. 서버 권위. */
+	void ApplyFallDamage(float FallHeight);
 
 	void RefreshSwimmingRotation(float DeltaTime);
 	

@@ -840,7 +840,10 @@ void URetrieveSaveSubsystem::PollFastTravelStreaming()
 
 void URetrieveSaveSubsystem::PerformFastTravelArrival()
 {
-	constexpr float GroundTraceUpHeight  = 2500.0f;
+	// 도착점보다 너무 높은 곳에서 트레이스를 시작하면(예: 동굴 지붕 위 지형) 아래로 쏠 때
+	// 동굴 바닥이 아니라 동굴 위 지형의 윗면을 먼저 맞혀 그 위로 스냅되는 문제가 있었다.
+	// 시작 높이를 낮춰(400) 동굴/오버행 안쪽(지붕 아래)에서 트레이스가 시작되도록 한다.
+	constexpr float GroundTraceUpHeight  = 400.0f;
 	constexpr float GroundTraceDownDepth = 12000.0f;
 	constexpr float GroundClearance      = 3.0f;
 	constexpr float MinWalkableNormalZ   = 0.35f;
