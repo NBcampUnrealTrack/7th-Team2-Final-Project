@@ -17,7 +17,7 @@
 
 // 타격감용 전역 기본 넉백(SetByCaller 넉백 없는 히트. 보스/플레이어/DoT 제외). 콘솔 라이브 튜닝.
 static TAutoConsoleVariable<float> CVarDefaultHitKnockback(
-	TEXT("retrieve.Combat.DefaultHitKnockback"), 150.f,
+	TEXT("retrieve.Combat.DefaultHitKnockback"), 400.f,
 	TEXT("기본 히트 넉백 강도. 0=끔."));
 static TAutoConsoleVariable<float> CVarDefaultHitKnockbackUpward(
 	TEXT("retrieve.Combat.DefaultHitKnockbackUpward"), 0.f,
