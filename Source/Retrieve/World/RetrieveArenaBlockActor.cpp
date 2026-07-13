@@ -106,9 +106,22 @@ void ARetrieveArenaBlockActor::OnPlayerSpotted(FGameplayTag Channel, const FEnem
 
 	// 여기서 바로 결계를 걸지 않는다. 보스가 문/벽 너머로 플레이어를 먼저 인지해도,
 	// 플레이어가 EntryTrigger(아레나 입구를 지난 지점)를 실제로 통과할 때만 잠근다.
-	CachedBoss = Payload.InstigatorEnemy; 
+	CachedBoss = Payload.InstigatorEnemy;
 	PendingSpottedPlayer = Payload.SpottedActor;
 	bWaitingForPlayerEntry = true;
+
+	// 방이 좁거나 시야선이 막혀 플레이어가 EntryTrigger "안"에서야 보스에게 인지되는 방
+	// (예: 불의 수호자 방)에서는, 진입 BeginOverlap이 이미 지나가 다시 발생하지 않으므로
+	// 결계가 영영 안 걸리고 보스 HP바도 안 뜬다. 인지 시점에 플레이어가 이미 트리거와
+	// 겹쳐 있으면 진입을 기다리지 않고 즉시 잠근다(넓은 방의 "인지→진입" 경로는 그대로 유지).
+	if (AActor* Spotted = Payload.SpottedActor.Get())
+	{
+		if (EntryTrigger && EntryTrigger->IsOverlappingActor(Spotted))
+		{
+			bWaitingForPlayerEntry = false;
+			LockArena();
+		}
+	}
 }
 
 void ARetrieveArenaBlockActor::OnEntryTriggerBeginOverlap(

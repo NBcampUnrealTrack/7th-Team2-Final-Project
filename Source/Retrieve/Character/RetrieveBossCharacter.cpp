@@ -6,6 +6,7 @@
 #include "Components/Enemy/EnemyPoiseComponent.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
+#include "Components/Inventory/DropComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
@@ -65,7 +66,15 @@ void ARetrieveBossCharacter::HandleDeathStarted(AActor* OwningActor)
 	{
 		return;
 	}
-	
+
+	// 1. 드랍 처리. 보스는 ARetrieveEnemyCharacter::HandleDeathStarted를 거치지 않으므로
+	//    (그쪽에서 하던) DropComponent::ProcessDrop을 여기서 직접 호출한다.
+	//    DropComponent는 스폰 시 베이스 MonsterData 행의 DropRows로 초기화되어 있다.
+	if (DropComponent)
+	{
+		DropComponent->ProcessDrop();
+	}
+
 	// 2. Channel.Monster.Died 브로드캐스트 (퀘스트·킬카운터 등 공통 리스너 처리)
 	const URetrieveHealthComponent* HC = GetHealthComponent();
 	FMonsterDiedPayload DiedPayload;

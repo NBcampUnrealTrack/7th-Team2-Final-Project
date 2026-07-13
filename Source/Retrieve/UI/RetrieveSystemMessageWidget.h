@@ -9,6 +9,7 @@ class UTextBlock;
 class USoundBase;
 struct FRetrieveCinematicStatePayload;
 struct FRetrieveRevealGatePayload;
+struct FRetrieveDialogueChangedPayload;
 
 /**
  * 우상단 텍스트 전용 시스템 메시지 위젯. 큐는 USystemMessageSubsystem이 갖고, 이 위젯은 꺼내 보여주기만 하는 얇은 뷰입니다.
@@ -31,6 +32,7 @@ protected:
 
 	void HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Message);
 	void HandleRevealGate(FGameplayTag Channel, const FRetrieveRevealGatePayload& Message);
+	void HandleDialogueChanged(FGameplayTag Channel, const FRetrieveDialogueChangedPayload& Message);
 
 	/** 억제 중이 아니고 표시 중 아니라면 큐에서 하나 꺼내 표시하고, 비었으면 숨깁니다. */
 	void PumpNext();
@@ -78,7 +80,12 @@ protected:
 private:
 	void SetModalInputBlock(bool bEngage);
 	void FocusSelfNextTick();
-	void SetTutorialFeedbackActive(bool bActive);
+	/**
+	 * 배경 보더 표시와 점멸(스케일 펄스)을 분리해 제어한다.
+	 * @param bShowBorder 배경 보더를 표시할지. 메시지가 떠 있는 동안 항상 true.
+	 * @param bPulse      점멸시킬지. Enter 해제형 메시지에서만 true, 자동 넘김형은 false(정적 보더).
+	 */
+	void SetTutorialFeedbackActive(bool bShowBorder, bool bPulse);
 
 	TWeakObjectPtr<USystemMessageSubsystem> Subsystem;
 
@@ -92,10 +99,12 @@ private:
 	bool bShowing = false;
 	bool bCinematicActive = false;
 	bool bRevealBlocked = false;
+	bool bDialogueActive = false;
 	bool bModalInputActive = false;
 	
 	FDelegateHandle QueuedHandle;
 	FGameplayMessageListenerHandle CinematicHandle;
 	FGameplayMessageListenerHandle RevealHandle;
+	FGameplayMessageListenerHandle DialogueHandle;
 	FTimerHandle HoldTimer;
 };

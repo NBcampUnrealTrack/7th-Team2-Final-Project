@@ -1,6 +1,18 @@
 #include "UI/ViewModels/BossStatusViewModel.h"
 
 #include "Components/Combat/RetrieveHealthComponent.h"
+#include "UI/RetrieveUISettingsLibrary.h"
+
+bool UBossStatusViewModel::GetIsVisible() const
+{
+	// "HUD 숨기기"가 켜져 있으면 시각적으로 숨긴다(체력/이름 필드는 계속 갱신되어 추적 기능은 유지).
+	return bVisible && !URetrieveUISettingsLibrary::IsHUDHidden(this);
+}
+
+ESlateVisibility UBossStatusViewModel::GetSlateVisibility() const
+{
+	return GetIsVisible() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed;
+}
 
 FText UBossStatusViewModel::GetHealthText() const
 {

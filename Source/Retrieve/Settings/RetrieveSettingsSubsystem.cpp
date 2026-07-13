@@ -28,6 +28,12 @@ void URetrieveSettingsSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	// 부팅 시점엔 World/Controller/Pawn이 아직 없다. 전역 설정만 즉시 적용하고,
 	// 월드/컨트롤러/폰 종속 설정은 ARetrievePlayerController의 BeginPlay/AcknowledgePossession에서 적용된다.
 	ApplyGlobalSettings();
+
+	// 저장된 HUD 숨기기 값을 확정값으로 초기화(부팅 시 HUD 생성 시점에 이 값을 따른다).
+	if (const URetrieveGameUserSettings* S = GetSettings())
+	{
+		bAppliedHideHUD = S->bHideHUD;
+	}
 }
 
 URetrieveSettingsSubsystem* URetrieveSettingsSubsystem::Get(const UObject* WorldContextObject)
@@ -102,6 +108,9 @@ void URetrieveSettingsSubsystem::ApplyAllSettings(bool bSaveToDisk)
 	{
 		S->SaveSettings();
 	}
+
+	// 전체 적용(Apply) 또는 취소 원복(RevertToBaseline) 확정 시점 → HUD 숨김 확정값 갱신.
+	bAppliedHideHUD = S->bHideHUD;
 
 	OnSettingChanged.Broadcast(ERetrieveSettingsCategory::MAX);
 }
@@ -222,6 +231,9 @@ void URetrieveSettingsSubsystem::ApplyCategory(ERetrieveSettingsCategory Categor
 	if (bSaveToDisk)
 	{
 		S->SaveSettings();
+		// 확정(Apply/Reset)일 때만 HUD 숨김 확정값을 갱신한다. 프리뷰(false)에선 갱신하지 않아
+		// 설정 창에서 토글만 한 상태에서는 HUD가 사라지지 않는다.
+		bAppliedHideHUD = S->bHideHUD;
 	}
 
 	OnSettingChanged.Broadcast(Category);

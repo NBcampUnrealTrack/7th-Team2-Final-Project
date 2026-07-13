@@ -23,14 +23,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void UnbindFromBoss();
 
+	// "HUD 숨기기"가 켜져 있으면 bVisible이 true여도 숨김으로 보고한다(MVVM 가시성 바인딩·C++ 양쪽이 이 값을 사용).
+	// 체력/이름 등 다른 필드는 그대로 갱신되므로 보스 체력 추적 기능은 유지된다.
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
-	bool GetIsVisible() const { return bVisible; }
+	bool GetIsVisible() const;
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
-	ESlateVisibility GetSlateVisibility() const
-	{
-		return bVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed;
-	}
+	ESlateVisibility GetSlateVisibility() const;
 
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Retrieve|UI")
 	FText GetBossName() const { return BossName; }

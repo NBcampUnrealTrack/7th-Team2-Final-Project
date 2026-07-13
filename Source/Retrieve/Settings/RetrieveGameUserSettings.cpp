@@ -111,6 +111,7 @@ void URetrieveGameUserSettings::ResetCategoryToDefaults(ERetrieveSettingsCategor
 		UITextScale = Defaults->UITextScale;
 		bHighContrastHUD = Defaults->bHighContrastHUD;
 		bReduceMotion = Defaults->bReduceMotion;
+		bHideHUD = Defaults->bHideHUD;
 		bHoldToInteract = Defaults->bHoldToInteract;
 		AimAssistStrength = Defaults->AimAssistStrength;
 		SubtitleBackgroundOpacity = Defaults->SubtitleBackgroundOpacity;

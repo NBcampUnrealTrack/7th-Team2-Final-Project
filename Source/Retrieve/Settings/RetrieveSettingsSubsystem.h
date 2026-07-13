@@ -84,6 +84,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Settings|Accessibility")
 	bool IsReduceMotionEnabled() const;
 
+	/**
+	 * "확정된" HUD 숨기기 값. 프리뷰(드래그/토글 중)로 바뀐 값이 아니라
+	 * Apply/Reset/취소 등 확정 시점에만 갱신된다. HUD 숨김은 이 값을 따라야
+	 * 설정 창에서 토글하자마자 HUD가 사라지지 않고 "적용" 시에만 반영된다.
+	 * (C++에서만 참조하므로 UFUNCTION 아님 → Live Coding 핫리로드 가능)
+	 */
+	bool IsHideHUDApplied() const { return bAppliedHideHUD; }
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Settings")
 	FRetrieveOnSettingChanged OnSettingChanged;
 
@@ -100,4 +108,7 @@ private:
 	UWorld* GetSubsystemWorld() const;
 	APlayerController* GetSubsystemPlayerController() const;
 	APawn* GetSubsystemPawn() const;
+
+	/** 확정(Apply/Reset/취소/부팅 로드)된 HUD 숨기기 값. 프리뷰로는 바뀌지 않는다. */
+	bool bAppliedHideHUD = false;
 };

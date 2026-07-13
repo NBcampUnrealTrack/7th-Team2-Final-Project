@@ -129,6 +129,10 @@ public:
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Accessibility")
 	bool bReduceMotion = false;
 
+	/** 게임플레이 HUD를 상시 숨긴다(체력/스태미나/미니맵/원소게이지/핫바/보스바 + 데미지 숫자·토스트 포함). */
+	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Accessibility")
+	bool bHideHUD = false;
+
 	/** true = 상호작용을 길게 눌러 발동(홀드), false = 토글. */
 	UPROPERTY(config, BlueprintReadWrite, Category = "Retrieve|Accessibility")
 	bool bHoldToInteract = false;
