@@ -699,6 +699,11 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, Category = "Moster|Move")
 	bool bPatrolable = false;
 
+	/** ShiftOrbit(오빗 이동) 중 타깃을 바라본 채 좌우/후방 이동할지 여부.
+	 *  BS에 다방향 Strafe 애니메이션이 준비된 몬스터만 true로 설정. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	bool bFaceTargetDuringShiftOrbit = false;
+
 	/** 에픽 몬스터 공중 페이즈 사용 여부 (비행 가능 몬스터만 true) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Monster|Epic")
 	bool bHasAerialPhase = false;

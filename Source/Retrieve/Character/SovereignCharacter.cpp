@@ -47,6 +47,10 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	MoveComp->JumpZVelocity = 600.f;
 	MoveComp->AirControl = 0.35f;
 
+	// 적의 RVO 회피가 플레이어를 장애물로 인식하도록 등록. Weight=0이라 플레이어 자신은 비켜서지 않음.
+	MoveComp->bUseRVOAvoidance = true;
+	MoveComp->AvoidanceWeight = 0.f;
+
 	// 메인 메시 = 가시 leader. 가시성은 PawnCosmeticComponent::ApplyVisualLayout이 모듈러 바디 유무로 제어.
 	if (USkeletalMeshComponent* MainMesh = GetMesh())
 	{
