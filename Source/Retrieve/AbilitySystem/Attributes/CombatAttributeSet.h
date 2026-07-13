@@ -79,10 +79,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxStamina)
 	FGameplayAttributeData MaxStamina;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxStamina)
-	
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_StaminaRegenRate)
-	FGameplayAttributeData StaminaRegenRate;
-	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, StaminaRegenRate)
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Poise)
 	FGameplayAttributeData Poise;
@@ -105,7 +101,6 @@ private:
 	UFUNCTION() void OnRep_AttackSpeedMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_Stamina(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxStamina(const FGameplayAttributeData& OldValue);
-	UFUNCTION() void OnRep_StaminaRegenRate(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_Poise(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxPoise(const FGameplayAttributeData& OldValue);
 

@@ -40,7 +40,6 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, AttackSpeedMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Stamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, StaminaRegenRate, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Poise, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxPoise, COND_None, REPNOTIFY_Always);
 }
@@ -103,10 +102,6 @@ void UCombatAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxStamina());
 	}
 	else if (Attribute == GetMaxStaminaAttribute())
-	{
-		NewValue = FMath::Max(0.f, NewValue);
-	}
-	else if (Attribute == GetStaminaRegenRateAttribute())
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
@@ -175,10 +170,6 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 		SetMaxStamina(FMath::Max(0.f, GetMaxStamina()));
 		SetStamina(FMath::Clamp(GetStamina(), 0.f, GetMaxStamina()));
 	}
-	else if (Data.EvaluatedData.Attribute == GetStaminaRegenRateAttribute())
-	{
-		SetStaminaRegenRate(FMath::Max(0.f, GetStaminaRegenRate()));
-	}
 }
 
 void UCombatAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
@@ -231,11 +222,6 @@ void UCombatAttributeSet::OnRep_MaxStamina(const FGameplayAttributeData& OldValu
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxStamina, OldValue);
 }
 
-void UCombatAttributeSet::OnRep_StaminaRegenRate(const FGameplayAttributeData& OldValue)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, StaminaRegenRate, OldValue);
-}
-
 void UCombatAttributeSet::OnRep_Poise(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, Poise, OldValue);
@@ -265,6 +251,13 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Environmental))
 	{
 		return RawDamage;
+	}
+
+	// 회피(대시): 무적 중엔 전투 피해 전부 무시. 환경(위에서 반환)/DoT(화상)는 예외
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Invincible)
+		&& !SpecTags.HasTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burn))
+	{
+		return 0.f;
 	}
 
 	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();

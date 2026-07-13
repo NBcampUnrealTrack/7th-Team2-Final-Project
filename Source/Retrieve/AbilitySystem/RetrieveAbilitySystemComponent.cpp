@@ -84,6 +84,22 @@ void URetrieveAbilitySystemComponent::ClearInputHeldForSpec(const FGameplayAbili
 	InputHeldSpecHandles.Remove(SpecHandle);
 }
 
+void URetrieveAbilitySystemComponent::ClearInputHeldForAbilityWithTag(const FGameplayTag& AbilityAssetTag)
+{
+	if (!AbilityAssetTag.IsValid())
+	{
+		return;
+	}
+
+	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	{
+		if (AbilitySpec.Ability && AbilitySpec.Ability->GetAssetTags().HasTag(AbilityAssetTag))
+		{
+			InputHeldSpecHandles.Remove(AbilitySpec.Handle);
+		}
+	}
+}
+
 bool URetrieveAbilitySystemComponent::HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const
 {
 	if (!InputTag.IsValid())

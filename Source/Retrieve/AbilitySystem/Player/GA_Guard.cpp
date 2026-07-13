@@ -5,7 +5,9 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
+#include "Audio/RetrieveMusicSubsystem.h"
 #include "Components/Player/WeaponComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -35,6 +37,8 @@ UGA_Guard::UGA_Guard()
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_SprintAttack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_JumpAttack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_BowShot);
+
+	StaminaCostTag = RetrieveGameplayTags::Ability_Player_Guard;
 }
 
 bool UGA_Guard::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -44,12 +48,11 @@ bool UGA_Guard::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		return false;
 	}
 
-	// 막기는 방패 전용 (그 외 무기는 GA_Parry)
+	// 막기는 방패 전용 (그 외 무기는 GA_Parry). 스태미너 게이팅은 베이스 CheckCost(DT 조회)가 처리.
 	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
 	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
 	return WeaponComp &&
-		WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield &&
-		HasStamina(ActorInfo, MinimumStaminaToActivate);
+		WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield;
 }
 
 void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
@@ -60,6 +63,12 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
+	}
+
+	// 달리기 ↔ 가드 상호배타: 가드가 실제 발동하면 달리기를 끈다(입력 태그 무관, 무기 조건은 CanActivate가 이미 보장).
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
 	}
 
 	if (UAnimMontage* Montage = GuardMontage.LoadSynchronous())
@@ -87,21 +96,9 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		GuardBrokenTask->ReadyForActivation();
 	}
 	
-	// 가드 지속 비용: 주기 소모 GE를 적용하고, 점검 타이머로 소진 시 종료
-	if (HasAuthority(&ActivationInfo) && StaminaDrainEffect)
+	// 가드 지속 비용: 점검 타이머가 DT_StaminaCost의 DrainPerSecond를 매 틱 소모하고, 소진 시 종료(권한 전용).
+	if (HasAuthority(&ActivationInfo))
 	{
-		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-			IsValid(ASC) && !StaminaDrainHandle.IsValid())
-		{
-			FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
-			Ctx.AddSourceObject(this);
-			const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(StaminaDrainEffect, GetAbilityLevel(), Ctx);
-			if (Spec.IsValid())
-			{
-				StaminaDrainHandle = ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-			}
-		}
-
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().SetTimer(
@@ -136,6 +133,23 @@ void UGA_Guard::HandleGuardBroken(FGameplayEventData /*Payload*/)
 
 void UGA_Guard::HandleGuardStaminaTick()
 {
+	// 실제 교전(IsCombatActive) 중에만 드레인 — 비전투 가드는 무료(질주와 동일 규칙).
+	const UWorld* World = GetWorld();
+	const URetrieveMusicSubsystem* MusicSubsystem = World ? World->GetSubsystem<URetrieveMusicSubsystem>() : nullptr;
+	if (!MusicSubsystem || !MusicSubsystem->IsCombatActive())
+	{
+		return;
+	}
+
+	const float Interval = FMath::Max(StaminaCostTickInterval, 0.01f);
+
+	FStaminaCostRow Row;
+	const float DrainPerSecond = GetStaminaCostRow(Row) ? Row.DrainPerSecond : 0.f;
+	if (DrainPerSecond > 0.f)
+	{
+		ApplyStaminaDelta(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, -DrainPerSecond * Interval);
+	}
+
 	if (!HasStamina(CurrentActorInfo, KINDA_SMALL_NUMBER))
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
@@ -147,15 +161,6 @@ void UGA_Guard::StopRuntimeTasks()
 	if (MontageTask)      { MontageTask->EndTask();      MontageTask = nullptr; }
 	if (InputReleaseTask) { InputReleaseTask->EndTask(); InputReleaseTask = nullptr; }
 	if (GuardBrokenTask)  { GuardBrokenTask->EndTask();  GuardBrokenTask = nullptr; }
-	
-	if (StaminaDrainHandle.IsValid())
-	{
-		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-		{
-			ASC->RemoveActiveGameplayEffect(StaminaDrainHandle);
-		}
-		StaminaDrainHandle.Invalidate();
-	}
 
 	if (UWorld* World = GetWorld())
 	{

@@ -20,6 +20,8 @@ UGA_Parry::UGA_Parry()
 
 	// 공중/회피·경직·다운·사망 중 발동 차단(플레이어 액션 공통 게이트)
 	ApplyCommonActionBlocks();
+
+	StaminaCostTag = RetrieveGameplayTags::Ability_Player_Parry;
 }
 
 bool UGA_Parry::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const

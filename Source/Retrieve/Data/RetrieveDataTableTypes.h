@@ -174,12 +174,36 @@ struct RETRIEVE_API FCharacterStats : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats", meta = (ClampMin = "0.1"))
 	float AttackSpeedMultiplier = 1.0f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Stamina")
-	float MaxStamina = 200.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Stamina")
-	float StaminaRegenRate = 50.0f;
+	// 스태미너(최대치/회복)는 플레이어 전용이라 여기(공용 캐릭터 스탯)가 아니라
+	// URetrieveStaminaSettings(Project Settings > Retrieve > Stamina)에서 관리한다.
+};
+
+/**
+ * 행동별 스태미너 비용. URetrieveStaminaSettings.StaminaCosts 맵(액션 GameplayTag → 이 구조체)의 값 타입.
+ * URetrieveGameplayAbility::StaminaCostTag로 조회한다.
+ * (FTableRowBase 상속 유지 — 추후 DataTable로 되돌릴 여지를 남긴다.)
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FStaminaCostRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	// 발동당 1회 소모(예: 대시/강공/블링크/패리). 0이면 일회성 소모 없음.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stamina Cost")
+	float ActivationCost = 0.0f;
+
+	// 발동에 필요한 최소 스태미너. 0이면 ActivationCost만큼만 있으면 됨(부족 시 발동 불가).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stamina Cost")
+	float MinimumToActivate = 0.0f;
+
+	// 지속 소모(초당). 홀드형 액션(가드)에서 사용. 0이면 지속 소모 없음.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stamina Cost")
+	float DrainPerSecond = 0.0f;
+
+	// 성공 시 회복량(예: 패리 성공). 0이면 회복 없음.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stamina Cost")
+	float RestoreAmount = 0.0f;
 };
 
 /**

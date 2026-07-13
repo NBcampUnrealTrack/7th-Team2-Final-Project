@@ -305,9 +305,7 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_IncomingDamageMultiplier, Row->IncomingDamageMultiplier);
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_GuardDamageReduction, Row->GuardDamageReduction);
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_AttackSpeedMultiplier, Row->AttackSpeedMultiplier);
-			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_MaxStamina, Row->MaxStamina);
-			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_Stamina, Row->MaxStamina);
-			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_StaminaRegenRate, Row->StaminaRegenRate);
+			// 스태미너(Max/Stamina)는 플레이어 전용이라 여기서 초기화하지 않는다 — UStaminaComponent가 URetrieveStaminaSettings로 세팅.
 
 			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
 		}
@@ -323,9 +321,7 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		AttributeSet->SetIncomingDamageMultiplier(Row->IncomingDamageMultiplier);
 		AttributeSet->SetGuardDamageReduction(Row->GuardDamageReduction);
 		AttributeSet->SetAttackSpeedMultiplier(Row->AttackSpeedMultiplier);
-		AttributeSet->SetMaxStamina(Row->MaxStamina);
-		AttributeSet->SetStamina(Row->MaxStamina);
-		AttributeSet->SetStaminaRegenRate(Row->StaminaRegenRate);
+		// 스태미너는 UStaminaComponent가 URetrieveStaminaSettings로 초기화한다(여기서 하지 않음).
 	}
 
 	// PIE 검증을 위한 핵심 초기화 로그 출력

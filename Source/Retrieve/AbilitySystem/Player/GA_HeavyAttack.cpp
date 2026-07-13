@@ -42,6 +42,8 @@ UGA_HeavyAttack::UGA_HeavyAttack()
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
+
+	StaminaCostTag = RetrieveGameplayTags::Ability_Player_HeavyAttack;
 }
 
 bool UGA_HeavyAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const

@@ -68,6 +68,10 @@ public:
 	 */
 	void ClearInputHeldForSpec(const FGameplayAbilitySpecHandle& SpecHandle);
 
+	// 이 자산 태그를 가진 스펙을 홀드 목록에서 제거(WhileInputActive 자동 재시도 억제).
+	// 입력 바인딩 태그를 몰라도 동작 — 달리기가 Guard/Aim 취소 시 사용.
+	void ClearInputHeldForAbilityWithTag(const FGameplayTag& AbilityAssetTag);
+
 	// 이 입력 인텐트로 발동 가능한(grant된) 어빌리티가 하나라도 있는가.
 	// chord 등 입력 치환 전에 "치환 대상이 실제로 존재하는지" 확인용(없는 클래스 입력 먹통 방지).
 	bool HasActivatableAbilityWithInputTag(const FGameplayTag& InputTag) const;
