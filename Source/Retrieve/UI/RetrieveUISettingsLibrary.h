@@ -35,6 +35,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI Settings")
 	static bool IsReduceMotionEnabled();
 
+	/**
+	 * "HUD 숨기기" 설정이 (확정 기준) 켜져 있는지. 상호작용 프롬프트·몬스터/보스 체력바 등
+	 * 월드 공간 HUD 요소가 "기능은 유지하되 시각만 숨김"을 판정할 때 사용한다.
+	 * (프리뷰가 아니라 Apply/Reset/취소로 확정된 값 — 서브시스템 IsHideHUDApplied. 미확보 시 저장값 폴백.)
+	 */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|UI Settings", meta = (WorldContext = "WorldContextObject"))
+	static bool IsHUDHidden(const UObject* WorldContextObject);
+
 	/** 중첩된 자식 UserWidget 트리까지 들어가 모든 애니메이션을 정지한다(Reduce Motion 적용용). */
 	static void StopAnimationsRecursive(UUserWidget* Root);
 

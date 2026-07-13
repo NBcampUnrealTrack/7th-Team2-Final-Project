@@ -8,6 +8,7 @@
 #include "Player/RetrievePlayerController.h"
 #include "UI/ViewModels/BossStatusViewModel.h"
 #include "UI/ViewModels/HUDViewModel.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 #include "UObject/UnrealType.h"
 #include "View/MVVMView.h"
 
@@ -217,7 +218,9 @@ void URetrieveBossHPBarWidget::RefreshFromViewModel()
 		return;
 	}
 
-	const bool bVisible = BossStatusViewModel->GetIsVisible();
+	// "HUD 숨기기"가 켜져 있으면 시각만 숨긴다. 보스 체력 추적은 BossStatusViewModel에서 계속 이뤄지고,
+	// 숨김 해제 시 다음 VM 갱신에서 텍스트/퍼센트가 다시 반영되므로 기능 손실은 없다.
+	const bool bVisible = BossStatusViewModel->GetIsVisible() && !URetrieveUISettingsLibrary::IsHUDHidden(this);
 	SetVisibility(bVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	if (!bVisible)
 	{

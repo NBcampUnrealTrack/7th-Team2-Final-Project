@@ -1,6 +1,7 @@
 #include "UI/RetrieveToastManagerWidget.h"
 
 #include "Components/Inventory/InventoryComponent.h"
+#include "Settings/RetrieveGameUserSettings.h"
 #include "Blueprint/UserWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -76,6 +77,14 @@ void URetrieveToastManagerWidget::BindToInventory()
 void URetrieveToastManagerWidget::OnInventoryItemAdded(
 	FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity)
 {
+	// "HUD 숨기기" 설정이 켜져 있으면 토스트는 별도 최상위 위젯이라 매니저 숨김과 무관하게
+	// 새로 뜨므로, 생성 자체를 막는다(상시 숨김 게이팅).
+	if (const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+		Settings && Settings->bHideHUD)
+	{
+		return;
+	}
+
 	// ── 최신 토스트 GeneratedClass 조회 ────────────────────────────
 	// 함수 로컬 static UClass 포인터는 WBP 재컴파일 시 새 GeneratedClass로
 	// 교체되지 않아, 런타임에서 애니메이션이 없는 이전 클래스를 생성할 수 있다.

@@ -3,11 +3,14 @@
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
 #include "Settings/RetrieveSettingsSubsystem.h"
+#include "Settings/RetrieveGameUserSettings.h"
 #include "Engine/LocalPlayer.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/PanelWidget.h"
+#include "UI/RetrieveSystemMessageWidget.h"
 #include "Components/Combat/AttackFeedbackComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
@@ -220,6 +223,10 @@ void ARetrievePlayerController::BeginPlay()
 		{
 			SettingsSubsystem->ApplyWorldSettings(World);
 			SettingsSubsystem->ApplyControllerSettings(this);
+
+			// "HUD 숨기기" 설정 토글 시 즉시 반영되도록 설정 변경을 구독한다.
+			SettingsSubsystem->OnSettingChanged.AddUniqueDynamic(this, &ARetrievePlayerController::HandleSettingsChangedForHUD);
+			HUDSettingsSubsystem = SettingsSubsystem;
 		}
 	}
 
@@ -322,6 +329,12 @@ void ARetrievePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason
 		}
 		CinematicHUDVisibilityHandle = FGameplayMessageListenerHandle();
 	}
+
+	if (URetrieveSettingsSubsystem* SettingsSubsystem = HUDSettingsSubsystem.Get())
+	{
+		SettingsSubsystem->OnSettingChanged.RemoveDynamic(this, &ARetrievePlayerController::HandleSettingsChangedForHUD);
+	}
+	HUDSettingsSubsystem = nullptr;
 
 	if (ActiveTopLevelWidget)
 	{
@@ -654,10 +667,19 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 		}
 	}
 
-	// 시네마틱 재생 중에 위젯이 교체/생성된 경우(오프닝과 상태 전환 경합 등) 새 위젯도 숨김 대상에 포함
-	if (IsCinematicActive())
+	// 인게임 진입 시에만 HUD 숨김을 적용한다(메인 메뉴/결과 화면 위젯은 통째로 사라지지 않도록).
+	if (NewState == ERetrieveSessionState::InGame)
 	{
-		SetHUDHiddenForCinematic(true);
+		// 시네마틱 재생 중이면 새로 생성/교체된 HUD도 일괄 숨김(기존 동작).
+		if (IsCinematicActive())
+		{
+			SetHUDHiddenForCinematic(true);
+		}
+		// "HUD 숨기기" 설정이 켜져 있으면 새 HUD의 게임플레이 요소를 숨긴다(시스템 메시지는 유지).
+		if (IsHideHUDEnabled())
+		{
+			SetHUDHiddenForSetting(true);
+		}
 	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
 }
@@ -774,7 +796,9 @@ void ARetrievePlayerController::EnsureCinematicCloseListener()
 				{
 					PC->CloseConversation();
 				}
-				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원
+				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원.
+				// (HUD 숨기기 설정은 별도 경로 SetHUDHiddenForSetting가 담당하며, 루트 자식만 접으므로
+				//  시네마틱이 루트를 복원해도 설정으로 접힌 자식들은 그대로 숨겨진 채 유지된다.)
 				PC->SetHUDHiddenForCinematic(Message.bActive);
 			});
 }
@@ -857,6 +881,96 @@ void ARetrievePlayerController::SetHUDHiddenForCinematic(bool bHideForCinematic)
 			}
 		}
 		CinematicHiddenWidgets.Reset();
+	}
+}
+
+bool ARetrievePlayerController::IsHideHUDEnabled() const
+{
+	// "확정된" 값을 따른다(설정 창에서 토글만 한 프리뷰 값이 아니라 Apply/Reset/취소로 확정된 값).
+	// → 설정 창에서 켜자마자 HUD가 사라지지 않고 "적용" 시에만 반영된다.
+	if (const URetrieveSettingsSubsystem* SettingsSubsystem = HUDSettingsSubsystem.Get())
+	{
+		return SettingsSubsystem->IsHideHUDApplied();
+	}
+	// 폴백: 서브시스템 미확보 시 저장값 직접 조회(부팅 초기 등).
+	const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+	return Settings && Settings->bHideHUD;
+}
+
+void ARetrievePlayerController::RefreshHUDHiddenForSetting()
+{
+	// HUD 숨기기 설정은 인게임(InGame)에서만 적용한다.
+	// (메인 메뉴/결과 화면에서는 그 화면 위젯 자체가 최상위이므로, 여기서 숨기면 화면이 통째로 사라진다.)
+	const UWorld* World = GetWorld();
+	const ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	const bool bInGame = GS && GS->GetSessionState() == ERetrieveSessionState::InGame;
+	SetHUDHiddenForSetting(bInGame && IsHideHUDEnabled());
+}
+
+void ARetrievePlayerController::SetHUDHiddenForSetting(bool bHide)
+{
+	// HUD 루트(WBP_HUD)를 통째로 접지 않고, 루트 캔버스의 게임플레이 자식들만 접는다.
+	// (루트를 접으면 그 자식인 시스템/튜토리얼 메시지가 포커스를 못 받아 Enter로 넘길 수 없다.)
+	UPanelWidget* RootPanel = ActiveTopLevelWidget ? Cast<UPanelWidget>(ActiveTopLevelWidget->GetRootWidget()) : nullptr;
+
+	if (bHide)
+	{
+		if (!RootPanel)
+		{
+			return;
+		}
+		const int32 ChildCount = RootPanel->GetChildrenCount();
+		for (int32 Index = 0; Index < ChildCount; ++Index)
+		{
+			UWidget* Child = RootPanel->GetChildAt(Index);
+			if (!Child)
+			{
+				continue;
+			}
+			// 시스템/튜토리얼 메시지는 모달 Enter 입력을 받아야 하므로 숨기지 않는다(부모=루트는 유지).
+			if (Child->IsA<URetrieveSystemMessageWidget>())
+			{
+				continue;
+			}
+			const ESlateVisibility CurrentVisibility = Child->GetVisibility();
+			if (CurrentVisibility == ESlateVisibility::Collapsed || CurrentVisibility == ESlateVisibility::Hidden)
+			{
+				continue; // 원래 숨어 있던 것(예: 미출현 보스바)은 복원 대상에서 제외
+			}
+			const bool bAlreadyTracked = SettingHiddenWidgets.ContainsByPredicate(
+				[Child](const TPair<TWeakObjectPtr<UWidget>, ESlateVisibility>& Entry)
+				{
+					return Entry.Key.Get() == Child;
+				});
+			if (bAlreadyTracked)
+			{
+				Child->SetVisibility(ESlateVisibility::Collapsed);
+				continue;
+			}
+			SettingHiddenWidgets.Emplace(Child, CurrentVisibility);
+			Child->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	else
+	{
+		// 숨겼던 자식들만 원래 가시성으로 복원. 도중 파괴된 위젯은 약참조가 걸러낸다.
+		for (const TPair<TWeakObjectPtr<UWidget>, ESlateVisibility>& Entry : SettingHiddenWidgets)
+		{
+			if (UWidget* Child = Entry.Key.Get())
+			{
+				Child->SetVisibility(Entry.Value);
+			}
+		}
+		SettingHiddenWidgets.Reset();
+	}
+}
+
+void ARetrievePlayerController::HandleSettingsChangedForHUD(ERetrieveSettingsCategory Category)
+{
+	// 접근성 개별 변경 또는 전체 적용(MAX)일 때만 HUD 숨김 상태를 재평가한다.
+	if (Category == ERetrieveSettingsCategory::Accessibility || Category == ERetrieveSettingsCategory::MAX)
+	{
+		RefreshHUDHiddenForSetting();
 	}
 }
 

@@ -257,4 +257,5 @@ private:
 	UFUNCTION() void HandleSubtitleBackgroundChanged(float Value);
 	UFUNCTION() void HandleHighContrastChanged(bool bChecked);
 	UFUNCTION() void HandleReduceMotionChanged(bool bChecked);
+	UFUNCTION() void HandleHideHUDChanged(bool bChecked);
 };

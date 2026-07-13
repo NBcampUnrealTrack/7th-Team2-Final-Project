@@ -1745,6 +1745,7 @@ void URetrieveSettingsPanelWidget::RefreshAccessibility()
 	SetChecked(Page, TEXT("Chk_ReduceMotion"), S->bReduceMotion);
 	SetToggleByKey(Page, TEXT("Accessibility_HighContrast"), S->bHighContrastHUD);
 	SetToggleByKey(Page, TEXT("Accessibility_ReduceMotion"), S->bReduceMotion);
+	SetToggleByKey(Page, TEXT("Accessibility_HideHUD"), S->bHideHUD);
 }
 
 void URetrieveSettingsPanelWidget::ApplyRuntimeStyle()
@@ -2080,6 +2081,7 @@ void URetrieveSettingsPanelWidget::HandleAimAssistChanged(float V) { if (bRefres
 void URetrieveSettingsPanelWidget::HandleSubtitleBackgroundChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->SubtitleBackgroundOpacity = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_SubtitleBG"), PercentText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleHighContrastChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bHighContrastHUD = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleReduceMotionChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bReduceMotion = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
+void URetrieveSettingsPanelWidget::HandleHideHUDChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bHideHUD = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 
 // ── Toggle Row 핸들러 ─────────────────────────────────────────────────────────
 
@@ -2117,6 +2119,7 @@ void URetrieveSettingsPanelWidget::HandleAccessibilityToggleChanged(FName RowKey
 	if (bRefreshingControls) return;
 	if      (RowKey == TEXT("Accessibility_HighContrast")) HandleHighContrastChanged(bValue);
 	else if (RowKey == TEXT("Accessibility_ReduceMotion")) HandleReduceMotionChanged(bValue);
+	else if (RowKey == TEXT("Accessibility_HideHUD"))      HandleHideHUDChanged(bValue);
 }
 
 #undef DEFINE_FLOAT_SETTING_HANDLER

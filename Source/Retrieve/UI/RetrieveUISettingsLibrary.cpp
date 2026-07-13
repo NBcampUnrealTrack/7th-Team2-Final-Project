@@ -2,6 +2,7 @@
 #include "UI/RetrieveUITheme.h"
 #include "Settings/RetrieveSettingsConfig.h"
 #include "Settings/RetrieveGameUserSettings.h"
+#include "Settings/RetrieveSettingsSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
@@ -47,6 +48,18 @@ bool URetrieveUISettingsLibrary::IsReduceMotionEnabled()
 {
 	const URetrieveGameUserSettings* S = URetrieveGameUserSettings::Get();
 	return S ? S->bReduceMotion : false;
+}
+
+bool URetrieveUISettingsLibrary::IsHUDHidden(const UObject* WorldContextObject)
+{
+	// 확정값(Apply/Reset/취소로 확정) 우선 — 프리뷰 토글만으로는 숨기지 않는다.
+	if (const URetrieveSettingsSubsystem* Subsystem = URetrieveSettingsSubsystem::Get(WorldContextObject))
+	{
+		return Subsystem->IsHideHUDApplied();
+	}
+	// 서브시스템 미확보 시 저장값 폴백.
+	const URetrieveGameUserSettings* S = URetrieveGameUserSettings::Get();
+	return S && S->bHideHUD;
 }
 
 void URetrieveUISettingsLibrary::StopAnimationsRecursive(UUserWidget* Root)

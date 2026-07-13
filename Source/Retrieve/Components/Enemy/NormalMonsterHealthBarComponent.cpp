@@ -7,6 +7,7 @@
 #include "Components/Enemy/EpicMonsterGroggyComponent.h"
 #include "TimerManager.h"
 #include "UI/HUD/RetrieveNormalMonsterHealthBarWidget.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 
 namespace
 {
@@ -444,13 +445,17 @@ void UNormalMonsterHealthBarComponent::HideBar()
 
 void UNormalMonsterHealthBarComponent::SetBarVisible(bool bNewVisible)
 {
-	SetHiddenInGame(!bNewVisible);
-	SetVisibility(bNewVisible, true);
+	// "HUD 숨기기"가 켜져 있으면 시각만 숨긴다. 체력 추적/표시 갱신(HandleHealthChanged 등)은
+	// 이 함수와 무관하게 계속 동작하므로 기능은 그대로 유지된다.
+	const bool bEffectiveVisible = bNewVisible && !URetrieveUISettingsLibrary::IsHUDHidden(this);
+
+	SetHiddenInGame(!bEffectiveVisible);
+	SetVisibility(bEffectiveVisible, true);
 
 	if (URetrieveNormalMonsterHealthBarWidget* HealthBarWidget =
 		Cast<URetrieveNormalMonsterHealthBarWidget>(GetUserWidgetObject()))
 	{
-		if (bNewVisible)
+		if (bEffectiveVisible)
 		{
 			HealthBarWidget->PlayShowAnimation();
 		}

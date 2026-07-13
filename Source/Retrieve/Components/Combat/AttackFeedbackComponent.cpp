@@ -259,7 +259,7 @@ void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRe
 void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, float DamageValue, const FHitFeedback& Feedback)
 {
 	if (const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
-		Settings && !Settings->bShowDamageNumbers)
+		Settings && (!Settings->bShowDamageNumbers || Settings->bHideHUD))
 	{
 		return;
 	}

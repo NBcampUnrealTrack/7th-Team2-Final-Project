@@ -52,6 +52,7 @@ struct FRetrieveSettingsSnapshot
 	float UITextScale = 1.f;
 	bool bHighContrastHUD = false;
 	bool bReduceMotion = false;
+	bool bHideHUD = false;
 	bool bHoldToInteract = false;
 	float AimAssistStrength = 0.f;
 	float SubtitleBackgroundOpacity = 0.5f;
@@ -102,6 +103,7 @@ struct FRetrieveSettingsSnapshot
 		UITextScale = S->UITextScale;
 		bHighContrastHUD = S->bHighContrastHUD;
 		bReduceMotion = S->bReduceMotion;
+		bHideHUD = S->bHideHUD;
 		bHoldToInteract = S->bHoldToInteract;
 		AimAssistStrength = S->AimAssistStrength;
 		SubtitleBackgroundOpacity = S->SubtitleBackgroundOpacity;
@@ -156,6 +158,7 @@ struct FRetrieveSettingsSnapshot
 		S->UITextScale = UITextScale;
 		S->bHighContrastHUD = bHighContrastHUD;
 		S->bReduceMotion = bReduceMotion;
+		S->bHideHUD = bHideHUD;
 		S->bHoldToInteract = bHoldToInteract;
 		S->AimAssistStrength = AimAssistStrength;
 		S->SubtitleBackgroundOpacity = SubtitleBackgroundOpacity;

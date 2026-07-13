@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/SlateWrapperTypes.h"
 #include "Core/RetrieveSessionState.h"
+#include "Settings/RetrieveSettingsTypes.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "InputKeyEventArgs.h"
@@ -21,11 +22,13 @@ class URetrieveQuickSlotWheelWidget;
 class URetrieveShopComponent;
 class URetrieveShopDefinitionAsset;
 class UUserWidget;
+class UWidget;
 class UDataTable;
 class UWeaponComponent;
 class UHUDViewModel;
 class UConversationViewModel;
 class UAttackFeedbackComponent;
+class URetrieveSettingsSubsystem;
 struct FRetrieveLumenCommandPayload;
 
 USTRUCT(BlueprintType)
@@ -281,6 +284,30 @@ protected:
 	 * 일괄 숨김/복원합니다. 예외: 로딩 커버, CinematicSubsystem의 오버레이(예외 UI).
 	 * Channel.Cinematic.Changed 기반이라 재생 주체(서브시스템/치트)와 무관하게 동작합니다. */
 	void SetHUDHiddenForCinematic(bool bHideForCinematic);
+
+	/** "HUD 숨기기" 접근성 설정이 (확정 기준) 켜져 있는지. */
+	bool IsHideHUDEnabled() const;
+
+	/**
+	 * "HUD 숨기기" 설정에 따른 HUD 숨김/복원.
+	 * 시네마틱과 달리 상시 지속되므로, HUD 루트(WBP_HUD)를 통째로 접지 않고 루트의 게임플레이 자식들만 접는다.
+	 * 시스템/튜토리얼 메시지(URetrieveSystemMessageWidget)는 제외한다 — 부모가 접히면 모달 포커스가 실패해
+	 * Enter로 메시지를 넘길 수 없어 진행이 막히기 때문. (설정 창 등 별도 최상위 패널은 애초에 건드리지 않는다.)
+	 */
+	void SetHUDHiddenForSetting(bool bHide);
+
+	/** 세션(InGame 여부)과 설정 확정값을 반영해 SetHUDHiddenForSetting을 호출한다. */
+	void RefreshHUDHiddenForSetting();
+
+	/** 설정 변경(OnSettingChanged) 시 HUD 숨김 상태를 재평가하는 상시 리스너. */
+	UFUNCTION()
+	void HandleSettingsChangedForHUD(ERetrieveSettingsCategory Category);
+
+	/** OnSettingChanged 구독 해제를 위해 보관하는 설정 서브시스템 약참조. */
+	TWeakObjectPtr<URetrieveSettingsSubsystem> HUDSettingsSubsystem;
+
+	/** HUD 숨기기 설정으로 접은 HUD 루트 자식과 원래 가시성(복원용). */
+	TArray<TPair<TWeakObjectPtr<UWidget>, ESlateVisibility>> SettingHiddenWidgets;
 
 	/** 시네마틱 재생 중인지(GameState CinematicState 기준). InputKey는 뷰포트 직행 경로라 DisableInput의
 	 * 영향을 받지 않으므로, 그 경로로 열리는 UI(ESC 시스템 메뉴/퀵슬롯 휠)는 이걸로 직접 차단합니다. */
