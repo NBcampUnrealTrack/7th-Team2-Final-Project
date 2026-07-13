@@ -93,7 +93,11 @@ public:
 	virtual bool ShouldGroundSnapOnSpawn() const { return false; }
 	virtual void StopGroundTurnAnimation() { StopLocomotionMontages(); }
 	virtual bool ShouldUseDirectChaseToTarget() const { return false; }
-	virtual bool ShouldFaceTargetDuringShiftOrbit() const { return false; }
+	virtual bool ShouldFaceTargetDuringShiftOrbit() const
+	{
+		const FMonsterDataRow* Row = GetMonsterDataRow();
+		return Row && Row->bFaceTargetDuringShiftOrbit;
+	}
 	virtual bool ShouldSuppressNormalAttackWhileFlying() const { return false; }
 	virtual bool ShouldUsePatternRangeForNormalAttack() const { return false; }
 	virtual bool ShouldUse2DPatternRangeWhileFlying() const { return false; }
