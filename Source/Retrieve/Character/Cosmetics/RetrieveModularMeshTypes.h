@@ -6,6 +6,7 @@
 #include "RetrieveModularMeshTypes.generated.h"
 
 class USkeletalMesh;
+class USkeletalMeshComponent;
 class UMaterialInterface;
 class URetrieveModularPartSet;
 
@@ -106,4 +107,12 @@ struct FRetrieveArmorVisualPart
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSoftObjectPtr<USkeletalMesh> Mesh;
+
+	/** 이 파츠에 입힐 머티리얼. 비우면(Null) 메시 자체 머티리얼을 유지한다(폴백). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<UMaterialInterface> MaterialOverride;
+
+	/** MaterialOverride를 컴포넌트의 모든 머티리얼 슬롯에 적용한다. SetSkeletalMesh 이후에 호출할 것.
+	 *  MaterialOverride가 Null이면 아무것도 하지 않는다(메시 기본 머티리얼 유지). */
+	void ApplyMaterialOverride(USkeletalMeshComponent* Component) const;
 };

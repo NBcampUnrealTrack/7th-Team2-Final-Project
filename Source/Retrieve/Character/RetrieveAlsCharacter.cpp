@@ -281,6 +281,88 @@ void ARetrieveAlsCharacter::OnLockOnTagChanged(const FGameplayTag Tag, int32 New
 		: AlsRotationModeTags::VelocityDirection);
 }
 
+bool ARetrieveAlsCharacter::IsMantlingAllowedToStart_Implementation() const
+{
+	// Desired가 아닌 실제 Stance 기준 — 크라우치 해제 직후 일어나는 중 프레임에 멘틀이 끼는 것을 막는다.
+	return Super::IsMantlingAllowedToStart_Implementation()
+		&& GetStance() != AlsStanceTags::Crouching;
+}
+
+void ARetrieveAlsCharacter::OnMantlingStarted_Implementation(const FAlsMantlingParameters& Parameters)
+{
+	Super::OnMantlingStarted_Implementation(Parameters);
+
+	MantleTargetPrimitive = Parameters.TargetPrimitive;
+}
+
+void ARetrieveAlsCharacter::OnMantlingEnded_Implementation()
+{
+	Super::OnMantlingEnded_Implementation();
+
+	ResolveMantlePenetrationUpward();
+	MantleTargetPrimitive.Reset();
+}
+
+void ARetrieveAlsCharacter::ResolveMantlePenetrationUpward()
+{
+	// 시뮬레이티드 프록시는 복제 트랜스폼을 따라가므로 직접 보정하지 않는다.
+	if (GetLocalRole() <= ROLE_SimulatedProxy)
+	{
+		return;
+	}
+
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UWorld* World = GetWorld();
+	if (!IsValid(Capsule) || !World)
+	{
+		return;
+	}
+
+	const float CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const FCollisionShape CapsuleShape =
+		FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), CapsuleHalfHeight);
+	const ECollisionChannel Channel = Capsule->GetCollisionObjectType();
+	const FCollisionQueryParams QueryParams{TEXT("ResolveMantlePenetrationUpward"), false, this};
+
+	const FVector Location = GetActorLocation();
+	if (!World->OverlapBlockingTestByChannel(Location, FQuat::Identity, Channel, CapsuleShape, QueryParams))
+	{
+		return;
+	}
+
+	// 탐색 상한: 멘틀 대상 메시 Bounds 상단 + 캡슐. 대상이 무효면 고정 상한으로 폴백.
+	float MaxZ = Location.Z + 300.f;
+	if (const UPrimitiveComponent* Target = MantleTargetPrimitive.Get())
+	{
+		MaxZ = FMath::Max(MaxZ, Target->Bounds.Origin.Z + Target->Bounds.BoxExtent.Z + CapsuleHalfHeight);
+	}
+
+	// XY 고정, 위로 계단식 탐색 — FindTeleportSpot은 방향을 안 가려 빈 메시 내부로 밀 수 있으므로 상향만 본다.
+	const float StepSize = CapsuleHalfHeight * 0.5f;
+	for (float CandidateZ = Location.Z + StepSize; CandidateZ <= MaxZ; CandidateZ += StepSize)
+	{
+		FVector Candidate{Location.X, Location.Y, CandidateZ};
+		if (World->OverlapBlockingTestByChannel(Candidate, FQuat::Identity, Channel, CapsuleShape, QueryParams))
+		{
+			continue;
+		}
+
+		// 자유공간 발견 — 아래로 스윕해 표면 위에 스냅 (공중에 뜨지 않게)
+		FHitResult FloorHit;
+		if (World->SweepSingleByChannel(FloorHit, Candidate, FVector{Location.X, Location.Y, Location.Z},
+		                                FQuat::Identity, Channel, CapsuleShape, QueryParams))
+		{
+			Candidate.Z = FloorHit.Location.Z + UCharacterMovementComponent::MIN_FLOOR_DIST;
+		}
+
+		SetActorLocation(Candidate, false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	// 상한까지 자유공간을 못 찾음 — 엔진 FindTeleportSpot 폴백 (안 하는 것보단 낫다)
+	TeleportTo(Location, GetActorRotation());
+}
+
 bool ARetrieveAlsCharacter::TryMantle()
 {
 	if (GetLocomotionMode() == AlsLocomotionModeTags::Grounded)

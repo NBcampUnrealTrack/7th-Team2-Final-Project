@@ -11,6 +11,7 @@ class URetrievePawnExtensionComponent;
 class URetrievePawnData;
 class UAnimMontage;
 class UGameplayEffect;
+class UPrimitiveComponent;
 class USpringArmComponent;
 
 /**
@@ -135,6 +136,15 @@ protected:
 	/** ALS 착지 낙법 판정 시점. bSuppressLandingRoll이 켜져 있으면 이 착지 1회의 낙법을 억제 */
 	virtual void NotifyLocomotionModeChanged(const FGameplayTag& PreviousLocomotionMode) override;
 
+	/** 크라우칭 중 멘틀 잠금. 모든 멘틀 경로(TryMantle/공중 자동/서버 검증)가 이 게이트를 지난다. */
+	virtual bool IsMantlingAllowedToStart_Implementation() const override;
+
+	/** 멘틀 대상 프리미티브 캐시 — 종료 시 상향 탈출 탐색 상한(Bounds 상단) 계산용 */
+	virtual void OnMantlingStarted_Implementation(const FAlsMantlingParameters& Parameters) override;
+
+	/** 멘틀 이동은 스윕 없이 진행되므로 종료 시 캡슐이 지오메트리에 박혀 있을 수 있음 → 상향 탈출 */
+	virtual void OnMantlingEnded_Implementation() override;
+
 	// ALS 회전 확장 훅 — true 반환 시 ALS 기본(velocity) 회전을 스킵. HoldFacing 구현에 사용.
 	virtual bool RefreshCustomGroundedMovingRotation(float DeltaTime) override;
 	virtual bool RefreshCustomGroundedNotMovingRotation(float DeltaTime) override;
@@ -175,6 +185,12 @@ private:
 
 	/** 낙차 추적 중 여부. 이륙(Grounded→InAir) 시 true, 착지 시 false. */
 	bool bTrackingFall = false;
+
+	/** 끼임(캡슐 침투) 시 위로 올려 메시 상단 자유공간에 착지시킴. 못 찾으면 TeleportTo 폴백. */
+	void ResolveMantlePenetrationUpward();
+
+	/** 진행 중 멘틀의 대상 프리미티브. 상향 탈출 탐색 상한 계산에 사용. */
+	TWeakObjectPtr<UPrimitiveComponent> MantleTargetPrimitive;
 
 	/** 착지 시 낙차(cm)로 낙사/경직 판정. 피해 구간이면 낙법 억제 + 낙하 데미지(Step 2). */
 	void HandleLandingImpact(float FallHeight);
