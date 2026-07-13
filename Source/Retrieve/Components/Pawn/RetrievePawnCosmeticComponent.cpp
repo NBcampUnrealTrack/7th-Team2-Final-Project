@@ -174,6 +174,8 @@ void URetrievePawnCosmeticComponent::ApplyEquipmentPartsForSlot(
 
 			if (USkeletalMeshComponent* PartComponent = CreateModularPartComponent(Mesh, LeaderMesh, Owner, /*bCastShadow=*/true))
 			{
+				// 파츠 데이터가 스스로 머티리얼을 바른다. 오버라이드가 없으면 메시 기본 머티리얼 유지(폴백).
+				Part.ApplyMaterialOverride(PartComponent);
 				SpawnedVisuals.Components.Add(PartComponent);
 			}
 		}
