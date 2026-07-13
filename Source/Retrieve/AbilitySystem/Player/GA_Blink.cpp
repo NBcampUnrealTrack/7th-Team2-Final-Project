@@ -31,6 +31,8 @@ UGA_Blink::UGA_Blink()
 	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Knockdown);
 
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
+
+	StaminaCostTag = RetrieveGameplayTags::Ability_Player_Blink;
 }
 
 bool UGA_Blink::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const

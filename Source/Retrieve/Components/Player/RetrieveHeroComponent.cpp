@@ -428,6 +428,7 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 		}
 	}
 
+	// 반대 방향(가드/조준이 달리기 취소)은 입력 태그 비의존을 위해 각 GA의 ActivateAbility에서 Sprinting을 끈다.
 	if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 	{
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
@@ -484,6 +485,15 @@ void URetrieveHeroComponent::Input_SprintPressed(const FInputActionValue& InputA
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
 			if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater)) { return; } // 수중 = Sprint 불가(표면 자유형만)
+
+			// 달리기 ↔ Guard/Aim 상호배타: 진행 중인 것을 취소 + 홀드 입력 제거(키 계속 눌러도 자동 재개 안 되게).
+			FGameplayTagContainer AbilitiesToCancel;
+			AbilitiesToCancel.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+			AbilitiesToCancel.AddTag(RetrieveGameplayTags::Ability_Player_BowAim);
+			ASC->CancelAbilities(&AbilitiesToCancel);
+			ASC->ClearInputHeldForAbilityWithTag(RetrieveGameplayTags::Ability_Player_Guard);
+			ASC->ClearInputHeldForAbilityWithTag(RetrieveGameplayTags::Ability_Player_BowAim);
+
 			ASC->AddLooseGameplayTag(RetrieveGameplayTags::State_Player_Sprinting);
 			SprintStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 		}

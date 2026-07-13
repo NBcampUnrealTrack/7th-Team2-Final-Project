@@ -68,6 +68,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_StanceBusy, "State.Player.StanceBusy");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Attacking, "State.Player.Attacking");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Dodging, "State.Player.Dodging");
+	UE_DEFINE_GAMEPLAY_TAG(State_Player_Invincible, "State.Player.Invincible");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Guarding, "State.Player.Guarding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_Parrying, "State.Player.Parrying");
 	UE_DEFINE_GAMEPLAY_TAG(State_Player_CanCounter, "State.Player.CanCounter");
@@ -416,11 +417,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Defense, "Data.Init.Defense");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_GuardDamageReduction, "Data.Init.GuardDamageReduction");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackSpeedMultiplier, "Data.Init.AttackSpeedMultiplier");
-	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxStamina, "Data.Init.MaxStamina");
-	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Stamina, "Data.Init.Stamina");
-	UE_DEFINE_GAMEPLAY_TAG(Data_Init_StaminaRegenRate, "Data.Init.StaminaRegenRate");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Weapon_AttackPower, "Data.Weapon.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Armor_Defense, "Data.Armor.Defense");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Cost_Stamina, "Data.Cost.Stamina");
 
 	// ---- Gameplay cues: Heavy attack
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_HeavyAttack_Fire, "GameplayCue.HeavyAttack.Fire");

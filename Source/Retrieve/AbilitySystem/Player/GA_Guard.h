@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ActiveGameplayEffectHandle.h"
 #include "AbilitySystem/Player/GA_ParryBase.h"
 #include "GA_Guard.generated.h"
 
@@ -44,13 +43,8 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Guard")
 	TSubclassOf<UGameplayEffect> GuardBreakStaggerEffect;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Guard|Cost", meta = (ClampMin = "0.0"))
-	float MinimumStaminaToActivate = 1.f;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Guard|Cost")
-	TSubclassOf<UGameplayEffect> StaminaDrainEffect;
-	
+
+	// 가드 지속 소모 점검 주기(초). 실제 소모량(초당)은 DT_StaminaCost 행의 DrainPerSecond.
 	UPROPERTY(EditDefaultsOnly, Category = "Guard|Cost", meta = (ClampMin = "0.01"))
 	float StaminaCostTickInterval = 0.1f;
 
@@ -59,5 +53,4 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> GuardBrokenTask;
 
 	FTimerHandle GuardStaminaTimerHandle;
-	FActiveGameplayEffectHandle StaminaDrainHandle;
 };

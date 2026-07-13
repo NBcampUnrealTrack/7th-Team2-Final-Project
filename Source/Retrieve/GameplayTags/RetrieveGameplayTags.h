@@ -71,6 +71,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_StanceBusy);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Attacking);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Dodging);
+	// 회피(대시) i-frame. 부여 중에는 전투 피해를 무시한다(환경/DoT 제외). ANS로 몽타주 구간에 부여.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Invincible);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Guarding);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_Parrying);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Player_CanCounter);
@@ -424,12 +426,11 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Defense);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_GuardDamageReduction);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_AttackSpeedMultiplier);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_MaxStamina);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_Stamina);
-	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Init_StaminaRegenRate);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_AttackPower);
 	// 방어구 장착 시 Defense 가산에 사용하는 SetByCaller 태그
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Armor_Defense);
+	// 공용 스태미너 비용 GE(GE_StaminaCost)의 SetByCaller 태그. 음수=소모, 양수=회복.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cost_Stamina);
 
 	// ---- Gameplay cues: Heavy attack
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_HeavyAttack_Fire);

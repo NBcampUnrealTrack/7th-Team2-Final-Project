@@ -4,6 +4,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Components/Player/CounterTimeDilationComponent.h"
+#include "Data/RetrieveDataTableTypes.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -133,9 +134,11 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 		RetrieveASC->SetPendingCounterTarget(LastParriedAttacker.Get());
 	}
 	
-	if (StaminaRestoreEffect)
+	// 패리 성공 시 스태미너 회복(스태미너 소모 설정 맵의 RestoreAmount, 이 어빌리티 StaminaCostTag 항목).
+	FStaminaCostRow StaminaRow;
+	if (GetStaminaCostRow(StaminaRow) && StaminaRow.RestoreAmount > 0.f)
 	{
-		ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, StaminaRestoreEffect.GetDefaultObject(), GetAbilityLevel());
+		ApplyStaminaDelta(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, StaminaRow.RestoreAmount);
 	}
 
 	// 성공 피드백만 즉시 실행한다.

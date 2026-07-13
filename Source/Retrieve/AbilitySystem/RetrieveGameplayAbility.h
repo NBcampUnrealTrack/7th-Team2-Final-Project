@@ -10,6 +10,7 @@ class UAbilitySystemComponent;
 class UAbilityTask_WaitGameplayEvent;
 class UGameplayEffect;
 struct FRetrieveBufferedCombatInput;
+struct FStaminaCostRow;
 
 UENUM(BlueprintType)
 enum class ERetrieveAbilityActivationPolicy : uint8
@@ -34,6 +35,10 @@ public:
 
 	virtual void OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& AbilitySpec) override;
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+	// 스태미너 비용 통합 진입점: StaminaCostTag로 설정 맵을 조회해 CheckCost=게이팅, ApplyCost=차감을 공통 적용(태그 없으면 무료).
+	virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
@@ -59,6 +64,10 @@ public:
 	// - 추후 일반 공격 데이터에 bCanStartParry를 추가하면 UGA_Attack/UGA_SprintAttack도 같은 hook만 override하면 된다.
 	virtual bool OpenNotifyParryWindow() { return false; }
 	virtual void CloseNotifyParryWindow() {}
+
+	// ParryWindow와 동형의 무적(i-frame) hook. GA_Dash가 override해 State.Player.Invincible GE를 여닫는다.
+	virtual bool OpenNotifyIFrameWindow() { return false; }
+	virtual void CloseNotifyIFrameWindow() {}
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability")
@@ -103,6 +112,17 @@ protected:
 	FGameplayTag ResolveCurrentElementTag() const;
 	
 	bool HasStamina(const FGameplayAbilityActorInfo* ActorInfo, float Cost) const;
+
+	// StaminaCostTag로 설정 맵(URetrieveStaminaSettings.StaminaCosts)의 비용 항목을 조회. 태그 미설정/부재 시 false.
+	bool GetStaminaCostRow(FStaminaCostRow& OutRow) const;
+
+	// 공용 스태미너 GE로 증감한다. Delta<0=소모, Delta>0=회복(가드 드레인·패리 회복 등 ApplyCost 외 경로용).
+	void ApplyStaminaDelta(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, float Delta) const;
+
+	// 이 어빌리티의 스태미너 비용 항목(URetrieveStaminaSettings.StaminaCosts)을 지정하는 태그.
+	// C++ 생성자에서만 설정하고 BP에는 노출하지 않는다(값 튜닝은 Project Settings에서). 비우면 무료.
+	UPROPERTY()
+	FGameplayTag StaminaCostTag;
 
 	// 컨텍스트(Instigator=아바타, SourceObject=this)를 갖춘 아웃고잉 GE 스펙 생성. ASC/이펙트 없으면 무효 핸들
 	FGameplayEffectSpecHandle MakeSourcedSpec(TSubclassOf<UGameplayEffect> EffectClass, float Level) const;

@@ -13,6 +13,9 @@
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerState.h"
+#include "Data/RetrieveDataTableTypes.h"
+#include "Settings/RetrieveStaminaSettings.h"
+#include "AbilitySystem/Effects/RetrieveStaminaCostEffect.h"
 
 URetrieveGameplayAbility::URetrieveGameplayAbility(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -88,6 +91,79 @@ bool URetrieveGameplayAbility::HasStamina(const FGameplayAbilityActorInfo* Actor
 	}
 
 	return ASC->GetNumericAttribute(UCombatAttributeSet::GetStaminaAttribute()) >= Cost;
+}
+
+bool URetrieveGameplayAbility::GetStaminaCostRow(FStaminaCostRow& OutRow) const
+{
+	if (!StaminaCostTag.IsValid())
+	{
+		return false;
+	}
+
+	const URetrieveStaminaSettings* Settings = GetDefault<URetrieveStaminaSettings>();
+	if (!Settings)
+	{
+		return false;
+	}
+
+	// 설정 맵(Project Settings > Retrieve > Stamina)에서 이 액션 태그의 비용을 조회. 없으면 무료.
+	const FStaminaCostRow* Found = Settings->StaminaCosts.Find(StaminaCostTag);
+	if (!Found)
+	{
+		return false;
+	}
+
+	OutRow = *Found;
+	return true;
+}
+
+void URetrieveGameplayAbility::ApplyStaminaDelta(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, float Delta) const
+{
+	if (FMath::IsNearlyZero(Delta))
+	{
+		return;
+	}
+
+	FGameplayEffectSpecHandle Spec = MakeSourcedSpec(URetrieveStaminaCostEffect::StaticClass(), GetAbilityLevel());
+	if (!Spec.IsValid() || !Spec.Data.IsValid())
+	{
+		return;
+	}
+
+	// 공용 GE 모디파이어(Stamina Additive)의 크기를 SetByCaller로 주입. 음수=소모, 양수=회복.
+	Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Cost_Stamina, Delta);
+	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, Spec);
+}
+
+bool URetrieveGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	FStaminaCostRow Row;
+	if (GetStaminaCostRow(Row))
+	{
+		const float Required = FMath::Max(Row.ActivationCost, Row.MinimumToActivate);
+		if (Required > 0.f && !HasStamina(ActorInfo, Required))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void URetrieveGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+
+	FStaminaCostRow Row;
+	if (GetStaminaCostRow(Row) && Row.ActivationCost > 0.f)
+	{
+		ApplyStaminaDelta(Handle, ActorInfo, ActivationInfo, -Row.ActivationCost);
+	}
 }
 
 void URetrieveGameplayAbility::OnAvatarSet(const FGameplayAbilityActorInfo* ActorInfo,

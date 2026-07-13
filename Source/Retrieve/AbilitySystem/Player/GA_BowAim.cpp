@@ -87,6 +87,12 @@ void UGA_BowAim::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 		return;
 	}
 
+	// 달리기 ↔ 조준 상호배타: 조준이 실제 발동하면 달리기를 끈다(입력 태그 무관, 활 조건은 CanActivate가 보장).
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
+	}
+
 	WaitInputReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, false);
 	if (!IsValid(WaitInputReleaseTask))
 	{

@@ -3,10 +3,20 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
-#include "GameplayEffect.h"
+#include "Audio/RetrieveMusicSubsystem.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Settings/RetrieveStaminaSettings.h"
 #include "Engine/Engine.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "TimerManager.h"
+
+namespace
+{
+	// 자연 회복 틱 주기(초). 실제 회복량 = RegenPerSecond × 이 값. 값 자체는 밸런스가 아니라 갱신 granularity.
+	constexpr float StaminaRegenTickInterval = 0.1f;
+}
 
 UStaminaComponent::UStaminaComponent()
 {
@@ -52,12 +62,11 @@ void UStaminaComponent::UninitializeFromAbilitySystem()
 			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 				UCombatAttributeSet::GetMaxStaminaAttribute()).Remove(MaxStaminaChangedHandle);
 		}
+	}
 
-		if (RegenEffectHandle.IsValid())
-		{
-			AbilitySystemComponent->RemoveActiveGameplayEffect(RegenEffectHandle);
-			RegenEffectHandle.Invalidate();
-		}
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(RegenTickTimerHandle);
 	}
 
 	StaminaChangedHandle.Reset();
@@ -104,15 +113,15 @@ bool UStaminaComponent::TryBindAttributeSet()
 	                                                .AddUObject(
 		                                                this, &UStaminaComponent::HandleMaxStaminaAttributeChanged);
 
-	if (const AActor* Owner = GetOwner(); Owner && Owner->HasAuthority()
-		&& StaminaRegenEffect && !RegenEffectHandle.IsValid())
+	InitStaminaPool();
+
+	// 자연 회복은 권한 측에서 주기 틱으로만 처리(클라는 복제된 값 표시).
+	if (const AActor* Owner = GetOwner(); Owner && Owner->HasAuthority())
 	{
-		FGameplayEffectContextHandle Ctx = AbilitySystemComponent->MakeEffectContext();
-		Ctx.AddSourceObject(this);
-		const FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(StaminaRegenEffect, 1.f, Ctx);
-		if (Spec.IsValid())
+		if (UWorld* World = GetWorld())
 		{
-			RegenEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+			World->GetTimerManager().SetTimer(
+				RegenTickTimerHandle, this, &UStaminaComponent::HandleStaminaTick, StaminaRegenTickInterval, /*bLoop=*/true);
 		}
 	}
 
@@ -123,6 +132,88 @@ bool UStaminaComponent::TryBindAttributeSet()
 void UStaminaComponent::HandleStaminaAttributeChanged(const FOnAttributeChangeData& Data)
 {
 	OnStaminaChanged.Broadcast(Data.NewValue, GetMaxStamina());
+
+	// 소모(감소)를 감지하면 회복 지연 타이머를 리셋한다(회복에 의한 증가는 무시).
+	// 가드 홀드 중 지속 드레인도 매 틱 감소라 이 경로로 회복이 계속 미뤄진다.
+	if (Data.NewValue < Data.OldValue - KINDA_SMALL_NUMBER)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			LastSpendTimeSeconds = World->GetTimeSeconds();
+		}
+	}
+}
+
+void UStaminaComponent::InitStaminaPool()
+{
+	const AActor* Owner = GetOwner();
+	if (!AbilitySystemComponent || !Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	const float Max = GetDefault<URetrieveStaminaSettings>()->MaxStamina;
+	AbilitySystemComponent->SetNumericAttributeBase(UCombatAttributeSet::GetMaxStaminaAttribute(), Max);
+	AbilitySystemComponent->SetNumericAttributeBase(UCombatAttributeSet::GetStaminaAttribute(), Max);
+}
+
+void UStaminaComponent::HandleStaminaTick()
+{
+	const AActor* Owner = GetOwner();
+	if (!AbilitySystemComponent || !AttributeSet || !Owner || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const URetrieveStaminaSettings* Settings = GetDefault<URetrieveStaminaSettings>();
+
+	// '전투 중'은 발검 스탠스 태그가 아니라 실제 교전(IsCombatActive)으로 판정 — 제자리 공격만으론 전투로 안 침.
+	const URetrieveMusicSubsystem* MusicSubsystem = World->GetSubsystem<URetrieveMusicSubsystem>();
+	const bool bInCombat = MusicSubsystem && MusicSubsystem->IsCombatActive();
+
+	// 전투 중 질주는 스태미너를 소모(비전투는 무료). 소진 시 질주 강제 종료(재입력 필요).
+	if (Settings->SprintDrainPerSecond > 0.f
+		&& bInCombat
+		&& AbilitySystemComponent->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Sprinting))
+	{
+		const float Cur = GetStamina();
+		const float Next = FMath::Max(0.f, Cur - Settings->SprintDrainPerSecond * StaminaRegenTickInterval);
+		if (Next < Cur)
+		{
+			AbilitySystemComponent->SetNumericAttributeBase(UCombatAttributeSet::GetStaminaAttribute(), Next);
+		}
+		if (Next <= 0.f)
+		{
+			AbilitySystemComponent->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
+		}
+		return;
+	}
+
+	// 소모 후 회복 지연은 전투 중에만 적용한다(비전투는 지연 없이 즉시 회복 재개).
+	const float RegenDelay = bInCombat ? Settings->RegenDelaySeconds : 0.f;
+	if (World->GetTimeSeconds() - LastSpendTimeSeconds < RegenDelay)
+	{
+		return;
+	}
+
+	// 비전투일 때는 더 빠른 회복 속도를 쓴다(탐험 편의).
+	const float RegenRate = bInCombat ? Settings->RegenPerSecond : Settings->OutOfCombatRegenPerSecond;
+
+	const float Cur = GetStamina();
+	const float Max = GetMaxStamina();
+	if (Cur >= Max || RegenRate <= 0.f)
+	{
+		return;
+	}
+
+	const float Next = FMath::Min(Cur + RegenRate * StaminaRegenTickInterval, Max);
+	AbilitySystemComponent->SetNumericAttributeBase(UCombatAttributeSet::GetStaminaAttribute(), Next);
 }
 
 void UStaminaComponent::HandleMaxStaminaAttributeChanged(const FOnAttributeChangeData& Data)

@@ -64,9 +64,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
 	TSubclassOf<UGameplayEffect> BossParryStaggerEffect;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Parry")
-	TSubclassOf<UGameplayEffect> StaminaRestoreEffect;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ParrySuccessTask;

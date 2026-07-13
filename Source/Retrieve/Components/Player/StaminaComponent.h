@@ -1,13 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ActiveGameplayEffectHandle.h"
 #include "Components/ActorComponent.h"
+#include "Engine/TimerHandle.h"
 #include "StaminaComponent.generated.h"
 
 class UAbilitySystemComponent;
 class UCombatAttributeSet;
-class UGameplayEffect;
 struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStaminaChanged, float, NewStamina, float, MaxStamina);
@@ -53,9 +52,11 @@ private:
 	void HandleStaminaAttributeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxStaminaAttributeChanged(const FOnAttributeChangeData& Data);
 	void BroadcastStaminaChanged();
-	
-	UPROPERTY(EditAnywhere, Category = "Retrieve|Stamina")
-	TSubclassOf<UGameplayEffect> StaminaRegenEffect;
+
+	// 스폰 시 Max/Stamina 어트리뷰트를 URetrieveStaminaSettings 값으로 세팅(권한 전용).
+	void InitStaminaPool();
+	// 주기 틱(권한 전용): 전투 중 질주 드레인 → 아니면 소모 지연 경과 시 자연 회복.
+	void HandleStaminaTick();
 
 	// UI(WBP_Stamina) 연동 완료로 비활성화. PIE 온스크린 스태미너 디버그가 필요하면
 	// 아래 프로퍼티와 StaminaComponent.cpp TickComponent 내 디버그 블록 주석을 해제.
@@ -70,6 +71,9 @@ private:
 
 	FDelegateHandle StaminaChangedHandle;
 	FDelegateHandle MaxStaminaChangedHandle;
-	
-	FActiveGameplayEffectHandle RegenEffectHandle;
+
+	// 마지막 소모 시각(월드 초). 회복 지연 판정용.
+	double LastSpendTimeSeconds = 0.0;
+
+	FTimerHandle RegenTickTimerHandle;
 };

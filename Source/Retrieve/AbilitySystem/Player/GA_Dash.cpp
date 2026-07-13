@@ -9,6 +9,7 @@
 #include "Components/Player/WeaponComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 UGA_Dash::UGA_Dash()
@@ -38,6 +39,8 @@ UGA_Dash::UGA_Dash()
 	// 공격(family)/가드 즉시 취소하고 발동
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+
+	StaminaCostTag = RetrieveGameplayTags::Ability_Player_Dash;
 }
 
 bool UGA_Dash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -53,7 +56,7 @@ bool UGA_Dash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 	{
 		return false;
 	}
-
+	
 	return true;
 }
 
@@ -149,8 +152,60 @@ void UGA_Dash::HandleMontageFinished()
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/false);
 }
 
+bool UGA_Dash::OpenNotifyIFrameWindow()
+{
+	if (bIFrameWindowOpened || !IFrameWindowEffect)
+	{
+		return false;
+	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(ASC))
+	{
+		return false;
+	}
+
+	const FGameplayEffectSpecHandle Spec = MakeSourcedSpec(IFrameWindowEffect, GetAbilityLevel());
+	if (!Spec.IsValid() || !Spec.Data.IsValid())
+	{
+		return false;
+	}
+
+	IFrameWindowHandle = ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+	if (!IFrameWindowHandle.IsValid())
+	{
+		return false;
+	}
+
+	bIFrameWindowOpened = true;
+	return true;
+}
+
+void UGA_Dash::CloseNotifyIFrameWindow()
+{
+	// ANS End와 EndAbility가 모두 닫기를 시도할 수 있으므로 idempotent하게 둔다.
+	if (!bIFrameWindowOpened && !IFrameWindowHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (IFrameWindowHandle.IsValid())
+		{
+			ASC->RemoveActiveGameplayEffect(IFrameWindowHandle);
+		}
+	}
+
+	IFrameWindowHandle.Invalidate();
+	bIFrameWindowOpened = false;
+}
+
 void UGA_Dash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	// 어떤 종료 경로에서도 무적 GE 제거(i-frame 도중 캔슬 시 무적 영구 잔류 방지).
+	CloseNotifyIFrameWindow();
+
 	// 모든 종료 경로(완주/인터럽트/외부 캔슬)에서 ALS Rolling 락아웃 해제. SetLocomotionAction(Empty)는 멱등.
 	if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
 	{
