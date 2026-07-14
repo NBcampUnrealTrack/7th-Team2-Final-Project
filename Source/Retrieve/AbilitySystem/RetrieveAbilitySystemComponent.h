@@ -109,6 +109,8 @@ protected:
 	void ResolveBufferedCombatInput();
 	// Ability.Type.Attack 자산태그를 가진 어빌리티가 현재 활성인가(= 공격 진행 중인가).
 	bool IsAttackAbilityActive() const;
+	// 이 자산태그를 가진 어빌리티가 현재 활성인가. (중복 스펙의 콤보 재시작 차단용 — ResolveBufferedCombatInput)
+	bool HasActiveAbilityWithAssetTag(const FGameplayTag& AssetTag) const;
 
 	TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;
 	TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;
