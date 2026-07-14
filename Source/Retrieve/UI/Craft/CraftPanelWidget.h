@@ -131,6 +131,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Category", meta = (Categories = "Item"))
 	FGameplayTagContainer Tags_Equipment;
+	
+	/** 선택된 카테고리 아이콘 틴트 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Category")
+	FLinearColor CategoryIconSelectedColor = FLinearColor(1.0f, 0.82f, 0.25f, 1.0f);
+
+	/** 비선택 카테고리 아이콘 틴트 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Category")
+	FLinearColor CategoryIconNormalColor = FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
 protected:
 	virtual void NativeConstruct() override;
@@ -197,6 +205,22 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Cat_Etc;
+	
+	// ── 카테고리 사이드바 아이콘 ────────────────────────────────────────────
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Btn_Consumable;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Btn_Buff;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Btn_Material;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Btn_Equip;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Btn_Etc;
 
 private:
 	void BindButtonEvents();

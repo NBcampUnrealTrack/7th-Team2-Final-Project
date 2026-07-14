@@ -38,6 +38,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Craft|Events")
 	FCraftRecipeEntryClickedSignature OnRecipeClicked;
 
+	// ── 레시피 이름 글자색 ────────────────────────────────────
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Colors")
+	FLinearColor RecipeNameSelectedColor = FLinearColor(1.0f, 0.84f, 0.35f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Colors")
+	FLinearColor RecipeNameHoveredColor = FLinearColor(1.0f, 0.95f, 0.78f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Craft|Colors")
+	FLinearColor RecipeNameNormalColor = FLinearColor(0.95f, 0.88f, 0.72f, 1.0f);
+	
 protected:
 	virtual void NativeConstruct() override;
 	virtual FReply NativeOnPreviewMouseButtonDown(

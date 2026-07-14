@@ -245,6 +245,13 @@ bool URetrieveSaveSubsystem::CaptureSaveThumbnail(APlayerController* PC, URetrie
 	Capture->bCaptureEveryFrame = false;
 	Capture->bCaptureOnMovement = false;
 	Capture->bAlwaysPersistRenderingState = true;
+	
+	constexpr float ThumbnailExposureEV100 = -2.0f;
+	Capture->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+	Capture->PostProcessSettings.AutoExposureMinBrightness = ThumbnailExposureEV100;
+	Capture->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+	Capture->PostProcessSettings.AutoExposureMaxBrightness = ThumbnailExposureEV100;
+	
 	Capture->CaptureScene();
 
 	TArray<FColor> Pixels;

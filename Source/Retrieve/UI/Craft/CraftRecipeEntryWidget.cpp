@@ -120,11 +120,7 @@ void UCraftRecipeEntryWidget::RefreshVisualState()
 	{
 		Text_RecipeName->SetText(DisplayName.IsEmpty() ? FText::FromName(NativeRecipeId) : DisplayName);
 		Text_RecipeName->SetColorAndOpacity(FSlateColor(
-			bSelected
-				? FLinearColor(1.0f, 0.84f, 0.35f, 1.0f)
-				: bHovered
-					? FLinearColor(1.0f, 0.95f, 0.78f, 1.0f)
-				: FLinearColor(0.95f, 0.88f, 0.72f, 1.0f)));
+			bSelected ? RecipeNameSelectedColor : bHovered ? RecipeNameHoveredColor : RecipeNameNormalColor));
 	}
 
 	if (Text_CraftableCount)
