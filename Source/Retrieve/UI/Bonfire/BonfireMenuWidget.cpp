@@ -406,11 +406,19 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 	}
 
 	int32 SelectedSlotIndex = 0;
-	if (const FIntProperty* SelectedProperty = FindFProperty<FIntProperty>(GetClass(), TEXT("SelectedSlotIndex")))
+	const FIntProperty* SelectedProperty = FindFProperty<FIntProperty>(GetClass(), TEXT("SelectedSlotIndex"));
+	if (SelectedProperty)
 	{
 		SelectedSlotIndex = SelectedProperty->GetPropertyValue_InContainer(this);
 	}
-
+	if (SelectedSlotIndex < 0 || SelectedSlotIndex >= URetrieveSaveSubsystem::MaxSaveSlots)
+	{
+		SelectedSlotIndex = 0;
+		if (SelectedProperty)
+		{
+			SelectedProperty->SetPropertyValue_InContainer(this, SelectedSlotIndex);
+		}
+	}
 	const int32 EntryCount = SaveSlots->GetChildrenCount();
 	if (SelectedSlotIndex == LastAppliedSelectedSlotIndex && EntryCount == LastAppliedSlotEntryCount)
 	{
@@ -434,6 +442,10 @@ void UBonfireMenuWidget::UpdateSlotSelectionVisuals()
 		}
 
 		const bool bIsSelected = ResolveSlotIndex(Entry, ChildIndex) == SelectedSlotIndex;
+		if (bIsSelected)
+		{
+			RefreshSelectedSlotPreview(Entry, SelectedSlotIndex);
+		}
 
 		// WBP의 SetSelected(false)가 클릭 선택된 엔트리의 글로우를 언호버 시 끄지 않도록 하는 플래그.
 		// SetSelected 호출보다 먼저 세팅해야 같은 프레임의 분기에서 올바르게 읽힌다.
@@ -485,165 +497,115 @@ int32 UBonfireMenuWidget::ResolveSlotIndex(const UUserWidget* EntryWidget, int32
 	return FallbackSlotIndex;
 }
 
+void UBonfireMenuWidget::RefreshSelectedSlotPreview(UUserWidget* SelectedEntry, int32 SelectedSlotIndex)
+{
+	URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	URetrieveSaveGame* SaveGame = SaveSubsystem ? SaveSubsystem->GetSaveGameForSlot(SelectedSlotIndex) : nullptr;
+
+	if (UTextBlock* NameText = Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_PreviewName"))))
+	{
+		NameText->SetText(SaveGame
+			                  ? FText::FromString(ResolveBonfireDisplayName(
+				                  GetWorld(), SaveGame->LoadSnapshot.BonfireId, SaveGame->BonfireDisplayName))
+			                  : NSLOCTEXT("Bonfire", "EmptySlotPreview", "빈 슬롯"));
+	}
+
+	if (UTextBlock* TimeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_PreviewTimestamp"))))
+	{
+		TimeText->SetText(SaveGame ? FText::FromString(SaveGame->SaveTimestamp) : FText::GetEmpty());
+	}
+
+	if (UTextBlock* QuestText = Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_PreviewQuest"))))
+	{
+		FString Line;
+		if (SaveGame && !SaveGame->TrackedQuestName.IsEmpty())
+		{
+			Line = SaveGame->TrackedQuestObjective.IsEmpty()
+				       ? SaveGame->TrackedQuestName
+				       : FString::Printf(TEXT("%s - %s"), *SaveGame->TrackedQuestName,
+				                         *SaveGame->TrackedQuestObjective);
+		}
+		QuestText->SetText(FText::FromString(Line));
+	}
+
+	if (UImage* PreviewThumb = Cast<UImage>(GetWidgetFromName(TEXT("Image_PreviewThumbnail"))))
+	{
+		if (UTexture2D* Shot = GetOrDecodeSlotScreenshot(SelectedSlotIndex))
+		{
+			PreviewThumb->SetBrushFromTexture(Shot, true);
+			PreviewThumb->SetColorAndOpacity(FLinearColor::White);
+		}
+		else { PreviewThumb->SetColorAndOpacity(FLinearColor(0, 0, 0, 0)); }
+	}
+}
+
+UTexture2D* UBonfireMenuWidget::GetOrDecodeSlotScreenshot(int32 SlotIndex)
+{
+	if (const TObjectPtr<UTexture2D>* Cached = SlotPreviewTextures.Find(SlotIndex))
+	{
+		return *Cached;
+	}
+	URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	URetrieveSaveGame* SaveGame = SaveSubsystem ? SaveSubsystem->GetSaveGameForSlot(SlotIndex) : nullptr;
+	if (!SaveGame || SaveGame->ScreenshotPng.IsEmpty())
+	{
+		return nullptr;
+	}
+	
+	UTexture2D* Texture = FImageUtils::ImportBufferAsTexture2D(SaveGame->ScreenshotPng);
+	if (!Texture)
+	{
+		return nullptr;
+	}
+	
+	if (FTexturePlatformData* PlatformData = Texture->GetPlatformData(); PlatformData && PlatformData->PixelFormat == PF_B8G8R8A8 && !PlatformData->Mips.IsEmpty())
+	{
+		FTexture2DMipMap& Mip = PlatformData->Mips[0];
+		if (FColor* MipPixels = static_cast<FColor*>(Mip.BulkData.Lock(LOCK_READ_WRITE)))
+		{
+			const int64 PixelCount = static_cast<int64>(Mip.SizeX) * Mip.SizeY;
+			for (int64 i = 0; i < PixelCount; ++i) { MipPixels[i].A = 255; }
+			Mip.BulkData.Unlock();
+			Texture->UpdateResource();
+		}
+	}
+	Texture->NeverStream = true;
+	SlotPreviewTextures.Add(SlotIndex, Texture);
+	return Texture;
+}
+
 void UBonfireMenuWidget::ApplyThumbnailToEntry(UUserWidget* EntryWidget, int32 FallbackSlotIndex)
 {
-	if (!EntryWidget || !EntryWidget->WidgetTree)
+	if (!EntryWidget)
 	{
 		return;
-	}
-
-	UHorizontalBox* Content = Cast<UHorizontalBox>(EntryWidget->GetWidgetFromName(TEXT("HorizontalBox_Content")));
-	if (!Content)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[BonfireMenu] SaveSlotEntry에 HorizontalBox_Content가 없어 썸네일을 표시할 수 없습니다."));
-		return;
-	}
-
-	UImage* ThumbnailImage = Cast<UImage>(EntryWidget->GetWidgetFromName(TEXT("Image_SaveThumbnail")));
-	if (!ThumbnailImage)
-	{
-		UWidget* InfoColumn = EntryWidget->GetWidgetFromName(TEXT("VerticalBox_Info"));
-		if (InfoColumn)
-		{
-			Content->RemoveChild(InfoColumn);
-		}
-
-		USizeBox* ThumbnailBox = EntryWidget->WidgetTree->ConstructWidget<USizeBox>(
-			USizeBox::StaticClass(), TEXT("SizeBox_SaveThumbnail"));
-		ThumbnailBox->SetWidthOverride(240.0f);
-		ThumbnailBox->SetHeightOverride(135.0f);
-		ThumbnailImage = EntryWidget->WidgetTree->ConstructWidget<UImage>(
-			UImage::StaticClass(), TEXT("Image_SaveThumbnail"));
-		ThumbnailImage->SetColorAndOpacity(FLinearColor(0.82f, 0.92f, 1.0f, 1.0f));
-		ThumbnailImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		ThumbnailBox->AddChild(ThumbnailImage);
-
-		if (UHorizontalBoxSlot* ThumbSlot = Content->AddChildToHorizontalBox(ThumbnailBox))
-		{
-			ThumbSlot->SetPadding(FMargin(8.0f, 6.0f, 18.0f, 6.0f));
-			ThumbSlot->SetVerticalAlignment(VAlign_Center);
-		}
-		if (InfoColumn)
-		{
-			if (UHorizontalBoxSlot* InfoSlot = Content->AddChildToHorizontalBox(InfoColumn))
-			{
-				InfoSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-				InfoSlot->SetVerticalAlignment(VAlign_Center);
-			}
-		}
-	}
-
-	// 썸네일 위에 별도의 금색 장식 프레임을 겹쳐 참조 이미지와 같은 카드 형태로 만든다.
-	if (ThumbnailImage && !EntryWidget->GetWidgetFromName(TEXT("Image_SaveThumbnailFrame")))
-	{
-		if (USizeBox* ThumbnailBox = Cast<USizeBox>(ThumbnailImage->GetParent()))
-		{
-			ThumbnailBox->RemoveChild(ThumbnailImage);
-			UOverlay* ThumbnailOverlay = EntryWidget->WidgetTree->ConstructWidget<UOverlay>(
-				UOverlay::StaticClass(), TEXT("Overlay_SaveThumbnail"));
-			ThumbnailBox->AddChild(ThumbnailOverlay);
-			if (UOverlaySlot* ImageSlot = ThumbnailOverlay->AddChildToOverlay(ThumbnailImage))
-			{
-				ImageSlot->SetHorizontalAlignment(HAlign_Fill);
-				ImageSlot->SetVerticalAlignment(VAlign_Fill);
-				ImageSlot->SetPadding(FMargin(8.0f));
-			}
-
-			if (UTexture2D* OrnateFrame = LoadFantasyMenuTexture(TEXT("SPR_FantasyMenus_Frame_Box_Large_01")))
-			{
-				UImage* ThumbnailFrame = EntryWidget->WidgetTree->ConstructWidget<UImage>(
-					UImage::StaticClass(), TEXT("Image_SaveThumbnailFrame"));
-				ThumbnailFrame->SetBrushFromTexture(OrnateFrame, true);
-				ThumbnailFrame->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-				if (UOverlaySlot* FrameSlot = ThumbnailOverlay->AddChildToOverlay(ThumbnailFrame))
-				{
-					FrameSlot->SetHorizontalAlignment(HAlign_Fill);
-					FrameSlot->SetVerticalAlignment(VAlign_Fill);
-				}
-			}
-		}
 	}
 
 	const int32 SlotIndex = ResolveSlotIndex(EntryWidget, FallbackSlotIndex);
-	URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance()
-		? GetGameInstance()->GetSubsystem<URetrieveSaveSubsystem>()
-		: nullptr;
-	URetrieveSaveGame* SaveGame = SaveSubsystem
-		? SaveSubsystem->GetSaveGameForSlot(SlotIndex)
-		: nullptr;
-
-	if (SaveGame)
+	URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	URetrieveSaveGame* SaveGame = SaveSubsystem ? SaveSubsystem->GetSaveGameForSlot(SlotIndex) : nullptr;
+	if (!SaveGame)
 	{
-		if (UTextBlock* BonfireNameText = Cast<UTextBlock>(EntryWidget->GetWidgetFromName(TEXT("Text_BonfireName"))))
-		{
-			BonfireNameText->SetText(FText::FromString(ResolveBonfireDisplayName(
-				GetWorld(), SaveGame->LoadSnapshot.BonfireId, SaveGame->BonfireDisplayName)));
-		}
-
-		// 저장 시점 추적 퀘스트 표시. WBP 에셋을 건드리지 않기 위해 썸네일과 같은 방식으로 동적 생성한다.
-		UTextBlock* QuestNameText = Cast<UTextBlock>(EntryWidget->GetWidgetFromName(TEXT("Text_QuestName")));
-		if (!QuestNameText)
-		{
-			if (UVerticalBox* InfoBox = Cast<UVerticalBox>(EntryWidget->GetWidgetFromName(TEXT("VerticalBox_Info"))))
-			{
-				QuestNameText = EntryWidget->WidgetTree->ConstructWidget<UTextBlock>(
-					UTextBlock::StaticClass(), TEXT("Text_QuestName"));
-				QuestNameText->SetColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.78f, 0.55f, 1.0f)));
-				QuestNameText->SetAutoWrapText(true);
-				if (UVerticalBoxSlot* QuestSlot = InfoBox->AddChildToVerticalBox(QuestNameText))
-				{
-					QuestSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 0.0f));
-				}
-			}
-		}
-		if (QuestNameText)
-		{
-			const FString QuestLine = SaveGame->TrackedQuestName.IsEmpty()
-				? FString()
-				: (SaveGame->TrackedQuestObjective.IsEmpty()
-					? SaveGame->TrackedQuestName
-					: FString::Printf(TEXT("%s - %s"), *SaveGame->TrackedQuestName, *SaveGame->TrackedQuestObjective));
-			QuestNameText->SetText(FText::FromString(QuestLine));
-			QuestNameText->SetVisibility(QuestLine.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		}
+		return;
 	}
 
-	if (SaveGame && !SaveGame->ScreenshotPng.IsEmpty())
+	if (UTextBlock* BonfireNameText = Cast<UTextBlock>(EntryWidget->GetWidgetFromName(TEXT("Text_BonfireName"))))
 	{
-		if (UTexture2D* Texture = FImageUtils::ImportBufferAsTexture2D(SaveGame->ScreenshotPng))
-		{
-			// 알파 0으로 저장된 기존 슬롯 이미지도 즉시 정상 표시되도록 런타임 마이그레이션한다.
-			if (FTexturePlatformData* PlatformData = Texture->GetPlatformData();
-				PlatformData && PlatformData->PixelFormat == PF_B8G8R8A8 && !PlatformData->Mips.IsEmpty())
-			{
-				FTexture2DMipMap& Mip = PlatformData->Mips[0];
-				if (FColor* MipPixels = static_cast<FColor*>(Mip.BulkData.Lock(LOCK_READ_WRITE)))
-				{
-					const int64 PixelCount = static_cast<int64>(Mip.SizeX) * Mip.SizeY;
-					for (int64 PixelIndex = 0; PixelIndex < PixelCount; ++PixelIndex)
-					{
-						MipPixels[PixelIndex].A = 255;
-					}
-					Mip.BulkData.Unlock();
-					Texture->UpdateResource();
-				}
-			}
-			Texture->NeverStream = true;
-			SlotThumbnailTextures.Add(Texture);
-			ThumbnailImage->SetBrushFromTexture(Texture, true);
-			ThumbnailImage->SetColorAndOpacity(FLinearColor::White);
-			UE_LOG(LogTemp, Log, TEXT("[BonfireMenu] 슬롯 %d 썸네일 표시 완료 (%d bytes)"),
-				SlotIndex, SaveGame->ScreenshotPng.Num());
-			return;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[BonfireMenu] 슬롯 %d PNG 디코딩 실패 (%d bytes)"),
-			SlotIndex, SaveGame->ScreenshotPng.Num());
+		BonfireNameText->SetText(FText::FromString(ResolveBonfireDisplayName(GetWorld(), SaveGame->LoadSnapshot.BonfireId, SaveGame->BonfireDisplayName)));
 	}
 
-	// 빈 슬롯은 플레이스홀더 없이 완전히 투명하게 둔다.
-	ThumbnailImage->SetBrushFromTexture(nullptr);
-	ThumbnailImage->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+	if (UTextBlock* QuestNameText = Cast<UTextBlock>(EntryWidget->GetWidgetFromName(TEXT("Text_QuestName"))))
+	{
+		const FString QuestLine = SaveGame->TrackedQuestName.IsEmpty()
+			                          ? FString()
+			                          : (SaveGame->TrackedQuestObjective.IsEmpty()
+				                             ? SaveGame->TrackedQuestName
+				                             : FString::Printf(
+					                             TEXT("%s - %s"), *SaveGame->TrackedQuestName,
+					                             *SaveGame->TrackedQuestObjective));
+		QuestNameText->SetText(FText::FromString(QuestLine));
+		QuestNameText->SetVisibility(QuestLine.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
 }
 
 void UBonfireMenuWidget::SetActiveTab(bool bSaveActive)

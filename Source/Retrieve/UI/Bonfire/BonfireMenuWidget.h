@@ -103,6 +103,8 @@ private:
 	void ApplyThumbnailToEntry(UUserWidget* EntryWidget, int32 FallbackSlotIndex);
 	void UpdateSlotSelectionVisuals();
 	static int32 ResolveSlotIndex(const UUserWidget* EntryWidget, int32 FallbackSlotIndex);
+	void RefreshSelectedSlotPreview(UUserWidget* SelectedEntry, int32 SelectedSlotIndex);
+	UTexture2D* GetOrDecodeSlotScreenshot(int32 SlotIndex);
 
 	UFUNCTION()
 	void HandleTabSaveClicked();
@@ -113,6 +115,9 @@ private:
 	/** PNG에서 만든 런타임 텍스처의 GC 방지. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UTexture2D>> SlotThumbnailTextures;
+	
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<UTexture2D>> SlotPreviewTextures;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> RuntimeButtonLoad;

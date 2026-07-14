@@ -110,22 +110,20 @@ void UCraftPanelWidget::SetActiveCategory(ECraftCategory InCategory)
 
 void UCraftPanelWidget::RefreshCategoryButtons()
 {
-	const FLinearColor SelectedTint(0.22f, 0.49f, 0.72f, 1.f);
-	const FLinearColor NormalTint(0.086f, 0.196f, 0.30f, 1.f);
-
-	auto Apply = [&](UButton* Button, ECraftCategory Category)
+	auto Apply = [&](UImage* Icon, ECraftCategory Category)
 	{
-		if (Button)
+		if (Icon)
 		{
-			Button->SetBackgroundColor(Category == ActiveCategory ? SelectedTint : NormalTint);
+			Icon->SetColorAndOpacity(
+				Category == ActiveCategory ? CategoryIconSelectedColor : CategoryIconNormalColor);
 		}
 	};
 
-	Apply(Button_Cat_Consumable, ECraftCategory::Consumable);
-	Apply(Button_Cat_Buff, ECraftCategory::Buff);
-	Apply(Button_Cat_Material, ECraftCategory::Material);
-	Apply(Button_Cat_Equip, ECraftCategory::Equipment);
-	Apply(Button_Cat_Etc, ECraftCategory::Etc);
+	Apply(Img_Btn_Consumable, ECraftCategory::Consumable);
+	Apply(Img_Btn_Buff, ECraftCategory::Buff);
+	Apply(Img_Btn_Material, ECraftCategory::Material);
+	Apply(Img_Btn_Equip, ECraftCategory::Equipment);
+	Apply(Img_Btn_Etc, ECraftCategory::Etc);
 }
 
 void UCraftPanelWidget::SelectRecipe(FName InRecipeId)
