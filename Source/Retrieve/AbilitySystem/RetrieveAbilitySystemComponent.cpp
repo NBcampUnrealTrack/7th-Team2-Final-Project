@@ -403,6 +403,12 @@ void URetrieveAbilitySystemComponent::ResolveBufferedCombatInput()
 		}
 
 		// (2) 새로 발동할 후보.
+		// 같은 정체성(asset tag)의 공격이 이미 활성이면 재발동하지 않는다 — 중복 grant된 스펙이 진행 중 콤보를 끊고 1타부터 재시작하는 것 방지.
+		if (HasActiveAbilityWithAssetTag(Entry.IntentTag))
+		{
+			continue;
+		}
+
 		// 공격 진행 중이면, 그 입력을 '캔슬 윈도우'가 허용해야만 발동할 수 있다. 평상시엔 제한 없음.
 		if (bAttackActive && !IsAttackCancelIntentAllowed(Entry.IntentTag))
 		{
@@ -437,6 +443,22 @@ bool URetrieveAbilitySystemComponent::IsAttackAbilityActive() const
 	{
 		if (Spec.IsActive() && Spec.Ability
 			&& Spec.Ability->GetAssetTags().HasTag(RetrieveGameplayTags::Ability_Type_Attack))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool URetrieveAbilitySystemComponent::HasActiveAbilityWithAssetTag(const FGameplayTag& AssetTag) const
+{
+	if (!AssetTag.IsValid())
+	{
+		return false;
+	}
+	for (const FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+	{
+		if (Spec.IsActive() && Spec.Ability && Spec.Ability->GetAssetTags().HasTagExact(AssetTag))
 		{
 			return true;
 		}
