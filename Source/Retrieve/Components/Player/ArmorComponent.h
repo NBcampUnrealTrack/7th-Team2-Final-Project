@@ -43,6 +43,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Armor")
 	UDataTable* GetArmorDataTable() const { return ArmorDataTable; }
 
+    /** Reapply startup armor gameplay after the ASC becomes available. */
+    void RefreshEquippedArmorGameplay();
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Armor")
 	FArmorChangedSignature OnArmorEquipped;
 
@@ -57,6 +60,10 @@ protected:
 	// GE 설정: Duration=Infinite, Modifier=Defense Add, Magnitude=SetByCaller(Data.Armor.Defense)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Armor|Stats")
 	TSubclassOf<UGameplayEffect> ArmorDefenseEffect;
+
+	// 세트 보너스 정의 테이블 (Row: FRetrieveArmorSetBonusRow). 미지정 시 기본 경로에서 로드 시도
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Armor|Set")
+	TObjectPtr<UDataTable> ArmorSetBonusTable;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_EquippedArmorEntries, Category = "Retrieve|Armor")
 	TArray<FRetrieveEquippedArmorEntry> EquippedArmorEntries;
@@ -78,9 +85,21 @@ private:
 	bool ApplyArmorVisual(FGameplayTag EquipmentSlotTag, const FRetrieveArmorDataRow& ArmorData);
 	void RefreshArmorVisuals();
 
+	// 착용 부위의 ArmorSetTag를 집계해 2/4세트 보너스 GE를 적용/회수한다 (장착/해제 후 호출)
+	void RecomputeSetBonuses();
+	const FRetrieveArmorSetBonusRow* FindSetBonusRow(FGameplayTag SetTag) const;
+
 	UPROPERTY(Transient)
 	TMap<FGameplayTag, FRetrieveAbilitySet_GrantedHandles> ArmorGrantedHandlesBySlot;
 
 	UPROPERTY(Transient)
 	TMap<FGameplayTag, FActiveGameplayEffectHandle> ArmorDefenseEffectHandlesBySlot;
+
+	// 세트 태그 → 적용 중인 2/4세트 보너스 GE 핸들
+	struct FArmorSetBonusHandles
+	{
+		FActiveGameplayEffectHandle Bonus2;
+		FActiveGameplayEffectHandle Bonus4;
+	};
+	TMap<FGameplayTag, FArmorSetBonusHandles> ArmorSetBonusHandles;
 };

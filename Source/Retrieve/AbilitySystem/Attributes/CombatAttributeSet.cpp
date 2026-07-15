@@ -25,6 +25,16 @@ static TAutoConsoleVariable<float> CVarDefaultHitKnockbackUpward(
 
 UCombatAttributeSet::UCombatAttributeSet()
 {
+	// 빌드 스탯 중립 기본값 — GE 미부여 시 기존 밸런스와 100% 동일해야 한다.
+	InitNormalAttackDamageMultiplier(1.0f);
+	InitHeavyAttackDamageMultiplier(1.0f);
+	InitElementalDamageMultiplier(1.0f);
+	InitCriticalChance(0.0f);
+	InitCriticalDamageMultiplier(1.5f);
+	InitLifeStealRatio(0.0f);
+	InitElementChargeGainMultiplier(1.0f);
+	InitOutgoingDamageMultiplier(1.0f);
+	InitStaminaRegenMultiplier(1.0f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -42,6 +52,15 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxStamina, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, Poise, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, MaxPoise, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, NormalAttackDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, HeavyAttackDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, ElementalDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, CriticalChance, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, CriticalDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, LifeStealRatio, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, ElementChargeGainMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, OutgoingDamageMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, StaminaRegenMultiplier, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -113,6 +132,27 @@ void UCombatAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
+	else if (Attribute == GetNormalAttackDamageMultiplierAttribute() ||
+		Attribute == GetHeavyAttackDamageMultiplierAttribute() ||
+		Attribute == GetElementalDamageMultiplierAttribute() ||
+		Attribute == GetElementChargeGainMultiplierAttribute() ||
+		Attribute == GetOutgoingDamageMultiplierAttribute())
+	{
+		NewValue = FMath::Max(0.f, NewValue);
+	}
+	else if (Attribute == GetCriticalChanceAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, CriticalChanceCap);
+	}
+	else if (Attribute == GetCriticalDamageMultiplierAttribute())
+	{
+		// 치명타가 데미지를 깎는 역전 방지
+		NewValue = FMath::Max(1.f, NewValue);
+	}
+	else if (Attribute == GetLifeStealRatioAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, LifeStealRatioCap);
+	}
 }
 
 void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data)
@@ -146,8 +186,7 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 			const float NewHealth = FMath::Clamp(GetHealth() - FinalDamage, 0.f, GetMaxHealth());
 			SetHealth(NewHealth);
 			BroadcastHitEvent(Data, FinalDamage);
-			
-			
+			ApplyLifeStealToSource(Data, FinalDamage, SpecTags);
 		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
@@ -230,6 +269,51 @@ void UCombatAttributeSet::OnRep_Poise(const FGameplayAttributeData& OldValue)
 void UCombatAttributeSet::OnRep_MaxPoise(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, MaxPoise, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_NormalAttackDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, NormalAttackDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_HeavyAttackDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, HeavyAttackDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_ElementalDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, ElementalDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_CriticalChance(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, CriticalChance, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_CriticalDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, CriticalDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_LifeStealRatio(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, LifeStealRatio, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_ElementChargeGainMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, ElementChargeGainMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_OutgoingDamageMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, OutgoingDamageMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_StaminaRegenMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, StaminaRegenMultiplier, OldValue);
 }
 
 
@@ -328,6 +412,40 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	}
 	
 	return ApplyDefenseMitigation(RawDamage);
+}
+
+void UCombatAttributeSet::ApplyLifeStealToSource(const FGameplayEffectModCallbackData& Data, float DamageDone, const FGameplayTagContainer& SpecTags) const
+{
+	// 환경 데미지(낙하 등)와 DoT 틱은 흡혈 대상이 아니다.
+	if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Environmental) ||
+		SpecTags.HasTag(RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Burn))
+	{
+		return;
+	}
+
+	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
+	UAbilitySystemComponent* SourceASC = Context.GetOriginalInstigatorAbilitySystemComponent();
+	if (!IsValid(SourceASC) || SourceASC == &Data.Target)
+	{
+		return;
+	}
+
+	UCombatAttributeSet* SourceSet =
+		const_cast<UCombatAttributeSet*>(SourceASC->GetSet<UCombatAttributeSet>());
+	if (!SourceSet || SourceSet->GetLifeStealRatio() <= 0.f)
+	{
+		return;
+	}
+
+	const float Heal = DamageDone * SourceSet->GetLifeStealRatio();
+	if (Heal <= 0.f || SourceSet->GetHealth() <= 0.f)
+	{
+		return;
+	}
+
+	// IncomingHealing 메타 어트리뷰트는 GE 실행으로만 소비되므로, 서버 로직인 여기서는
+	// IncomingHealing 처리와 동일한 클램프 규칙으로 체력을 직접 갱신한다.
+	SourceSet->SetHealth(FMath::Clamp(SourceSet->GetHealth() + Heal, 0.f, SourceSet->GetMaxHealth()));
 }
 
 float UCombatAttributeSet::ApplyDefenseMitigation(float Damage) const

@@ -1,4 +1,4 @@
-#include "RetrieveGameplayTags.h"
+﻿#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -147,6 +147,7 @@ namespace RetrieveGameplayTags
 	// ---- Attack property
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property, "Attack.Property");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_Critical, "Attack.Property.Critical");
 
 	// ---- Hit react type
 	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type, "HitReact.Type");
@@ -161,6 +162,36 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Element_Wind, "Element.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Element_Corruption, "Element.Corruption");
 	UE_DEFINE_GAMEPLAY_TAG(Element_None, "Element.None");
+
+	// ---- Element attunement (원소 공명 스택)
+	UE_DEFINE_GAMEPLAY_TAG(Element_Attune, "Element.Attune");
+	UE_DEFINE_GAMEPLAY_TAG(Element_Attune_Fire, "Element.Attune.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Element_Attune_Water, "Element.Attune.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Element_Attune_Wind, "Element.Attune.Wind");
+
+	// ---- Element resonance
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance, "State.Resonance");
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance_Fire, "State.Resonance.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance_Water, "State.Resonance.Water");
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance_Wind, "State.Resonance.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance_Mixed, "State.Resonance.Mixed");
+	UE_DEFINE_GAMEPLAY_TAG(State_Resonance_Trinity, "State.Resonance.Trinity");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group, "Resonance.Group");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Single, "Resonance.Group.Single");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Mixed, "Resonance.Group.Mixed");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Fire, "Resonance.Group.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Water, "Resonance.Group.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Wind, "Resonance.Group.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(Resonance_Group_Trinity, "Resonance.Group.Trinity");
+
+	// ---- Armor set
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set, "Armor.Set");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Pyromancer, "Armor.Set.Pyromancer");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Guardian, "Armor.Set.Guardian");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Berserker, "Armor.Set.Berserker");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Hunter, "Armor.Set.Hunter");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Gale, "Armor.Set.Gale");
+	UE_DEFINE_GAMEPLAY_TAG(Armor_Set_Vampire, "Armor.Set.Vampire");
 
 	// ---- Weapon
 	UE_DEFINE_GAMEPLAY_TAG(Weapon_Type_Unarmed, "Weapon.Type.Unarmed");
@@ -324,6 +355,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Fire, "Item.Consumable.Draught.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Water, "Item.Consumable.Draught.Water");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Draught_Wind, "Item.Consumable.Draught.Wind");
+	// 원소 정수: 사용 시 어튠 스택 +1 (원소 공명 재료)
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Essence_Fire, "Item.Consumable.Essence.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Essence_Water, "Item.Consumable.Essence.Water");
+	UE_DEFINE_GAMEPLAY_TAG(Item_Consumable_Essence_Wind, "Item.Consumable.Essence.Wind");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Material_EmptyFlask, "Item.Material.EmptyFlask");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Fire, "Item.Material.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Item_Material_Water, "Item.Material.Water");
@@ -344,6 +379,35 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Fire, "UI.Buff.Absorb.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Water, "UI.Buff.Absorb.Water");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Absorb_Wind, "UI.Buff.Absorb.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance, "UI.Buff.Resonance");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Fire, "UI.Buff.Resonance.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Water, "UI.Buff.Resonance.Water");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Wind, "UI.Buff.Resonance.Wind");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Fire2, "UI.Buff.Resonance.Fire2");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Water2, "UI.Buff.Resonance.Water2");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Wind2, "UI.Buff.Resonance.Wind2");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Steam, "UI.Buff.Resonance.Steam");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Storm, "UI.Buff.Resonance.Storm");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Mist, "UI.Buff.Resonance.Mist");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Trinity, "UI.Buff.Resonance.Trinity");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet, "UI.Buff.ArmorSet");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Berserker_2pc, "UI.Buff.ArmorSet.Berserker.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Berserker_4pc, "UI.Buff.ArmorSet.Berserker.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Gale_2pc, "UI.Buff.ArmorSet.Gale.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Gale_4pc, "UI.Buff.ArmorSet.Gale.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Guardian_2pc, "UI.Buff.ArmorSet.Guardian.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Guardian_4pc, "UI.Buff.ArmorSet.Guardian.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Hunter_2pc, "UI.Buff.ArmorSet.Hunter.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Hunter_4pc, "UI.Buff.ArmorSet.Hunter.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Pyromancer_2pc, "UI.Buff.ArmorSet.Pyromancer.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Pyromancer_4pc, "UI.Buff.ArmorSet.Pyromancer.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Vampire_2pc, "UI.Buff.ArmorSet.Vampire.2pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Vampire_4pc, "UI.Buff.ArmorSet.Vampire.4pc");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ParryMomentum, "UI.Buff.ParryMomentum");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_DodgeMomentum, "UI.Buff.DodgeMomentum");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Attune_Fire, "UI.Buff.Attune.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Attune_Water, "UI.Buff.Attune.Water");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Attune_Wind, "UI.Buff.Attune.Wind");
 
 	// ---- Message channels
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Session_StateChanged, "Channel.Session.StateChanged");
@@ -417,6 +481,17 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Defense, "Data.Init.Defense");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_GuardDamageReduction, "Data.Init.GuardDamageReduction");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Init_AttackSpeedMultiplier, "Data.Init.AttackSpeedMultiplier");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_MaxStamina, "Data.Init.MaxStamina");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_Stamina, "Data.Init.Stamina");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_StaminaRegenRate, "Data.Init.StaminaRegenRate");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_NormalAttackMul, "Data.Init.NormalAttackMul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_HeavyAttackMul, "Data.Init.HeavyAttackMul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_ElementalMul, "Data.Init.ElementalMul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_CritChance, "Data.Init.CritChance");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_CritDamageMul, "Data.Init.CritDamageMul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_LifeSteal, "Data.Init.LifeSteal");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_ElementChargeGainMul, "Data.Init.ElementChargeGainMul");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Init_OutgoingMul, "Data.Init.OutgoingMul");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Weapon_AttackPower, "Data.Weapon.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Armor_Defense, "Data.Armor.Defense");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Cost_Stamina, "Data.Cost.Stamina");

@@ -32,6 +32,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void SetIsRotatingStock(bool bRotating);
 
+	/** 런타임 남은 재고로 재고 텍스트를 갱신한다(무한이면 -1 → "∞").
+	 *  SetupBuyEntry가 DT의 정적 StockCount로 채운 값을 실제 잔량으로 덮어쓴다. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
+	void SetRuntimeStock(int32 Remaining);
+
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Shop")
 	bool bIsRotatingStock = false;
 

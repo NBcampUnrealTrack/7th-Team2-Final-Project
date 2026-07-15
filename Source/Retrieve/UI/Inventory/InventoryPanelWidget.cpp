@@ -914,6 +914,37 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 		return FText::GetEmpty();
 	}
 
+	// 방어구는 설명 Helper가 다루지 않으므로(소모품/재료/무기 전용) 여기서 직접 조립한다.
+	// 이 분기가 없으면 아래 폴백(이름/타입/보유)으로 빠져 방어력·세트 정보가 전부 누락된다.
+	if (IsArmorCategory(ItemCategoryTag) && ArmorDataTable)
+	{
+		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText"), /*bWarnIfRowMissing=*/false))
+		{
+			TArray<FString> Lines;
+			Lines.Add(Row->DisplayName.ToString());
+			Lines.Add(FString::Printf(TEXT("방어력: +%.0f"), Row->Defense));
+			Lines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag)));
+
+			const FName EquippedId = InventoryComponent
+				? InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) : NAME_None;
+			Lines.Add(EquippedId == ItemId ? TEXT("장착 중") : TEXT("보관 중"));
+
+			if (!Row->ShortDescription.IsEmpty())
+			{
+				Lines.Add(Row->ShortDescription.ToString());
+			}
+
+			const FText SetInfo = BuildArmorSetInfoText(*Row);
+			if (!SetInfo.IsEmpty())
+			{
+				Lines.Add(TEXT("---------------------------"));
+				Lines.Add(SetInfo.ToString());
+			}
+			return FText::FromString(FString::Join(Lines, TEXT("\n")));
+		}
+	}
+
 	// 순수 아이템 설명 — Helper에 위임 (DisplayName, 스탯, ShortDescription, SkillPreviews)
 	FText BaseDesc = URetrieveItemDescriptionHelper::BuildItemDescription(
 		ItemId, ItemCategoryTag,
@@ -1537,30 +1568,130 @@ void UInventoryPanelWidget::RefreshSelectedArmorDetails()
 		return;
 	}
 
-	if (Text_DetailType)
+	// WBP 기본 상태가 Collapsed라 텍스트만 넣으면 안 보인다 — 내용이 있으면 함께 펼친다
+	auto SetDetailText = [](UTextBlock* TextBlock, const FText& Value)
 	{
-		Text_DetailType->SetText(FText::FromString(GetGameplayTagLeaf(Armor.EquipmentSlotTag)));
-	}
-	if (Text_DetailState)
-	{
-		Text_DetailState->SetText(GetSelectedItemStateText());
-	}
-	if (Text_DetailName)
-	{
-		Text_DetailName->SetText(Armor.DisplayName);
-	}
+		if (!TextBlock)
+		{
+			return;
+		}
+		TextBlock->SetText(Value);
+		TextBlock->SetVisibility(Value.IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	};
+
+	SetDetailText(Text_DetailType, FText::FromString(GetGameplayTagLeaf(Armor.EquipmentSlotTag)));
+	SetDetailText(Text_DetailState, GetSelectedItemStateText());
+	SetDetailText(Text_DetailName, Armor.DisplayName);
 	if (Text_DetailMainStat)
 	{
 		const float TotalDef = GetTotalDefense();
 		const FString StatText = IsSelectedArmorEquipped()
 			? FString::Printf(TEXT("방어력: +%.0f  (최종: %.0f)"), Armor.Defense, TotalDef)
 			: FString::Printf(TEXT("방어력: +%.0f"), Armor.Defense);
-		Text_DetailMainStat->SetText(FText::FromString(StatText));
+		SetDetailText(Text_DetailMainStat, FText::FromString(StatText));
 	}
 	if (Text_DetailDescription)
 	{
-		Text_DetailDescription->SetText(Armor.ShortDescription);
+		// 기본 설명 아래에 세트 정보(세트명·착용 수·2/4세트 효과) 블록을 덧붙인다
+		const FText SetInfo = BuildArmorSetInfoText(Armor);
+		FText Combined;
+		if (SetInfo.IsEmpty())
+		{
+			Combined = Armor.ShortDescription;
+		}
+		else if (Armor.ShortDescription.IsEmpty())
+		{
+			Combined = SetInfo;
+		}
+		else
+		{
+			Combined = FText::FromString(
+				Armor.ShortDescription.ToString() + TEXT("\n\n") + SetInfo.ToString());
+		}
+		SetDetailText(Text_DetailDescription, Combined);
 	}
+}
+
+FText UInventoryPanelWidget::BuildArmorSetInfoText(const FRetrieveArmorDataRow& Armor) const
+{
+	if (!Armor.ArmorSetTag.IsValid() || !ArmorDataTable)
+	{
+		return FText::GetEmpty();
+	}
+
+	// 세트 보너스 정의 테이블 — ArmorComponent와 동일한 기본 경로 (한 번 로드되면 캐시됨)
+	const UDataTable* SetBonusTable = Cast<UDataTable>(FSoftObjectPath(
+		TEXT("/Game/Retrieve/Data/Items/DT_ArmorSetBonus.DT_ArmorSetBonus")).TryLoad());
+	if (!SetBonusTable)
+	{
+		return FText::GetEmpty();
+	}
+
+	const FRetrieveArmorSetBonusRow* BonusRow = nullptr;
+	for (const TPair<FName, uint8*>& Pair : SetBonusTable->GetRowMap())
+	{
+		const FRetrieveArmorSetBonusRow* Row = reinterpret_cast<const FRetrieveArmorSetBonusRow*>(Pair.Value);
+		if (Row && Row->SetTag == Armor.ArmorSetTag)
+		{
+			BonusRow = Row;
+			break;
+		}
+	}
+	if (!BonusRow)
+	{
+		return FText::GetEmpty();
+	}
+
+	// 착용 중인 같은 세트 부위 수 집계
+	int32 EquippedPieces = 0;
+	if (InventoryComponent)
+	{
+		for (const FRetrieveEquippedArmorEntry& Entry : InventoryComponent->GetEquippedArmorSlots())
+		{
+			const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
+				Entry.ArmorItemId, TEXT("UInventoryPanelWidget::BuildArmorSetInfoText"), /*bWarnIfRowMissing=*/false);
+			if (Row && Row->ArmorSetTag == Armor.ArmorSetTag)
+			{
+				++EquippedPieces;
+			}
+		}
+	}
+
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("[%s] 착용 %d부위"), *BonusRow->DisplayName.ToString(), EquippedPieces));
+	if (!BonusRow->Bonus2Desc.IsEmpty())
+	{
+		Lines.Add(FString::Printf(TEXT("2세트(%s): %s"),
+			EquippedPieces >= 2 ? TEXT("활성") : TEXT("비활성"),
+			*BonusRow->Bonus2Desc.ToString()));
+	}
+	if (!BonusRow->Bonus4Desc.IsEmpty())
+	{
+		Lines.Add(FString::Printf(TEXT("4세트(%s): %s"),
+			EquippedPieces >= 4 ? TEXT("활성") : TEXT("비활성"),
+			*BonusRow->Bonus4Desc.ToString()));
+	}
+	return FText::FromString(FString::Join(Lines, TEXT("\n")));
+}
+
+FString UInventoryPanelWidget::GetWeaponPassiveSummary(const FGameplayTag& WeaponTypeTag)
+{
+	// GE_WeaponPassive_* (DA_AbilitySet_*에 연결)의 수치와 반드시 일치시켜 유지한다
+	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff)
+	{
+		return TEXT("원소 데미지 +10%, 게이지 획득 +15%");
+	}
+	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Bow)
+	{
+		return TEXT("일반공격 +10%, 치명타 +5%");
+	}
+	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield)
+	{
+		return TEXT("강공격 +10%, 가드 감쇄 +5%");
+	}
+	return TEXT("없음");
 }
 
 void UInventoryPanelWidget::UpdateEquipActionButtons()
@@ -2568,7 +2699,14 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 
 	const FString CurrentInfo = FormatArmorTooltipBlock(CurrentArmor, TEXT("Current"));
 	const FString HoveredInfo = FormatArmorTooltipBlock(HoveredArmor, TEXT("Selected"));
-	const FString DeltaInfo = BuildArmorSwapDeltaText(CurrentArmor, HoveredArmor);
+	FString DeltaInfo = BuildArmorSwapDeltaText(CurrentArmor, HoveredArmor);
+
+	// 세트 정보는 비교 툴팁 경로에서도 보여준다 (장착 중인 슬롯 아이템 호버 시 이 경로만 탄다)
+	const FText SetInfo = BuildArmorSetInfoText(HoveredArmor);
+	if (!SetInfo.IsEmpty())
+	{
+		DeltaInfo += TEXT("\n---------------------------\n") + SetInfo.ToString();
+	}
 
 	InvokeTooltipTextFunction(
 		TooltipWidget,
@@ -2744,6 +2882,7 @@ FString UInventoryPanelWidget::FormatWeaponTooltipBlock(
 	Lines.Add(FString::Printf(TEXT("원소: %s"), *GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
 	Lines.Add(FString::Printf(TEXT("공격력: %.0f"), WeaponData.AttackPower));
 	Lines.Add(FString::Printf(TEXT("원소 충전: x%.2f"), WeaponData.ElementChargeMultiplier));
+	Lines.Add(FString::Printf(TEXT("패시브: %s"), *GetWeaponPassiveSummary(WeaponData.WeaponTypeTag)));
 
 	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
 	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.

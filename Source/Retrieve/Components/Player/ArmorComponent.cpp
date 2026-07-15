@@ -23,6 +23,53 @@ void UArmorComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(UArmorComponent, EquippedArmorEntries);
 }
 
+void UArmorComponent::RefreshEquippedArmorGameplay()
+{
+    if (!HasAuthorityToModify())
+    {
+        RefreshArmorVisuals();
+        return;
+    }
+
+    URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+    if (!ASC)
+    {
+        return;
+    }
+
+    // Startup equipment may be restored before the ASC is ready. Rebuild all
+    // runtime armor effects from the current equipped entries once it is bound.
+    ClearAllArmorGameplay();
+    for (const TPair<FGameplayTag, FArmorSetBonusHandles>& Pair : ArmorSetBonusHandles)
+    {
+        if (Pair.Value.Bonus2.IsValid())
+        {
+            ASC->RemoveActiveGameplayEffect(Pair.Value.Bonus2);
+        }
+        if (Pair.Value.Bonus4.IsValid())
+        {
+            ASC->RemoveActiveGameplayEffect(Pair.Value.Bonus4);
+        }
+    }
+    ArmorSetBonusHandles.Empty();
+
+    for (const FRetrieveEquippedArmorEntry& Entry : EquippedArmorEntries)
+    {
+        if (!Entry.EquipmentSlotTag.IsValid() || Entry.ArmorItemId.IsNone())
+        {
+            continue;
+        }
+
+        if (const FRetrieveArmorDataRow* ArmorData = FindArmorData(Entry.ArmorItemId))
+        {
+            ApplyArmorGameplay(Entry.EquipmentSlotTag, *ArmorData);
+        }
+    }
+
+    RefreshArmorVisuals();
+    RecomputeSetBonuses();
+}
+
 bool UArmorComponent::EquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemId)
 {
 	if (!HasAuthorityToModify())
@@ -60,6 +107,7 @@ bool UArmorComponent::EquipArmor(FGameplayTag EquipmentSlotTag, FName ArmorItemI
 
 	ApplyArmorGameplay(EquipmentSlotTag, *ArmorData);
 	ApplyArmorVisual(EquipmentSlotTag, *ArmorData);
+	RecomputeSetBonuses();
 	OnArmorEquipped.Broadcast(EquipmentSlotTag, ArmorItemId);
 	return true;
 }
@@ -81,6 +129,7 @@ bool UArmorComponent::UnequipArmor(FGameplayTag EquipmentSlotTag)
 		const FName PreviousArmorId = EquippedArmorEntries[Index].ArmorItemId;
 		EquippedArmorEntries.RemoveAt(Index);
 		ClearArmorGameplayForSlot(EquipmentSlotTag);
+		RecomputeSetBonuses();
 
 		if (URetrievePawnCosmeticComponent* CosmeticComponent = GetPawnCosmeticComponent())
 		{
@@ -104,6 +153,7 @@ void UArmorComponent::UnequipAllArmor()
 	const TArray<FRetrieveEquippedArmorEntry> PreviousEntries = EquippedArmorEntries;
 	EquippedArmorEntries.Reset();
 	ClearAllArmorGameplay();
+	RecomputeSetBonuses();
 
 	if (URetrievePawnCosmeticComponent* CosmeticComponent = GetPawnCosmeticComponent())
 	{
@@ -259,6 +309,121 @@ void UArmorComponent::ApplyArmorGameplay(FGameplayTag EquipmentSlotTag, const FR
 				ArmorData.Defense);
 			const FActiveGameplayEffectHandle DefenseHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
 			ArmorDefenseEffectHandlesBySlot.Add(EquipmentSlotTag, DefenseHandle);
+		}
+	}
+}
+
+const FRetrieveArmorSetBonusRow* UArmorComponent::FindSetBonusRow(FGameplayTag SetTag) const
+{
+	if (!ArmorSetBonusTable || !SetTag.IsValid())
+	{
+		return nullptr;
+	}
+
+	for (const TPair<FName, uint8*>& Pair : ArmorSetBonusTable->GetRowMap())
+	{
+		const FRetrieveArmorSetBonusRow* Row = reinterpret_cast<const FRetrieveArmorSetBonusRow*>(Pair.Value);
+		if (Row && Row->SetTag == SetTag)
+		{
+			return Row;
+		}
+	}
+	return nullptr;
+}
+
+void UArmorComponent::RecomputeSetBonuses()
+{
+	if (!HasAuthorityToModify())
+	{
+		return;
+	}
+
+	URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent();
+	if (!ASC)
+	{
+		return;
+	}
+
+	// 컴포넌트에 테이블 미지정 시 기본 경로 폴백 (BP 재저장 없이 동작)
+	if (!ArmorSetBonusTable)
+	{
+		ArmorSetBonusTable = Cast<UDataTable>(FSoftObjectPath(
+			TEXT("/Game/Retrieve/Data/Items/DT_ArmorSetBonus.DT_ArmorSetBonus")).TryLoad());
+		if (!ArmorSetBonusTable)
+		{
+			return;
+		}
+	}
+
+	// 1. 착용 중 방어구의 세트별 부위 수 집계
+	TMap<FGameplayTag, int32> PieceCounts;
+	for (const FRetrieveEquippedArmorEntry& Entry : EquippedArmorEntries)
+	{
+		if (const FRetrieveArmorDataRow* ArmorData = FindArmorData(Entry.ArmorItemId))
+		{
+			if (ArmorData->ArmorSetTag.IsValid())
+			{
+				PieceCounts.FindOrAdd(ArmorData->ArmorSetTag)++;
+			}
+		}
+	}
+
+	// 2. 기존 핸들과 diff — 원하는 상태 계산 후 어긋난 것만 적용/회수
+	TSet<FGameplayTag> SetTagsToVisit;
+	for (const TPair<FGameplayTag, int32>& Pair : PieceCounts)
+	{
+		SetTagsToVisit.Add(Pair.Key);
+	}
+	for (const TPair<FGameplayTag, FArmorSetBonusHandles>& Pair : ArmorSetBonusHandles)
+	{
+		SetTagsToVisit.Add(Pair.Key);
+	}
+
+	auto ApplySetEffect = [this, ASC](const TSoftClassPtr<UGameplayEffect>& EffectPtr) -> FActiveGameplayEffectHandle
+	{
+		UClass* EffectClass = EffectPtr.LoadSynchronous();
+		if (!EffectClass)
+		{
+			return FActiveGameplayEffectHandle();
+		}
+		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		Context.AddSourceObject(this);
+		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(EffectClass, 1.f, Context);
+		return SpecHandle.IsValid() ? ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data) : FActiveGameplayEffectHandle();
+	};
+
+	for (const FGameplayTag& SetTag : SetTagsToVisit)
+	{
+		const int32 Count = PieceCounts.FindRef(SetTag);
+		const FRetrieveArmorSetBonusRow* BonusRow = FindSetBonusRow(SetTag);
+		const bool bWant2 = BonusRow && Count >= 2 && !BonusRow->Bonus2PieceEffect.IsNull();
+		const bool bWant4 = BonusRow && Count >= 4 && !BonusRow->Bonus4PieceEffect.IsNull();
+
+		FArmorSetBonusHandles& Handles = ArmorSetBonusHandles.FindOrAdd(SetTag);
+
+		if (bWant2 && !Handles.Bonus2.IsValid())
+		{
+			Handles.Bonus2 = ApplySetEffect(BonusRow->Bonus2PieceEffect);
+		}
+		else if (!bWant2 && Handles.Bonus2.IsValid())
+		{
+			ASC->RemoveActiveGameplayEffect(Handles.Bonus2);
+			Handles.Bonus2 = FActiveGameplayEffectHandle();
+		}
+
+		if (bWant4 && !Handles.Bonus4.IsValid())
+		{
+			Handles.Bonus4 = ApplySetEffect(BonusRow->Bonus4PieceEffect);
+		}
+		else if (!bWant4 && Handles.Bonus4.IsValid())
+		{
+			ASC->RemoveActiveGameplayEffect(Handles.Bonus4);
+			Handles.Bonus4 = FActiveGameplayEffectHandle();
+		}
+
+		if (!Handles.Bonus2.IsValid() && !Handles.Bonus4.IsValid())
+		{
+			ArmorSetBonusHandles.Remove(SetTag);
 		}
 	}
 }

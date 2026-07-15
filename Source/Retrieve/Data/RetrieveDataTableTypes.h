@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
@@ -174,6 +174,32 @@ struct RETRIEVE_API FCharacterStats : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats", meta = (ClampMin = "0.1"))
 	float AttackSpeedMultiplier = 1.0f;
+
+	// ---- 빌드 스탯 (전부 중립 기본값. 데이터 미지정 시 기존 밸런스 불변) ----
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0"))
+	float NormalAttackDamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0"))
+	float HeavyAttackDamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0"))
+	float ElementalDamageMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float CriticalChance = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "1.0"))
+	float CriticalDamageMultiplier = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LifeStealRatio = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0"))
+	float ElementChargeGainMultiplier = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Stats|Build", meta = (ClampMin = "0.0"))
+	float OutgoingDamageMultiplier = 1.0f;
 
 	// 스태미너(최대치/회복)는 플레이어 전용이라 여기(공용 캐릭터 스탯)가 아니라
 	// URetrieveStaminaSettings(Project Settings > Retrieve > Stamina)에서 관리한다.
@@ -1775,11 +1801,91 @@ struct RETRIEVE_API FRetrieveArmorDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Gameplay", meta = (AllowedClasses = "/Script/Retrieve.RetrieveAbilitySet"))
 	FSoftObjectPath ArmorAbilitySet;
 
+	/** 이 방어구가 속한 세트. None = 세트 없음. 같은 세트 2/4부위 장착 시 DT_ArmorSetBonus의 보너스 GE가 발동한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Gameplay", meta = (Categories = "Armor.Set"))
+	FGameplayTag ArmorSetTag;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|UI", meta = (MultiLine = true))
 	FText ShortDescription;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armor|Economy", meta = (ClampMin = "0"))
 	int32 BasePrice = 300;
+};
+
+/**
+ * 방어구 세트 보너스 정의 (DT_ArmorSetBonus).
+ * ArmorComponent::RecomputeSetBonuses()가 착용 부위 수를 집계해 2/4세트 GE를 적용/회수한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveArmorSetBonusRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** 세트 식별 태그. DT_Armor의 ArmorSetTag와 매칭된다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet", meta = (Categories = "Armor.Set"))
+	FGameplayTag SetTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet")
+	FText DisplayName;
+
+	/** 같은 세트 2부위 이상 착용 시 적용할 GE (Infinite 권장) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet")
+	TSoftClassPtr<UGameplayEffect> Bonus2PieceEffect;
+
+	/** 같은 세트 4부위 이상 착용 시 추가 적용할 GE (2세트 GE 위에 중첩) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet")
+	TSoftClassPtr<UGameplayEffect> Bonus4PieceEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet|UI", meta = (MultiLine = true))
+	FText Bonus2Desc;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ArmorSet|UI", meta = (MultiLine = true))
+	FText Bonus4Desc;
+};
+
+/**
+ * 원소 공명 정의 (DT_ElementResonance).
+ * ElementResonanceComponent가 Fire/Water/Wind 어튠 스택 수를 집계해 조건 충족 행의 GE를 발동한다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FElementResonanceRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance")
+	FText DisplayName;
+
+	/** 필요한 불 스택 수. 0 = 무관 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Condition", meta = (ClampMin = "0"))
+	int32 RequiredFire = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Condition", meta = (ClampMin = "0"))
+	int32 RequiredWater = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Condition", meta = (ClampMin = "0"))
+	int32 RequiredWind = 0;
+
+	/** true = 요구치와 정확히 같아야 발동(0인 원소는 여전히 무관), false = 이상이면 발동 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Condition")
+	bool bExactMatch = false;
+
+	/** 배타 그룹 내 우선순위. 높을수록 우선 (예: 불 공명 II > 불 공명 I) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Exclusive")
+	int32 Priority = 0;
+
+	/** true면 같은 ExclusiveGroup에서 조건 충족 행 중 Priority 최고 하나만 활성 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Exclusive")
+	bool bExclusive = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|Exclusive", meta = (Categories = "Resonance.Group"))
+	FGameplayTag ExclusiveGroup;
+
+	/** 공명 발동 시 적용할 GE (Infinite 권장. UI.Buff.Resonance.* AssetTag를 달면 버프 바에 자동 표기) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance")
+	TSoftClassPtr<UGameplayEffect> ResonanceEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resonance|UI", meta = (MultiLine = true))
+	FText Description;
 };
 
 // 소모 아이템 데이터. 실제 회복/버프 적용은 UseItem Ability에서 처리

@@ -46,6 +46,16 @@ void UShopItemEntryWidget::SetupBuyEntry(FName InRowName, const FRetrieveShopIte
 	SetSelected(false);
 }
 
+void UShopItemEntryWidget::SetRuntimeStock(int32 Remaining)
+{
+	if (Text_Stock)
+	{
+		Text_Stock->SetText(Remaining < 0
+			? FText::FromString(TEXT("∞"))
+			: FText::AsNumber(Remaining));
+	}
+}
+
 void UShopItemEntryWidget::SetIsRotatingStock(bool bRotating)
 {
 	bIsRotatingStock = bRotating;

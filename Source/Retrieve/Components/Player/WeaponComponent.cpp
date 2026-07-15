@@ -11,6 +11,9 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Settings/RetrieveWeaponSocketSettings.h"
 
 UWeaponComponent::UWeaponComponent(const FObjectInitializer& ObjectInitializer)
@@ -18,6 +21,9 @@ UWeaponComponent::UWeaponComponent(const FObjectInitializer& ObjectInitializer)
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
+	EnhancementVFXTier1 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier1.NS_WeaponEnhance_Tier1")));
+	EnhancementVFXTier2 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier2.NS_WeaponEnhance_Tier2")));
+	EnhancementVFXTier3 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier3.NS_WeaponEnhance_Tier3")));
 }
 
 void UWeaponComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -132,6 +138,7 @@ void UWeaponComponent::SpawnWeaponVisuals()
 		// SetWeaponDrawn으로 처리한다(이 신호는 모든 스폰 경로의 단일 통로 — fallback/OnRep/장착 노티 공통).
 		// Equip 전환 중이면 숨겨서 스폰 → 발검 노티가 손에 부착하며 보이게 한다(검→방패 순차 등장).
 		ApplyWeaponVisuals(CurrentWeaponData, /*bSpawnHidden=*/IsEquipTransitionActive());
+		SpawnWeaponEnhancementVFX();
 		OnWeaponVisualsSpawned.Broadcast();
 	}
 }
@@ -243,6 +250,7 @@ void UWeaponComponent::ClearGrantedWeaponAbilities()
 
 void UWeaponComponent::ClearWeaponVisuals()
 {
+	ClearWeaponEnhancementVFX();
 	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 	{
 		if (Part.Mesh)
@@ -499,6 +507,94 @@ void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket, bool b
 	}
 }
 
+void UWeaponComponent::ClearWeaponEnhancementVFX()
+{
+	for (UNiagaraComponent* Component : WeaponEnhancementVFXComponents)
+	{
+		if (IsValid(Component))
+		{
+			Component->DeactivateImmediate();
+			Component->DestroyComponent();
+		}
+	}
+	WeaponEnhancementVFXComponents.Reset();
+}
+
+void UWeaponComponent::SpawnWeaponEnhancementVFX()
+{
+	ClearWeaponEnhancementVFX();
+
+	if (CurrentWeaponData.EnhancementLevel <= 0)
+	{
+		return;
+	}
+
+	UStaticMeshComponent* TargetMesh = nullptr;
+	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
+	{
+		UStaticMeshComponent* StaticPart = Cast<UStaticMeshComponent>(Part.Mesh);
+		if (!IsValid(StaticPart) || !StaticPart->GetStaticMesh())
+		{
+			continue;
+		}
+		if (!TargetMesh || Part.bGeneratesHitVolume)
+		{
+			TargetMesh = StaticPart;
+			if (Part.bGeneratesHitVolume)
+			{
+				break;
+			}
+		}
+	}
+	if (!TargetMesh)
+	{
+		return; // 원본 Aura 시스템이 StaticMesh 입력형이라 스켈레탈 무기는 제외한다.
+	}
+
+	const int32 Level = CurrentWeaponData.EnhancementLevel;
+	const TSoftObjectPtr<UNiagaraSystem>& SystemPtr = Level >= 7
+		? EnhancementVFXTier3
+		: (Level >= 4 ? EnhancementVFXTier2 : EnhancementVFXTier1);
+	UNiagaraSystem* System = SystemPtr.LoadSynchronous();
+	if (!System)
+	{
+		return;
+	}
+
+	UNiagaraComponent* VFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		System,
+		TargetMesh,
+		NAME_None,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		EAttachLocation::KeepRelativeOffset,
+		/*bAutoDestroy=*/false,
+		/*bAutoActivate=*/false);
+	if (!VFX)
+	{
+		return;
+	}
+
+	const FLinearColor AuraColor = CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Fire
+		? FLinearColor(8.f, 0.35f, 0.03f, 1.f)
+		: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Water
+			? FLinearColor(0.05f, 2.5f, 10.f, 1.f)
+			: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Wind
+				? FLinearColor(0.15f, 8.f, 1.2f, 1.f)
+				: FLinearColor(3.5f, 1.2f, 7.f, 1.f);
+	const float TierAlpha = FMath::Clamp(static_cast<float>(Level) / 10.f, 0.1f, 1.f);
+
+	VFX->SetVariableStaticMesh(FName(TEXT("User.01 - Mesh -> Weapon")), TargetMesh->GetStaticMesh());
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Emissive")), AuraColor);
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay")), AuraColor * (0.55f + TierAlpha * 0.45f));
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay Noise")), AuraColor);
+	VFX->SetVariableFloat(FName(TEXT("User.Sparks Amount")), FMath::Lerp(18.f, 90.f, TierAlpha));
+	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Width")), FMath::Lerp(8.f, 24.f, TierAlpha));
+	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Lifetime")), FMath::Lerp(0.25f, 0.85f, TierAlpha));
+	VFX->ComponentTags.AddUnique(FName(TEXT("Retrieve.VFX.WeaponEnhancement")));
+	VFX->Activate(true);
+	WeaponEnhancementVFXComponents.Add(VFX);
+}
 UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeaponAttachmentData& Attachment) const
 {
 	AActor* Owner = GetOwner();

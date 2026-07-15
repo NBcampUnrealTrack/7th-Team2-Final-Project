@@ -11,6 +11,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "UObject/SoftObjectPath.h"
 
 UGA_Dash::UGA_Dash()
 {
@@ -210,6 +211,29 @@ void UGA_Dash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGamepl
 	if (ARetrieveAlsCharacter* Als = Cast<ARetrieveAlsCharacter>(GetAvatarActorFromActorInfo()))
 	{
 		Als->EndRollLockout();
+	}
+
+	// 회피 완주 어드밴티지: 캔슬/피격 중단이 아닌 정상 완료에만 짧은 기동 모멘텀 부여
+	if (!bWasCancelled)
+	{
+		TSubclassOf<UGameplayEffect> MomentumEffect = DodgeMomentumEffect;
+		if (!MomentumEffect)
+		{
+			MomentumEffect = FSoftClassPath(TEXT("/Game/Retrieve/AbilitySystem/Player/Advantage/GE_DodgeMomentum.GE_DodgeMomentum_C")).TryLoadClass<UGameplayEffect>();
+		}
+		if (MomentumEffect)
+		{
+			if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+			{
+				FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+				Context.AddSourceObject(this);
+				const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(MomentumEffect, GetAbilityLevel(), Context);
+				if (SpecHandle.IsValid())
+				{
+					ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
+				}
+			}
+		}
 	}
 
 	if (MontageTask)

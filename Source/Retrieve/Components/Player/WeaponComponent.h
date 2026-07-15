@@ -9,6 +9,8 @@
 #include "WeaponComponent.generated.h"
 
 class UGameplayEffect;
+class UNiagaraComponent;
+class UNiagaraSystem;
 class URetrieveAbilitySystemComponent;
 class UMeshComponent;
 class USceneComponent;
@@ -170,6 +172,17 @@ protected:
 	// 노킹 화살 메시(bIsNockedArrow attachment). 표시/숨김 토글용. EquippedWeaponMeshComponents가 소유·파괴한다.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMeshComponent>> NockedArrowMeshes;
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Weapon|Enhancement VFX")
+	TSoftObjectPtr<UNiagaraSystem> EnhancementVFXTier1;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Weapon|Enhancement VFX")
+	TSoftObjectPtr<UNiagaraSystem> EnhancementVFXTier2;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Weapon|Enhancement VFX")
+	TSoftObjectPtr<UNiagaraSystem> EnhancementVFXTier3;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> WeaponEnhancementVFXComponents;
 
 	// 노킹 상태(화살 장전됨). SetNockedArrowVisible에서 갱신. 드로우 전 장전 판정용(로컬 비주얼 상태).
 	bool bArrowNocked = false;
@@ -197,4 +210,6 @@ protected:
 	// 어태치먼트 데이터로 메시 컴포넌트를 생성해 반환. 메시 미설정 시 nullptr
 	UMeshComponent* CreateWeaponMeshComponent(const FRetrieveWeaponAttachmentData& Attachment) const;
 	USceneComponent* FindAttachmentParent(const FRetrieveWeaponAttachmentData& Attachment) const;
+	void SpawnWeaponEnhancementVFX();
+	void ClearWeaponEnhancementVFX();
 };

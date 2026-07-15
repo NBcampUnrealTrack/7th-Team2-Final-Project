@@ -35,6 +35,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void RollRotatingStock();
 
+	// ── 재고 (유한 재고 상점, 세이브 지속) ──────────────────────────────────────
+	/** 이 상점에서 RowName 슬롯의 남은 재고. 무한 재고이면 -1을 반환한다. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Shop")
+	int32 GetRemainingStock(FName RowName) const;
+
+	/** 구매 성공 시 재고를 Quantity만큼 차감하고 세이브에 반영한다.
+	 *  무한 재고이면 아무것도 하지 않고 true. 재고 부족이면 false. */
+	bool ConsumeStock(FName RowName, int32 Quantity);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Shop")
 	TObjectPtr<URetrieveShopDefinitionAsset> ShopDefinition;
 
@@ -48,4 +57,22 @@ public:
 
 private:
 	FGameplayMessageListenerHandle RestListenerHandle;
+
+	// ── 재고 내부 상태 ──────────────────────────────────────────────────────────
+	/** 이 상점의 식별자(정의 에셋 이름). 세이브 키로 사용. */
+	FName GetShopId() const;
+
+	/** 세이브에서 이 상점의 소진 재고를 세션 최초 1회 로드한다. */
+	void EnsureStockInitialized();
+
+	/** 현재 RemainingStock 맵을 세이브에 기록한다. */
+	void PersistStock() const;
+
+	/** 정의 에셋(메인/순환 테이블)에서 RowName 행을 찾는다. */
+	const struct FRetrieveShopItemRow* FindDefinitionRow(FName RowName) const;
+
+	/** RowName → 남은 재고. 유한 재고 행만 담긴다(무한 재고는 미포함). */
+	TMap<FName, int32> RemainingStockMap;
+
+	bool bStockInitialized = false;
 };

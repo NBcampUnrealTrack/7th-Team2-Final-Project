@@ -377,6 +377,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|UI")
 	TArray<FRetrievePanelShortcutConfig> PanelShortcuts;
 
+	/** K키로 여는 독립 스킬 개요 패널. 네이티브 PlayerController 사용 시에도 항상 동작한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Skill")
+	TSoftClassPtr<URetrieveGamePanelWidget> SkillOverviewPanelClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Skill")
+	FKey SkillOverviewPanelKey = EKeys::K;
 	/** 기본 설정 화면. 별도 BP 배선 없이 SettingsPanelKey로도 열 수 있다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Settings")
 	TSoftClassPtr<URetrieveGamePanelWidget> SettingsPanelClass;
@@ -679,3 +685,4 @@ protected:
 	TObjectPtr<UAttackFeedbackComponent> AttackFeedbackComponent;
 #pragma endregion
 };
+

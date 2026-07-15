@@ -12,6 +12,7 @@
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/Player/RetrieveHeroComponent.h"
 #include "Components/Element/ElementGaugeComponent.h"
+#include "Components/Element/ElementResonanceComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
 #include "Components/Player/StaminaComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
@@ -79,6 +80,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	WeaponComponent = CreateDefaultSubobject<UWeaponComponent>(TEXT("WeaponComponent"));
 	ArmorComponent = CreateDefaultSubobject<UArmorComponent>(TEXT("ArmorComponent"));
 	ElementGaugeComponent = CreateDefaultSubobject<UElementGaugeComponent>(TEXT("ElementGaugeComponent"));
+	ElementResonanceComponent = CreateDefaultSubobject<UElementResonanceComponent>(TEXT("ElementResonanceComponent"));
 	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>(TEXT("StaminaComponent"));
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	CombatStanceComponent = CreateDefaultSubobject<UCombatStanceComponent>(TEXT("CombatStanceComponent"));
@@ -177,10 +179,22 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		ElementUnlockComponent->InitializeWithAbilitySystem(ASC);
 	}
 
+	if (ElementResonanceComponent)
+	{
+		ElementResonanceComponent->InitializeWithAbilitySystem(ASC);
+	}
+
 	if (BuffUIBroadcastComponent)
 	{
 		BuffUIBroadcastComponent->RefreshAbilitySystemBinding();
 	}
+
+    // Bind the buff observer first, then rebuild startup armor set effects so
+    // their initial application is visible without an unequip/re-equip cycle.
+    if (ArmorComponent)
+    {
+        ArmorComponent->RefreshEquippedArmorGameplay();
+    }
 }
 
 void ASovereignCharacter::UnPossessed()
@@ -200,6 +214,11 @@ void ASovereignCharacter::UnPossessed()
 	if (ElementUnlockComponent)
 	{
 		ElementUnlockComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (ElementResonanceComponent)
+	{
+		ElementResonanceComponent->UninitializeFromAbilitySystem();
 	}
 
 	if (StaminaComponent)

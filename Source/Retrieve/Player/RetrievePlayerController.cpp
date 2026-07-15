@@ -157,6 +157,8 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_SystemMenu.WBP_SystemMenu_C")));
 	ControlsGuideClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_ControlsGuide.WBP_ControlsGuide_C")));
+	SkillOverviewPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Skill/WBP_SkillOverviewPanel.WBP_SkillOverviewPanel_C")));
 }
 
 ARetrievePlayerState* ARetrievePlayerController::GetRetrievePlayerState() const
@@ -446,6 +448,15 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 		if (SettingsPanelKey.IsValid() && Params.Key == SettingsPanelKey)
 		{
 			OpenSettingsPanel();
+			return true;
+		}
+
+		if (SkillOverviewPanelKey.IsValid() && Params.Key == SkillOverviewPanelKey)
+		{
+			if (!IsCinematicActive() && !SkillOverviewPanelClass.IsNull())
+			{
+				OpenExclusivePanel(SkillOverviewPanelClass.LoadSynchronous(), SkillOverviewPanelKey);
+			}
 			return true;
 		}
 
@@ -2423,3 +2434,5 @@ bool ARetrievePlayerController::ReturnToShopConversation()
 	Client_OpenConversation(ShopNPC);
 	return true;
 }
+
+

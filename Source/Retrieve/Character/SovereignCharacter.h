@@ -17,6 +17,7 @@ class UCombatReactionComponent;
 class USpringArmComponent;
 class UWeaponComponent;
 class UElementGaugeComponent;
+class UElementResonanceComponent;
 class UStaminaComponent;
 class UPlayerBurstComponent;
 class URetrieveBuffUIBroadcastComponent;
@@ -71,6 +72,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementGaugeComponent> ElementGaugeComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UElementResonanceComponent> ElementResonanceComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UStaminaComponent> StaminaComponent;

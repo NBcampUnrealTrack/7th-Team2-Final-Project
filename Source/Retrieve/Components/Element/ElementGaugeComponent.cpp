@@ -1,6 +1,7 @@
 #include "Components/Element/ElementGaugeComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
@@ -108,6 +109,15 @@ void UElementGaugeComponent::AddCharge(int32 Amount)
 		if (const UWeaponComponent* Weapon = OwnerPawn->FindComponentByClass<UWeaponComponent>())
 		{
 			Multiplier *= FMath::Max(Weapon->GetWeaponData().ElementChargeMultiplier, 0.f);
+		}
+	}
+
+	// 빌드 스탯(장비 특수효과/공명/세트 GE)의 게이지 획득 배율 반영
+	if (const URetrieveAbilitySystemComponent* RetrieveASC = GetRetrieveASC())
+	{
+		if (const UCombatAttributeSet* CombatSet = RetrieveASC->GetSet<UCombatAttributeSet>())
+		{
+			Multiplier *= FMath::Max(CombatSet->GetElementChargeGainMultiplier(), 0.f);
 		}
 	}
 

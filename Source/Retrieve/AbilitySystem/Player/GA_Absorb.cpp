@@ -46,6 +46,26 @@ TSubclassOf<UGameplayEffect> LoadDefaultAbsorbEffect(FGameplayTag ElementTag)
 
 	return EffectPath ? FSoftClassPath(EffectPath).TryLoadClass<UGameplayEffect>() : nullptr;
 }
+
+// 어빌리티 기본값에 어튠 스택 GE가 비어 있을 때 사용하는 고정 경로 폴백 (BP 재저장 없이 동작)
+TSubclassOf<UGameplayEffect> LoadDefaultAttuneStackEffect(FGameplayTag ElementTag)
+{
+	const TCHAR* EffectPath = nullptr;
+	if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Fire))
+	{
+		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Fire.GE_ElementStack_Fire_C");
+	}
+	else if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Water))
+	{
+		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Water.GE_ElementStack_Water_C");
+	}
+	else if (ElementTag.MatchesTagExact(RetrieveGameplayTags::Element_Wind))
+	{
+		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Wind.GE_ElementStack_Wind_C");
+	}
+
+	return EffectPath ? FSoftClassPath(EffectPath).TryLoadClass<UGameplayEffect>() : nullptr;
+}
 }
 
 UGA_Absorb::UGA_Absorb()
@@ -83,6 +103,16 @@ TSubclassOf<UGameplayEffect> UGA_Absorb::ResolveAbsorbEffectClass(const FGamepla
 	}
 
 	return LoadDefaultAbsorbEffect(Element);
+}
+
+TSubclassOf<UGameplayEffect> UGA_Absorb::ResolveAttuneStackEffectClass(const FGameplayTag Element) const
+{
+	if (const TSubclassOf<UGameplayEffect>* EffectClassPtr = ElementToAttuneStackEffect.Find(Element))
+	{
+		return *EffectClassPtr;
+	}
+
+	return LoadDefaultAttuneStackEffect(Element);
 }
 
 bool UGA_Absorb::CanActivateAbility(
@@ -193,7 +223,19 @@ void UGA_Absorb::ActivateAbility(
 			}
 		}
 	}
-	
+
+	// 원소 공명: 흡수한 원소의 어튠 스택 +1 (스택형 Duration GE. ElementResonanceComponent가 집계)
+	if (const TSubclassOf<UGameplayEffect> StackEffectClass = ResolveAttuneStackEffectClass(TargetElement))
+	{
+		FGameplayEffectContextHandle StackContext = ASC->MakeEffectContext();
+		StackContext.AddSourceObject(this);
+		const FGameplayEffectSpecHandle StackSpecHandle = ASC->MakeOutgoingSpec(StackEffectClass, GetAbilityLevel(), StackContext);
+		if (StackSpecHandle.IsValid())
+		{
+			ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, StackSpecHandle);
+		}
+	}
+
 	// 신규 표준: 흡수 시전 몽타주는 장착 무기의 AttackDefinition에서 먼저 찾는다.
 	// GA_Absorb는 공용 AbilitySet에서 부여되므로 무기별 모션 데이터는 런타임 무기 데이터가 소유한다.
 	const UWeaponComponent* WeaponComp = Avatar->FindComponentByClass<UWeaponComponent>();

@@ -103,6 +103,10 @@ void URetrieveAbilitySet::GiveToAbilitySystem(URetrieveAbilitySystemComponent* A
 		}
 	}
 
+	UE_LOG(LogTemp, Log, TEXT("[AbilitySet] %s -> %s : %d effects, %d abilities"),
+		*GetNameSafe(this), *GetNameSafe(ASC->GetAvatarActor()),
+		GrantedGameplayEffects.Num(), GrantedGameplayAbilities.Num());
+
 	// Grant the gameplay abilities
 	for (const FRetrieveAbilitySet_GameplayAbility& AbilityToGrant : GrantedGameplayAbilities)
 	{

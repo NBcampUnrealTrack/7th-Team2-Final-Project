@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "ActiveGameplayEffectHandle.h"
@@ -46,6 +46,11 @@ private:
 	/** i-frame 무적 GE. Infinite + GrantedTag=State.Player.Invincible 로 설정. ANS 윈도우 구간 동안만 적용된다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Dash|IFrame")
 	TSubclassOf<UGameplayEffect> IFrameWindowEffect;
+
+	/** 회피 완주 시 짧게 부여하는 기동 모멘텀 버프 (GE_DodgeMomentum).
+	 *  미지정이면 C++ 기본 경로(/Game/Retrieve/AbilitySystem/Player/Advantage/GE_DodgeMomentum)를 폴백 로드한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Dash|Advantage")
+	TSubclassOf<class UGameplayEffect> DodgeMomentumEffect;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;

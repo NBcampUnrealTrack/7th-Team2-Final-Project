@@ -25,6 +25,12 @@ public:
 	 *  Defense가 이 값과 같아지면 피해가 정확히 절반이 된다. */
 	static constexpr float DefenseConstant = 100.f;
 
+	/** 크리티컬 확률 상한. 장비/공명 중첩으로도 이 이상 올라가지 않는다(폭주 방지). */
+	static constexpr float CriticalChanceCap = 0.6f;
+
+	/** 흡혈 비율 상한(준 데미지 대비 회복 %). */
+	static constexpr float LifeStealRatioCap = 0.3f;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
@@ -88,6 +94,54 @@ public:
 	FGameplayAttributeData MaxPoise;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxPoise)
 
+	// ---- 빌드 스탯 (장비 특수효과/원소 공명/세트가 GE로 증감. 전부 중립 기본값 = 미부여 시 기존 밸런스 불변) ----
+
+	/** 일반공격(Attack.Type.Normal) 데미지 배율. 기본 1.0. ExecCalc에서 소비. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_NormalAttackDamageMultiplier)
+	FGameplayAttributeData NormalAttackDamageMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, NormalAttackDamageMultiplier)
+
+	/** 강공격(Attack.Type.Heavy) 데미지 배율. 기본 1.0. ExecCalc에서 소비. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_HeavyAttackDamageMultiplier)
+	FGameplayAttributeData HeavyAttackDamageMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, HeavyAttackDamageMultiplier)
+
+	/** 원소(Element.Fire/Water/Wind) 실린 공격 데미지 배율. 기본 1.0. ExecCalc에서 소비. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ElementalDamageMultiplier)
+	FGameplayAttributeData ElementalDamageMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, ElementalDamageMultiplier)
+
+	/** 치명타 확률(0~CriticalChanceCap). 기본 0. ExecCalc 서버 굴림. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CriticalChance)
+	FGameplayAttributeData CriticalChance;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, CriticalChance)
+
+	/** 치명타 데미지 배율. 기본 1.5, 최소 1.0. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CriticalDamageMultiplier)
+	FGameplayAttributeData CriticalDamageMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, CriticalDamageMultiplier)
+
+	/** 흡혈 비율(준 데미지 대비, 0~LifeStealRatioCap). 기본 0. 피격자 PostGameplayEffectExecute에서 공격자 회복. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_LifeStealRatio)
+	FGameplayAttributeData LifeStealRatio;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, LifeStealRatio)
+
+	/** 원소 게이지 획득 배율. 기본 1.0. ElementGaugeComponent::AddCharge에서 소비. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ElementChargeGainMultiplier)
+	FGameplayAttributeData ElementChargeGainMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, ElementChargeGainMultiplier)
+
+	/** 주는 데미지 전체 배율(범용 버프용). 기본 1.0. ExecCalc에서 소비. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_OutgoingDamageMultiplier)
+	FGameplayAttributeData OutgoingDamageMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, OutgoingDamageMultiplier)
+
+	/** 스태미너 자연 회복 속도 배율. 기본 1.0(중립). 회복 base는 URetrieveStaminaSettings 소유,
+	 *  이 배율만 세트/버프 GE로 증감해 StaminaComponent 회복 계산에 곱해진다. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_StaminaRegenMultiplier)
+	FGameplayAttributeData StaminaRegenMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, StaminaRegenMultiplier)
+
 private:
 	void ClampAttribute(const FGameplayAttribute& Attribute, float& NewValue) const;
 
@@ -103,6 +157,15 @@ private:
 	UFUNCTION() void OnRep_MaxStamina(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_Poise(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_MaxPoise(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_NormalAttackDamageMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_HeavyAttackDamageMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_ElementalDamageMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_CriticalChance(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_CriticalDamageMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_LifeStealRatio(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_ElementChargeGainMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_OutgoingDamageMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_StaminaRegenMultiplier(const FGameplayAttributeData& OldValue);
 
 	// 방어 분기 단일 진입점
 	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);
@@ -110,4 +173,6 @@ private:
 	float ApplyDefenseMitigation(float Damage) const;
 	// 데미지 적용 후 카메라/플로터/리액션 시스템에 알릴 이벤트 발행
 	void BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const;
+	// 공격자의 LifeStealRatio에 따라 최종 데미지 비율만큼 공격자 체력 회복 (환경/DoT/자기피격 제외)
+	void ApplyLifeStealToSource(const struct FGameplayEffectModCallbackData& Data, float DamageDone, const FGameplayTagContainer& SpecTags) const;
 };
