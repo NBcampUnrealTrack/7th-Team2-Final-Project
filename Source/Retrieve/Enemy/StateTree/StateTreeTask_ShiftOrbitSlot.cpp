@@ -36,7 +36,9 @@ namespace
 
 		const bool bFaceTarget = ShouldFaceTargetDuringShiftOrbit(Pawn, Target);
 		const bool bUseForwardLocomotion = ShouldUseShiftOrbitForwardLocomotion(Pawn);
-		Pawn->bUseControllerRotationYaw = bFaceTarget;
+		// bUseControllerRotationYaw는 매 프레임 즉시 스냅(보간 없음)이라 bUseControllerDesiredRotation의
+		// RotationRate 보간과 동시에 켜면 스냅이 그대로 이겨버린다. 항상 false로 두고 보간만 사용한다.
+		Pawn->bUseControllerRotationYaw = false;
 		CharacterMovement->bOrientRotationToMovement = !bFaceTarget && bUseForwardLocomotion;
 		CharacterMovement->bUseControllerDesiredRotation = bFaceTarget || !bUseForwardLocomotion;
 
