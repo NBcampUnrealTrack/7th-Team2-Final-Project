@@ -1,4 +1,4 @@
-﻿#include "RetrieveSystemMessageWidget.h"
+#include "RetrieveSystemMessageWidget.h"
 
 #include "Components/TextBlock.h"
 #include "Messaging/RetrieveMessageTypes.h"
@@ -82,6 +82,21 @@ FReply URetrieveSystemMessageWidget::NativeOnKeyDown(const FGeometry& InGeometry
 	}
 	
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply URetrieveSystemMessageWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// 해제 필수 메시지를 보여주는 동안 좌클릭도 Enter와 동일하게 다음으로 넘긴다.
+	if (bShowing && bHasCurrent && CurrentEntry.bRequiresDismiss)
+	{
+		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+		{
+			HandleHoldExpired(); // 타이머 만료/Enter와 동일 경로: 페이드 → PumpNext → 다음 항목
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 void URetrieveSystemMessageWidget::NativeOnFocusLost(const FFocusEvent& InFocusEvent)
@@ -282,30 +297,30 @@ void URetrieveSystemMessageWidget::SetTutorialFeedbackActive(bool bShowBorder, b
 	bTutorialPulseActive = bShowBorder && bPulse;
 	TutorialPulseElapsed = 0.f;
 
-	if (TutorialPulseBorder)
-	{
-		TutorialPulseBorder->SetVisibility(
-			bShowBorder ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-		// 점멸을 끈 경우 스케일을 1로 고정해 정적 보더로 표시한다.
-		TutorialPulseBorder->SetRenderScale(FVector2D(1.f, 1.f));
-		TutorialPulseBorder->SetRenderOpacity(1.f);
-	}
+	//if (TutorialPulseBorder)
+	//{
+	//	TutorialPulseBorder->SetVisibility(
+	//		bShowBorder ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	//	// 점멸을 끈 경우 스케일을 1로 고정해 정적 보더로 표시한다.
+	//	TutorialPulseBorder->SetRenderScale(FVector2D(1.f, 1.f));
+	//	TutorialPulseBorder->SetRenderOpacity(1.f);
+	//}
 }
 
 void URetrieveSystemMessageWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (bTutorialPulseActive && TutorialPulseBorder)
-	{
-		// 1.0 → 1+Amplitude → 1.0 을 Period 주기로 부드럽게 반복(중심 피벗 기준 맥동).
-		constexpr float Period = 0.75f;    // 한 맥동 주기(초)
-		constexpr float Amplitude = 0.06f; // 최대 확대 비율(6%)
-		TutorialPulseElapsed += InDeltaTime;
-		const float Phase = (TutorialPulseElapsed / Period) * 2.f * PI;
-		const float Scale = 1.f + Amplitude * 0.5f * (1.f - FMath::Cos(Phase));
-		TutorialPulseBorder->SetRenderScale(FVector2D(Scale, Scale));
-	}
+	//if (bTutorialPulseActive && TutorialPulseBorder)
+	//{
+	//	// 1.0 → 1+Amplitude → 1.0 을 Period 주기로 부드럽게 반복(중심 피벗 기준 맥동).
+	//	constexpr float Period = 0.75f;    // 한 맥동 주기(초)
+	//	constexpr float Amplitude = 0.06f; // 최대 확대 비율(6%)
+	//	TutorialPulseElapsed += InDeltaTime;
+	//	const float Phase = (TutorialPulseElapsed / Period) * 2.f * PI;
+	//	const float Scale = 1.f + Amplitude * 0.5f * (1.f - FMath::Cos(Phase));
+	//	TutorialPulseBorder->SetRenderScale(FVector2D(Scale, Scale));
+	//}
 }
 
 void URetrieveSystemMessageWidget::SetModalInputBlock(bool bEngage)
