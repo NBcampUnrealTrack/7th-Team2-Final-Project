@@ -40,6 +40,19 @@ struct RETRIEVE_API FRetrieveShopItemRow : public FTableRowBase
 	int32 SortOrder = 0;
 };
 
+/** 상점 1곳의 소진 재고 스냅샷. 세이브 파일에 직렬화됨.
+ *  TMap<FName, FRetrieveShopStockSave>의 값으로 쓰기 위해 TMap을 구조체로 감쌌다
+ *  (UPROPERTY는 TMap<Key, TMap<...>> 형태를 직접 허용하지 않음). */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrieveShopStockSave
+{
+	GENERATED_BODY()
+
+	/** 상점 슬롯 RowName → 남은 재고. 무한(-1) 재고 행은 저장하지 않는다. */
+	UPROPERTY(BlueprintReadWrite)
+	TMap<FName, int32> RemainingStock;
+};
+
 /** 판매 완료 후 재구매 히스토리 항목. 세이브 파일에 직렬화됨 */
 USTRUCT(BlueprintType)
 struct RETRIEVE_API FShopRepurchaseRecord

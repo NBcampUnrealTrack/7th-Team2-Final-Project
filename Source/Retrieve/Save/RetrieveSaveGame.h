@@ -88,6 +88,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	TArray<FShopRepurchaseRecord> ShopRepurchaseHistory;
 
+	/** 상점별 소진 재고. 키=상점 정의 에셋 이름(ShopId), 값=RowName별 남은 수량.
+	 *  유한 재고 상점에서 구매할 때마다 차감·저장된다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TMap<FName, FRetrieveShopStockSave> ShopStock;
+
 	// ── 퀘스트 진행 상태 (QuestBranchComponent 미러) ─────────────────────────────
 
 	/** 완료된 퀘스트 스텝 목록 */

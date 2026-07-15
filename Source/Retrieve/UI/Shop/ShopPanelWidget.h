@@ -275,6 +275,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_ItemPrice;
 
+	/** 구매 탭 보유 골드 표시(판매 탭 Text_CurrencyInInventory와 대응). */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_BuyCurrentGold;
+
+	/** 구매 예정 금액(단가×수량) 표시. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_BuyTotalCost;
+
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_OwnedCount;
 
@@ -324,11 +332,28 @@ protected:
 	TObjectPtr<UTextBlock> Text_SelectedCount;
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_SelectedCurrency;
+	/** 선택한 판매 품목명과 판매/보유 수량을 한눈에 보여 주는 요약 영역. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_SellSelectionSummary;
 	
 
 	/** 선택 항목 일괄 판매 버튼 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_SellSelected;
+
+	// ── 판매 수량 (단일 선택 시 부분 판매) ───────────────────────────────────
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SellDecrease;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SellIncrease;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_SellQuantity;
+
+	/** 수량 조절 UI 묶음(단일 선택이 아닐 때 숨김). 없으면 개별 위젯만 토글. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> Panel_SellQuantity;
 
 	/** 재구매 패널 열기 버튼 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
@@ -376,6 +401,8 @@ private:
 	// ── 구매 탭 내부 ────────────────────────────────────────────────────────────
 	void RefreshBuyList();
 	void RefreshBuyDetail();
+	/** 선택 품목의 구매 가능 최대 수량(무한 재고면 99, 유한이면 남은 재고(≤99)). */
+	int32 GetBuyStockLimit() const;
 
 	// ── 판매 탭 내부 ────────────────────────────────────────────────────────────
 	void RefreshSellGrid(FGameplayTag CategoryTag);
@@ -394,6 +421,15 @@ private:
 	float     GetItemStatValue(FName ItemId, FGameplayTag CategoryTag) const;
 	int32     GetItemBasePrice(FName ItemId, FGameplayTag CategoryTag) const;
 	int32     CalcSellPrice(FName ItemId, FGameplayTag CategoryTag) const;
+	// 아래 판매 슬롯 캐시 구조체(하단 정의)를 파라미터로 쓰는 헬퍼가 있어 전방 선언한다.
+	struct FSellSlotCache;
+
+	/** 해당 인벤토리 스택이 현재 장착 중인 장비인지(무기=장착 슬롯 ID, 방어구=장착 슬롯 목록). */
+	bool      IsStackEquipped(const struct FRetrieveItemStack& Stack) const;
+	/** 판매 슬롯용 상세 툴팁(WBP_ItemDetailTooltip)을 생성해 아이콘/등급/스탯/판매가/뱃지를 채운다. */
+	UUserWidget* BuildSellSlotTooltip(const FSellSlotCache& SlotData) const;
+	/** 카트에 슬롯을 담고(기본 수량=전량) 활성 슬롯으로 지정. 장착 슬롯은 무시. */
+	void      AddSlotToCart(int32 SlotIndex, bool bMakeActive);
 	UTexture2D* GetItemIcon(FName ItemId) const;
 
 	// ── 버튼 핸들러 ─────────────────────────────────────────────────────────────
@@ -408,6 +444,8 @@ private:
 	UFUNCTION() void HandleSellTabMaterialClicked();
 	UFUNCTION() void HandleSellTabArmorClicked();
 	UFUNCTION() void HandleSellSelectedClicked();
+	UFUNCTION() void HandleSellDecreaseClicked();
+	UFUNCTION() void HandleSellIncreaseClicked();
 	UFUNCTION() void HandleOpenRepurchaseClicked();
 	UFUNCTION() void HandleBackToSellClicked();
 	UFUNCTION() void HandleRepurchaseAllClicked();
@@ -425,10 +463,19 @@ private:
 
 	bool bSellModeActive = false;
 
+	// 판매 실행 중 재진입 가드. ExecuteSellSelected 루프 도중 RemoveItem이 유발하는
+	// OnInventoryChanged → HandleInventoryChanged → RefreshSellGrid 재생성을 억제한다.
+	bool bIsSelling = false;
+
 	// 구매
 	FName SelectedBuyRowName;
 	int32 BuyQuantity     = 1;
 	int32 SelectedBuyPrice = 0;
+
+	// 판매 카트: 담긴 슬롯 인덱스 → 판매 예정 수량. 여러 종류를 각각 다른 수량으로 담아 한 번에 판매.
+	TMap<int32, int32> SelectedSlotQuantities;
+	// 수량 ± 조절 대상(가장 최근에 담거나 클릭한 슬롯). -1이면 없음.
+	int32 ActiveSellSlotIndex = -1;
 
 	// 판매 — 현재 카테고리 슬롯 캐시
 	struct FSellSlotCache
@@ -438,6 +485,8 @@ private:
 		int32        Quantity = 0;
 		// 같은 아이템이 여러 슬롯에 나뉘어 있을 때 정확히 이 슬롯을 판매하기 위한 식별자.
 		int32        SlotInstanceId = -1;
+		// 이 슬롯이 현재 장착 중인 장비인지(판매 방지 + "장착" 배지 표시).
+		bool         bEquipped = false;
 	};
 	TArray<FSellSlotCache>              CurrentSellSlots;
 	TArray<TObjectPtr<UShopSellSlotWidget>> SellSlotWidgets;
