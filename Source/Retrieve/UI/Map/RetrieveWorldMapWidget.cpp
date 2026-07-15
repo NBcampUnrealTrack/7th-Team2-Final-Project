@@ -1076,25 +1076,17 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 {
 	const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
 
-	// ── 해상도 독립 기준 rect (Border_Window 퍼센트 앵커 + MapViewportPadding) ──
-	// AllottedGeometry 한 좌표계 안에서만 계산되므로 해상도/DPI/렌더 트랜스폼에 견고하다.
-	// 1차(MapViewport geometry) 결과 검증과 폴백 양쪽에 사용한다.
-	const float BW_Left   = WidgetSize.X * MapWindowAnchorMin.X;
-	const float BW_Top    = WidgetSize.Y * MapWindowAnchorMin.Y;
-	const float BW_Right  = WidgetSize.X * MapWindowAnchorMax.X;
-	const float BW_Bottom = WidgetSize.Y * MapWindowAnchorMax.Y;
-
-	const FVector2D RefTopLeft(
-		BW_Left + MapViewportPadding.Left,
-		BW_Top  + MapViewportPadding.Top);
-	const FVector2D RefSize(
-		FMath::Max(1.0f, (BW_Right  - BW_Left) - MapViewportPadding.Left - MapViewportPadding.Right),
-		FMath::Max(1.0f, (BW_Bottom - BW_Top)  - MapViewportPadding.Top  - MapViewportPadding.Bottom));
-
-	// ── 1차: MapViewport geometry ─────────────────────────────────────────────
-	// 정상일 때 정확하고 WBP 레이아웃 변경에도 자동 적응한다. 단, 일부 해상도/타이밍에서
-	// 자식 위젯 cached geometry가 부모(AllottedGeometry)와 좌표계가 어긋나 우하단 절반짜리
-	// 비정상 rect를 돌려주는 경우가 있어, 기준 rect로 타당성을 검증한 뒤에만 채택한다.
+	// ── 1차: 실제 바인딩된 MapViewport 위젯 geometry (해상도/DPI 자동 적응) ──
+	// MapViewport는 WBP에서 CanvasPanel_Main 안에 풀 CanvasPanel로 바인딩(is_variable)돼
+	// 그 자체가 정확한 뷰포트 인셋(현재 오프셋 240/84/240/54)을 갖는다.
+	// cached geometry를 AllottedGeometry 로컬 좌표로 변환해 그대로 채택하고, 위젯 경계와의
+	// 교집합으로만 클램프한다.
+	//
+	// 과거에는 여기서 "크기 70% 이상 + 중심 25% 이내"라는 휴리스틱으로 이 geometry를
+	// 검증한 뒤에만 채택하고, 실패 시 (앵커% + 절대픽셀 패딩) 폴백 rect를 썼다. 그런데
+	// 폴백 패딩(98/117px)이 실제 뷰포트 인셋(240px)과 크게 달라, 1280×720·울트라와이드 등
+	// 일부 해상도에서 정상 geometry가 오탐되어 폴백으로 넘어가면 맵이 실제 뷰포트보다
+	// 넓게/치우쳐 그려지며 영역 밖으로 오버플로되는 버그가 있었다(#3). → 휴리스틱 게이트 제거.
 	if (MapViewport)
 	{
 		const FGeometry& ViewGeometry = MapViewport->GetCachedGeometry();
@@ -1119,37 +1111,28 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 			const float CandidateH = CandidateRect.Bottom - CandidateRect.Top;
 			if (CandidateW > 1.0f && CandidateH > 1.0f)
 			{
-				// 타당성 검증: 크기가 기준의 70% 이상이고 중심이 기준에서 크게 벗어나지 않을 것.
-				const bool bSizePlausible =
-					CandidateW >= RefSize.X * 0.7f && CandidateH >= RefSize.Y * 0.7f;
-				const FVector2D CandCenter(
-					CandidateRect.Left + CandidateW * 0.5f,
-					CandidateRect.Top  + CandidateH * 0.5f);
-				const FVector2D RefCenter = RefTopLeft + RefSize * 0.5f;
-				const bool bPosPlausible =
-					FMath::Abs(CandCenter.X - RefCenter.X) <= WidgetSize.X * 0.25f &&
-					FMath::Abs(CandCenter.Y - RefCenter.Y) <= WidgetSize.Y * 0.25f;
-
-				if (bSizePlausible && bPosPlausible)
-				{
-					OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
-					OutSize = FVector2D(CandidateW, CandidateH);
-					LogMapViewRect(TEXT("MapViewport"), WidgetSize, OutTopLeft, OutSize);
-					return;
-				}
-
-				UE_LOG(LogTemp, Warning,
-					TEXT("[WorldMap] MapViewport geometry implausible — using anchor fallback. "
-					     "Cand TL=(%.1f, %.1f) Size=(%.1f, %.1f) vs Ref TL=(%.1f, %.1f) Size=(%.1f, %.1f)"),
-					CandidateRect.Left, CandidateRect.Top, CandidateW, CandidateH,
-					RefTopLeft.X, RefTopLeft.Y, RefSize.X, RefSize.Y);
+				OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
+				OutSize = FVector2D(CandidateW, CandidateH);
+				LogMapViewRect(TEXT("MapViewport"), WidgetSize, OutTopLeft, OutSize);
+				return;
 			}
 		}
 	}
 
-	// ── 폴백: 해상도 독립 기준 rect ───────────────────────────────────────────
-	OutTopLeft = RefTopLeft;
-	OutSize    = RefSize;
+	// ── 폴백: MapViewport geometry가 아직 준비 안 된 첫 프레임 등에서만 사용 ──
+	// (앵커% + 절대픽셀 패딩). 다음 프레임에 위 1차 경로가 실제 geometry로 교정한다.
+	// 크기 하한을 위젯의 10%로 둬 어떤 해상도에서도 rect가 붕괴하지 않게 한다.
+	const float BW_Left   = WidgetSize.X * MapWindowAnchorMin.X;
+	const float BW_Top    = WidgetSize.Y * MapWindowAnchorMin.Y;
+	const float BW_Right  = WidgetSize.X * MapWindowAnchorMax.X;
+	const float BW_Bottom = WidgetSize.Y * MapWindowAnchorMax.Y;
+
+	OutTopLeft = FVector2D(
+		BW_Left + MapViewportPadding.Left,
+		BW_Top  + MapViewportPadding.Top);
+	OutSize = FVector2D(
+		FMath::Max(WidgetSize.X * 0.1f, (BW_Right  - BW_Left) - MapViewportPadding.Left - MapViewportPadding.Right),
+		FMath::Max(WidgetSize.Y * 0.1f, (BW_Bottom - BW_Top)  - MapViewportPadding.Top  - MapViewportPadding.Bottom));
 	LogMapViewRect(TEXT("Fallback(Anchor+Padding)"), WidgetSize, OutTopLeft, OutSize);
 }
 
