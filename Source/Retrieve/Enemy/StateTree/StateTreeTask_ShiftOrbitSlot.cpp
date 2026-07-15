@@ -98,13 +98,14 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime += DeltaTime;
+
 	if (InstanceData.ElapsedTime < InstanceData.StrafeInterval)
 	{
 		return EStateTreeRunStatus::Running;
 	}
-	
+
 	InstanceData.ElapsedTime = -FMath::FRandRange(0.f, InstanceData.StrafeIntervalJitter);
-	
+
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{

@@ -233,6 +233,7 @@ private:
 	float BaseMaxWalkSpeed = 0.f;
 	float DefaultGravityScale = 1.0f;
 	EMovementMode DefaultMovementMode = MOVE_Walking;
+	bool bDefaultUseRVOAvoidance = true;
 	
 	bool bCachedIsDead      = false;
 	bool bCachedIsChasing   = false;
@@ -246,4 +247,7 @@ private:
 	float AerialSpecialPhaseStartTime = -1.f;
 
 	FTimerHandle AlertStaggerTimer;
+
+	// 스태거 타이머가 대기 중일 때, 더 가까운 인스티게이터의 알림으로만 교체하기 위한 기준 거리.
+	float PendingAlertInstigatorDist = TNumericLimits<float>::Max();
 };

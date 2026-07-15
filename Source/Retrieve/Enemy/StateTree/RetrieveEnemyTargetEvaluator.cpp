@@ -248,6 +248,18 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 							InstanceData.ChaseLocation = FMath::VInterpTo(
 								InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
 						}
+
+						// 슬롯 전환 보간이 직선으로 링 중심(플레이어)을 가로지르지 않도록,
+						// 보간된 위치가 플레이어에게 너무 가까워지면 각도는 유지한 채 반경만 밀어낸다.
+						const FVector ToChase2D = InstanceData.ChaseLocation - InstanceData.TargetLocation;
+						const float MinSafeRadiusSq = FMath::Square(InstanceData.OrbitInnerRadius);
+						const float DistFromPlayerSq = FVector2D(ToChase2D.X, ToChase2D.Y).SizeSquared();
+						if (DistFromPlayerSq < MinSafeRadiusSq && DistFromPlayerSq > KINDA_SMALL_NUMBER)
+						{
+							const FVector2D SafeDir2D = FVector2D(ToChase2D.X, ToChase2D.Y).GetSafeNormal();
+							InstanceData.ChaseLocation.X = InstanceData.TargetLocation.X + SafeDir2D.X * InstanceData.OrbitInnerRadius;
+							InstanceData.ChaseLocation.Y = InstanceData.TargetLocation.Y + SafeDir2D.Y * InstanceData.OrbitInnerRadius;
+						}
 					}
 					else
 					{
@@ -441,6 +453,33 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		}
 	}
 
+	// AlertedTarget은 ChosenTarget 유무·기존 TargetPlayer 보유 여부와 무관하게 먼저 소비한다.
+	// Suspicious 상태(TargetPlayer는 이미 있지만 게이지 미완, 즉 ChosenTarget도 이미 non-null)에서도
+	// 동료의 알림이 오면 즉시 확신 단계로 승격시켜야 하는데, ChosenTarget 유무로 게이팅하면
+	// 자기 시야로 이미 플레이어를 인식 중인(=ChosenTarget이 항상 non-null인) Suspicious 개체는
+	// 이 블록에 영영 도달하지 못해 AlertedTarget이 안 지워진 채 그대로 방치된다.
+	if (ARetrieveEnemyCharacter* EnemyChar = Cast<ARetrieveEnemyCharacter>(Pawn))
+	{
+		if (AActor* Alerted = EnemyChar->AlertedTarget)
+		{
+			if (!IsDeadOrDyingActor(Alerted) && !IsCinematicSuppressedActor(Alerted))
+			{
+				if (!IsValid(InstanceData.TargetPlayer))
+				{
+					InstanceData.TargetPlayer = Alerted;
+				}
+				InstanceData.bTargetLost = false;
+				// 동료가 이미 확신하고 전파한 대상이므로 Suspicious를 건너뛰고 바로 Combat 자격을 준다.
+				// bSuspicionGaugeFull도 같이 세팅해야 한다 — 이 값은 이번 틱 하단(게이지 갱신 블록)에서야
+				// SuspicionGauge 기준으로 다시 계산되는데, 그 전에 else if(TargetPlayer) 분기가
+				// 아직 갱신 전(직전 틱)의 false 값을 보고 "즉시 놓친다" 코드를 실행해버리기 때문이다.
+				InstanceData.SuspicionGauge = 1.f;
+				InstanceData.bSuspicionGaugeFull = true;
+			}
+			EnemyChar->AlertedTarget = nullptr;
+		}
+	}
+
 	if (ChosenTarget)
 	{
 		if (InstanceData.TargetPlayer != ChosenTarget)
@@ -496,23 +535,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				InstanceData.TargetPlayer = nullptr;
 				InstanceData.DistanceToTarget = 0.f;
 				InstanceData.bTargetLost = true;
-			}
-		}
-	}
-	else
-	{
-		if (ARetrieveEnemyCharacter* EnemyChar = Cast<ARetrieveEnemyCharacter>(Pawn))
-		{
-			if (AActor* Alerted = EnemyChar->AlertedTarget)
-			{
-				if (!IsDeadOrDyingActor(Alerted) && !IsCinematicSuppressedActor(Alerted))
-				{
-					InstanceData.TargetPlayer = Alerted;
-					InstanceData.bTargetLost = false;
-					// 동료가 이미 확신하고 전파한 대상이므로 Suspicious를 건너뛰고 바로 Combat 자격을 준다.
-					InstanceData.SuspicionGauge = 1.f;
-				}
-				EnemyChar->AlertedTarget = nullptr;
 			}
 		}
 	}

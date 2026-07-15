@@ -135,7 +135,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 		return EStateTreeRunStatus::Failed;
 	}
 	InstanceData.bAttackTokenAcquired = true;
-	
+
+	if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
+	{
+		InstanceData.bOriginalUseRVOAvoidance = MoveComp->bUseRVOAvoidance;
+		MoveComp->bUseRVOAvoidance = false;
+	}
+
 	return EStateTreeRunStatus::Running;
 }
 
@@ -160,7 +166,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 		SetChaseAnimationTag(Pawn, false);
 		return EStateTreeRunStatus::Failed;
 	}
-	
+
 	if (!InstanceData.bStartAttack)
 	{
 		const float AttackStartRange = InstanceData.AttackRange + InstanceData.AttackStartRangeTolerance;
@@ -350,7 +356,12 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	{
 		return;
 	}
-	
+
+	if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
+	{
+		MoveComp->bUseRVOAvoidance = InstanceData.bOriginalUseRVOAvoidance;
+	}
+
 	if (bStartedAttack)
 	{
 		if (UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>())

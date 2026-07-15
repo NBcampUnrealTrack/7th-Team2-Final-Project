@@ -22,6 +22,7 @@
 #include "Components/Water/SwimDetectionComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AI/Navigation/NavigationAvoidanceTypes.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Components/Pawn/RetrieveCameraBoom.h"
 #include "Components/Player/CounterTimeDilationComponent.h"
@@ -47,9 +48,18 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	MoveComp->JumpZVelocity = 600.f;
 	MoveComp->AirControl = 0.35f;
 
-	// 적의 RVO 회피가 플레이어를 장애물로 인식하도록 등록. Weight=0이라 플레이어 자신은 비켜서지 않음.
+	// 적의 RVO 회피가 플레이어를 장애물로 인식하도록 등록. Weight=1.0(>=1.0)이라 자기 회피 계산(CalcAvoidanceVelocity)이 스킵되어 플레이어 자신은 비켜서지 않음.
 	MoveComp->bUseRVOAvoidance = true;
-	MoveComp->AvoidanceWeight = 0.f;
+	MoveComp->AvoidanceConsiderationRadius = 50.f;
+	MoveComp->AvoidanceWeight = 1.0f;
+
+	FNavAvoidanceMask PlayerAvoidanceGroup;
+	PlayerAvoidanceGroup.SetFlagsDirectly(2);   // bGroup1 = 플레이어
+	MoveComp->SetAvoidanceGroupMask(PlayerAvoidanceGroup);
+
+	FNavAvoidanceMask MonsterAvoidanceGroup;
+	MonsterAvoidanceGroup.SetFlagsDirectly(4);  // bGroup2 = 몬스터
+	MoveComp->SetGroupsToIgnoreMask(MonsterAvoidanceGroup);
 
 	// 메인 메시 = 가시 leader. 가시성은 PawnCosmeticComponent::ApplyVisualLayout이 모듈러 바디 유무로 제어.
 	if (USkeletalMeshComponent* MainMesh = GetMesh())

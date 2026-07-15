@@ -8,6 +8,7 @@
 #include "Enemy/EnemyAIController.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AI/Navigation/NavigationAvoidanceTypes.h"
 #include "Animation/AnimInstance.h"
 #include "NavigationSystem.h"
 #include "AIController.h"
@@ -86,6 +87,14 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	MoveComp->bUseRVOAvoidance = true;
 	MoveComp->AvoidanceConsiderationRadius = 200.0f;
 	MoveComp->AvoidanceWeight = 0.5f;
+
+	FNavAvoidanceMask MonsterAvoidanceGroup;
+	MonsterAvoidanceGroup.SetFlagsDirectly(4);  // bGroup2 = 몬스터
+	MoveComp->SetAvoidanceGroupMask(MonsterAvoidanceGroup);
+
+	FNavAvoidanceMask MonsterAvoidTargets;
+	MonsterAvoidTargets.SetFlagsDirectly(4 | 2);  // 몬스터끼리 + 플레이어(bGroup1) 모두 회피
+	MoveComp->SetGroupsToAvoidMask(MonsterAvoidTargets);
 	
 	if (IsValid(OwnedASC))
 	{
@@ -220,6 +229,7 @@ void ARetrieveEnemyCharacter::BeginPlay()
 			? MOVE_Walking
 			: MoveComp->MovementMode.GetValue();
 		BaseMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+		bDefaultUseRVOAvoidance = MoveComp->bUseRVOAvoidance;
 
 		if (HasAerialPhase() && MoveComp->MovementMode == MOVE_Falling)
 		{
@@ -564,6 +574,7 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 	{
 		GetCharacterMovement()->GravityScale = DefaultGravityScale;
 		GetCharacterMovement()->SetMovementMode(DefaultMovementMode);
+		MoveComp->bUseRVOAvoidance = bDefaultUseRVOAvoidance;
 	}
 
 	// 에픽 전용: 스폰 위치가 네비메시(지면)보다 높이 떠 있으면 지면으로 스냅한다.
@@ -724,14 +735,16 @@ void ARetrieveEnemyCharacter::DeactivateEnemy()
 	{
 		MoveComp->GravityScale = 0.0f;
 		MoveComp->SetMovementMode(EMovementMode::MOVE_None);
+		MoveComp->bUseRVOAvoidance = false;
 	}
 	
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
+		MeshComp->SetSimulatePhysics(false);
 		MeshComp->bPauseAnims = true;
 		MeshComp->SetComponentTickEnabled(false);
 	}
-	
+
 	if (AEnemyAIController* AI = Cast<AEnemyAIController>(GetController()))
 	{
 		AI->Deactivate();
@@ -745,7 +758,8 @@ void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayer
 		return;
 	}
 
-	if (FVector::Dist(GetActorLocation(), Payload.InstigatorLocation) > GroupAlertRadius)
+	const float InstigatorDist = FVector::Dist(GetActorLocation(), Payload.InstigatorLocation);
+	if (InstigatorDist > GroupAlertRadius)
 	{
 		return;
 	}
@@ -760,14 +774,27 @@ void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayer
 		AlertedTarget = SpottedActor;
 		return;
 	}
+
+	// 이미 스태거 타이머가 대기 중이면, 더 가까운 인스티게이터의 알림일 때만 교체한다.
+	// 단순히 먼저 온 것을 무조건 유지하면 나중에 온 더 급한(더 가까운) 알림을 놓칠 수 있고,
+	// 반대로 매번 무조건 리셋하면 팩 멤버들이 순차 전파할 때마다 카운트다운이 계속 밀려
+	// 이 개체가 영영 반응하지 못하는 것처럼 보일 수 있다.
+	if (GetWorldTimerManager().IsTimerActive(AlertStaggerTimer) && InstigatorDist >= PendingAlertInstigatorDist)
+	{
+		return;
+	}
+
+	PendingAlertInstigatorDist = InstigatorDist;
 	const float Delay = FMath::FRandRange(0.f, EngageStaggerMaxDelay);
 	FTimerDelegate InDelegate = FTimerDelegate::CreateWeakLambda(this, [this, SpottedActor]()
 	{
+		PendingAlertInstigatorDist = TNumericLimits<float>::Max();
+
 		if (IsHidden() || (HealthComponent && HealthComponent->IsDeadOrDying()))
 		{
 			return;
 		}
-	
+
 		if (!AlertedTarget && IsValid(SpottedActor))
 		{
 			AlertedTarget = SpottedActor;
