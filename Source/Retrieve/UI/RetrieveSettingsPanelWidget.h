@@ -10,6 +10,7 @@ class URetrieveSettingsSubsystem;
 class URetrieveGameUserSettings;
 class UUserWidget;
 class UEnhancedInputUserSettings;
+class ULocalPlayer;
 
 /**
  * 설정 화면(WBP_SettingsScreen)의 C++ 베이스.
@@ -67,6 +68,13 @@ public:
 	/** 사용자가 "되돌리기"를 선택하거나 시간 초과. 이전 해상도/창 모드로 복구한다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Settings")
 	void RevertResolution();
+
+	/**
+	 * PlayerMappable 액션 등록 + IMC_Default 등록을 로컬 플레이어 기준으로 보장한다.
+	 * 설정 패널을 열지 않아도 조작키 안내 위젯이 리바인드 상태를 읽을 수 있도록,
+	 * 부팅(PlayerController BeginPlay)·가이드 표시 시점에 이 정적 함수를 호출한다.
+	 */
+	static void EnsureInputMappingsRegistered(ULocalPlayer* LocalPlayer);
 
 protected:
 	virtual void NativeConstruct() override;

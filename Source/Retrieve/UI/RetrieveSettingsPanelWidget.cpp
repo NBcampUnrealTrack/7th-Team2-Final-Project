@@ -1195,12 +1195,16 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	RefreshKeyBindings();
 }
 
-UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSettings() const
+void URetrieveSettingsPanelWidget::EnsureInputMappingsRegistered(ULocalPlayer* LocalPlayer)
 {
-	ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+	// PlayerMappable 액션 등록 + IMC_Default 등록을 로컬 플레이어 기준으로 보장한다.
+	// 이 등록이 되어 있어야 EnhancedInputUserSettings의 KeyProfile에 매핑 행이 생기고,
+	// 조작키 안내 위젯(RefreshControlsGuideKeyLabels)이 리바인드된 키를 읽을 수 있다.
+	// 예전에는 이 로직이 설정 패널의 GetEnhancedInputUserSettings 안에만 있어서,
+	// 설정 창의 조작 탭을 한 번 열기 전까지는 안내 위젯이 빈 상태로 표시되는 버그가 있었다.
 	if (!LocalPlayer)
 	{
-		return nullptr;
+		return;
 	}
 
 	UEnhancedInputUserSettings* InputSettings = nullptr;
@@ -1213,19 +1217,42 @@ UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSe
 	{
 		InputSettings = UEnhancedInputUserSettings::LoadOrCreateSettings(LocalPlayer);
 	}
-	if (InputSettings)
+	if (!InputSettings)
 	{
-		for (const FRebindActionDef& Def : GetRebindActionDefs())
+		return;
+	}
+
+	for (const FRebindActionDef& Def : GetRebindActionDefs())
+	{
+		EnsurePlayerMappableAction(Def.AssetPath, Def.MappingName, FText::FromString(Def.DisplayLabel));
+	}
+	if (const UInputMappingContext* Context = LoadObject<UInputMappingContext>(
+		nullptr, TEXT("/Game/Retrieve/Input/IMC_Default.IMC_Default")))
+	{
+		InputSettings->RegisterInputMappingContext(Context);
+	}
+}
+
+UEnhancedInputUserSettings* URetrieveSettingsPanelWidget::GetEnhancedInputUserSettings() const
+{
+	ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+	if (!LocalPlayer)
+	{
+		return nullptr;
+	}
+
+	// 등록(PlayerMappable + IMC)을 공용 헬퍼로 보장한 뒤 설정 객체를 반환한다.
+	EnsureInputMappingsRegistered(LocalPlayer);
+
+	if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem =
+		LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+	{
+		if (UEnhancedInputUserSettings* InputSettings = InputSubsystem->GetUserSettings())
 		{
-			EnsurePlayerMappableAction(Def.AssetPath, Def.MappingName, FText::FromString(Def.DisplayLabel));
-		}
-		if (const UInputMappingContext* Context = LoadObject<UInputMappingContext>(
-			nullptr, TEXT("/Game/Retrieve/Input/IMC_Default.IMC_Default")))
-		{
-			InputSettings->RegisterInputMappingContext(Context);
+			return InputSettings;
 		}
 	}
-	return InputSettings;
+	return UEnhancedInputUserSettings::LoadOrCreateSettings(LocalPlayer);
 }
 
 void URetrieveSettingsPanelWidget::RefreshKeyBindings()

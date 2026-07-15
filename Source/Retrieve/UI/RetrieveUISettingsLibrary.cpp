@@ -15,6 +15,8 @@
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
+#include "UI/RetrieveSettingsPanelWidget.h"
+#include "Engine/LocalPlayer.h"
 
 URetrieveUITheme* URetrieveUISettingsLibrary::GetActiveUITheme()
 {
@@ -497,14 +499,20 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 	UpdateDisplayableKeyCache(Slots);
 
 	ULocalPlayer* LocalPlayer = GuideWidget->GetOwningLocalPlayer();
+
+	// 설정 창을 한 번도 열지 않았어도 안내 위젯이 리바인드 키를 읽을 수 있도록,
+	// 프로파일을 조회하기 전에 PlayerMappable/IMC 등록을 여기서 직접 보장한다.
+	// (예전엔 이 등록이 설정 패널에만 있어, 설정→조작 탭을 들렀다 와야 안내가 맞게 보였다.)
+	URetrieveSettingsPanelWidget::EnsureInputMappingsRegistered(LocalPlayer);
+
 	UEnhancedInputLocalPlayerSubsystem* InputSubsystem =
 		LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
 	UEnhancedInputUserSettings* InputSettings = InputSubsystem ? InputSubsystem->GetUserSettings() : nullptr;
 	const UEnhancedPlayerMappableKeyProfile* Profile = InputSettings ? InputSettings->GetActiveKeyProfile() : nullptr;
 	if (!Profile)
 	{
-		// 설정 화면을 한 번도 연 적이 없어 PlayerMappable 등록이 안 됐을 수 있다.
-		// 이 경우 리바인드도 없었을 것이므로 WBP에 디자인된 기본 상태가 곧 정답이다.
+		// 등록을 시도했는데도 프로파일이 없으면(로컬 플레이어/입력 서브시스템 부재 등)
+		// WBP에 디자인된 기본 상태가 곧 정답이므로 그대로 둔다.
 		return;
 	}
 

@@ -34,6 +34,7 @@
 #include "UI/Map/RetrieveWorldMapWidget.h"
 #include "UI/RetrieveGamePanelWidget.h"
 #include "UI/RetrieveUISettingsLibrary.h"
+#include "UI/RetrieveSettingsPanelWidget.h"
 #include "UI/ViewModels/ConversationViewModel.h"
 #include "UI/ViewModels/QuestTrackerViewModel.h"
 #include "UI/HUD/RetrieveBossHPBarWidget.h"
@@ -228,6 +229,10 @@ void ARetrievePlayerController::BeginPlay()
 			SettingsSubsystem->OnSettingChanged.AddUniqueDynamic(this, &ARetrievePlayerController::HandleSettingsChangedForHUD);
 			HUDSettingsSubsystem = SettingsSubsystem;
 		}
+
+		// 설정 창을 열지 않아도 조작키 안내 위젯이 리바인드된 키를 읽을 수 있도록,
+		// PlayerMappable/IMC 등록을 부팅 시점에 한 번 보장한다.
+		URetrieveSettingsPanelWidget::EnsureInputMappingsRegistered(LP);
 	}
 
 	// 상점 포커스 카메라를 미리 스폰해 전환 시점의 스폰 히치를 제거한다.
