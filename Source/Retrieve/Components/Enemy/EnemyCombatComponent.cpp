@@ -951,18 +951,6 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 		*OutRowName = BestRowName;
 	}
 
-	if (bLogPatternSelection && !BestRow)
-	{
-		UE_LOG(LogRetrieveCombat, Warning,
-			TEXT("[FindBestPattern] No pattern selected. Owner=%s Required=%s Slots=%d Dist3D=%.1f Dist2D=%.1f Flying=%d"),
-			*GetNameSafe(OwnerActor),
-			*RequiredPatternType.ToString(),
-			PatternSlots.Num(),
-			Distance3D,
-			Distance2D,
-			bOwnerFlying ? 1 : 0);
-	}
-	
 	return BestRow;
 }
 

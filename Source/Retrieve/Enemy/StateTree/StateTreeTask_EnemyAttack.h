@@ -59,6 +59,9 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	
 	UPROPERTY()
 	TWeakObjectPtr<UEnemyCombatComponent> CachedCombatComponent = nullptr;
+
+	// Attack 진입 전 RVO 회피 설정. 접근 중 플레이어를 우회하지 않도록 Attack 동안만 끈다.
+	bool bOriginalUseRVOAvoidance = true;
 };
 
 USTRUCT(BlueprintType, meta = (DisplayName = "Enemy Attack", Category = "Retrieve|AI"))
