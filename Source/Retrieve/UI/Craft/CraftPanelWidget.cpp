@@ -91,6 +91,15 @@ void UCraftPanelWidget::InitializeCraftPanel(UInventoryComponent* InInventoryCom
 	}
 
 	ResolveDefaultDataAssets();
+
+	// UI와 인벤토리가 서로 다른 제작 테이블을 참조하면 화면에는 재료가 충분해 보여도
+	// GetMaxCraftableCount/CraftItem은 다른 행을 검사하게 된다. 패널에서 확정한 테이블을
+	// 실제 제작 판정에도 동일하게 사용해 표시와 실행 결과를 맞춘다.
+	if (CraftRecipeTable && InventoryComponent->CraftRecipeTable != CraftRecipeTable)
+	{
+		InventoryComponent->CraftRecipeTable = CraftRecipeTable;
+	}
+
 	RefreshRecipeList();
 	SelectFirstVisibleRecipe();
 }
