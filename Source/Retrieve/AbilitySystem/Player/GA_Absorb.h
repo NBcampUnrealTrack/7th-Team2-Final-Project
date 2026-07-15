@@ -50,6 +50,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb")
 	TMap<FGameplayTag, FGameplayTag> ElementToAbsorbBuffUITag;
 
+	/** 원소 태그 → 공명 어튠 스택 GE (GE_ElementStack_*, Element.Attune.* GrantedTags 필수).
+	 *  비어 있으면 C++ 기본 경로(GE_ElementStack_Fire/Water/Wind)를 폴백 로드한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb|Resonance")
+	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> ElementToAttuneStackEffect;
+
 	/** Legacy fallback: 장착 무기의 AttackDefinition에 Absorb 몽타주가 없을 때만 사용한다.
 	 *  신규 무기별/원소별 흡수 몽타주는 DA_AttackDefinition_*의 Absorb 섹션에 넣는다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Absorb|Motion")
@@ -61,6 +66,7 @@ public:
 
 private:
 	TSubclassOf<UGameplayEffect> ResolveAbsorbEffectClass(FGameplayTag Element) const;
+	TSubclassOf<UGameplayEffect> ResolveAttuneStackEffectClass(FGameplayTag Element) const;
 
 	void CleanupAbsorb();
 	bool PlayCastMontage(const TSoftObjectPtr<UAnimMontage>& MontagePtr, float PlayRate);

@@ -3,9 +3,11 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Player/CounterTimeDilationComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameplayEffect.h"
+#include "UObject/SoftObjectPath.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
@@ -139,6 +141,30 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 	if (GetStaminaCostRow(StaminaRow) && StaminaRow.RestoreAmount > 0.f)
 	{
 		ApplyStaminaDelta(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, StaminaRow.RestoreAmount);
+	}
+
+	// 패링 성공 어드밴티지: 짧은 공격 모멘텀 버프 + 원소 게이지 충전 (잘 막으면 보상)
+	{
+		TSubclassOf<UGameplayEffect> MomentumEffect = ParryMomentumEffect;
+		if (!MomentumEffect)
+		{
+			MomentumEffect = FSoftClassPath(TEXT("/Game/Retrieve/AbilitySystem/Player/Advantage/GE_ParryMomentum.GE_ParryMomentum_C")).TryLoadClass<UGameplayEffect>();
+		}
+		if (MomentumEffect)
+		{
+			ApplyGameplayEffectToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, MomentumEffect.GetDefaultObject(), GetAbilityLevel());
+		}
+
+		if (ParryElementGaugeCharge > 0)
+		{
+			if (AActor* Avatar = GetAvatarActorFromActorInfo())
+			{
+				if (UElementGaugeComponent* Gauge = Avatar->FindComponentByClass<UElementGaugeComponent>())
+				{
+					Gauge->AddCharge(ParryElementGaugeCharge);
+				}
+			}
+		}
 	}
 
 	// 성공 피드백만 즉시 실행한다.

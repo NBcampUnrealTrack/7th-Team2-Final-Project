@@ -203,7 +203,9 @@ void UStaminaComponent::HandleStaminaTick()
 	}
 
 	// 비전투일 때는 더 빠른 회복 속도를 쓴다(탐험 편의).
-	const float RegenRate = bInCombat ? Settings->RegenPerSecond : Settings->OutOfCombatRegenPerSecond;
+	const float BaseRegen = bInCombat ? Settings->RegenPerSecond : Settings->OutOfCombatRegenPerSecond;
+	// 회복 base는 설정(URetrieveStaminaSettings) 소유, 세트/버프 GE가 올린 배율(StaminaRegenMultiplier, 기본 1.0)만 곱한다.
+	const float RegenRate = BaseRegen * (AttributeSet ? AttributeSet->GetStaminaRegenMultiplier() : 1.0f);
 
 	const float Cur = GetStamina();
 	const float Max = GetMaxStamina();

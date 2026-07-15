@@ -305,7 +305,14 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_IncomingDamageMultiplier, Row->IncomingDamageMultiplier);
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_GuardDamageReduction, Row->GuardDamageReduction);
 			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_AttackSpeedMultiplier, Row->AttackSpeedMultiplier);
-			// 스태미너(Max/Stamina)는 플레이어 전용이라 여기서 초기화하지 않는다 — UStaminaComponent가 URetrieveStaminaSettings로 세팅.
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_NormalAttackMul, Row->NormalAttackDamageMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_HeavyAttackMul, Row->HeavyAttackDamageMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_ElementalMul, Row->ElementalDamageMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_CritChance, Row->CriticalChance);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_CritDamageMul, Row->CriticalDamageMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_LifeSteal, Row->LifeStealRatio);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_ElementChargeGainMul, Row->ElementChargeGainMultiplier);
+			Spec.SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Init_OutgoingMul, Row->OutgoingDamageMultiplier);
 
 			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
 		}
@@ -321,6 +328,14 @@ void URetrievePawnExtensionComponent::ApplyCharacterStatsRow()
 		AttributeSet->SetIncomingDamageMultiplier(Row->IncomingDamageMultiplier);
 		AttributeSet->SetGuardDamageReduction(Row->GuardDamageReduction);
 		AttributeSet->SetAttackSpeedMultiplier(Row->AttackSpeedMultiplier);
+		AttributeSet->SetNormalAttackDamageMultiplier(Row->NormalAttackDamageMultiplier);
+		AttributeSet->SetHeavyAttackDamageMultiplier(Row->HeavyAttackDamageMultiplier);
+		AttributeSet->SetElementalDamageMultiplier(Row->ElementalDamageMultiplier);
+		AttributeSet->SetCriticalChance(Row->CriticalChance);
+		AttributeSet->SetCriticalDamageMultiplier(Row->CriticalDamageMultiplier);
+		AttributeSet->SetLifeStealRatio(Row->LifeStealRatio);
+		AttributeSet->SetElementChargeGainMultiplier(Row->ElementChargeGainMultiplier);
+		AttributeSet->SetOutgoingDamageMultiplier(Row->OutgoingDamageMultiplier);
 		// 스태미너는 UStaminaComponent가 URetrieveStaminaSettings로 초기화한다(여기서 하지 않음).
 	}
 

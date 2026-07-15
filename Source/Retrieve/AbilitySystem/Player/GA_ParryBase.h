@@ -65,6 +65,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
 	TSubclassOf<UGameplayEffect> BossParryStaggerEffect;
 
+	/** 패링 성공 시 짧게 부여하는 공격 어드밴티지 버프 (GE_ParryMomentum).
+	 *  미지정이면 C++ 기본 경로(/Game/Retrieve/AbilitySystem/Player/Advantage/GE_ParryMomentum)를 폴백 로드한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Advantage")
+	TSubclassOf<UGameplayEffect> ParryMomentumEffect;
+
+	/** 패링 성공 시 충전할 원소 게이지량. 0 = 비활성 */
+	UPROPERTY(EditDefaultsOnly, Category = "Parry|Advantage", meta = (ClampMin = "0"))
+	int32 ParryElementGaugeCharge = 15;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ParrySuccessTask;
 

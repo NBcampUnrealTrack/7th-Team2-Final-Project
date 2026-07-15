@@ -668,6 +668,10 @@ protected:
 	bool IsMaterialCategory(FGameplayTag ItemCategoryTag) const;
 	bool IsArmorCategory(FGameplayTag ItemCategoryTag) const;
 	void RefreshSelectedArmorDetails();
+	// 세트 소속/착용 수/2·4세트 효과와 활성 여부를 상세 설명에 덧붙일 텍스트 생성. 세트 없는 방어구는 빈 텍스트
+	FText BuildArmorSetInfoText(const FRetrieveArmorDataRow& Armor) const;
+	// 무기 타입별 상시 패시브(WeaponAbilitySet의 GE_WeaponPassive_*) 한 줄 요약
+	static FString GetWeaponPassiveSummary(const FGameplayTag& WeaponTypeTag);
 	void UpdateEquipActionButtons();
 	// 장착/해제 버튼의 '표시 여부'는 장비 변경 잠금(CanChangeEquipment)과 무관하게 대상 존재 여부로 결정.
 	// 잠금은 버튼 활성화(SetIsEnabled)로만 반영한다.

@@ -75,6 +75,9 @@ class RETRIEVE_API URetrieveAbilitySet : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 
+	// 에디터 자동화 유틸이 GrantedGameplayEffects에 항목을 추가할 수 있게 허용 (런타임 변경 아님)
+	friend class URetrieveDataTableTool;
+
 public:
 	void GiveToAbilitySystem(URetrieveAbilitySystemComponent* ASC, FRetrieveAbilitySet_GrantedHandles* OutGrantedHandles,
 	                         UObject* SourceObject = nullptr) const;

@@ -20,7 +20,8 @@ void URetrieveBuffSlotWidget::SetBuff(const FRetrieveUIBuffPayload& Payload)
 		{
 			IMG_Icon->SetBrushFromTexture(Payload.Icon);
 		}
-		IMG_Icon->SetColorAndOpacity(StatusColor);
+		// Preserve the authored icon colors. Status tint is reserved for the duration bar.
+		IMG_Icon->SetColorAndOpacity(FLinearColor::White);
 	}
 
 	InitialDuration = Payload.Duration;
@@ -31,7 +32,9 @@ void URetrieveBuffSlotWidget::SetBuff(const FRetrieveUIBuffPayload& Payload)
 	UpdateStack(1);   // 새 슬롯 배정 시 스택 카운트 초기화 (Bar에서 이후 UpdateStack으로 덮어씀)
 	SetToolTipText(BuildTooltipText(Payload));
 	SetRenderOpacity(1.f);
-	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	// 커서가 있을 때(메뉴/UI 모드) 호버 툴팁이 뜨도록 히트테스트를 허용한다.
+	// SelfHitTestInvisible이면 툴팁 텍스트를 설정해도 절대 표시되지 않는다.
+	SetVisibility(ESlateVisibility::Visible);
 }
 
 void URetrieveBuffSlotWidget::UpdateDuration(float Remaining)
