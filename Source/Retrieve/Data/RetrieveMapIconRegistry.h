@@ -40,6 +40,8 @@ enum class ERetrieveMapIconType : uint8
 	Shop        UMETA(DisplayName="Shop"),
 	// 신규 값은 반드시 끝에 추가 — 기존 enum 정수값(에셋/DataTable 직렬화)이 밀리지 않도록.
 	Enemy       UMETA(DisplayName="Enemy"),
+	// 지역 이름 표시 전용 — 아이콘 없이 큰 폰트 라벨만 렌더한다(월드맵). MapLabel에 지역명을 넣는다.
+	Region      UMETA(DisplayName="Region"),
 };
 
 /**

@@ -38,6 +38,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	bool bLumenEngraved = false;
 
+	/** 전장의 안개 탐색 마스크(0=미탐색, 255=탐색). 정사각, 크기 = ExploredMaskResolution^2. */
+	UPROPERTY()
+	TArray<uint8> ExploredMask;
+
+	/** 위 마스크의 한 변 해상도. 0이면 저장된 안개 데이터 없음. */
+	UPROPERTY()
+	int32 ExploredMaskResolution = 0;
+
 	/** NPC 대화 랜덤 보상 지급 횟수 (SpeakerTag별, 월드 공유 진행 상태. NPC당 최대 횟수 제한용) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	TMap<FGameplayTag, int32> DialogueRewardGrantCounts;

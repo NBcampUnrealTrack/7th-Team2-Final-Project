@@ -5,9 +5,11 @@
 #include "World/RetrieveMinimapAreaVolume.h"
 
 #include "Components/SceneCaptureComponent2D.h"
+#include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EngineUtils.h"
 #include "Landscape.h"
+#include "RenderUtils.h"
 #include "UObject/UObjectIterator.h"
 
 void URetrieveMapSubsystem::OnWorldBeginPlay(UWorld& InWorld)
@@ -608,4 +610,173 @@ void URetrieveMapSubsystem::RequestIndoorCapture(ARetrieveMinimapAreaVolume* Are
 	{
 		IndoorCaptureActor->RequestCapture(Area);
 	}
+}
+
+// ── 전장의 안개 (탐색 마스크) ────────────────────────────────────────────────
+
+void URetrieveMapSubsystem::EnsureRevealMask()
+{
+	const int32 Res = FMath::Max(RevealResolution, 8);
+	RevealResolution = Res;
+
+	if (RevealMask.Num() != Res * Res)
+	{
+		RevealMask.Init(0, Res * Res);
+		bRevealMaskDirty = true;
+	}
+
+	if (!RevealMaskTexture)
+	{
+		RevealMaskTexture = UTexture2D::CreateTransient(Res, Res, PF_B8G8R8A8);
+		if (RevealMaskTexture)
+		{
+			RevealMaskTexture->SRGB = false;
+			RevealMaskTexture->Filter = TF_Bilinear;
+			RevealMaskTexture->AddressX = TA_Clamp;
+			RevealMaskTexture->AddressY = TA_Clamp;
+			RevealMaskTexture->NeverStream = true;
+			RevealMaskTexture->UpdateResource();
+			bRevealMaskDirty = true;
+		}
+	}
+}
+
+bool URetrieveMapSubsystem::MarkExploredAtWorld(const FVector& WorldLocation)
+{
+	if (!HasValidBounds())
+	{
+		return false;
+	}
+	EnsureRevealMask();
+
+	const int32 Res = RevealResolution;
+	if (RevealMask.Num() != Res * Res)
+	{
+		return false;
+	}
+
+	const FVector2D UV = WorldToUV(WorldLocation);
+	const float CxF = UV.X * Res;
+	const float CyF = UV.Y * Res;
+
+	// U축(열)=East-West=MapExtentXY.Y, V축(행)=North-South=MapExtentXY.X
+	const float ExtX = FMath::Max(MapExtentXY.X, 1.0f);
+	const float ExtY = FMath::Max(MapExtentXY.Y, 1.0f);
+	const float rCellU = (ExploreWorldRadius / ExtY) * Res;
+	const float rCellV = (ExploreWorldRadius / ExtX) * Res;
+	if (rCellU < KINDA_SMALL_NUMBER || rCellV < KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const int32 MinX = FMath::Clamp(FMath::FloorToInt(CxF - rCellU), 0, Res - 1);
+	const int32 MaxX = FMath::Clamp(FMath::CeilToInt (CxF + rCellU), 0, Res - 1);
+	const int32 MinY = FMath::Clamp(FMath::FloorToInt(CyF - rCellV), 0, Res - 1);
+	const int32 MaxY = FMath::Clamp(FMath::CeilToInt (CyF + rCellV), 0, Res - 1);
+
+	bool bChanged = false;
+	for (int32 Y = MinY; Y <= MaxY; ++Y)
+	{
+		const float ndy = (static_cast<float>(Y) + 0.5f - CyF) / rCellV;
+		for (int32 X = MinX; X <= MaxX; ++X)
+		{
+			const float ndx = (static_cast<float>(X) + 0.5f - CxF) / rCellU;
+			const float Dist = FMath::Sqrt(ndx * ndx + ndy * ndy);
+			if (Dist > 1.0f)
+			{
+				continue;
+			}
+
+			// 안쪽 70%는 완전 공개, 바깥 30%는 선형 페이드 → 안개 경계가 부드럽다.
+			const float Falloff = Dist <= 0.7f ? 1.0f : 1.0f - (Dist - 0.7f) / 0.3f;
+			const uint8 NewVal = static_cast<uint8>(FMath::Clamp(Falloff * 255.0f, 0.0f, 255.0f));
+
+			const int32 Idx = Y * Res + X;
+			if (NewVal > RevealMask[Idx])
+			{
+				RevealMask[Idx] = NewVal;
+				bChanged = true;
+			}
+		}
+	}
+
+	if (bChanged)
+	{
+		bRevealMaskDirty = true;
+	}
+	return bChanged;
+}
+
+void URetrieveMapSubsystem::FlushRevealMaskToTexture()
+{
+	if (!bRevealMaskDirty || !RevealMaskTexture)
+	{
+		return;
+	}
+
+	const int32 Res = RevealResolution;
+	if (RevealMask.Num() != Res * Res)
+	{
+		return;
+	}
+
+	const int32 NumPixels = Res * Res;
+	uint8* Buffer = new uint8[NumPixels * 4];
+	for (int32 i = 0; i < NumPixels; ++i)
+	{
+		const uint8 Explored = RevealMask[i];
+		Buffer[i * 4 + 0] = 255;                              // B
+		Buffer[i * 4 + 1] = 255;                              // G
+		Buffer[i * 4 + 2] = 255;                              // R
+		Buffer[i * 4 + 3] = static_cast<uint8>(255 - Explored); // A = 안개 불투명도
+	}
+
+	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Res, Res);
+	RevealMaskTexture->UpdateTextureRegions(
+		0, 1, Region,
+		static_cast<uint32>(Res * 4), 4,
+		Buffer,
+		[](uint8* Src, const FUpdateTextureRegion2D* Reg)
+		{
+			delete[] Src;
+			delete Reg;
+		});
+
+	bRevealMaskDirty = false;
+}
+
+bool URetrieveMapSubsystem::IsWorldLocationExplored(const FVector& WorldLocation) const
+{
+	const int32 Res = RevealResolution;
+	if (RevealMask.Num() != Res * Res)
+	{
+		return false;
+	}
+
+	const FVector2D UV = WorldToUV(WorldLocation);
+	const int32 X = FMath::Clamp(FMath::FloorToInt(UV.X * Res), 0, Res - 1);
+	const int32 Y = FMath::Clamp(FMath::FloorToInt(UV.Y * Res), 0, Res - 1);
+	return RevealMask[Y * Res + X] >= static_cast<uint8>(FMath::Clamp(ExploredThreshold, 0, 255));
+}
+
+UTexture2D* URetrieveMapSubsystem::GetRevealMaskTexture()
+{
+	EnsureRevealMask();
+	FlushRevealMaskToTexture();
+	return RevealMaskTexture;
+}
+
+void URetrieveMapSubsystem::SetRevealMaskData(const TArray<uint8>& InData, int32 InResolution)
+{
+	if (InResolution <= 0 || InData.Num() != InResolution * InResolution)
+	{
+		return;
+	}
+
+	RevealResolution = InResolution;
+	RevealMask = InData;
+	RevealMaskTexture = nullptr; // 해상도 변동 대비 재생성
+	bRevealMaskDirty = true;
+	EnsureRevealMask();
+	FlushRevealMaskToTexture();
 }

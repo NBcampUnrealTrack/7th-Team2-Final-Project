@@ -244,6 +244,19 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	}
 
 	const FVector PlayerLocation = PC->GetPawn()->GetActorLocation();
+
+	// 전장의 안개: 플레이어 주변을 주기적으로 공개하고 dirty면 GPU 텍스처에 반영한다.
+	if (bEnableFogOfWar)
+	{
+		FogRevealAccum += InDeltaTime;
+		if (FogRevealAccum >= FogRevealInterval)
+		{
+			FogRevealAccum = 0.0f;
+			MapSub->MarkExploredAtWorld(PlayerLocation);
+			MapSub->FlushRevealMaskToTexture();
+		}
+	}
+
 	if (MinimapMID)
 	{
 		UpdateMinimapMaterial(MapSub, PlayerLocation);
@@ -307,6 +320,19 @@ void URetrieveMinimapWidget::UpdateMinimapMaterial(
 		CachedMIDTexture = ActiveTexture;
 	}
 
+	// ── 전장의 안개 파라미터 ────────────────────────────────────────────────
+	// M_Minimap 그래프에서: 최종 맵 색상 = lerp(FogColor, MapColor, RevealMask.Sample(finalUV).a)
+	// (RevealMask는 BGRA8, A=안개 불투명도이므로 explored = 1 - A. 실내 컨텍스트에서는 안개를 끈다.)
+	MinimapMID->SetScalarParameterValue(TEXT("FogEnabled"),
+		(bEnableFogOfWar && !ActiveContext.IsIndoor()) ? 1.0f : 0.0f);
+	MinimapMID->SetVectorParameterValue(TEXT("FogColor"), FogColor);
+	if (bEnableFogOfWar && !ActiveContext.IsIndoor())
+	{
+		if (UTexture2D* RevealTex = MapSub->GetRevealMaskTexture())
+		{
+			MinimapMID->SetTextureParameterValue(TEXT("RevealMask"), RevealTex);
+		}
+	}
 }
 
 void URetrieveMinimapWidget::DrawBlackCircularMap(
@@ -565,6 +591,32 @@ int32 URetrieveMinimapWidget::NativePaint(
 		FSlateBrush Brush;
 		Brush.SetResourceObject(PlayerMarkerTexture);
 		Brush.ImageSize = MarkerSz;
+
+		// 대비 외곽선(배킹): 마커보다 크게 어두운 색으로 먼저 그려 지형/아이콘 위에서 분리한다.
+		if (PlayerMarkerOutlineScale > 1.0f && PlayerMarkerOutlineColor.A > KINDA_SMALL_NUMBER)
+		{
+			const FVector2D OutlineSz  = MarkerSz * PlayerMarkerOutlineScale;
+			const FVector2D OutlinePos = Center - OutlineSz * 0.5f;
+
+			FSlateBrush OutlineBrush;
+			OutlineBrush.SetResourceObject(PlayerMarkerTexture);
+			OutlineBrush.ImageSize = OutlineSz;
+
+			FSlateDrawElement::MakeRotatedBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(OutlineSz),
+					FSlateLayoutTransform(FVector2f(OutlinePos))
+				),
+				PlayerMarkerTexture ? &OutlineBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				FMath::DegreesToRadians(MarkerRot),
+				TOptional<FVector2D>(AbsCenter),
+				FSlateDrawElement::ERotationSpace::RelativeToWorld,
+				PlayerMarkerOutlineColor
+			);
+		}
 
 		FSlateDrawElement::MakeRotatedBox(
 			OutDrawElements,

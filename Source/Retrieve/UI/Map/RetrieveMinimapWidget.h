@@ -68,10 +68,19 @@ public:
 	float ViewWorldRadius = 3000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
-	float PlayerMarkerSize = 20.0f;
+	float PlayerMarkerSize = 22.0f;
 
+	// 미니맵에서도 지형/아이콘과 분리되도록 고대비 기본색(시안)을 사용.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
-	FLinearColor PlayerMarkerColor = FLinearColor::White;
+	FLinearColor PlayerMarkerColor = FLinearColor(0.12f, 0.95f, 1.0f, 1.0f);
+
+	// 플레이어 마커 뒤에 그리는 대비 외곽선(배킹) 색상.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
+	FLinearColor PlayerMarkerOutlineColor = FLinearColor(0.02f, 0.02f, 0.05f, 0.9f);
+
+	// 외곽선 배킹 크기 배율(마커 대비). 1.0이면 외곽선 미표시.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap", meta=(ClampMin="1.0"))
+	float PlayerMarkerOutlineScale = 1.5f;
 
 	// 웨이포인트 마커 크기 (픽셀)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint", meta=(ClampMin="4.0"))
@@ -103,6 +112,19 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap")
 	ERetrieveMinimapRotationMode RotationMode = ERetrieveMinimapRotationMode::NorthUp;
+
+	// ── 전장의 안개 ────────────────────────────────────────────────────────────
+	// 켜면 플레이어 주변을 탐색 마스크에 공개하고, M_Minimap이 미탐색 영역을 FogColor로 어둡게 처리한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Fog")
+	bool bEnableFogOfWar = true;
+
+	// 미탐색 영역 색(머티리얼에서 사용). 알파는 미니맵 안개 농도.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Fog")
+	FLinearColor FogColor = FLinearColor(0.015f, 0.02f, 0.04f, 1.0f);
+
+	// 탐색 공개 갱신 주기(초). 매 Tick 갱신을 피해 비용을 낮춘다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Fog", meta=(ClampMin="0.05"))
+	float FogRevealInterval = 0.2f;
 
 	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
 	void ToggleRotationMode();
@@ -143,6 +165,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMID;
+
+	// 전장의 안개 공개 갱신 스로틀 누산기.
+	float FogRevealAccum = 0.0f;
 
 	void HideSquareMinimapBackground();
 

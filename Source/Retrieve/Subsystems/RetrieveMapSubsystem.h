@@ -263,6 +263,44 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
 	void DebugPrintBounds() const;
 
+	// ── 전장의 안개 (탐색 마스크) ──────────────────────────────────────────────
+	/** 탐색 마스크 해상도(정사각). 클수록 경계가 정밀하지만 메모리/갱신 비용 증가. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Fog")
+	int32 RevealResolution = 256;
+
+	/** 플레이어 등 위치 주변으로 한 번에 공개되는 월드 반경(UU). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Fog")
+	float ExploreWorldRadius = 3500.0f;
+
+	/** 아이콘/렌더에서 "탐색됨"으로 간주하는 최소 마스크 값(0~255). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Fog")
+	int32 ExploredThreshold = 48;
+
+	/** CPU 마스크와 GPU 텍스처를 (없으면) 생성한다. */
+	void EnsureRevealMask();
+
+	/** 지정 월드 위치 주변을 공개한다. 변경이 있으면 true. */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Fog")
+	bool MarkExploredAtWorld(const FVector& WorldLocation);
+
+	/** dirty 상태면 CPU 마스크를 GPU 텍스처로 반영한다. */
+	void FlushRevealMaskToTexture();
+
+	/** 해당 월드 위치가 이미 탐색됐는지. */
+	UFUNCTION(BlueprintPure, Category="Retrieve|Fog")
+	bool IsWorldLocationExplored(const FVector& WorldLocation) const;
+
+	/** 안개 렌더용 마스크 텍스처(BGRA8, A=안개 불투명도, RGB=255). */
+	UFUNCTION(BlueprintPure, Category="Retrieve|Fog")
+	UTexture2D* GetRevealMaskTexture();
+
+	/** 세이브용 — 현재 마스크 바이트 배열/해상도. */
+	const TArray<uint8>& GetRevealMaskData() const { return RevealMask; }
+	int32 GetRevealMaskResolution() const { return RevealResolution; }
+
+	/** 로드용 — 마스크 바이트 배열 복원(크기 일치 시 텍스처 재생성). */
+	void SetRevealMaskData(const TArray<uint8>& InData, int32 InResolution);
+
 	void RegisterIcon(URetrieveMapIconComponent* Icon);
 	void UnregisterIcon(URetrieveMapIconComponent* Icon);
 
@@ -313,4 +351,12 @@ private:
 	TArray<FUserWaypoint> UserWaypoints;
 
 	int32 NextWaypointId = 0;
+
+	// ── 전장의 안개 상태 ──────────────────────────────────────────────────────
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> RevealMaskTexture;
+
+	/** RevealResolution^2 바이트. 0=미탐색, 255=완전 탐색. */
+	TArray<uint8> RevealMask;
+	bool bRevealMaskDirty = false;
 };

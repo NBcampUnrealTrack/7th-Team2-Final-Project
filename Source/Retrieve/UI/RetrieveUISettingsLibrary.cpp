@@ -228,6 +228,7 @@ namespace
 			EKeys::N,                               // 미니맵 회전
 			EKeys::I,                               // 인벤토리
 			EKeys::M,                               // 월드맵
+			EKeys::K,                               // 스킬 안내(컨트롤러 하드코딩)
 			EKeys::Four, EKeys::Five,               // 아이템 사용
 			EKeys::Escape,                          // 일시정지/패널 닫기
 			EKeys::F10,                             // 설정
@@ -675,6 +676,38 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 					? FString(Act.DisplayLabel)
 					: Existing + TEXT("/") + Act.DisplayLabel;
 				Label->SetText(FText::FromString(NewLabel));
+			}
+			break;
+		}
+	}
+
+	// 3) EnhancedInput 액션(IA_*)이 아니라 컨트롤러가 직접 하드코딩 처리하는 고정 시스템 키를
+	//    고정 라벨로 표시한다. 스킬 안내(K)는 ARetrievePlayerController::SkillOverviewPanelKey로
+	//    처리되어 위 액션 루프에 잡히지 않으므로, 여기서 라벨+색을 직접 입힌다.
+	//    (리바인드 불가 → IsSystemReservedKey에도 포함되어 있어 액션이 K를 덮어쓰지 않는다.)
+	struct FControlsGuideFixedKey { FKey Key; const TCHAR* DisplayLabel; FLinearColor Color; };
+	static const FControlsGuideFixedKey FixedKeys[] = {
+		{ EKeys::K, TEXT("스킬 안내"), SpecialFunctionColor },
+	};
+	for (const FControlsGuideFixedKey& Fixed : FixedKeys)
+	{
+		for (FDiscoveredKeycap& Slot : Slots)
+		{
+			if (Slot.Key != Fixed.Key)
+			{
+				continue;
+			}
+			if (Slot.Border)
+			{
+				Slot.Border->SetBrushColor(Fixed.Color);
+			}
+			if (Slot.KeyText)
+			{
+				Slot.KeyText->SetColorAndOpacity(FSlateColor(BrightKeyTextColor));
+			}
+			if (UTextBlock* Label = EnsureSlotLabel(GuideWidget, Slot, RefLabel))
+			{
+				Label->SetText(FText::FromString(Fixed.DisplayLabel));
 			}
 			break;
 		}

@@ -1,4 +1,4 @@
-#include "UI/Map/RetrieveWorldMapWidget.h"
+﻿#include "UI/Map/RetrieveWorldMapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "UI/RetrieveUISettingsLibrary.h"
 #include "InputCoreTypes.h"
@@ -27,6 +27,7 @@
 #include "Fonts/FontMeasure.h"
 #include "HAL/PlatformTime.h"
 #include "Data/RetrieveMapConfigDataAsset.h"
+#include "UObject/ConstructorHelpers.h"
 
 FGameplayTag URetrieveWorldMapWidget::GetPanelOpenSoundContext() const
 {
@@ -43,6 +44,19 @@ FGameplayTag URetrieveWorldMapWidget::GetPanelCloseSoundContext() const
 URetrieveWorldMapWidget::URetrieveWorldMapWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	static ConstructorHelpers::FObjectFinder<UTexture2D> FogTextureFinder(
+		TEXT("/Game/Retrieve/UI/Map/Textures/T_WorldMapFog.T_WorldMapFog"));
+	if (FogTextureFinder.Succeeded())
+	{
+		FogTexture = FogTextureFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FogMaterialFinder(
+		TEXT("/Game/Retrieve/UI/Map/Materials/M_WorldMapFogAnimated.M_WorldMapFogAnimated"));
+	if (FogMaterialFinder.Succeeded())
+	{
+		FogDisplayMaterial = FogMaterialFinder.Object;
+	}
 }
 
 void URetrieveWorldMapWidget::NativeDestruct()
@@ -510,6 +524,58 @@ int32 URetrieveWorldMapWidget::NativePaint(
 	const FSlateRect MapViewRect(MapViewTopLeft.X, MapViewTopLeft.Y,
 	                             MapViewTopLeft.X + MapViewSize.X, MapViewTopLeft.Y + MapViewSize.Y);
 
+	// ── 전장의 안개 오버레이 ────────────────────────────────────────────────────
+	// RevealMask의 알파와 연무 텍스처를 UI 머티리얼에서 합성한다.
+	// 맵과 동일 rect/UV를 사용하므로 줌·패닝 중에도 탐색 경계가 지형에 고정된다.
+	if (bEnableFogOfWar && MapSub && MapSub->HasValidBounds())
+	{
+		if (UTexture2D* RevealTex = MapSub->GetRevealMaskTexture())
+		{
+			FSlateBrush FogBrush;
+			// 머티리얼 UV를 축소하지 않고 Slate 브러시 자체를 둥글게 클리핑한다.
+			// 픽셀 기준 반경이라 맵 종횡비나 확대 배율에 관계없이 모서리 곡률이 일정하다.
+			FogBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+			FogBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+			FogBrush.OutlineSettings.CornerRadii = FVector4(18.0f, 18.0f, 18.0f, 18.0f);
+			if (FogDisplayMaterial && FogTexture)
+			{
+				if (!FogDisplayMID || FogDisplayMID->Parent != FogDisplayMaterial)
+				{
+					FogDisplayMID = UMaterialInstanceDynamic::Create(
+						FogDisplayMaterial, const_cast<URetrieveWorldMapWidget*>(this));
+				}
+
+				if (FogDisplayMID)
+				{
+					FogDisplayMID->SetTextureParameterValue(TEXT("FogTexA"), FogTexture);
+					FogDisplayMID->SetTextureParameterValue(TEXT("FogTexB"), FogTexture);
+					FogDisplayMID->SetTextureParameterValue(TEXT("RevealTex"), RevealTex);
+					FogDisplayMID->SetVectorParameterValue(TEXT("FogColor"), FogColor);
+					FogBrush.SetResourceObject(FogDisplayMID);
+				}
+			}
+
+			// 에셋이 누락된 빌드에서도 기존 단색 마스크 표현으로 안전하게 폴백한다.
+			if (!FogBrush.GetResourceObject())
+			{
+				FogBrush.SetResourceObject(RevealTex);
+			}
+			FogBrush.ImageSize = MapDrawSize;
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(MapDrawSize),
+					FSlateLayoutTransform(FVector2f(MapTopLeft))
+				),
+				&FogBrush,
+				ESlateDrawEffect::None,
+				FogDisplayMID ? FLinearColor::White : FogColor
+			);
+		}
+	}
+
 	// ── DataAsset 기반 정적 아이콘 (WP 로드 여부 완전 무관) ────────────────────
 	// 화톳불 포함 모든 아이콘 항상 표시. 모닥불 타입은 활성화 여부에 따라 색상 구분.
 	if (MapSub && MapSub->HasValidBounds() && WorldMapIconData)
@@ -522,6 +588,29 @@ int32 URetrieveWorldMapWidget::NativePaint(
 			const FVector2D IconScreen = UVToScreen(IconUV, Center, ScaledW, ScaledH);
 
 			if (!MapViewRect.ContainsPoint(FVector2D(IconScreen))) { continue; }
+
+			// 지역명 전용 타입: 아이콘 없이 큰 폰트 라벨만 렌더한다.
+			if (Entry.IconType == ERetrieveMapIconType::Region)
+			{
+				if (!Entry.MapLabel.IsEmpty() && Entry.bShowLabel)
+				{
+					const FSlateFontInfo RegionFont =
+						FCoreStyle::GetDefaultFontStyle("Bold", FMath::RoundToInt(RegionLabelFontSize * URetrieveUISettingsLibrary::GetUIScale()));
+					const FLinearColor RegionColor =
+						RegionLabelColor.A > KINDA_SMALL_NUMBER ? RegionLabelColor : LabelColor;
+					DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
+					          Entry.MapLabel.ToString(),
+					          FVector2D(IconScreen.X, IconScreen.Y),
+					          RegionFont, RegionColor);
+				}
+				continue;
+			}
+
+			// 전장의 안개: 아직 탐색하지 않은 영역의 아이콘은 숨긴다(지역명 라벨은 위에서 예외 처리).
+			if (bEnableFogOfWar && !MapSub->IsWorldLocationExplored(Entry.WorldLocation))
+			{
+				continue;
+			}
 
 			FRetrieveMapIconSnapshot Snap;
 			Snap.WorldLocation        = Entry.WorldLocation;
@@ -643,6 +732,32 @@ int32 URetrieveWorldMapWidget::NativePaint(
 				PlayerMarkerColor.A > KINDA_SMALL_NUMBER ? PlayerMarkerColor : FLinearColor::White;
 			const FLinearColor EffectiveLabelColor =
 				LabelColor.A > KINDA_SMALL_NUMBER ? LabelColor : FLinearColor::White;
+
+			// 대비 외곽선(배킹): 마커보다 크게 어두운 색으로 먼저 그려 밝은 지형/흰 아이콘 위에서 분리한다.
+			if (PlayerMarkerOutlineScale > 1.0f && PlayerMarkerOutlineColor.A > KINDA_SMALL_NUMBER)
+			{
+				const FVector2D OutlineSz      = MarkerSz * PlayerMarkerOutlineScale;
+				const FVector2D OutlineTopLeft = PlayerScreen - OutlineSz * 0.5f;
+
+				FSlateBrush OutlineBrush;
+				OutlineBrush.SetResourceObject(PlayerMarkerTexture);
+				OutlineBrush.ImageSize = OutlineSz;
+
+				FSlateDrawElement::MakeRotatedBox(
+					OutDrawElements,
+					++CurrentLayer,
+					AllottedGeometry.ToPaintGeometry(
+						FVector2f(OutlineSz),
+						FSlateLayoutTransform(FVector2f(OutlineTopLeft))
+					),
+					PlayerMarkerTexture ? &OutlineBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+					ESlateDrawEffect::None,
+					FMath::DegreesToRadians(CameraYaw),
+					TOptional<FVector2D>(AbsPlayerScreen),
+					FSlateDrawElement::ERotationSpace::RelativeToWorld,
+					PlayerMarkerOutlineColor
+				);
+			}
 
 			FSlateDrawElement::MakeRotatedBox(
 				OutDrawElements,
@@ -1109,7 +1224,22 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 
 			const float CandidateW = CandidateRect.Right - CandidateRect.Left;
 			const float CandidateH = CandidateRect.Bottom - CandidateRect.Top;
-			if (CandidateW > 1.0f && CandidateH > 1.0f)
+
+			// #312에서 이 geometry를 "무조건 채택"으로 바꾼 뒤, 열기 애니메이션의 렌더 트랜스폼이
+			// 페인트 직전 MapViewport에 남긴 축소·오프셋 geometry(예: 우하단으로 ~0.3배 축소, 위치는
+			// 해상도/창모드에 따라 달라짐)까지 그대로 채택돼 맵이 패널이 아닌 엉뚱한 곳에 그려지는
+			// 회귀가 있었다. 해상도 무관한 상대 기준으로 "명백히 깨진" geometry만 걸러내고 폴백한다.
+			// (과거 게이트의 70%/25% 임계는 1280×720 등에서 정상 geometry를 오탐 → 임계를 넉넉히 완화.)
+			const FVector2D CandCenter(
+				(CandidateRect.Left + CandidateRect.Right) * 0.5f,
+				(CandidateRect.Top + CandidateRect.Bottom) * 0.5f);
+			const FVector2D WidgetCenter(WidgetSize.X * 0.5f, WidgetSize.Y * 0.5f);
+			const bool bCoversEnough =
+				CandidateW >= WidgetSize.X * 0.45f && CandidateH >= WidgetSize.Y * 0.45f;
+			const bool bCentered =
+				FMath::Abs(CandCenter.X - WidgetCenter.X) <= WidgetSize.X * 0.25f &&
+				FMath::Abs(CandCenter.Y - WidgetCenter.Y) <= WidgetSize.Y * 0.25f;
+			if (CandidateW > 1.0f && CandidateH > 1.0f && bCoversEnough && bCentered)
 			{
 				OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
 				OutSize = FVector2D(CandidateW, CandidateH);
@@ -1229,6 +1359,29 @@ void URetrieveWorldMapWidget::DrawWorldIcon(
 
 	const FVector2D IconSz(Size, Size);
 	const FVector2D DrawPos = ScreenPos - IconSz * 0.5f;
+
+	// 대비 외곽선(배킹): 아이콘보다 크게 어두운 색으로 먼저 그려 밝은 지형/겹친 아이콘과 분리한다.
+	if (bDrawIconOutline && IconOutlineScale > 1.0f && IconOutlineColor.A > KINDA_SMALL_NUMBER)
+	{
+		const FVector2D OutlineSz  = IconSz * IconOutlineScale;
+		const FVector2D OutlinePos = ScreenPos - OutlineSz * 0.5f;
+
+		FSlateBrush OutlineBrush;
+		OutlineBrush.SetResourceObject(Texture);
+		OutlineBrush.ImageSize = OutlineSz;
+
+		FSlateDrawElement::MakeBox(
+			OutDrawElements,
+			++LayerId,
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f(OutlineSz),
+				FSlateLayoutTransform(FVector2f(OutlinePos))
+			),
+			Texture ? &OutlineBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+			ESlateDrawEffect::None,
+			IconOutlineColor
+		);
+	}
 
 	FSlateBrush IconBrush;
 	IconBrush.SetResourceObject(Texture);
