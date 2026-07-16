@@ -78,8 +78,12 @@ private:
 	void RecomputeResonance();
 
 	int32 CountAttuneStacks(const FGameplayTag& AttuneTag) const;
-	static bool IsAttuneSpec(const FGameplayEffectSpec& Spec);
 
-	// 어튠 스택 수를 버프 바에 ×N 칩으로 표시/갱신/제거 (정수·흡수 피드백)
-	void BroadcastCompressedBuffChips(int32 FireStacks, int32 WaterStacks, int32 WindStacks, const TSet<FName>& ActiveRows) const;
+	/** 유한 지속시간(흡수/아이템) 어튠 스택만 집계 — 장비(Infinite)는 제외. 소모/발동 판정용. */
+	int32 CountAbsorbStacks(const FGameplayTag& AttuneTag) const;
+
+	/** 유한 지속시간(흡수) 어튠 스택 GE를 전부 제거 = 공명 발동에 소모. */
+	void ConsumeAbsorbStacks(const FGameplayTag& AttuneTag);
+
+	static bool IsAttuneSpec(const FGameplayEffectSpec& Spec);
 };

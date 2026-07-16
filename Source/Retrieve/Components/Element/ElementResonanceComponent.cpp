@@ -128,6 +128,21 @@ void UElementResonanceComponent::OnGameplayEffectRemoved(const FActiveGameplayEf
 {
 	WatchedStackHandles.Remove(RemovedGE.Handle);
 
+	// 12초 만료(또는 회수)된 공명 핸들을 목록에서 지워, 재흡수 시 같은 공명을 다시 발동할 수 있게 한다.
+	bool bRemovedResonance = false;
+	for (auto It = ActiveResonanceHandles.CreateIterator(); It; ++It)
+	{
+		if (It.Value() == RemovedGE.Handle)
+		{
+			It.RemoveCurrent();
+			bRemovedResonance = true;
+		}
+	}
+	if (bRemovedResonance)
+	{
+		OnResonanceChanged.Broadcast();
+	}
+
 	if (IsAttuneSpec(RemovedGE.Spec))
 	{
 		ScheduleRecompute();
@@ -204,12 +219,21 @@ void UElementResonanceComponent::RecomputeResonance()
 		return;
 	}
 
+	// 총 스택(장비 영구 + 흡수) — 공명 조건 판정용
 	const int32 FireStacks = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Fire);
 	const int32 WaterStacks = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Water);
 	const int32 WindStacks = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Wind);
 
-	// 스택 자체를 항상 버프 바에 노출 — 정수 1개/흡수 1회로는 공명이 안 떠도 진행도가 보여야 한다.
+	// 흡수(유한 지속) 스택만 — 소모 대상이자 발동 필수 조건
+	const int32 FireAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire);
+	const int32 WaterAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water);
+	const int32 WindAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind);
 
+	// 소모할 흡수 스택이 전혀 없으면(장비 어튠만) 공명을 발동하지 않는다 — "흡수 스택 필수 소모" 규칙.
+	if (FireAbsorb <= 0 && WaterAbsorb <= 0 && WindAbsorb <= 0)
+	{
+		return;
+	}
 
 	// 1. 조건 충족 행 수집
 	struct FSatisfiedRow
@@ -267,33 +291,29 @@ void UElementResonanceComponent::RecomputeResonance()
 		Desired.Add(Pair.Value->RowName);
 	}
 
-	// 3. diff 적용 — 해제된 공명 회수
+	// 3. 아직 활성이 아닌(=새로) 충족된 공명만 발동한다.
+	//    기존 활성 공명은 회수하지 않고 각자의 12초 타이머로 자연 만료된다(카운트다운 표시).
 	bool bChanged = false;
-	for (auto It = ActiveResonanceHandles.CreateIterator(); It; ++It)
-	{
-		if (!Desired.Contains(It.Key()))
-		{
-			if (It.Value().IsValid())
-			{
-				PinnedASC->RemoveActiveGameplayEffect(It.Value());
-			}
-			UE_LOG(LogRetrieveCombat, Log, TEXT("[Resonance] Deactivated: %s (F=%d W=%d G=%d)"),
-				*It.Key().ToString(), FireStacks, WaterStacks, WindStacks);
-			It.RemoveCurrent();
-			bChanged = true;
-		}
-	}
-
-	// 4. diff 적용 — 새로 충족된 공명 부여
+	bool bConsumeFire = false, bConsumeWater = false, bConsumeWind = false;
 	for (const FName& RowName : Desired)
 	{
 		if (ActiveResonanceHandles.Contains(RowName))
 		{
-			continue;
+			continue; // 이미 활성 → 재발동 금지(만료 후 재흡수해야 다시 발동)
 		}
 
 		const FElementResonanceRow* Row = ResonanceTable->FindRow<FElementResonanceRow>(RowName, TEXT("RecomputeResonance"));
 		if (!Row)
+		{
+			continue;
+		}
+
+		// 이 공명이 요구하는 원소 중 최소 하나에 흡수 스택이 있어야 발동(장비 어튠만으로는 발동 불가).
+		const bool bAbsorbContributes =
+			(Row->RequiredFire  > 0 && FireAbsorb  > 0) ||
+			(Row->RequiredWater > 0 && WaterAbsorb > 0) ||
+			(Row->RequiredWind  > 0 && WindAbsorb  > 0);
+		if (!bAbsorbContributes)
 		{
 			continue;
 		}
@@ -312,138 +332,73 @@ void UElementResonanceComponent::RecomputeResonance()
 		{
 			const FActiveGameplayEffectHandle Applied = PinnedASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
 			ActiveResonanceHandles.Add(RowName, Applied);
-			UE_LOG(LogRetrieveCombat, Log, TEXT("[Resonance] Activated: %s (F=%d W=%d G=%d)"),
-				*RowName.ToString(), FireStacks, WaterStacks, WindStacks);
 			bChanged = true;
+			if (Row->RequiredFire  > 0) { bConsumeFire  = true; }
+			if (Row->RequiredWater > 0) { bConsumeWater = true; }
+			if (Row->RequiredWind  > 0) { bConsumeWind  = true; }
+			UE_LOG(LogRetrieveCombat, Log, TEXT("[Resonance] Activated (timed 12s): %s (F=%d W=%d G=%d)"),
+				*RowName.ToString(), FireStacks, WaterStacks, WindStacks);
 		}
 	}
+
+	// 4. 발동된 공명이 요구한 원소의 흡수 스택을 소모한다(재흡수 전까지 재발동 방지).
+	if (bConsumeFire)  { ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire); }
+	if (bConsumeWater) { ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water); }
+	if (bConsumeWind)  { ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind); }
 
 	if (bChanged)
 	{
 		OnResonanceChanged.Broadcast();
 	}
 
-	BroadcastCompressedBuffChips(FireStacks, WaterStacks, WindStacks, Desired);
+	// 공명 칩(12초 카운트다운)은 공명 GE의 UI.Buff.Resonance.* AssetTag로
+	// RetrieveBuffUIBroadcastComponent가 OnGEAdded/OnGERemoved에서 자동 표시·제거한다(수동 브로드캐스트 불필요).
 }
 
-void UElementResonanceComponent::BroadcastCompressedBuffChips(
-	int32 FireStacks,
-	int32 WaterStacks,
-	int32 WindStacks,
-	const TSet<FName>& ActiveRows) const
+int32 UElementResonanceComponent::CountAbsorbStacks(const FGameplayTag& AttuneTag) const
 {
-	AActor* Owner = GetOwner();
-	URetrieveBuffUIBroadcastComponent* BuffUI =
-		Owner ? Owner->FindComponentByClass<URetrieveBuffUIBroadcastComponent>() : nullptr;
-	if (!BuffUI)
+	UAbilitySystemComponent* PinnedASC = ASC.Get();
+	if (!PinnedASC || !AttuneTag.IsValid())
+	{
+		return 0;
+	}
+
+	const FGameplayEffectQuery Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(
+		FGameplayTagContainer(AttuneTag));
+
+	int32 Total = 0;
+	for (const FActiveGameplayEffectHandle& Handle :
+		const_cast<UAbilitySystemComponent*>(PinnedASC)->GetActiveEffects(Query))
+	{
+		const FActiveGameplayEffect* AGE = PinnedASC->GetActiveGameplayEffect(Handle);
+		if (AGE && AGE->Spec.Def &&
+			AGE->Spec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration)
+		{
+			Total += FMath::Max(1, PinnedASC->GetCurrentStackCount(Handle));
+		}
+	}
+	return Total;
+}
+
+void UElementResonanceComponent::ConsumeAbsorbStacks(const FGameplayTag& AttuneTag)
+{
+	UAbilitySystemComponent* PinnedASC = ASC.Get();
+	if (!PinnedASC || !AttuneTag.IsValid())
 	{
 		return;
 	}
 
-	const FGameplayTag ResonanceTags[] =
-	{
-		RetrieveGameplayTags::UI_Buff_Resonance_Fire,
-		RetrieveGameplayTags::UI_Buff_Resonance_Fire2,
-		RetrieveGameplayTags::UI_Buff_Resonance_Water,
-		RetrieveGameplayTags::UI_Buff_Resonance_Water2,
-		RetrieveGameplayTags::UI_Buff_Resonance_Wind,
-		RetrieveGameplayTags::UI_Buff_Resonance_Wind2,
-		RetrieveGameplayTags::UI_Buff_Resonance_Steam,
-		RetrieveGameplayTags::UI_Buff_Resonance_Storm,
-		RetrieveGameplayTags::UI_Buff_Resonance_Mist,
-		RetrieveGameplayTags::UI_Buff_Resonance_Trinity,
-	};
-	for (const FGameplayTag& Tag : ResonanceTags)
-	{
-		BuffUI->BroadcastBuffRemove(Tag);
-	}
+	const FGameplayEffectQuery Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(
+		FGameplayTagContainer(AttuneTag));
 
-	const bool bTrinity2 = ActiveRows.Contains(TEXT("Resonance_Trinity2"));
-	const bool bTrinity1 = ActiveRows.Contains(TEXT("Resonance_Trinity1"));
-	const bool bHasTrinity = bTrinity2 || bTrinity1;
-
-	bool bFireCovered = bHasTrinity;
-	bool bWaterCovered = bHasTrinity;
-	bool bWindCovered = bHasTrinity;
-
-	if (bHasTrinity)
+	for (const FActiveGameplayEffectHandle& Handle : PinnedASC->GetActiveEffects(Query))
 	{
-		BuffUI->BroadcastBuffManual(
-			RetrieveGameplayTags::UI_Buff_Resonance_Trinity,
-			0.f,
-			nullptr,
-			bTrinity2 ? 2 : 1);
-	}
-	else
-	{
-		auto ShowSingle = [BuffUI, &ActiveRows](
-			const TCHAR* Level2Row,
-			const TCHAR* Level1Row,
-			FGameplayTag Level2Tag,
-			FGameplayTag Level1Tag,
-			int32 StackCount) -> bool
+		const FActiveGameplayEffect* AGE = PinnedASC->GetActiveGameplayEffect(Handle);
+		if (AGE && AGE->Spec.Def &&
+			AGE->Spec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration)
 		{
-			if (ActiveRows.Contains(FName(Level2Row)))
-			{
-				BuffUI->BroadcastBuffManual(Level2Tag, 0.f, nullptr, FMath::Min(StackCount, 4));
-				return true;
-			}
-			if (ActiveRows.Contains(FName(Level1Row)))
-			{
-				BuffUI->BroadcastBuffManual(Level1Tag, 0.f, nullptr, FMath::Min(StackCount, 4));
-				return true;
-			}
-			return false;
-		};
-
-		bFireCovered = ShowSingle(TEXT("Resonance_Fire2"), TEXT("Resonance_Fire1"),
-			RetrieveGameplayTags::UI_Buff_Resonance_Fire2,
-			RetrieveGameplayTags::UI_Buff_Resonance_Fire,
-			FireStacks);
-		bWaterCovered = ShowSingle(TEXT("Resonance_Water2"), TEXT("Resonance_Water1"),
-			RetrieveGameplayTags::UI_Buff_Resonance_Water2,
-			RetrieveGameplayTags::UI_Buff_Resonance_Water,
-			WaterStacks);
-		bWindCovered = ShowSingle(TEXT("Resonance_Wind2"), TEXT("Resonance_Wind1"),
-			RetrieveGameplayTags::UI_Buff_Resonance_Wind2,
-			RetrieveGameplayTags::UI_Buff_Resonance_Wind,
-			WindStacks);
-
-		if (ActiveRows.Contains(TEXT("Resonance_Steam")))
-		{
-			BuffUI->BroadcastBuffManual(RetrieveGameplayTags::UI_Buff_Resonance_Steam);
-			bFireCovered = true;
-			bWaterCovered = true;
+			// 흡수 스택 전체 제거 = 소모 (StacksToRemove=-1: 전부)
+			PinnedASC->RemoveActiveGameplayEffect(Handle, -1);
 		}
-		if (ActiveRows.Contains(TEXT("Resonance_Storm")))
-		{
-			BuffUI->BroadcastBuffManual(RetrieveGameplayTags::UI_Buff_Resonance_Storm);
-			bFireCovered = true;
-			bWindCovered = true;
-		}
-		if (ActiveRows.Contains(TEXT("Resonance_Mist")))
-		{
-			BuffUI->BroadcastBuffManual(RetrieveGameplayTags::UI_Buff_Resonance_Mist);
-			bWaterCovered = true;
-			bWindCovered = true;
-		}
-	}
-
-	const struct
-	{
-		FGameplayTag UITag;
-		int32 Stacks;
-		bool bCovered;
-	} AttuneChips[] =
-	{
-		{ RetrieveGameplayTags::UI_Buff_Attune_Fire, FireStacks, bFireCovered },
-		{ RetrieveGameplayTags::UI_Buff_Attune_Water, WaterStacks, bWaterCovered },
-		{ RetrieveGameplayTags::UI_Buff_Attune_Wind, WindStacks, bWindCovered },
-	};
-
-	for (const auto& Chip : AttuneChips)
-	{
-		// 공명 조건을 충족하기 전의 어튠 진행 스택은 HUD 버프로 노출하지 않는다.
-		BuffUI->BroadcastBuffRemove(Chip.UITag);
 	}
 }

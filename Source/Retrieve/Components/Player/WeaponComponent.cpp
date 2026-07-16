@@ -576,21 +576,27 @@ void UWeaponComponent::SpawnWeaponEnhancementVFX()
 	}
 
 	const FLinearColor AuraColor = CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Fire
-		? FLinearColor(8.f, 0.35f, 0.03f, 1.f)
+		? FLinearColor(0.5f, 0.023f, 0.002f, 1.f)   // 발광 강도 하향: blown-out/블룸 번짐 제거 (재스폰 시 반영)
 		: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Water
-			? FLinearColor(0.05f, 2.5f, 10.f, 1.f)
+			? FLinearColor(0.0035f, 0.13f, 0.5f, 1.f)
 			: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Wind
-				? FLinearColor(0.15f, 8.f, 1.2f, 1.f)
-				: FLinearColor(3.5f, 1.2f, 7.f, 1.f);
-	const float TierAlpha = FMath::Clamp(static_cast<float>(Level) / 10.f, 0.1f, 1.f);
+				? FLinearColor(0.01f, 0.5f, 0.075f, 1.f)
+				: FLinearColor(0.25f, 0.08f, 0.5f, 1.f);
+	// 강화 레벨(1~10)을 0~1로 정규화. 단계별 차이를 넓게 벌리기 위해 최저(레벨1)도 0에 가깝게 둔다.
+	const float TierAlpha = FMath::Clamp((static_cast<float>(Level) - 1.f) / 9.f, 0.f, 1.f);
+
+	// 강화 단계가 확실히 체감되도록 발광/오버레이 밝기 자체를 레벨에 비례시킨다.
+	// 최고 레벨(10) = 현재 튜닝된 기준 밝기(AuraColor), 낮은 레벨은 은은하게.
+	const float LevelIntensity = FMath::Lerp(0.28f, 1.0f, TierAlpha);
+	const FLinearColor ScaledColor = AuraColor * LevelIntensity;
 
 	VFX->SetVariableStaticMesh(FName(TEXT("User.01 - Mesh -> Weapon")), TargetMesh->GetStaticMesh());
-	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Emissive")), AuraColor);
-	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay")), AuraColor * (0.55f + TierAlpha * 0.45f));
-	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay Noise")), AuraColor);
-	VFX->SetVariableFloat(FName(TEXT("User.Sparks Amount")), FMath::Lerp(18.f, 90.f, TierAlpha));
-	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Width")), FMath::Lerp(8.f, 24.f, TierAlpha));
-	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Lifetime")), FMath::Lerp(0.25f, 0.85f, TierAlpha));
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Emissive")), ScaledColor);
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay")), ScaledColor * (0.5f + TierAlpha * 0.5f));
+	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay Noise")), ScaledColor);
+	VFX->SetVariableFloat(FName(TEXT("User.Sparks Amount")), FMath::Lerp(6.f, 110.f, TierAlpha));
+	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Width")), FMath::Lerp(5.f, 26.f, TierAlpha));
+	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Lifetime")), FMath::Lerp(0.15f, 0.85f, TierAlpha));
 	VFX->ComponentTags.AddUnique(FName(TEXT("Retrieve.VFX.WeaponEnhancement")));
 	VFX->Activate(true);
 	WeaponEnhancementVFXComponents.Add(VFX);

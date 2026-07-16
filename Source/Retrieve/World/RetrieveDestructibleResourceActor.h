@@ -8,6 +8,7 @@
 #include "RetrieveDestructibleResourceActor.generated.h"
 
 class UGeometryCollectionComponent;
+class UMaterialInstanceDynamic;
 class UNiagaraSystem;
 class USoundBase;
 class UStaticMeshComponent;
@@ -82,16 +83,32 @@ public:
 		FSoftObjectPath(TEXT("/Game/Retrieve/Audio/SFX/SwordShield/SC_SSH_SwordHit.SC_SSH_SwordHit")));
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.05"))
-	float HitShakeDuration = 0.18f;
+	float HitShakeDuration = 0.2f;
+
+	// 타격 시 흔들림 거리(UU). "깨지는 중"이 확실히 보이도록 기본값을 키웠다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0"))
+	float HitShakeDistance = 9.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0"))
-	float HitShakeDistance = 4.0f;
+	float HitShakeRotationDegrees = 5.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0"))
-	float HitShakeRotationDegrees = 2.5f;
+	/**
+	 * 타격 시 순간 스쿼시(축소→복원) 강도. 0이면 스케일 펀치 없음.
+	 * 머티리얼 크랙과 무관하게 메시가 움찔하므로 어떤 자원이든 타격 반응이 확실히 보인다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+	float HitScalePunch = 0.14f;
+
+	/**
+	 * 진행형 크랙 머티리얼 스칼라 파라미터 이름.
+	 * IntactMesh 머티리얼에 이 이름의 스칼라 파라미터가 있으면 타격마다 0→1로 균열이 진행된다.
+	 * 파라미터가 없으면 무해하게 무시된다(별도 아트 없이도 나머지 피드백은 동작).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback")
+	FName CrackProgressParamName = TEXT("CrackProgress");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource|Feedback", meta = (ClampMin = "0.01"))
-	float HitImpactVFXScale = 0.65f;
+	float HitImpactVFXScale = 0.85f;
 
 protected:
 	/** 파괴 확정 처리(서버 전용): bBroken 설정 → IntactMesh 콜리전 해제 → 보상 지급 → 파괴 연출 전파 */
@@ -122,6 +139,15 @@ private:
 	void StartHitShake(const FVector& ImpactNormal, int32 HitCount, float HitProgress);
 	void UpdateHitShake();
 	void StopHitShake();
+
+	/** IntactMesh 각 머티리얼 슬롯을 다이나믹 인스턴스로 교체해 크랙 진행 파라미터를 구동할 수 있게 한다. */
+	void CreateCrackMIDs();
+
+	/** 크랙 진행도(0~1)를 모든 MID에 적용. 파라미터가 없으면 무해하게 무시된다. */
+	void UpdateCrackProgress(float Progress);
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> CrackMIDs;
 
 	/** ApplyBrokenVisual 중복 실행 방지(멀티캐스트 + OnRep이 겹쳐도 한 번만 재생) */
 	bool bBreakVisualPlayed = false;

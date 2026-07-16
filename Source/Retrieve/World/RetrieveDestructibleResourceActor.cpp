@@ -6,6 +6,7 @@
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -44,6 +45,43 @@ void ARetrieveDestructibleResourceActor::BeginPlay()
 	{
 		HitBaseRelativeTransform = IntactMesh->GetRelativeTransform();
 		bHitBaseTransformCaptured = true;
+	}
+	CreateCrackMIDs();
+}
+
+void ARetrieveDestructibleResourceActor::CreateCrackMIDs()
+{
+	CrackMIDs.Reset();
+	if (!IntactMesh)
+	{
+		return;
+	}
+
+	const int32 NumMaterials = IntactMesh->GetNumMaterials();
+	for (int32 SlotIndex = 0; SlotIndex < NumMaterials; ++SlotIndex)
+	{
+		if (UMaterialInstanceDynamic* MID = IntactMesh->CreateAndSetMaterialInstanceDynamic(SlotIndex))
+		{
+			CrackMIDs.Add(MID);
+		}
+	}
+	UpdateCrackProgress(0.0f);
+}
+
+void ARetrieveDestructibleResourceActor::UpdateCrackProgress(float Progress)
+{
+	if (CrackProgressParamName.IsNone())
+	{
+		return;
+	}
+
+	const float Clamped = FMath::Clamp(Progress, 0.0f, 1.0f);
+	for (UMaterialInstanceDynamic* MID : CrackMIDs)
+	{
+		if (MID)
+		{
+			MID->SetScalarParameterValue(CrackProgressParamName, Clamped);
+		}
 	}
 }
 
@@ -148,6 +186,7 @@ void ARetrieveDestructibleResourceActor::MulticastPlayHitFeedback_Implementation
 		? static_cast<float>(HitCount) / static_cast<float>(RequiredHitCount)
 		: 0.0f;
 
+	UpdateCrackProgress(HitProgress);
 	PlayDefaultHitFeedback(ImpactPoint, ImpactNormal, HitCount, HitProgress);
 	PlayHitFeedback(ImpactPoint, ImpactNormal, HitCount, HitProgress);
 }
@@ -244,7 +283,11 @@ void ARetrieveDestructibleResourceActor::UpdateHitShake()
 		HitShakeRotationDegrees * 0.7f * Oscillation * RotationSign);
 	const FQuat Rotation = HitBaseRelativeTransform.GetRotation() * RotationOffset.Quaternion();
 
-	IntactMesh->SetRelativeLocationAndRotation(Location, Rotation);
+	// 스케일 스쿼시: 타격 직후 살짝 눌렸다가(Envelope=1) 원래 크기로 복원(Envelope=0)된다.
+	const float ScaleFactor = 1.0f - HitScalePunch * Envelope * HitShakeStrength;
+	const FVector NewScale = HitBaseRelativeTransform.GetScale3D() * FMath::Max(ScaleFactor, 0.1f);
+
+	IntactMesh->SetRelativeTransform(FTransform(Rotation, Location, NewScale));
 }
 
 void ARetrieveDestructibleResourceActor::StopHitShake()
