@@ -28,6 +28,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
 #include "Core/RetrieveGameState.h"
+#include "Subsystems/RetrieveMapSubsystem.h"
 #include "Quest/QuestBranchComponent.h"
 #include "UI/Quest/RetrieveQuestStatus.h"
 #include "Subsystems/QuestNotificationSubsystem.h"
@@ -117,6 +118,20 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		Pawn->FindComponentByClass<URetrieveHealthComponent>())
 	{
 		Snapshot.SavedHealth = HealthComp->GetHealth();
+	}
+
+	// 전장의 안개 탐색 마스크 저장 (라이브 MapSubsystem에서 직접 캡처)
+	if (UWorld* World = PC->GetWorld())
+	{
+		if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
+		{
+			const TArray<uint8>& Mask = MapSub->GetRevealMaskData();
+			if (Mask.Num() > 0)
+			{
+				SlotSave->ExploredMask = Mask;
+				SlotSave->ExploredMaskResolution = MapSub->GetRevealMaskResolution();
+			}
+		}
 	}
 
 	// 퀘스트 진행 상태 기록 (GameState 소속이라 Pawn과 별도로 조회)
@@ -338,6 +353,16 @@ bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerCo
 		if (UQuestNotificationSubsystem* NotificationSubsystem = World->GetSubsystem<UQuestNotificationSubsystem>())
 		{
 			NotificationSubsystem->ResetBaseline();
+		}
+
+		// 전장의 안개 탐색 마스크 복원 (bounds 초기화 전이라도 raw 마스크는 안전하게 세팅됨)
+		if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
+		{
+			if (CurrentSaveGame->ExploredMaskResolution > 0)
+			{
+				MapSub->SetRevealMaskData(CurrentSaveGame->ExploredMask,
+					CurrentSaveGame->ExploredMaskResolution);
+			}
 		}
 
 		FRetrieveQuestStepPayload RefreshMessage;

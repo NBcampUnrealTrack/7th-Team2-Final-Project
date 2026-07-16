@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Fonts/SlateFontInfo.h"
@@ -78,18 +78,58 @@ public:
 	TObjectPtr<URetrieveMapIconRegistry> IconRegistry;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
-	float PlayerMarkerSize = 24.0f;
+	float PlayerMarkerSize = 28.0f;
 
+	// 마을처럼 밝은 배경/밀집 아이콘 위에서도 눈에 띄도록 고대비 기본색(시안)을 사용.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
-	FLinearColor PlayerMarkerColor = FLinearColor::White;
+	FLinearColor PlayerMarkerColor = FLinearColor(0.12f, 0.95f, 1.0f, 1.0f);
+
+	// 플레이어 마커 뒤에 그리는 대비 외곽선(배킹) 색상. 밝은 지형/흰 아이콘 위에서 마커를 분리한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap")
+	FLinearColor PlayerMarkerOutlineColor = FLinearColor(0.02f, 0.02f, 0.05f, 0.9f);
+
+	// 외곽선 배킹 크기 배율(마커 대비). 1.0이면 외곽선 미표시.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap", meta=(ClampMin="1.0"))
+	float PlayerMarkerOutlineScale = 1.5f;
+
+	// ── 아이콘 대비 외곽선 ────────────────────────────────────────────────────
+	// 아이콘 뒤에 어두운 배킹을 깔아 밝은 지형/서로 겹친 아이콘과 윤곽을 분리한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Icon")
+	bool bDrawIconOutline = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Icon")
+	FLinearColor IconOutlineColor = FLinearColor(0.02f, 0.02f, 0.05f, 0.85f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Icon", meta=(ClampMin="1.0"))
+	float IconOutlineScale = 1.28f;
+
+	// ── 전장의 안개 ────────────────────────────────────────────────────────────
+	// 켜면 미탐색 영역을 FogColor로 덮고 그 영역의 아이콘을 숨긴다(지역명 라벨/웨이포인트/플레이어는 예외).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Fog")
+	bool bEnableFogOfWar = true;
+
+	// 미탐색 영역을 덮는 안개 색. 알파는 안개 최대 농도(마스크 A와 곱해진다).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Fog")
+	FLinearColor FogColor = FLinearColor(0.32f, 0.34f, 0.34f, 0.94f);
+
+	// 미탐색 영역에 입힐 타일형 연무 텍스처. RevealMask의 알파와 결합해 탐색 영역은 투명해진다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Fog")
+	TObjectPtr<UTexture2D> FogTexture;
+
+	// FogTex, RevealTex, FogColor 파라미터를 받는 UI 머티리얼.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Fog")
+	TObjectPtr<UMaterialInterface> FogDisplayMaterial;
 
 	// Independent panel chrome can take space around the actual map viewport.
 	/**
 	 * MapViewport 기준 오프셋 (WBP Border_Window 내부 기준 left/top/right/bottom).
 	 * WBP에서 MapViewport 슬롯을 바꾸면 이 값도 맞춰 업데이트할 것.
 	 */
+	// 실제 WBP MapViewport 슬롯 오프셋과 일치(left=240/top=84/right=240/bottom=54).
+	// 폴백 rect가 실제 뷰포트와 정확히 겹치도록 한다(과거 98/74/117/72는 실제 인셋과 달라
+	// 폴백 시 맵이 프레임 밖으로 넘치는 원인이었음).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Layout")
-	FMargin MapViewportPadding = FMargin(98.0f, 74.0f, 117.0f, 72.0f);
+	FMargin MapViewportPadding = FMargin(240.0f, 84.0f, 240.0f, 54.0f);
 
 	/**
 	 * WBP에서 Border_Window가 차지하는 화면 비율 (Min = 좌상단, Max = 우하단).
@@ -239,6 +279,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label", meta=(ClampMin="8"))
 	int32 IconLabelFontSize = 10;
 
+	// 지역명(Region 타입) 라벨 폰트 크기 — 지역 구분이 잘 되도록 크게.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label", meta=(ClampMin="10"))
+	int32 RegionLabelFontSize = 20;
+
+	// 지역명 라벨 색상 (기본 라벨과 구분되는 은은한 금색조).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label")
+	FLinearColor RegionLabelColor = FLinearColor(0.95f, 0.85f, 0.55f, 0.95f);
+
 	// 텍스트 색상
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label")
 	FLinearColor LabelColor = FLinearColor::White;
@@ -308,6 +356,10 @@ private:
 	// MapDisplayMaterial로부터 생성한 동적 머티리얼 인스턴스(맵 텍스처 파라미터 주입용) 캐시.
 	UPROPERTY(Transient)
 	mutable TObjectPtr<UMaterialInstanceDynamic> MapDisplayMID;
+
+	// RevealMask와 안개 텍스처를 합성하는 동적 머티리얼 인스턴스 캐시.
+	UPROPERTY(Transient)
+	mutable TObjectPtr<UMaterialInstanceDynamic> FogDisplayMID;
 
 	// ViewCenterUV를 맵 범위 내로 클램핑
 	void ClampViewCenter();
