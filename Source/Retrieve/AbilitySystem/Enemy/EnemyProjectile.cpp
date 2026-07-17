@@ -166,6 +166,20 @@ void AEnemyProjectile::SetGravityScale(float GravityScale)
 	ProjectileMovement->ProjectileGravityScale = GravityScale;
 }
 
+void AEnemyProjectile::SetBallisticGravityScale(float GravityScale)
+{
+	if (!ProjectileMovement)
+	{
+		return;
+	}
+
+	ProjectileMovement->ProjectileGravityScale = FMath::Max(0.f, GravityScale);
+	if (ProjectileMovement->ProjectileGravityScale > 0.f)
+	{
+		ProjectileMovement->MaxSpeed = 0.f;
+	}
+}
+
 void AEnemyProjectile::SetHitReactType(ERetrieveHitReactType InHitReactType)
 {
 	HitReactType = InHitReactType;

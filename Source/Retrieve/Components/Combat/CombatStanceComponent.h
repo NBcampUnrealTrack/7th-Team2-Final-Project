@@ -25,10 +25,15 @@ class RETRIEVE_API UCombatStanceComponent : public UPawnComponent
 public:
 	UCombatStanceComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	// 모든 전투 트리거의 단일 진입점(공격/피격/락온/2차 적 어그로가 전부 호출).
-	// bFromAttack=true면 '공격전 발검' → 발검 몽타주 없이 즉시 손 소켓 스냅(공격 모션이 발검을 표현).
+	// 전투 태세(Combat) 진입점 — 적 포착(PlayerSpotted) 전용. 그 외 발검 활동은 NotifyDrawnActivity로.
+	// bFromAttack=true면 발검 몽타주 없이 즉시 손 소켓 스냅.
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|CombatStance")
 	void NotifyCombatActivity(bool bFromAttack = false);
+
+	// 발검(Relaxed) 진입점 — 장착/공격/조준이 호출. 납검이면 발검으로 올리고, 이미 발검이면 유지(Combat 강등 없음).
+	// bInstant=true면 발검 몽타주 스킵 + 소켓 즉시 스냅(장착·공격發 발검).
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|CombatStance")
+	void NotifyDrawnActivity(bool bInstant = false);
 	
 	// ASC 연결 - 캐릭터의 ASC를 초기화시 호출(아래 1 ~ 4)
     void InitializeWithAbilitySystem(UAbilitySystemComponent* ASC);

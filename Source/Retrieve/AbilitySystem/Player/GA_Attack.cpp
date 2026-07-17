@@ -94,7 +94,7 @@ void UGA_Attack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 			{
 				if (UCombatStanceComponent* Stance = AvatarActor->FindComponentByClass<UCombatStanceComponent>())
 				{
-					Stance->NotifyCombatActivity(/*bFromAttack=*/false); // 발검 몽타주 + 디케이 타이머
+					Stance->NotifyDrawnActivity(/*bInstant=*/false); // 발검 몽타주 + 납검 디케이 타이머
 				}
 			}
 			EndAbility(Handle, ActorInfo, ActivationInfo, true, false);

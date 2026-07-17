@@ -16,6 +16,8 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UWorld;
 class AStaffProjectile;
+class UAudioComponent;
+class USoundBase;
 
 // 투사체 스폰 파라미터(스태프 강공·활 공용)
 struct FRetrieveProjectileSpawnParams
@@ -97,7 +99,8 @@ private:
 	void ApplyHitToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC, const FHitResult& SweepResult);
 	// ArmDelayedLaunch 타이머 콜백: 저장한 방향/속도로 발사.
 	void HandleDelayedLaunch();
-
+	void PlayImpactSFX(const FVector& Location);
+	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -119,6 +122,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
+	// 화살 Whoosh 사운드 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile|SFX",	meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> FlightSFXComponent;
+	
+	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly, Category = "StaffProjectile|SFX")
+	TObjectPtr<USoundBase> FlightSFX;
+	
+	// 피격시 사운드
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|SFX")
+	TObjectPtr<USoundBase> ImpactSFX;
+	
+	// 중복 착탄음 방지
+	bool bImpactSFXPlayed = false;
+	
 	// 넉백 강도. 적중 시 URetrieveKnockbackLibrary::ApplyKnockbackFromSource로 적용.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackStrength = 0.f;

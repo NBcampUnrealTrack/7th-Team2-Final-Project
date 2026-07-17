@@ -17,6 +17,8 @@
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "NiagaraComponent.h"
 #include "TimerManager.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -92,6 +94,11 @@ AStaffProjectile::AStaffProjectile()
 	TrailVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TrailVFXComponent"));
 	TrailVFXComponent->SetupAttachment(CollisionSphere);
 	TrailVFXComponent->SetAutoActivate(false);
+	
+	// 사운드 Component, Flight SFX와 ImpactSFX 실행
+	FlightSFXComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("FlightSFXComponent"));
+	FlightSFXComponent->SetupAttachment(CollisionSphere);
+	FlightSFXComponent->SetAutoActivate(false);
 }
 
 void AStaffProjectile::Launch(const FVector& Direction, float Speed)
@@ -131,6 +138,17 @@ void AStaffProjectile::ArmDelayedLaunch(const FVector& Direction, float Speed, f
 void AStaffProjectile::HandleDelayedLaunch()
 {
 	Launch(PendingLaunchDirection, PendingLaunchSpeed);
+}
+
+void AStaffProjectile::PlayImpactSFX(const FVector& Location)
+{
+	if (bImpactSFXPlayed || !ImpactSFX)
+	{
+		return;
+	}
+	
+	bImpactSFXPlayed = true;
+	UGameplayStatics::PlaySoundAtLocation(this, ImpactSFX, Location);
 }
 
 void AStaffProjectile::IgnoreOtherProjectile(AStaffProjectile* Other)
@@ -301,6 +319,13 @@ void AStaffProjectile::BeginPlay()
 		TrailVFXComponent->SetAsset(TrailVFX);
 		TrailVFXComponent->Activate(true);
 	}
+	
+	// 발사음 실행
+	if (FlightSFXComponent && FlightSFX)
+	{
+		FlightSFXComponent->SetSound(FlightSFX);
+		FlightSFXComponent->Play();
+	}
 }
 
 void AStaffProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -337,7 +362,10 @@ void AStaffProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComp, 
 			URetrieveKnockbackLibrary::ApplyKnockbackFromSource(HitCharacter, GetActorLocation(), KnockbackParams);
 		}
 	}
-
+	
+	const FVector ImpactLocation = SweepResult.bBlockingHit ? FVector(SweepResult.ImpactPoint) : GetActorLocation();
+	
+	PlayImpactSFX(ImpactLocation);
 	Destroy();
 }
 
@@ -399,6 +427,9 @@ void AStaffProjectile::ApplyHitToTarget(AActor* TargetActor, UAbilitySystemCompo
 
 void AStaffProjectile::OnProjectileStopped(const FHitResult& ImpactResult)
 {
+	const FVector ImpactLocation = ImpactResult.bBlockingHit ? FVector(ImpactResult.ImpactPoint) : GetActorLocation();
+
+	PlayImpactSFX(ImpactLocation);
 	Destroy();
 }
 
