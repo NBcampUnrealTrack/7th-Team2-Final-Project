@@ -67,6 +67,9 @@ private:
 	// GE 콜백 안에서 GE를 적용/제거하는 재진입을 피하기 위한 다음 틱 지연 플래그
 	bool bRecomputePending = false;
 
+	// 공명 변환 중 발생하는 내부 GE 추가/제거 콜백의 재계산을 막는다.
+	bool bApplyingResonanceTransaction = false;
+
 	bool HasAuthorityToModify() const;
 	void ResolveResonanceTable();
 
@@ -82,8 +85,11 @@ private:
 	/** 유한 지속시간(흡수/아이템) 어튠 스택만 집계 — 장비(Infinite)는 제외. 소모/발동 판정용. */
 	int32 CountAbsorbStacks(const FGameplayTag& AttuneTag) const;
 
-	/** 유한 지속시간(흡수) 어튠 스택 GE를 전부 제거 = 공명 발동에 소모. */
-	void ConsumeAbsorbStacks(const FGameplayTag& AttuneTag);
+	/** 공명 재료로 사용한 흡수 스택과 대응하는 능력치 버프 GE를 지정 수만큼 제거. */
+	void ConsumeAbsorbStacks(const FGameplayTag& AttuneTag, int32 StacksToConsume);
+
+	/** 기존 공명에서 사용하지 않고 남은 재료를 흡수/어튠 스택으로 되돌린다. */
+	void RestoreAbsorbStacks(const FGameplayTag& AttuneTag, int32 StacksToRestore);
 
 	static bool IsAttuneSpec(const FGameplayEffectSpec& Spec);
 };
