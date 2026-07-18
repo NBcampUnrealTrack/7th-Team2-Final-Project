@@ -1,16 +1,19 @@
 #include "UI/Skill/RetrieveSkillOverviewWidget.h"
 
 #include "Components/Element/ElementResonanceComponent.h"
+#include "Components/PanelWidget.h"
 #include "Components/Player/ArmorComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Components/TextBlock.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
+#include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Player/RetrievePlayerState.h"
 #include "TimerManager.h"
 #include "UI/RetrieveElementUILibrary.h"
+#include "UI/Skill/RetrieveResonanceEntryWidget.h"
 
 void URetrieveSkillOverviewWidget::NativeConstruct()
 {
@@ -40,6 +43,7 @@ void URetrieveSkillOverviewWidget::NativeConstruct()
 			true);
 	}
 	RefreshAll();
+	RebuildResonanceList();
 }
 
 void URetrieveSkillOverviewWidget::NativeDestruct()
@@ -67,7 +71,7 @@ void URetrieveSkillOverviewWidget::NativeDestruct()
 
 void URetrieveSkillOverviewWidget::HandleWeaponChanged(FName) { RefreshAll(); }
 void URetrieveSkillOverviewWidget::HandleArmorChanged(FGameplayTag, FName) { RefreshAll(); }
-void URetrieveSkillOverviewWidget::HandleResonanceChanged() { RefreshAll(); }
+void URetrieveSkillOverviewWidget::HandleResonanceChanged() { RefreshAll(); RebuildResonanceList(); }
 void URetrieveSkillOverviewWidget::HandleTimerRefresh() { RefreshAll(); }
 
 void URetrieveSkillOverviewWidget::RefreshAll()
@@ -261,35 +265,16 @@ FText URetrieveSkillOverviewWidget::BuildSetSection() const
 
 FText URetrieveSkillOverviewWidget::BuildResonanceSection() const
 {
+	// 상세 목록은 RebuildResonanceList()가 엔트리 위젯으로 그린다.
+	// 이 텍스트 섹션은 현재 어튠 스택 요약만 표시한다.
 	const UElementResonanceComponent* Resonance = GetResonanceComponent();
-	const UDataTable* Table = Cast<UDataTable>(FSoftObjectPath(
-		TEXT("/Game/Retrieve/Data/Skill/DT_ElementResonance.DT_ElementResonance")).TryLoad());
-	if (!Resonance || !Table) return FText::GetEmpty();
+	if (!Resonance) return FText::GetEmpty();
 
 	const int32 Fire = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Fire);
 	const int32 Water = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Water);
 	const int32 Wind = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Wind);
-	const TArray<FName> ActiveIds = Resonance->GetActiveResonanceIds();
-
-	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("현재 스택 · 불 %d · 물 %d · 바람 %d"), Fire, Water, Wind));
-	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
-	{
-		const FElementResonanceRow* Row = reinterpret_cast<const FElementResonanceRow*>(Pair.Value);
-		if (!Row) continue;
-
-		TArray<FString> Conditions;
-		if (Row->RequiredFire > 0) Conditions.Add(FString::Printf(TEXT("불%d"), Row->RequiredFire));
-		if (Row->RequiredWater > 0) Conditions.Add(FString::Printf(TEXT("물%d"), Row->RequiredWater));
-		if (Row->RequiredWind > 0) Conditions.Add(FString::Printf(TEXT("바람%d"), Row->RequiredWind));
-
-		Lines.Add(FString::Printf(TEXT("%s %s (%s) · %s"),
-			ActiveIds.Contains(Pair.Key) ? TEXT("●") : TEXT("○"),
-			*Row->DisplayName.ToString(),
-			*FString::Join(Conditions, TEXT("+")),
-			*Row->Description.ToString()));
-	}
-	return FText::FromString(FString::Join(Lines, TEXT("\n")));
+	return FText::FromString(
+		FString::Printf(TEXT("현재 스택 · 불 %d · 물 %d · 바람 %d"), Fire, Water, Wind));
 }
 
 FText URetrieveSkillOverviewWidget::BuildAdvantageSection() const
@@ -330,6 +315,125 @@ UElementResonanceComponent* URetrieveSkillOverviewWidget::GetResonanceComponent(
 {
 	APawn* Pawn = GetOwningPlayerPawn();
 	return Pawn ? Pawn->FindComponentByClass<UElementResonanceComponent>() : nullptr;
+}
+
+void URetrieveSkillOverviewWidget::RebuildResonanceList()
+{
+	if (!Panel_ResonanceEntries)
+	{
+		return;
+	}
+
+	Panel_ResonanceEntries->ClearChildren();
+
+	const UElementResonanceComponent* Resonance = GetResonanceComponent();
+	const UDataTable* ResonanceTable = Cast<UDataTable>(FSoftObjectPath(
+		TEXT("/Game/Retrieve/Data/Skill/DT_ElementResonance.DT_ElementResonance")).TryLoad());
+	if (!Resonance || !ResonanceTable || !ResonanceEntryClass)
+	{
+		return;
+	}
+
+	// DT_BuffDefinitions는 이름/아이콘/효과 조회용. 없으면 DT_ElementResonance 값으로 폴백한다.
+	const UDataTable* BuffTable = Cast<UDataTable>(FSoftObjectPath(
+		TEXT("/Game/Retrieve/Data/Skill/DT_BuffDefinitions.DT_BuffDefinitions")).TryLoad());
+
+	// 보기 좋은 순서: 원소 종류 적은 것(단일)→많은 것(혼합/삼중) → 총 요구량 → 이름.
+	struct FSortedRow
+	{
+		FName RowName;
+		const FElementResonanceRow* Row;
+	};
+	TArray<FSortedRow> Rows;
+	for (const TPair<FName, uint8*>& Pair : ResonanceTable->GetRowMap())
+	{
+		if (const FElementResonanceRow* Row = reinterpret_cast<const FElementResonanceRow*>(Pair.Value))
+		{
+			Rows.Add({ Pair.Key, Row });
+		}
+	}
+	Rows.Sort([](const FSortedRow& A, const FSortedRow& B)
+	{
+		auto Kinds = [](const FElementResonanceRow* R)
+		{
+			return (R->RequiredFire > 0 ? 1 : 0)
+				+ (R->RequiredWater > 0 ? 1 : 0)
+				+ (R->RequiredWind > 0 ? 1 : 0);
+		};
+		const int32 KA = Kinds(A.Row);
+		const int32 KB = Kinds(B.Row);
+		if (KA != KB) return KA < KB;
+		const int32 CA = A.Row->RequiredFire + A.Row->RequiredWater + A.Row->RequiredWind;
+		const int32 CB = B.Row->RequiredFire + B.Row->RequiredWater + B.Row->RequiredWind;
+		if (CA != CB) return CA < CB;
+		return A.Row->DisplayName.CompareTo(B.Row->DisplayName) < 0;
+	});
+
+	for (const FSortedRow& Sorted : Rows)
+	{
+		const FElementResonanceRow* Row = Sorted.Row;
+
+		FRetrieveResonanceEntryView View;
+
+		// 필요 스택 (DT_ElementResonance)
+		TArray<FString> Conditions;
+		if (Row->RequiredFire > 0) Conditions.Add(FString::Printf(TEXT("불%d"), Row->RequiredFire));
+		if (Row->RequiredWater > 0) Conditions.Add(FString::Printf(TEXT("물%d"), Row->RequiredWater));
+		if (Row->RequiredWind > 0) Conditions.Add(FString::Printf(TEXT("바람%d"), Row->RequiredWind));
+		View.StacksText = FText::FromString(FString::Join(Conditions, TEXT(" + ")));
+
+		// 이름/아이콘/효과 (DT_BuffDefinitions): 공명 GE의 AssetTag(UI.Buff.Resonance.*)로 조회.
+		const FGameplayTag BuffTag = ExtractResonanceBuffTag(Row->ResonanceEffect);
+		FRetrieveBuffUIRow BuffRow;
+		const bool bHasBuff = URetrieveElementUILibrary::GetBuffUIRow(BuffTable, BuffTag, BuffRow);
+
+		View.DisplayName = (bHasBuff && !BuffRow.DisplayName.IsEmpty())
+			? BuffRow.DisplayName
+			: Row->DisplayName;
+		View.EffectText = bHasBuff
+			? (!BuffRow.EffectSummary.IsEmpty() ? BuffRow.EffectSummary : BuffRow.Description)
+			: Row->Description;
+		if (bHasBuff)
+		{
+			View.Icon = BuffRow.Icon.LoadSynchronous();
+			View.IconTint = BuffRow.TintColor;
+		}
+
+		if (URetrieveResonanceEntryWidget* EntryWidget =
+			CreateWidget<URetrieveResonanceEntryWidget>(this, ResonanceEntryClass))
+		{
+			EntryWidget->SetEntry(View);
+			Panel_ResonanceEntries->AddChild(EntryWidget);
+		}
+	}
+}
+
+FGameplayTag URetrieveSkillOverviewWidget::ExtractResonanceBuffTag(
+	const TSoftClassPtr<UGameplayEffect>& EffectClass)
+{
+	UClass* LoadedClass = EffectClass.LoadSynchronous();
+	if (!LoadedClass)
+	{
+		return FGameplayTag();
+	}
+
+	const UGameplayEffect* CDO = LoadedClass->GetDefaultObject<UGameplayEffect>();
+	if (!CDO)
+	{
+		return FGameplayTag();
+	}
+
+	// 공명 GE에 달린 UI.Buff.Resonance.* AssetTag(정확히 UI.Buff.Resonance 자신은 제외)를 첫 번째로 반환.
+	const FGameplayTagContainer& AssetTags = CDO->GetAssetTags();
+	for (const FGameplayTag& Tag : AssetTags)
+	{
+		if (Tag.MatchesTag(RetrieveGameplayTags::UI_Buff_Resonance)
+			&& Tag != RetrieveGameplayTags::UI_Buff_Resonance)
+		{
+			return Tag;
+		}
+	}
+	return FGameplayTag();
 }
 
 

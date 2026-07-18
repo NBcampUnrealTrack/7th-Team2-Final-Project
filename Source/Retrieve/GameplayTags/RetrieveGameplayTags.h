@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "NativeGameplayTags.h"
 
@@ -400,6 +400,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Steam);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Storm);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Mist);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Condensation);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Heat);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Frost);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Trinity);
 	// 방어구 세트 보너스 발동 시 버프 바 표기 (세트 GE의 AssetTag로 부착)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_ArmorSet);

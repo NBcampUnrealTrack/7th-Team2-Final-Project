@@ -50,24 +50,6 @@ UClass* LoadAbsorbEffectClass(const FGameplayTag& AttuneTag)
 	}
 	return EffectPath ? FSoftClassPath(EffectPath).TryLoadClass<UGameplayEffect>() : nullptr;
 }
-
-UClass* LoadAttuneStackEffectClass(const FGameplayTag& AttuneTag)
-{
-	const TCHAR* EffectPath = nullptr;
-	if (AttuneTag.MatchesTagExact(RetrieveGameplayTags::Element_Attune_Fire))
-	{
-		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Fire.GE_ElementStack_Fire_C");
-	}
-	else if (AttuneTag.MatchesTagExact(RetrieveGameplayTags::Element_Attune_Water))
-	{
-		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Water.GE_ElementStack_Water_C");
-	}
-	else if (AttuneTag.MatchesTagExact(RetrieveGameplayTags::Element_Attune_Wind))
-	{
-		EffectPath = TEXT("/Game/Retrieve/AbilitySystem/Player/Resonance/GE_ElementStack_Wind.GE_ElementStack_Wind_C");
-	}
-	return EffectPath ? FSoftClassPath(EffectPath).TryLoadClass<UGameplayEffect>() : nullptr;
-}
 }
 
 UElementResonanceComponent::UElementResonanceComponent()
@@ -149,64 +131,6 @@ void UElementResonanceComponent::UninitializeFromAbilitySystem()
 	WatchedStackHandles.Reset();
 	ActiveResonanceHandles.Reset();
 	ASC = nullptr;
-}
-
-void UElementResonanceComponent::RestoreAbsorbStacks(
-	const FGameplayTag& AttuneTag, int32 StacksToRestore)
-{
-	UAbilitySystemComponent* PinnedASC = ASC.Get();
-	if (!PinnedASC || !AttuneTag.IsValid() || StacksToRestore <= 0)
-	{
-		return;
-	}
-
-	UClass* StackEffectClass = LoadAttuneStackEffectClass(AttuneTag);
-	UClass* AbsorbEffectClass = LoadAbsorbEffectClass(AttuneTag);
-	if (!StackEffectClass || !AbsorbEffectClass)
-	{
-		return;
-	}
-
-	FActiveGameplayEffectHandle LastAbsorbHandle;
-	float AbsorbDuration = 0.f;
-	for (int32 Index = 0; Index < StacksToRestore; ++Index)
-	{
-		FGameplayEffectContextHandle Context = PinnedASC->MakeEffectContext();
-		Context.AddSourceObject(this);
-
-		const FGameplayEffectSpecHandle StackSpec =
-			PinnedASC->MakeOutgoingSpec(StackEffectClass, 1.f, Context);
-		if (StackSpec.IsValid())
-		{
-			PinnedASC->ApplyGameplayEffectSpecToSelf(*StackSpec.Data);
-		}
-
-		const FGameplayEffectSpecHandle AbsorbSpec =
-			PinnedASC->MakeOutgoingSpec(AbsorbEffectClass, 1.f, Context);
-		if (AbsorbSpec.IsValid())
-		{
-			AbsorbDuration = AbsorbSpec.Data->GetDuration();
-			LastAbsorbHandle = PinnedASC->ApplyGameplayEffectSpecToSelf(*AbsorbSpec.Data);
-		}
-	}
-
-	if (AActor* Owner = GetOwner())
-	{
-		if (URetrieveBuffUIBroadcastComponent* BuffUI =
-			Owner->FindComponentByClass<URetrieveBuffUIBroadcastComponent>())
-		{
-			const FGameplayTag BuffTag = AttuneToAbsorbBuffTag(AttuneTag);
-			if (BuffTag.IsValid())
-			{
-				const int32 StackCount = LastAbsorbHandle.IsValid()
-					? PinnedASC->GetCurrentStackCount(LastAbsorbHandle)
-					: StacksToRestore;
-				BuffUI->BroadcastBuffManual(
-					BuffTag, AbsorbDuration > 0.f ? AbsorbDuration : 0.f,
-					AbsorbEffectClass, StackCount);
-			}
-		}
-	}
 }
 
 bool UElementResonanceComponent::IsAttuneSpec(const FGameplayEffectSpec& Spec)
@@ -338,48 +262,27 @@ void UElementResonanceComponent::RecomputeResonance()
 		return;
 	}
 
-	const int32 FireTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Fire);
-	const int32 WaterTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Water);
-	const int32 WindTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Wind);
+	// 공명은 한 번에 하나만 적용된다. 이미 활성 공명이 있으면 새로 발동하지 않으며,
+	// 이 동안 흡수해도 어튠 스택은 쌓이지 않는다(GA_Absorb가 HasActiveResonance로 차단).
+	if (!ActiveResonanceHandles.IsEmpty())
+	{
+		return;
+	}
+
 	const int32 FireAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire);
 	const int32 WaterAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water);
 	const int32 WindAbsorb = CountAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind);
 
-	// 외부 흡수/아이템 스택이 새로 들어온 경우에만 조합을 시작한다.
+	// 흡수 스택이 하나도 없으면 발동할 조합이 없다.
 	if (FireAbsorb <= 0 && WaterAbsorb <= 0 && WindAbsorb <= 0)
 	{
 		return;
 	}
 
-	const int32 FirePersistent = FMath::Max(0, FireTotal - FireAbsorb);
-	const int32 WaterPersistent = FMath::Max(0, WaterTotal - WaterAbsorb);
-	const int32 WindPersistent = FMath::Max(0, WindTotal - WindAbsorb);
-
-	struct FActiveMaterial
-	{
-		FName RowName;
-		FActiveGameplayEffectHandle Handle;
-		const FElementResonanceRow* Row = nullptr;
-	};
-	TArray<FActiveMaterial> ActiveMaterials;
-
-	int32 AvailableFire = FireAbsorb + FirePersistent;
-	int32 AvailableWater = WaterAbsorb + WaterPersistent;
-	int32 AvailableWind = WindAbsorb + WindPersistent;
-	for (const TPair<FName, FActiveGameplayEffectHandle>& Pair : ActiveResonanceHandles)
-	{
-		const FElementResonanceRow* ActiveRow =
-			ResonanceTable->FindRow<FElementResonanceRow>(Pair.Key, TEXT("BuildResonanceMaterials"));
-		if (!ActiveRow)
-		{
-			continue;
-		}
-
-		AvailableFire += ActiveRow->RequiredFire;
-		AvailableWater += ActiveRow->RequiredWater;
-		AvailableWind += ActiveRow->RequiredWind;
-		ActiveMaterials.Add({ Pair.Key, Pair.Value, ActiveRow });
-	}
+	// 장비 등 영구 어튠은 조건 판정에 포함하되(비용 대납) 소모하지 않는다.
+	const int32 FireTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Fire);
+	const int32 WaterTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Water);
+	const int32 WindTotal = CountAttuneStacks(RetrieveGameplayTags::Element_Attune_Wind);
 
 	struct FCandidate
 	{
@@ -393,15 +296,29 @@ void UElementResonanceComponent::RecomputeResonance()
 	for (const TPair<FName, uint8*>& Pair : ResonanceTable->GetRowMap())
 	{
 		const FElementResonanceRow* Row = reinterpret_cast<const FElementResonanceRow*>(Pair.Value);
-		if (!Row || ActiveResonanceHandles.Contains(Pair.Key))
+		if (!Row)
 		{
 			continue;
 		}
 
-		const bool bMeets =
-			AvailableFire >= Row->RequiredFire &&
-			AvailableWater >= Row->RequiredWater &&
-			AvailableWind >= Row->RequiredWind;
+		// bExactMatch=true면 요구치와 정확히 일치할 때만(0인 원소는 무관), false면 이상이면 발동.
+		bool bMeets = false;
+		if (Row->bExactMatch)
+		{
+			bMeets =
+				(Row->RequiredFire == 0 || FireTotal == Row->RequiredFire) &&
+				(Row->RequiredWater == 0 || WaterTotal == Row->RequiredWater) &&
+				(Row->RequiredWind == 0 || WindTotal == Row->RequiredWind);
+		}
+		else
+		{
+			bMeets =
+				FireTotal >= Row->RequiredFire &&
+				WaterTotal >= Row->RequiredWater &&
+				WindTotal >= Row->RequiredWind;
+		}
+
+		// 새로 들어온 흡수가 실제로 이 공명에 기여해야 발동한다(장비만으로 상시 발동 방지).
 		const bool bNewAbsorbContributes =
 			(Row->RequiredFire > 0 && FireAbsorb > 0) ||
 			(Row->RequiredWater > 0 && WaterAbsorb > 0) ||
@@ -428,6 +345,7 @@ void UElementResonanceComponent::RecomputeResonance()
 		return;
 	}
 
+	// 원소 종류 많은 것 > 총 요구량 큰 것 > Priority 높은 것 순으로 하나만 고른다.
 	Candidates.Sort([](const FCandidate& A, const FCandidate& B)
 	{
 		if (A.ElementKinds != B.ElementKinds)
@@ -442,56 +360,17 @@ void UElementResonanceComponent::RecomputeResonance()
 	});
 	const FCandidate& Selected = Candidates[0];
 
-	int32 NeedFire = Selected.Row->RequiredFire;
-	int32 NeedWater = Selected.Row->RequiredWater;
-	int32 NeedWind = Selected.Row->RequiredWind;
-	int32 RefundFire = 0;
-	int32 RefundWater = 0;
-	int32 RefundWind = 0;
-	TArray<FName> ConsumedResonanceRows;
-	TArray<FActiveGameplayEffectHandle> ConsumedResonanceHandles;
+	// 영구 어튠이 대납하고 남은 만큼만 흡수 스택에서 소모한다.
+	const int32 FirePersistent = FMath::Max(0, FireTotal - FireAbsorb);
+	const int32 WaterPersistent = FMath::Max(0, WaterTotal - WaterAbsorb);
+	const int32 WindPersistent = FMath::Max(0, WindTotal - WindAbsorb);
 
-	// 기존 공명을 먼저 재료로 사용한다. 일부만 사용하면 나머지 원소는 흡수 스택으로 환급한다.
-	ActiveMaterials.Sort([](const FActiveMaterial& A, const FActiveMaterial& B)
-	{
-		const int32 ACost = A.Row->RequiredFire + A.Row->RequiredWater + A.Row->RequiredWind;
-		const int32 BCost = B.Row->RequiredFire + B.Row->RequiredWater + B.Row->RequiredWind;
-		return ACost > BCost;
-	});
-	for (const FActiveMaterial& Material : ActiveMaterials)
-	{
-		const int32 UseFire = FMath::Min(NeedFire, Material.Row->RequiredFire);
-		const int32 UseWater = FMath::Min(NeedWater, Material.Row->RequiredWater);
-		const int32 UseWind = FMath::Min(NeedWind, Material.Row->RequiredWind);
-		if (UseFire + UseWater + UseWind <= 0)
-		{
-			continue;
-		}
+	const int32 ConsumeFire = FMath::Max(0, Selected.Row->RequiredFire - FirePersistent);
+	const int32 ConsumeWater = FMath::Max(0, Selected.Row->RequiredWater - WaterPersistent);
+	const int32 ConsumeWind = FMath::Max(0, Selected.Row->RequiredWind - WindPersistent);
 
-		NeedFire -= UseFire;
-		NeedWater -= UseWater;
-		NeedWind -= UseWind;
-		RefundFire += Material.Row->RequiredFire - UseFire;
-		RefundWater += Material.Row->RequiredWater - UseWater;
-		RefundWind += Material.Row->RequiredWind - UseWind;
-		ConsumedResonanceRows.Add(Material.RowName);
-		ConsumedResonanceHandles.Add(Material.Handle);
-
-		if (NeedFire <= 0 && NeedWater <= 0 && NeedWind <= 0)
-		{
-			break;
-		}
-	}
-
-	// 장비 세트의 영구 어튠은 비용을 대신하지만 제거되지는 않는다.
-	const int32 UsePersistentFire = FMath::Min(NeedFire, FirePersistent);
-	const int32 UsePersistentWater = FMath::Min(NeedWater, WaterPersistent);
-	const int32 UsePersistentWind = FMath::Min(NeedWind, WindPersistent);
-	NeedFire -= UsePersistentFire;
-	NeedWater -= UsePersistentWater;
-	NeedWind -= UsePersistentWind;
-
-	if (NeedFire > FireAbsorb || NeedWater > WaterAbsorb || NeedWind > WindAbsorb)
+	// 흡수가 요구량에 못 미치면 발동하지 않는다(방어적).
+	if (ConsumeFire > FireAbsorb || ConsumeWater > WaterAbsorb || ConsumeWind > WindAbsorb)
 	{
 		return;
 	}
@@ -506,29 +385,17 @@ void UElementResonanceComponent::RecomputeResonance()
 
 	bApplyingResonanceTransaction = true;
 
-	for (const FName& RowName : ConsumedResonanceRows)
+	if (ConsumeFire > 0)
 	{
-		ActiveResonanceHandles.Remove(RowName);
+		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire, ConsumeFire);
 	}
-	for (const FActiveGameplayEffectHandle& Handle : ConsumedResonanceHandles)
+	if (ConsumeWater > 0)
 	{
-		if (Handle.IsValid())
-		{
-			PinnedASC->RemoveActiveGameplayEffect(Handle);
-		}
+		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water, ConsumeWater);
 	}
-
-	if (NeedFire > 0)
+	if (ConsumeWind > 0)
 	{
-		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire, NeedFire);
-	}
-	if (NeedWater > 0)
-	{
-		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water, NeedWater);
-	}
-	if (NeedWind > 0)
-	{
-		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind, NeedWind);
+		ConsumeAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind, ConsumeWind);
 	}
 
 	FGameplayEffectContextHandle Context = PinnedASC->MakeEffectContext();
@@ -542,26 +409,12 @@ void UElementResonanceComponent::RecomputeResonance()
 		ActiveResonanceHandles.Add(Selected.RowName, Applied);
 	}
 
-	if (RefundFire > 0)
-	{
-		RestoreAbsorbStacks(RetrieveGameplayTags::Element_Attune_Fire, RefundFire);
-	}
-	if (RefundWater > 0)
-	{
-		RestoreAbsorbStacks(RetrieveGameplayTags::Element_Attune_Water, RefundWater);
-	}
-	if (RefundWind > 0)
-	{
-		RestoreAbsorbStacks(RetrieveGameplayTags::Element_Attune_Wind, RefundWind);
-	}
-
 	bApplyingResonanceTransaction = false;
 	OnResonanceChanged.Broadcast();
 
 	UE_LOG(LogRetrieveCombat, Log,
-		TEXT("[Resonance] Converted to %s: raw consume F=%d W=%d G=%d, refund F=%d W=%d G=%d"),
-		*Selected.RowName.ToString(), NeedFire, NeedWater, NeedWind,
-		RefundFire, RefundWater, RefundWind);
+		TEXT("[Resonance] Activated %s: consumed absorb F=%d W=%d G=%d"),
+		*Selected.RowName.ToString(), ConsumeFire, ConsumeWater, ConsumeWind);
 }
 
 int32 UElementResonanceComponent::CountAbsorbStacks(const FGameplayTag& AttuneTag) const

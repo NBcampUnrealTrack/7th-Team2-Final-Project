@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
 #include "Components/Element/ElementGaugeComponent.h"
+#include "Components/Element/ElementResonanceComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/WeaponAttackDefinition.h"
 #include "GameFramework/Pawn.h"
@@ -224,15 +225,21 @@ void UGA_Absorb::ActivateAbility(
 		}
 	}
 
-	// 원소 공명: 흡수한 원소의 어튠 스택 +1 (스택형 Duration GE. ElementResonanceComponent가 집계)
-	if (const TSubclassOf<UGameplayEffect> StackEffectClass = ResolveAttuneStackEffectClass(TargetElement))
+	// 원소 공명: 흡수한 원소의 어튠 스택 +1 (스택형 Duration GE. ElementResonanceComponent가 집계).
+	// 단, 이미 공명 버프가 활성 중이면 어튠 스택을 쌓지 않는다(공명은 한 번에 하나만).
+	const UElementResonanceComponent* ResonanceComp = Avatar->FindComponentByClass<UElementResonanceComponent>();
+	const bool bResonanceActive = ResonanceComp && ResonanceComp->HasActiveResonance();
+	if (!bResonanceActive)
 	{
-		FGameplayEffectContextHandle StackContext = ASC->MakeEffectContext();
-		StackContext.AddSourceObject(this);
-		const FGameplayEffectSpecHandle StackSpecHandle = ASC->MakeOutgoingSpec(StackEffectClass, GetAbilityLevel(), StackContext);
-		if (StackSpecHandle.IsValid())
+		if (const TSubclassOf<UGameplayEffect> StackEffectClass = ResolveAttuneStackEffectClass(TargetElement))
 		{
-			ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, StackSpecHandle);
+			FGameplayEffectContextHandle StackContext = ASC->MakeEffectContext();
+			StackContext.AddSourceObject(this);
+			const FGameplayEffectSpecHandle StackSpecHandle = ASC->MakeOutgoingSpec(StackEffectClass, GetAbilityLevel(), StackContext);
+			if (StackSpecHandle.IsValid())
+			{
+				ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, StackSpecHandle);
+			}
 		}
 	}
 

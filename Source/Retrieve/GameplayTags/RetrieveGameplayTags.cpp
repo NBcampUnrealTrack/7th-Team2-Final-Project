@@ -1,4 +1,4 @@
-﻿#include "RetrieveGameplayTags.h"
+#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -389,6 +389,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Steam, "UI.Buff.Resonance.Steam");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Storm, "UI.Buff.Resonance.Storm");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Mist, "UI.Buff.Resonance.Mist");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Condensation, "UI.Buff.Resonance.Condensation");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Heat, "UI.Buff.Resonance.Heat");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Frost, "UI.Buff.Resonance.Frost");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Trinity, "UI.Buff.Resonance.Trinity");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet, "UI.Buff.ArmorSet");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Berserker_2pc, "UI.Buff.ArmorSet.Berserker.2pc");
