@@ -81,6 +81,34 @@ namespace
 		return ASC && ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Cinematic);
 	}
 
+	// 타겟을 최종 해제한다. 슬롯/토큰 반납 + Perception known 제거 + InstanceData 코어 정리를 원자적으로 수행.
+	// ForgetActor를 함께 호출하지 않으면 AISense_Sight의 MaxAge 동안 known에 잔존해 다음 틱에 재획득된다.
+	void ClearTarget(FRetrieveEnemyTargetEvalInstanceData& InstanceData,
+		UAIPerceptionComponent* PerceptionComp,
+		UEncirclementSubsystem* EncirclementSubsystem,
+		APawn* Pawn)
+	{
+		if (!IsValid(InstanceData.TargetPlayer))
+		{
+			InstanceData.TargetPlayer = nullptr;
+			InstanceData.DistanceToTarget = 0.f;
+			InstanceData.bTargetLost = true;
+			return;
+		}
+		if (EncirclementSubsystem)
+		{
+			EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
+			EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
+		}
+		if (PerceptionComp)
+		{
+			PerceptionComp->ForgetActor(InstanceData.TargetPlayer);
+		}
+		InstanceData.TargetPlayer = nullptr;
+		InstanceData.DistanceToTarget = 0.f;
+		InstanceData.bTargetLost = true;
+	}
+
 }
 
 bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
@@ -177,18 +205,13 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		// 시네마틱이 시작된 타겟은 사망과 동일하게 즉시 놓아준다(공격/포위 유지 방지)
 		if (IsDeadOrDyingActor(InstanceData.TargetPlayer) || IsCinematicSuppressedActor(InstanceData.TargetPlayer))
 		{
-			if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
-			{
-				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
-				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
-			}
-
-			InstanceData.TargetPlayer = nullptr;
+			UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
+			AAIController* AICtrl = Context.GetExternalDataPtr(AIControllerHandle);
+			UAIPerceptionComponent* PerceptionCompLocal = AICtrl ? AICtrl->GetAIPerceptionComponent() : nullptr;
+			ClearTarget(InstanceData, PerceptionCompLocal, EncSubsystem, Pawn);
 			InstanceData.TargetLocation = FVector::ZeroVector;
 			InstanceData.ChaseLocation = FVector::ZeroVector;
-			InstanceData.DistanceToTarget = 0.f;
 			InstanceData.TimeSinceLastSeen = TargetLostDelay;
-			InstanceData.bTargetLost = true;
 		}
 		else
 		{
@@ -326,15 +349,13 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (InstanceData.bWasOutOfChaseRange && !bNewOutOfChaseRange)
 	{
-		// 원점 복귀 완료 → 타깃 즉시 초기화
-		if (UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
-		{
-			EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
-			EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
-		}
-		InstanceData.TargetPlayer   = nullptr;
+		// 원점 복귀 완료 → 타깃 즉시 초기화. Suspicious 잔여 게이지도 함께 리셋해서
+		// 다음 사이클을 깨끗한 상태로 시작한다.
+		UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
+		ClearTarget(InstanceData, PerceptionComp, EncSubsystem, Pawn);
 		InstanceData.TimeSinceLastSeen = TargetLostDelay;
-		InstanceData.bTargetLost    = true;
+		InstanceData.SuspicionGauge = 0.f;
+		InstanceData.bSuspicionGaugeFull = false;
 	}
 
 	InstanceData.bWasOutOfChaseRange = bNewOutOfChaseRange;
@@ -342,24 +363,35 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	TArray<AActor*> PerceivedActors;
 	PerceptionComp->GetKnownPerceivedActors(nullptr, PerceivedActors);
-	
+
 	const FVector PawnLocation = Pawn->GetActorLocation();
+
+	// 경계(Suspicious) 단계를 쓰는 몬스터는 최초 발견에 정면 시야각을 요구하지 않는다 —
+	// 거리 내에 들어오면 우선 눈치채고, Suspicious 상태에서 서서히 돌아보게 한다.
+	const bool bUsesSuspiciousFlow = InstanceData.SuspicionIncreaseRate > 0.f;
 
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(Pawn, 0))
 	{
 		const float PlayerDistSq = FVector::DistSquared(PawnLocation, PlayerPawn->GetActorLocation());
+		const AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(AIController);
 		float InitialAcquireRange;
 		if (InstanceData.TargetPlayer == nullptr)
 		{
-			// 최초 발견은 AIPerception Sight 설정(SightRadius)을 그대로 따른다.
-			const AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(AIController);
+			// Idle → 최초 발견: AIPerception Sight 설정(SightRadius)을 그대로 따른다.
 			InitialAcquireRange = EnemyAIController
 				? EnemyAIController->GetEffectiveSightRadius()
 				: InstanceData.ChaseRange;
 		}
+		else if (bUsesSuspiciousFlow && !InstanceData.bSuspicionGaugeFull)
+		{
+			// Suspicious 유지: LoseSightRadius 밖으로 나가면 재획득하지 않고 게이지 감소에 위임.
+			InitialAcquireRange = EnemyAIController
+				? EnemyAIController->GetEffectiveLoseSightRadius()
+				: InstanceData.ChaseRange;
+		}
 		else
 		{
-			// 이미 추적 중인 타겟은 ChaseRange까지 재획득을 유지한다(추격 중 시야 이탈 방지).
+			// Combat 유지: ChaseRange까지 끈질기게 붙는다(추격 중 시야 이탈 방지).
 			InitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
 		}
 		if (PlayerDistSq <= FMath::Square(InitialAcquireRange)
@@ -373,9 +405,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	AActor* BestTarget = nullptr;
 	float BestScore = MAX_FLT;
 	float CurrentScore = MAX_FLT;
-	// 경계(Suspicious) 단계를 쓰는 몬스터는 최초 발견에 정면 시야각을 요구하지 않는다 —
-	// 거리 내에 들어오면 우선 눈치채고, Suspicious 상태에서 서서히 돌아보게 한다.
-	const bool bUsesSuspiciousFlow = InstanceData.SuspicionIncreaseRate > 0.f;
 	const bool bApplyFov = (InstanceData.TargetPlayer == nullptr) && !bUsesSuspiciousFlow;
 
 	UEncirclementSubsystem* EncirclementSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
@@ -510,38 +539,39 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	}
 	else if (InstanceData.TargetPlayer)
 	{
-		if (bUsesSuspiciousFlow && !InstanceData.bSuspicionGaugeFull)
+		const bool bIsSuspiciousPhase = bUsesSuspiciousFlow && !InstanceData.bSuspicionGaugeFull;
+		if (!bIsSuspiciousPhase)
 		{
-			// 아직 Combat까지 확신하지 못한 Suspicious 단계에서는 유예 없이 즉시 놓친다.
-			if (EncirclementSubsystem)
-			{
-				EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
-				EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
-			}
-			InstanceData.TargetPlayer = nullptr;
-			InstanceData.DistanceToTarget = 0.f;
-			InstanceData.bTargetLost = true;
-		}
-		else
-		{
+			// Combat: TargetLostDelay 유예 후 최종 해제
 			InstanceData.TimeSinceLastSeen += TickInterval;
 			if (InstanceData.TimeSinceLastSeen >= TargetLostDelay)
 			{
-				if (EncirclementSubsystem)
-				{
-					EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
-					EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
-				}
-				InstanceData.TargetPlayer = nullptr;
-				InstanceData.DistanceToTarget = 0.f;
-				InstanceData.bTargetLost = true;
+				ClearTarget(InstanceData, PerceptionComp, EncirclementSubsystem, Pawn);
 			}
 		}
+		// Suspicious: 최종 소실은 아래 게이지 감소 블록이 거리 조건으로 직접 판정하고 처리한다.
 	}
 
 	if (bUsesSuspiciousFlow)
 	{
-		if (IsValid(InstanceData.TargetPlayer) && !InstanceData.bTargetLost)
+		// 게이지 판정은 known 목록/ChosenTarget과 무관하게 실제 거리로 확정한다.
+		// AISense_Sight의 known은 MaxAge(5s) 만큼 잔존하므로 그것만으로는 시야 이탈을 판정할 수 없다.
+		// bTargetLost는 아래 게이지 0 도달 시점에서만 세팅해 StateTree 전이 세맨틱을 보존한다.
+		const AEnemyAIController* EnemyAICtrlForGauge = Cast<AEnemyAIController>(AIController);
+		const float LoseRangeForGauge = EnemyAICtrlForGauge
+			? EnemyAICtrlForGauge->GetEffectiveLoseSightRadius()
+			: InstanceData.ChaseRange;
+		const float DistToTargetForGauge = IsValid(InstanceData.TargetPlayer)
+			? FVector2D::Distance(
+				FVector2D(Pawn->GetActorLocation()),
+				FVector2D(InstanceData.TargetPlayer->GetActorLocation()))
+			: MAX_FLT;
+		// LOS도 함께 검사 — AIPerception known은 MaxAge(5s) 동안 잔존하므로 거리만으로는
+		// 벽 뒤로 이동한 플레이어가 계속 감지된 것으로 오판돼 게이지가 증가할 수 있다.
+		const bool bTargetInSight = IsValid(InstanceData.TargetPlayer)
+			&& DistToTargetForGauge <= LoseRangeForGauge
+			&& AIController->LineOfSightTo(InstanceData.TargetPlayer);
+		if (bTargetInSight)
 		{
 			// DistanceToTarget은 타겟을 처음 인식한 이번 틱엔 아직 갱신 전(이전 틱 값=0)이라
 			// 여기서 직접 신선한 거리를 계산한다 — 안 그러면 최초 인식 시 항상 0<=ForceCombatRange로 오판된다.
@@ -564,6 +594,12 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		{
 			InstanceData.SuspicionGauge = FMath::Clamp(
 				InstanceData.SuspicionGauge - InstanceData.SuspicionDecreaseRate * TickInterval, 0.f, 1.f);
+
+			if (InstanceData.SuspicionGauge <= 0.f && IsValid(InstanceData.TargetPlayer))
+			{
+				// 게이지 소진 → 최종 소실 처리. ClearTarget이 bTargetLost=true 세팅 → Suspicious→Idle 전이 자연 발동.
+				ClearTarget(InstanceData, PerceptionComp, EncirclementSubsystem, Pawn);
+			}
 		}
 
 		InstanceData.bSuspicionGaugeFull = InstanceData.SuspicionGauge >= 1.f;

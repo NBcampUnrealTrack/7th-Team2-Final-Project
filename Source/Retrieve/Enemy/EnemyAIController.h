@@ -29,6 +29,7 @@ public:
 	void Reactivate();
 
 	float GetEffectiveSightRadius() const;
+	float GetEffectiveLoseSightRadius() const;
 
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
@@ -39,7 +40,6 @@ protected:
 private:
 	void InitSightConfig();
 	void InitDamageConfig();
-	float GetEffectiveLoseSightRadius() const;
 	float GetEffectivePeripheralVisionAngleDegrees() const;
 	
 	void RestartStateTree();
