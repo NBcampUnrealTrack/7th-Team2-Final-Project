@@ -636,5 +636,10 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 	DamageMsg.DamageAmount = DamageDone;
 	DamageMsg.HitEventTag = AttackerEventTag;
 	DamageMsg.TargetEventTag = TargetEventTag;
+	// 타격 접점 GA_Attack/버스트가 EffectContect에 넣어둔 HitResult가 있으면 사용
+	if (const FHitResult* HitPtr = Context.GetHitResult())
+	{
+		DamageMsg.HitLocation = HitPtr->ImpactPoint;
+	}
 	UGameplayMessageSubsystem::Get(World).BroadcastMessage(RetrieveGameplayTags::Channel_Combat_DamageDealt, DamageMsg);
 }

@@ -248,7 +248,7 @@ void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRe
 
 	if (bIsAttacker)
 	{
-		SpawnDamageFloater(Payload.Target, Payload.DamageAmount, *Feedback);
+		SpawnDamageFloater(Payload.Target, Payload.HitLocation, Payload.DamageAmount, *Feedback);
 	}
 	else
 	{
@@ -256,7 +256,7 @@ void UAttackFeedbackComponent::HandleDamageDealt(FGameplayTag Channel, const FRe
 	}
 }
 
-void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, float DamageValue, const FHitFeedback& Feedback)
+void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, const FVector& HitLocation, float DamageValue, const FHitFeedback& Feedback)
 {
 	if (const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
 		Settings && (!Settings->bShowDamageNumbers || Settings->bHideHUD))
@@ -275,8 +275,8 @@ void UAttackFeedbackComponent::SpawnDamageFloater(const AActor* Target, float Da
 		return;
 	}
 
-	// 머리 위 월드 위치 -> 스크린
-	const FVector WorldLoc = Target->GetActorLocation() + FVector(0.f, 0.f, Feedback.FloaterWorldZOffset);
+	// 타격 접점이 있으면 그 지점, 없으면 기존처럼 머리 위(액터+Z) 폴백
+	const FVector WorldLoc = HitLocation.IsNearlyZero() ? Target->GetActorLocation() + FVector(0.f, 0.f, Feedback.FloaterWorldZOffset) : HitLocation + Feedback.FloaterWorldZOffset;
 	FVector2D ScreenPos;
 	if (UGameplayStatics::ProjectWorldToScreen(PC, WorldLoc, ScreenPos, false) == false)
 	{
