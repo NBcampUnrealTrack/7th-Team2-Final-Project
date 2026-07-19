@@ -142,6 +142,12 @@ public:
 	FGameplayAttributeData StaminaRegenMultiplier;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, StaminaRegenMultiplier)
 
+	/** 버스트 스킬 판정 반경 배율. 기본 1.0(중립). PlayerBurstComponent가 sweep/overlap 반경에 곱한다.
+	 *  전설 영웅 세트 등 "스킬 범위 2배" 효과를 세트/버프 GE로 부여한다. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_BurstRadiusMultiplier)
+	FGameplayAttributeData BurstRadiusMultiplier;
+	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, BurstRadiusMultiplier)
+
 private:
 	void ClampAttribute(const FGameplayAttribute& Attribute, float& NewValue) const;
 
@@ -166,6 +172,7 @@ private:
 	UFUNCTION() void OnRep_ElementChargeGainMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_OutgoingDamageMultiplier(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_StaminaRegenMultiplier(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_BurstRadiusMultiplier(const FGameplayAttributeData& OldValue);
 
 	// 방어 분기 단일 진입점
 	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);

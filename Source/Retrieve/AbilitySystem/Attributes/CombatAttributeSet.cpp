@@ -35,6 +35,7 @@ UCombatAttributeSet::UCombatAttributeSet()
 	InitElementChargeGainMultiplier(1.0f);
 	InitOutgoingDamageMultiplier(1.0f);
 	InitStaminaRegenMultiplier(1.0f);
+	InitBurstRadiusMultiplier(1.0f);
 }
 
 void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -61,6 +62,7 @@ void UCombatAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, ElementChargeGainMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, OutgoingDamageMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, StaminaRegenMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UCombatAttributeSet, BurstRadiusMultiplier, COND_None, REPNOTIFY_Always);
 }
 
 void UCombatAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -136,7 +138,8 @@ void UCombatAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 		Attribute == GetHeavyAttackDamageMultiplierAttribute() ||
 		Attribute == GetElementalDamageMultiplierAttribute() ||
 		Attribute == GetElementChargeGainMultiplierAttribute() ||
-		Attribute == GetOutgoingDamageMultiplierAttribute())
+		Attribute == GetOutgoingDamageMultiplierAttribute() ||
+		Attribute == GetBurstRadiusMultiplierAttribute())
 	{
 		NewValue = FMath::Max(0.f, NewValue);
 	}
@@ -314,6 +317,11 @@ void UCombatAttributeSet::OnRep_OutgoingDamageMultiplier(const FGameplayAttribut
 void UCombatAttributeSet::OnRep_StaminaRegenMultiplier(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, StaminaRegenMultiplier, OldValue);
+}
+
+void UCombatAttributeSet::OnRep_BurstRadiusMultiplier(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UCombatAttributeSet, BurstRadiusMultiplier, OldValue);
 }
 
 

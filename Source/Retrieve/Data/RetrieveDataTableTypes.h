@@ -20,6 +20,7 @@ class UWeaponAttackDefinition;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
+class UMaterialInterface;
 class UNiagaraSystem;
 class USoundBase;
 class AStaffProjectile;
@@ -1713,6 +1714,11 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Weapon.Affinity"))
 	FGameplayTag WeaponAffinityTag;
 
+	/** 이 무기가 속한 세트. None = 세트 없음. 잊혀진/전설 영웅 장비 진화(HeroEquipmentEvolutionComponent)가
+	 *  방어구 ArmorSetTag와 함께 이 태그로 세트 완성 여부를 판정한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (Categories = "Weapon.Set"))
+	FGameplayTag WeaponSetTag;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	float AttackPower = 10.0f;
 
@@ -1721,7 +1727,12 @@ struct RETRIEVE_API FRetrieveWeaponDataRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual")
 	TArray<FRetrieveWeaponAttachmentData> Attachments;
-	
+
+	/** 원소 모드별 무기(검) 머티리얼 오버라이드. 키=Element.Fire/Water/Wind, 값=적용할 머티리얼.
+	 *  비어 있으면 원소 전환 시 머티리얼을 바꾸지 않는다(기본 무기). 전설 영웅 검 등에 사용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Visual", meta = (Categories = "Element"))
+	TMap<FGameplayTag, TSoftObjectPtr<UMaterialInterface>> ElementModeMaterials;
+
 	// 버스트 VFX 등 단일 지점 기준으로 쓰는 소켓
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Combat")
 	FName TraceSocketName = TEXT("Weapon_R");

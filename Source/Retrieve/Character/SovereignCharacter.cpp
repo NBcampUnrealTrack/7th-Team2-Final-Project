@@ -13,6 +13,7 @@
 #include "Components/Player/RetrieveHeroComponent.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Element/ElementResonanceComponent.h"
+#include "Components/Player/HeroEquipmentEvolutionComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
 #include "Components/Player/StaminaComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
@@ -85,6 +86,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	CombatStanceComponent = CreateDefaultSubobject<UCombatStanceComponent>(TEXT("CombatStanceComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
+	HeroEquipmentEvolutionComponent = CreateDefaultSubobject<UHeroEquipmentEvolutionComponent>(TEXT("HeroEquipmentEvolutionComponent"));
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
@@ -184,6 +186,16 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		ElementResonanceComponent->InitializeWithAbilitySystem(ASC);
 	}
 
+	if (HeroEquipmentEvolutionComponent)
+	{
+		HeroEquipmentEvolutionComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	if (WeaponComponent)
+	{
+		WeaponComponent->InitializeWithAbilitySystem(ASC);
+	}
+
 	if (BuffUIBroadcastComponent)
 	{
 		BuffUIBroadcastComponent->RefreshAbilitySystemBinding();
@@ -219,6 +231,16 @@ void ASovereignCharacter::UnPossessed()
 	if (ElementResonanceComponent)
 	{
 		ElementResonanceComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (HeroEquipmentEvolutionComponent)
+	{
+		HeroEquipmentEvolutionComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (WeaponComponent)
+	{
+		WeaponComponent->UninitializeFromAbilitySystem();
 	}
 
 	if (StaminaComponent)

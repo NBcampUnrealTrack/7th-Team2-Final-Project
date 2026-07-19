@@ -20,6 +20,7 @@ class UElementGaugeComponent;
 class UElementResonanceComponent;
 class UStaminaComponent;
 class UPlayerBurstComponent;
+class UHeroEquipmentEvolutionComponent;
 class URetrieveBuffUIBroadcastComponent;
 class UElementUnlockComponent;
 class UMotionWarpingComponent;
@@ -81,6 +82,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UPlayerBurstComponent> PlayerBurstComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
+	TObjectPtr<UHeroEquipmentEvolutionComponent> HeroEquipmentEvolutionComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
 	TObjectPtr<UElementUnlockComponent> ElementUnlockComponent;
