@@ -9,6 +9,8 @@ class UAnimSequenceBase;
 class UAnimMontage;
 class USkeletalMeshComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDialogueClosedSignature, AActor*, Instigator);
+
 /** 특정 대화 선택지에 연동된 NPC 애니메이션 항목 */
 USTRUCT(BlueprintType)
 struct FNPCDialogueAnimEntry
@@ -72,6 +74,13 @@ class RETRIEVE_API URetrieveDialogueComponent : public UActorComponent
 
 public:
 	URetrieveDialogueComponent();
+
+
+	/** 서버에서 대화 UI가 정상적으로 닫힌 뒤 호출됩니다. */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Dialogue")
+	FOnDialogueClosedSignature OnDialogueClosed;
+
+	void NotifyDialogueClosed(AActor* Instigator) { OnDialogueClosed.Broadcast(Instigator); }
 
 	// URetrieveInteractionResponseComponent.OnApplied에 바인딩됨 (호스트 전용)
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Dialogue")

@@ -15,6 +15,9 @@
 #include "Subsystems/RetrieveCinematicSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
 #include "UObject/UObjectGlobals.h"
+#include "EngineUtils.h"
+#include "World/RetrieveRescueEncounter.h"
+#include "World/RetrieveLostCargoEncounter.h"
 
 ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -336,6 +339,24 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 		return;
 	}
 	GS->SeedDefaultCheckpointIfUnset();
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSubsystem = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSubsystem->ResetRescueEncountersForNewGame();
+		}
+	}
+
+	for (TActorIterator<ARetrieveRescueEncounter> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewGame();
+	}
+	for (TActorIterator<ARetrieveLostCargoEncounter> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewGame();
+	}
+
 	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
 	{
 		Quest->ResetForTest();

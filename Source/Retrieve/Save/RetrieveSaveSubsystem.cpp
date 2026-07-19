@@ -56,6 +56,12 @@ void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			UGameplayStatics::LoadGameFromSlot(DefaultSaveSlotName, SaveUserIndex));
 		UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 레거시 Slot0 WorldState로 마이그레이션"));
 	}
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
 }
 
 // ── 슬롯 이름 ──────────────────────────────────────────────────────────────────
@@ -92,9 +98,13 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		SlotSave->ActivatedBonfireTransforms = CurrentSaveGame->ActivatedBonfireTransforms;
 		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
 		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
+		SlotSave->HeroEvolutionCharge        = CurrentSaveGame->HeroEvolutionCharge;
+		SlotSave->bHeroEquipmentEvolved      = CurrentSaveGame->bHeroEquipmentEvolved;
 		SlotSave->ShopRepurchaseHistory      = CurrentSaveGame->ShopRepurchaseHistory;
 		SlotSave->DialogueRewardGrantCounts  = CurrentSaveGame->DialogueRewardGrantCounts;
 		SlotSave->RpsRewardGrantCounts       = CurrentSaveGame->RpsRewardGrantCounts;
+		SlotSave->RescueEncounters           = CurrentSaveGame->RescueEncounters;
+		SlotSave->LostCargoEncounters        = CurrentSaveGame->LostCargoEncounters;
 	}
 
 	// LoadSnapshot 기록
@@ -677,6 +687,64 @@ bool URetrieveSaveSubsystem::IsLumenEngraved() const
 	return CurrentSaveGame && CurrentSaveGame->bLumenEngraved;
 }
 
+// ── 잊혀진→전설 영웅 장비 진화 진행 상태 (월드 공유) ─────────────────────────────
+
+int32 URetrieveSaveSubsystem::GetHeroEvolutionCharge() const
+{
+	return CurrentSaveGame ? CurrentSaveGame->HeroEvolutionCharge : 0;
+}
+
+void URetrieveSaveSubsystem::SetHeroEvolutionCharge(int32 NewCharge)
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	const int32 Clamped = FMath::Max(0, NewCharge);
+	if (CurrentSaveGame->HeroEvolutionCharge == Clamped)
+	{
+		return;
+	}
+
+	CurrentSaveGame->HeroEvolutionCharge = Clamped;
+
+	// WorldState 슬롯에 자동 저장
+	UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+}
+
+bool URetrieveSaveSubsystem::IsHeroEquipmentEvolved() const
+{
+	return CurrentSaveGame && CurrentSaveGame->bHeroEquipmentEvolved;
+}
+
+void URetrieveSaveSubsystem::SetHeroEquipmentEvolved(bool bEvolved)
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	if (CurrentSaveGame->bHeroEquipmentEvolved == bEvolved)
+	{
+		return;
+	}
+
+	CurrentSaveGame->bHeroEquipmentEvolved = bEvolved;
+
+	// WorldState 슬롯에 자동 저장
+	const bool bSaved = UGameplayStatics::SaveGameToSlot(
+		CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveSubsystem] 영웅 장비 진화 상태 저장 — %s WorldState=%s"),
+		bEvolved ? TEXT("true") : TEXT("false"), bSaved ? TEXT("OK") : TEXT("FAIL"));
+}
+
 // ── 빠른 이동 (World Partition) ───────────────────────────────────────────────
 
 void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerController* PC)
@@ -1191,4 +1259,19 @@ void URetrieveSaveSubsystem::FlushWorldState()
 	{
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
 	}
+}
+
+void URetrieveSaveSubsystem::ResetRescueEncountersForNewGame()
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	CurrentSaveGame->RescueEncounters.Reset();
+	CurrentSaveGame->LostCargoEncounters.Reset();
+	CurrentSaveGame->QuestEncounters.Reset();
+	FlushWorldState();
 }

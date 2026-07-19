@@ -112,6 +112,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
 	void FlushWorldState();
 
+	/** Reset rescue progress for a brand-new game. */
+	void ResetRescueEncountersForNewGame();
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool HasSaveGameForPlayer(APlayerController* PlayerController) const;
 
@@ -171,6 +174,24 @@ public:
 	/** 지급 횟수 +1 후 WorldState 슬롯에 자동 저장(모닥불 활성화와 동일 패턴). */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
 	void IncrementNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet);
+
+	// ── 잊혀진→전설 영웅 장비 진화 진행 상태 (월드 공유) ─────────────────
+
+	/** 진화 충전량 조회(세트 착용 중 흡수/버스트 누적). 세이브 없으면 0. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	int32 GetHeroEvolutionCharge() const;
+
+	/** 진화 충전량 설정 후 WorldState 슬롯에 즉시 저장. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void SetHeroEvolutionCharge(int32 NewCharge);
+
+	/** 진화 완료 여부 조회. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	bool IsHeroEquipmentEvolved() const;
+
+	/** 진화 완료 여부 설정 후 WorldState 슬롯에 즉시 저장. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void SetHeroEquipmentEvolved(bool bEvolved);
 
 	// ── 빠른 이동 (World Partition) ───────────────────────────────────
 

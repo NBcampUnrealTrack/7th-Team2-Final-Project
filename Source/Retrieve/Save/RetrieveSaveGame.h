@@ -6,6 +6,54 @@
 #include "Shop/RetrieveShopTypes.h"
 #include "RetrieveSaveGame.generated.h"
 
+USTRUCT(BlueprintType)
+struct FRetrieveRescueEncounterSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Rescue")
+	bool bEnemiesDefeated = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Rescue")
+	bool bRewardClaimed = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Rescue")
+	bool bMerchantUnlocked = false;
+};
+
+USTRUCT(BlueprintType)
+struct FRetrieveLostCargoSaveData
+{
+	GENERATED_BODY()
+
+	/** ERetrieveLostCargoState serialized as a byte to keep SaveGame independent from the encounter actor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Lost Cargo")
+	uint8 State = 0;
+};
+
+/** 제너릭 퀘스트 인카운터의 목표 1개 진행도(바이트 블롭). */
+USTRUCT()
+struct FRetrieveQuestObjectiveSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<uint8> Bytes;
+};
+
+/** EncounterId별 제너릭 퀘스트 진행 상태(단계 + 목표별 진행도). */
+USTRUCT(BlueprintType)
+struct FRetrieveQuestSaveData
+{
+	GENERATED_BODY()
+
+	/** ERetrieveQuestPhase를 바이트로 직렬화. */
+	UPROPERTY()
+	uint8 Phase = 0;
+
+	UPROPERTY()
+	TArray<FRetrieveQuestObjectiveSaveData> Objectives;
+};
 /**
  * 화톳불 기반 저장 데이터 컨테이너.
  *
@@ -38,6 +86,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	bool bLumenEngraved = false;
 
+	/** 잊혀진 영웅 장비 진화 충전량(0~임계치). 세트 착용 중 흡수/버스트 시 누적. 월드 공유 진행 상태. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	int32 HeroEvolutionCharge = 0;
+
+	/** 잊혀진 영웅 장비가 전설 영웅 장비로 진화 완료됐는지 여부. 월드 공유 진행 상태. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	bool bHeroEquipmentEvolved = false;
+
 	/** 전장의 안개 탐색 마스크(0=미탐색, 255=탐색). 정사각, 크기 = ExploredMaskResolution^2. */
 	UPROPERTY()
 	TArray<uint8> ExploredMask;
@@ -53,6 +109,18 @@ public:
 	/** 가위바위보 내기 3연승 보상 지급 횟수 (SpeakerTag별, 월드 공유 진행 상태) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	TMap<FGameplayTag, int32> RpsRewardGrantCounts;
+
+	/** EncounterId별 구출 이벤트 진행 상태. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Rescue")
+	TMap<FName, FRetrieveRescueEncounterSaveData> RescueEncounters;
+
+	/** EncounterId별 도난 짐 회수 이벤트 진행 상태. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Lost Cargo")
+	TMap<FName, FRetrieveLostCargoSaveData> LostCargoEncounters;
+
+	/** EncounterId별 제너릭 퀘스트 인카운터 진행 상태. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Quest")
+	TMap<FName, FRetrieveQuestSaveData> QuestEncounters;
 
 	// ── 슬롯 메타데이터 (UI 표시용) ─────────────────────────────────────────────
 

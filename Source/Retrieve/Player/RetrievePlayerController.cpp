@@ -1,4 +1,4 @@
-﻿#include "Player/RetrievePlayerController.h"
+#include "Player/RetrievePlayerController.h"
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
@@ -2094,6 +2094,12 @@ void ARetrievePlayerController::Server_RequestLumenToggleWait_Implementation()
 
 void ARetrievePlayerController::CloseConversation()
 {
+	AActor* ClosedDialogueNPC = CurrentDialogueNPC;
+	if (ClosedDialogueNPC)
+	{
+		Server_NotifyDialogueClosed(ClosedDialogueNPC);
+	}
+
 	// NPC 유휴 애니메이션 복귀
 	if (CurrentDialogueNPC)
 	{
@@ -2146,6 +2152,27 @@ void ARetrievePlayerController::CloseConversation()
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+}
+
+void ARetrievePlayerController::Server_NotifyDialogueClosed_Implementation(AActor* NPC)
+{
+	APawn* PlayerPawn = GetPawn();
+	if (!IsValid(NPC) || !IsValid(PlayerPawn))
+	{
+		return;
+	}
+
+	constexpr float MaxDialogueCloseDistance = 1200.0f;
+	if (FVector::DistSquared(PlayerPawn->GetActorLocation(), NPC->GetActorLocation())
+		> FMath::Square(MaxDialogueCloseDistance))
+	{
+		return;
+	}
+
+	if (URetrieveDialogueComponent* Dialogue = NPC->FindComponentByClass<URetrieveDialogueComponent>())
+	{
+		Dialogue->NotifyDialogueClosed(PlayerPawn);
+	}
 }
 
 void ARetrievePlayerController::UpdateHUDNarrativeVisibility()

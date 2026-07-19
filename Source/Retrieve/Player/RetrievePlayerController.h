@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/SlateWrapperTypes.h"
@@ -456,6 +456,9 @@ protected:
 public:
 	UFUNCTION(Server, Reliable)
 	void Server_RequestDialogueAdvance(FGameplayTag TopicId);
+
+	UFUNCTION(Server, Reliable)
+	void Server_NotifyDialogueClosed(AActor* NPC);
 
 	UFUNCTION(Client, Reliable)
 	void Client_OpenConversation(AActor* NPC);

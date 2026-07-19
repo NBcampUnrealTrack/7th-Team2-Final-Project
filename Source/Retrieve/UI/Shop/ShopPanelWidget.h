@@ -82,6 +82,9 @@ public:
 	                         URetrieveShopDefinitionAsset* InShopDefinition,
 	                         URetrieveShopComponent* InShopComponent = nullptr);
 
+	/** 현재 상점의 구매가 배율(ShopDefinition->PriceMultiplier). 목록/상세 표시가 동일 배율을 쓰도록 노출. */
+	float GetActivePriceMultiplier() const;
+
 	// ── 탭 전환 ────────────────────────────────────────────────────────────────
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Shop")
 	void SwitchToBuyTab();
