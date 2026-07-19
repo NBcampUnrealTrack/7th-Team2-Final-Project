@@ -220,16 +220,33 @@ void UCraftPanelWidget::HandleTimedCraftComplete()
 	}
 
 	const int32 CountToCraft = PendingCraftCount;
+
+	// 확률제 레시피를 2개 이상 제작하면 매 회차 결과 팝업이 한 프레임에 서로 덮어써져 마지막 것만 보인다.
+	// 배치 동안에는 HandleCraftCompleted에서 개별 팝업을 억제하고 성공/실패만 누적한 뒤,
+	// 루프 종료 후 요약 팝업("성공 N / 실패 M")을 1회만 띄운다.
+	const FRetrieveCraftRecipeRow* PendingRecipe = CraftRecipeTable
+		? CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(PendingRecipeId, TEXT("CraftPanel::TimedComplete"))
+		: nullptr;
+	const bool bProbabilistic = PendingRecipe && PendingRecipe->SuccessChance < 1.0f;
+	bBatchResultInProgress = bProbabilistic && CountToCraft > 1;
+	BatchSuccessCount = 0;
+	BatchFailCount = 0;
+
 	bool bCraftedAny = false;
 	if (InventoryComponent)
 	{
 		for (int32 i = 0; i < CountToCraft; ++i)
 		{
-			if (!InventoryComponent->CraftItem(PendingRecipeId))
+			// 재료가 남아 있는 한 계속 시도한다. 확률 실패(재료는 소모, 결과만 실패)로는 중단하지 않고,
+			// 재료가 실제로 소진됐을 때에만 멈춘다.
+			if (!InventoryComponent->CanCraftItem(PendingRecipeId))
 			{
 				break;
 			}
-			bCraftedAny = true;
+			if (InventoryComponent->CraftItem(PendingRecipeId))
+			{
+				bCraftedAny = true;
+			}
 		}
 	}
 
@@ -245,8 +262,27 @@ void UCraftPanelWidget::HandleTimedCraftComplete()
 		}
 	}
 
+	// 배치 요약 팝업 (개별 팝업은 HandleCraftCompleted에서 억제됨)
+	if (bBatchResultInProgress)
+	{
+		bBatchResultInProgress = false;
+		if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
+		{
+			const bool bAnySuccess = BatchSuccessCount > 0;
+			BonfireMenu->ShowCraftResultSummary(BatchSuccessCount, BatchFailCount, LoadCraftResultIcon(bAnySuccess));
+		}
+	}
+
 	bIsCrafting = false;
 	UpdateCraftCountUI();
+}
+
+UTexture2D* UCraftPanelWidget::LoadCraftResultIcon(bool bSuccess) const
+{
+	const TCHAR* IconPath = bSuccess
+		? TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Inventory/T_ICON_FantasyWarrior_Inventory_Swords01_Underlay.T_ICON_FantasyWarrior_Inventory_Swords01_Underlay")
+		: TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Status/T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke.T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke");
+	return LoadObject<UTexture2D>(nullptr, IconPath);
 }
 
 void UCraftPanelWidget::BindButtonEvents()
@@ -652,8 +688,11 @@ void UCraftPanelWidget::RefreshMaterialRows(const FRetrieveCraftRecipeRow& Recip
 			? InventoryComponent->GetItemCount(Material.ItemId)
 			: 0;
 
+		// 필요량은 실제 제작 횟수 기준으로 표시한다. 강화 레시피는 제작 불가 시 CraftCount가 0으로
+		// 떨어지는데, 그대로 곱하면 필요량이 0이 되어 재료 행이 "부족한데도 충분한 것처럼" 보인다.
+		// Max(1, CraftCount)로 최소 1회분(원본 Quantity)을 항상 반영해 표시를 실제와 맞춘다.
 		Row->InitMaterialRow(ItemIconTable, MaterialItemTable, Material.ItemId,
-			Material.Quantity * CraftCount, Owned, WeaponDataTable);
+			Material.Quantity * FMath::Max(1, CraftCount), Owned, WeaponDataTable);
 
 		VerticalBox_Materials->AddChild(Row);
 	}
@@ -825,20 +864,27 @@ void UCraftPanelWidget::HandleCraftCompleted(bool bSuccess, FName RecipeId, FNam
 	OnCrafted.Broadcast(RecipeId, bSuccess);
 	HandleInventoryChanged();
 
-	// 강화 레시피(확률제)만 성공/실패 팝업을 띄운다. 일반 제작은 조용히 갱신한다.
+	// 강화 레시피(확률제)만 성공/실패 팝업을 띄운다. 일반(확정) 제작은 조용히 갱신한다.
 	const FRetrieveCraftRecipeRow* Recipe = CraftRecipeTable
 		? CraftRecipeTable->FindRow<FRetrieveCraftRecipeRow>(RecipeId, TEXT("CraftPanel::HandleCraftCompleted"))
 		: nullptr;
-	if (Recipe && Recipe->SuccessChance < 1.0f)
+	if (!Recipe || Recipe->SuccessChance >= 1.0f)
 	{
-		if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
-		{
-			const TCHAR* IconPath = bSuccess
-				? TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Inventory/T_ICON_FantasyWarrior_Inventory_Swords01_Underlay.T_ICON_FantasyWarrior_Inventory_Swords01_Underlay")
-				: TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Status/T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke.T_ICON_FantasyWarrior_Status_AttackBroken01_Stroke");
-			UTexture2D* ResultIcon = LoadObject<UTexture2D>(nullptr, IconPath);
-			BonfireMenu->ShowCraftResult(bSuccess, ResultIcon);
-		}
+		return;
+	}
+
+	// 배치 제작 중에는 개별 팝업을 억제하고 성공/실패만 누적한다.
+	// (요약 팝업은 HandleTimedCraftComplete가 루프 종료 후 1회 띄운다)
+	if (bBatchResultInProgress)
+	{
+		if (bSuccess) { ++BatchSuccessCount; } else { ++BatchFailCount; }
+		return;
+	}
+
+	// 단일 강화: 즉시 성공/실패 팝업
+	if (UBonfireMenuWidget* BonfireMenu = GetTypedOuter<UBonfireMenuWidget>())
+	{
+		BonfireMenu->ShowCraftResult(bSuccess, LoadCraftResultIcon(bSuccess));
 	}
 }
 

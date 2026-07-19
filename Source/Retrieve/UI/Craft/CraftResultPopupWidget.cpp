@@ -36,6 +36,26 @@ void UCraftResultPopupWidget::ShowResult(bool bSuccess, UTexture2D* Icon)
 	SetVisibility(ESlateVisibility::Visible);
 }
 
+void UCraftResultPopupWidget::ShowResultSummary(int32 SuccessCount, int32 FailCount, UTexture2D* Icon)
+{
+	if (Image_ResultIcon && Icon)
+	{
+		Image_ResultIcon->SetBrushFromTexture(Icon, true);
+	}
+
+	if (Text_ResultTitle)
+	{
+		Text_ResultTitle->SetText(FText::Format(
+			NSLOCTEXT("CraftResultPopup", "Summary", "강화 완료: 성공 {0} / 실패 {1}"),
+			FText::AsNumber(SuccessCount),
+			FText::AsNumber(FailCount)));
+		// 하나라도 성공했으면 성공 색, 전부 실패면 실패 색.
+		Text_ResultTitle->SetColorAndOpacity(FSlateColor(SuccessCount > 0 ? SuccessColor : FailureColor));
+	}
+
+	SetVisibility(ESlateVisibility::Visible);
+}
+
 void UCraftResultPopupWidget::HideResult()
 {
 	SetVisibility(ESlateVisibility::Collapsed);

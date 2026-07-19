@@ -26,6 +26,9 @@ public:
 	/** 성공/실패에 맞는 아이콘·문구·색상으로 팝업을 채우고 표시한다. */
 	void ShowResult(bool bSuccess, UTexture2D* Icon);
 
+	/** 배치(여러 개 확률 제작) 결과를 "성공 N / 실패 M" 요약으로 채우고 1회만 표시한다. */
+	void ShowResultSummary(int32 SuccessCount, int32 FailCount, UTexture2D* Icon);
+
 	void HideResult();
 
 protected:
