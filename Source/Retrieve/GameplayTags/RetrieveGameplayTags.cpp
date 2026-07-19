@@ -468,6 +468,7 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: UI Quest notification / Reveal gate
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_QuestNotification, "Channel.UI.QuestNotification");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_RevealGate, "Channel.UI.RevealGate");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_PickupToast, "Channel.UI.PickupToast");
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");

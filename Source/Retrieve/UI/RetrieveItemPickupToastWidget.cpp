@@ -155,11 +155,54 @@ void URetrieveItemPickupToastWidget::InitToast(FName ItemId, FGameplayTag ItemCa
 	if (ItemNameText)
 	{
 		ItemNameText->SetText(DisplayName);
+		ApplyNameAutoFit(DisplayName);
 	}
 
 	if (QuantityText)
 	{
 		QuantityText->SetText(FText::FromString(FString::Printf(TEXT("×%d"), Quantity)));
+	}
+
+	PlayUIVFXOnWidget(
+		RetrieveGameplayTags::UI_VFX_Icon_ItemAdded,
+		ToastVFXTarget ? ToastVFXTarget.Get() : ResolveDefaultVFXTarget());
+}
+
+void URetrieveItemPickupToastWidget::InitCustomToast(const FText& Title, UTexture2D* Icon, const FText& InQuantityText)
+{
+	// 아이콘: BindWidget 멤버(ItemIcon)가 이름 불일치로 null일 수 있어 이름으로도 조회.
+	UImage* IconImg = ItemIcon ? ItemIcon.Get() : Cast<UImage>(GetWidgetFromName(TEXT("ItemIcon")));
+	if (IconImg)
+	{
+		if (Icon)
+		{
+			IconImg->SetBrushFromTexture(Icon, false);
+			IconImg->SetRenderOpacity(1.f);
+			IconImg->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			IconImg->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (ItemNameText)
+	{
+		ItemNameText->SetText(Title);
+		ApplyNameAutoFit(Title);
+	}
+
+	if (QuantityText)
+	{
+		if (InQuantityText.IsEmptyOrWhitespace())
+		{
+			QuantityText->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			QuantityText->SetVisibility(ESlateVisibility::HitTestInvisible);
+			QuantityText->SetText(InQuantityText);
+		}
 	}
 
 	PlayUIVFXOnWidget(
@@ -186,78 +229,90 @@ void URetrieveItemPickupToastWidget::SetToastSlotIndex(int32 SlotIndex, float Sl
 	}
 }
 
+void URetrieveItemPickupToastWidget::ApplyNameAutoFit(const FText& Name)
+{
+	if (!ItemNameText)
+	{
+		return;
+	}
+
+	FSlateFontInfo Font = ItemNameText->GetFont();
+	if (BaseNameFontSize <= 0)
+	{
+		BaseNameFontSize = Font.Size; // WBP 기본 크기 캐싱(짧은 이름은 이 크기로 원복)
+	}
+
+	// 토스트 이름 영역의 가용 폭(px). ToastBG 300 - 아이콘/여백 ≈ 200.
+	// 한글 글자폭 ≈ 폰트 크기 1.0배, 라틴·숫자·공백 ≈ 0.55배로 가중 길이를 추정한다.
+	float WeightedLen = 0.f;
+	for (const TCHAR Ch : Name.ToString())
+	{
+		WeightedLen += (Ch <= 0x2FF) ? 0.55f : 1.f;
+	}
+
+	constexpr float AvailablePx = 200.f;
+	constexpr int32 MinFontSize = 11;
+
+	int32 NewSize = BaseNameFontSize;
+	if (WeightedLen > 0.f && WeightedLen * BaseNameFontSize > AvailablePx)
+	{
+		NewSize = FMath::Clamp(
+			FMath::FloorToInt(AvailablePx / WeightedLen), MinFontSize, BaseNameFontSize);
+	}
+
+	Font.Size = NewSize;
+	ItemNameText->SetFont(Font);
+}
+
 FText URetrieveItemPickupToastWidget::LookupItemDisplayName(FName ItemId, FGameplayTag ItemCategoryTag)
 {
-	// LoadObject에 전체 경로(패키지.오브젝트) 사용 — 경로만 쓰면 찾지 못할 수 있음
-	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))
+	// 각 카테고리 테이블에서 이름 조회(못 찾거나 DisplayName이 비면 빈 텍스트 반환).
+	// LoadObject에 전체 경로(패키지.오브젝트) 사용 — 경로만 쓰면 찾지 못할 수 있음.
+	auto FromWeapon = [ItemId]() -> FText
 	{
-		if (UDataTable* DT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData")))
-		{
-			if (const FRetrieveWeaponDataRow* Row =
-				DT->FindRow<FRetrieveWeaponDataRow>(ItemId, TEXT("InitToast"), false))
-			{
-				return Row->DisplayName;
-			}
-			UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] Weapon row '%s' NOT FOUND"), *ItemId.ToString());
-		}
-		else { UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_WeaponData load FAILED")); }
-	}
-	else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable))
+		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData")))
+			if (const FRetrieveWeaponDataRow* Row = DT->FindRow<FRetrieveWeaponDataRow>(ItemId, TEXT("InitToast"), false))
+				if (!Row->DisplayName.IsEmptyOrWhitespace()) return Row->DisplayName;
+		return FText::GetEmpty();
+	};
+	auto FromArmor = [ItemId]() -> FText
 	{
-		if (UDataTable* DT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem")))
-		{
-			if (const FRetrieveConsumableItemRow* Row =
-				DT->FindRow<FRetrieveConsumableItemRow>(ItemId, TEXT("InitToast"), false))
-			{
-				return Row->DisplayName;
-			}
-			UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] Consumable row '%s' NOT FOUND"), *ItemId.ToString());
-		}
-		else { UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_ConsumableItem load FAILED")); }
-	}
-	else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material))
+		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Items/DT_Armor.DT_Armor")))
+			if (const FRetrieveArmorDataRow* Row = DT->FindRow<FRetrieveArmorDataRow>(ItemId, TEXT("InitToast"), false))
+				if (!Row->DisplayName.IsEmptyOrWhitespace()) return Row->DisplayName;
+		return FText::GetEmpty();
+	};
+	auto FromConsumable = [ItemId]() -> FText
 	{
-		if (UDataTable* DT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem")))
-		{
-			if (const FRetrieveMaterialItemRow* Row =
-				DT->FindRow<FRetrieveMaterialItemRow>(ItemId, TEXT("InitToast"), false))
-			{
-				return Row->DisplayName;
-			}
-			UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] Material row '%s' NOT FOUND"), *ItemId.ToString());
-		}
-		else { UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] DT_MaterialItem load FAILED")); }
-	}
-	else
+		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem")))
+			if (const FRetrieveConsumableItemRow* Row = DT->FindRow<FRetrieveConsumableItemRow>(ItemId, TEXT("InitToast"), false))
+				if (!Row->DisplayName.IsEmptyOrWhitespace()) return Row->DisplayName;
+		return FText::GetEmpty();
+	};
+	auto FromMaterial = [ItemId]() -> FText
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] Tag '%s' matched no category, trying all tables"), *ItemCategoryTag.ToString());
+		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem")))
+			if (const FRetrieveMaterialItemRow* Row = DT->FindRow<FRetrieveMaterialItemRow>(ItemId, TEXT("InitToast"), false))
+				if (!Row->DisplayName.IsEmptyOrWhitespace()) return Row->DisplayName;
+		return FText::GetEmpty();
+	};
 
-		if (UDataTable* WDT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData")))
-		{
-			if (const FRetrieveWeaponDataRow* Row =
-				WDT->FindRow<FRetrieveWeaponDataRow>(ItemId, TEXT("InitToast"), false))
-				return Row->DisplayName;
-		}
-		if (UDataTable* CDT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_ConsumableItem.DT_ConsumableItem")))
-		{
-			if (const FRetrieveConsumableItemRow* Row =
-				CDT->FindRow<FRetrieveConsumableItemRow>(ItemId, TEXT("InitToast"), false))
-				return Row->DisplayName;
-		}
-		if (UDataTable* MDT = LoadObject<UDataTable>(
-			nullptr, TEXT("/Game/Retrieve/Data/Items/DT_MaterialItem.DT_MaterialItem")))
-		{
-			if (const FRetrieveMaterialItemRow* Row =
-				MDT->FindRow<FRetrieveMaterialItemRow>(ItemId, TEXT("InitToast"), false))
-				return Row->DisplayName;
-		}
-	}
+	// 1) 카테고리 태그가 가리키는 테이블 우선 조회.
+	FText Name;
+	if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Weapon))          Name = FromWeapon();
+	else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Armor))      Name = FromArmor();
+	else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Consumable)) Name = FromConsumable();
+	else if (ItemCategoryTag.MatchesTag(RetrieveGameplayTags::Item_Material))   Name = FromMaterial();
+	if (!Name.IsEmpty()) return Name;
 
-	UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] LookupItemDisplayName FALLBACK for '%s'"), *ItemId.ToString());
+	// 2) 카테고리가 없거나(None) 해당 테이블에 없으면 모든 테이블을 순회(카테고리 오지정/누락 보정).
+	Name = FromWeapon();     if (!Name.IsEmpty()) return Name;
+	Name = FromArmor();      if (!Name.IsEmpty()) return Name;
+	Name = FromConsumable(); if (!Name.IsEmpty()) return Name;
+	Name = FromMaterial();   if (!Name.IsEmpty()) return Name;
+
+	// 3) 어디에도 이름이 없으면 최후에 ID를 표시.
+	UE_LOG(LogTemp, Warning, TEXT("[ToastWidget] LookupItemDisplayName: no DisplayName for '%s' (tag=%s)"),
+		*ItemId.ToString(), *ItemCategoryTag.ToString());
 	return FText::FromName(ItemId);
 }

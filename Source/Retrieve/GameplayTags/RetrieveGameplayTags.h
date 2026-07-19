@@ -480,6 +480,8 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: UI Quest notification / Reveal gate
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_QuestNotification);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_RevealGate);
+	// 인벤토리 미경유 획득(퀘스트 물건 등)의 아이템 획득 토스트 트리거.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_PickupToast);
 
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Bow_Charge);	
 
