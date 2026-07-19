@@ -107,6 +107,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
 	InstanceData.bAttackTokenAcquired = false;
+	InstanceData.bRotationSettingsCaptured = false;
 
 	if (!IsValid(InstanceData.TargetPlayer))
 	{
@@ -139,7 +140,22 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
 	{
 		InstanceData.bOriginalUseRVOAvoidance = MoveComp->bUseRVOAvoidance;
+
+		const bool bForwardLocomotion = ShouldUseForwardLocomotion(Pawn);
+
+		InstanceData.bOriginalOrientRotationToMovement = MoveComp->bOrientRotationToMovement;
+		InstanceData.bOriginalUseControllerDesiredRotation = MoveComp->bUseControllerDesiredRotation;
+		InstanceData.bOriginalUseControllerRotationYaw = Pawn->bUseControllerRotationYaw;
+		InstanceData.bRotationSettingsCaptured = true;
+
 		MoveComp->bUseRVOAvoidance = false;
+
+		if (!bForwardLocomotion)
+		{
+			MoveComp->bOrientRotationToMovement = false;
+			MoveComp->bUseControllerDesiredRotation = false;
+			Pawn->bUseControllerRotationYaw = false;
+		}
 	}
 
 	return EStateTreeRunStatus::Running;
@@ -354,13 +370,23 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{
+		InstanceData.bRotationSettingsCaptured = false;
 		return;
 	}
 
 	if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
 	{
 		MoveComp->bUseRVOAvoidance = InstanceData.bOriginalUseRVOAvoidance;
+
+		if (InstanceData.bRotationSettingsCaptured)
+		{
+			MoveComp->bOrientRotationToMovement = InstanceData.bOriginalOrientRotationToMovement;
+			MoveComp->bUseControllerDesiredRotation = InstanceData.bOriginalUseControllerDesiredRotation;
+			Pawn->bUseControllerRotationYaw = InstanceData.bOriginalUseControllerRotationYaw;
+		}
 	}
+
+	InstanceData.bRotationSettingsCaptured = false;
 
 	if (bStartedAttack)
 	{

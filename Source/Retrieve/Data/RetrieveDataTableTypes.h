@@ -731,6 +731,11 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
 	bool bFaceTargetDuringShiftOrbit = false;
 
+	/** 전진 로코모션(bOrientRotationToMovement) 사용 여부. true면 이동 방향으로 회전.
+	 *  Base 캐릭터의 UsesForwardLocomotion()이 이 값을 참조. Epic 파생은 자체 멤버가 우선. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Moster|Move")
+	bool bUseForwardLocomotion = false;
+
 	/** 에픽 몬스터 공중 페이즈 사용 여부 (비행 가능 몬스터만 true) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Monster|Epic")
 	bool bHasAerialPhase = false;

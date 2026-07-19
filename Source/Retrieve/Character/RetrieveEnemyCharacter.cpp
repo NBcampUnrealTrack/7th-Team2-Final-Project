@@ -205,6 +205,12 @@ const FMonsterDataRow* ARetrieveEnemyCharacter::GetMonsterDataRow() const
 		MonsterDataRowName, TEXT("ARetrieveEnemyCharacter::GetMonsterDataRow"));
 }
 
+bool ARetrieveEnemyCharacter::UsesForwardLocomotion() const
+{
+	const FMonsterDataRow* Row = GetMonsterDataRow();
+	return Row && Row->bUseForwardLocomotion;
+}
+
 void ARetrieveEnemyCharacter::BeginPlay()
 {
 	Super::BeginPlay();

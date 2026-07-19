@@ -22,6 +22,9 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "DrawDebugHelpers.h"
+#include "HAL/IConsoleManager.h"
+#include "Navigation/PathFollowingComponent.h"
 
 namespace
 {
@@ -228,17 +231,23 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			{
 				// 플레이어에게 무조건 붙는 이동을 피하게 수정
 				const float DirectChaseRange = FMath::Max(InstanceData.AttackableRange + 35.f, 0.f);
+				UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 				if (InstanceData.bUseDirectChaseToTarget)
 				{
 					// DataTable/캐릭터 기본 설정에서 직접 추적을 허용한 몬스터는 플레이어 위치를 ChaseLocation으로 사용.
 					// 직접 추적을 끈 몬스터는 전투 거리 안에서 오빗/스트레이프 위치를 사용
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
-				else if (InstanceData.DistanceToTarget > DirectChaseRange)
+				else if (InstanceData.DistanceToTarget > DirectChaseRange
+					&& (!EncSubsystem
+						|| EncSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn)))
 				{
+					// 대안 D(Phase 2 실험): DirectChase는 공격 진입 자격이 있을 때만.
+					// 개인 토큰 쿨다운 등으로 CanRequest=false인 몬스터는 아래 슬롯 로직으로 흘려
+					// 자연스럽게 Outer로 이동시킨다. Retreat 상태·캐시 도입 없이 목적지 정책만 조건화.
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
-				else if (UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+				else if (EncSubsystem)
 				{
 					EncSubsystem->GetOrUpdateRingAnchor(InstanceData.TargetPlayer);
 					int32 SlotIndex = EncSubsystem->GetCurrentSlot(InstanceData.TargetPlayer, Pawn);
@@ -246,6 +255,49 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					{
 						SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
 					}
+
+					// 진단 디버그: 실제 ChaseLocation과 이동 상태를 표시. Encircle.Debug >= 1일 때만.
+					// 대안 D 실험 판정(Outer 목적지 생성 vs 실제 이동 성공 여부 구분)에 사용.
+					auto DrawChaseLocationDebug = [Pawn, &InstanceData](int32 SlotIdx, bool bHasTok, bool bCanReq, bool bOuter)
+					{
+						const IConsoleVariable* DebugCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Encircle.Debug"));
+						if (!DebugCVar || DebugCVar->GetInt() <= 0)
+						{
+							return;
+						}
+						UWorld* World = Pawn->GetWorld();
+						if (!World)
+						{
+							return;
+						}
+						const FColor DebugColor = bOuter ? FColor::Cyan : FColor::Red;
+
+						// Outer 목표는 유지되는데 실제 이동이 없는 경우를 구분하기 위한 이동 상태값.
+						const float Speed2D = Pawn->GetVelocity().Size2D();
+						const AAIController* AIController = Cast<AAIController>(Pawn->GetController());
+						FString MoveStatusStr = TEXT("NoAIC");
+						if (AIController)
+						{
+							switch (AIController->GetMoveStatus())
+							{
+							case EPathFollowingStatus::Idle:    MoveStatusStr = TEXT("Idle");    break;
+							case EPathFollowingStatus::Waiting: MoveStatusStr = TEXT("Waiting"); break;
+							case EPathFollowingStatus::Paused:  MoveStatusStr = TEXT("Paused");  break;
+							case EPathFollowingStatus::Moving:  MoveStatusStr = TEXT("Moving");  break;
+							default:                            MoveStatusStr = TEXT("Unknown"); break;
+							}
+						}
+
+						DrawDebugSphere(World, InstanceData.ChaseLocation, 25.f, 8, DebugColor, false, -1.f);
+						DrawDebugLine(World, Pawn->GetActorLocation(), InstanceData.ChaseLocation, DebugColor, false, -1.f);
+						DrawDebugString(World, InstanceData.ChaseLocation + FVector(0.f, 0.f, 40.f),
+							FString::Printf(TEXT("%s\nSlot=%d HasToken=%d CanRequest=%d Outer=%d\nPawn-Player=%.0f Pawn-Chase=%.0f\nSpeed=%.0f MoveStatus=%s"),
+								*Pawn->GetName(), SlotIdx, bHasTok, bCanReq, bOuter,
+								FVector::Dist2D(Pawn->GetActorLocation(), InstanceData.TargetLocation),
+								FVector::Dist2D(Pawn->GetActorLocation(), InstanceData.ChaseLocation),
+								Speed2D, *MoveStatusStr),
+							nullptr, DebugColor, 0.f, true);
+					};
 
 					if (SlotIndex != INDEX_NONE)
 					{
@@ -283,11 +335,16 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 							InstanceData.ChaseLocation.X = InstanceData.TargetLocation.X + SafeDir2D.X * InstanceData.OrbitInnerRadius;
 							InstanceData.ChaseLocation.Y = InstanceData.TargetLocation.Y + SafeDir2D.Y * InstanceData.OrbitInnerRadius;
 						}
+
+						DrawChaseLocationDebug(SlotIndex, bHasTokenForLocation, bCanRequest, bUseOuterRadius);
 					}
 					else
 					{
 						InstanceData.ChaseLocation = EncSubsystem->GetOverflowStandoffLocation(
 							InstanceData.TargetPlayer, Pawn, InstanceData.StrafeOffRange);
+
+						// 슬롯을 아예 못 받은(링이 꽉 찬) 대기자 — Outer 취급으로 표시.
+						DrawChaseLocationDebug(INDEX_NONE, false, false, true);
 					}
 				}
 				else

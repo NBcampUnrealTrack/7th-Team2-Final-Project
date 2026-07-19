@@ -62,6 +62,13 @@ struct FStateTreeTask_EnemyAttackInstanceData
 
 	// Attack 진입 전 RVO 회피 설정. 접근 중 플레이어를 우회하지 않도록 Attack 동안만 끈다.
 	bool bOriginalUseRVOAvoidance = true;
+
+	// Attack 접근 중 회전 권한을 FaceTargetForAttack이 단독으로 갖도록 세 값을 강제 false로 세팅했다가
+	// Exit에서 복구. Forward Locomotion Enemy(Wolf 등)는 캡처만 하고 값 변경은 스킵.
+	bool bOriginalOrientRotationToMovement = true;
+	bool bOriginalUseControllerDesiredRotation = false;
+	bool bOriginalUseControllerRotationYaw = false;
+	bool bRotationSettingsCaptured = false;
 };
 
 USTRUCT(BlueprintType, meta = (DisplayName = "Enemy Attack", Category = "Retrieve|AI"))

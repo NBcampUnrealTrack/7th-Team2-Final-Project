@@ -88,7 +88,7 @@ public:
 	void ResetAerialSpecialPhase();
 	float GetAerialSpecialPhaseElapsedTime() const;
 
-	virtual bool UsesForwardLocomotion() const { return false; }
+	virtual bool UsesForwardLocomotion() const;
 	virtual void UpdateGroundTurnAnimation(float SignedYawDelta) {}
 	virtual bool ShouldGroundSnapOnSpawn() const { return false; }
 	virtual void StopGroundTurnAnimation() { StopLocomotionMontages(); }
