@@ -15,9 +15,9 @@ class UUserWidget;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveSaveCompleted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveLoadCompleted);
 
-/** 빠른 이동 시작 — UI에서 LoadingCutscene 표시용 */
+/** 빠른 이동 시작 — UI에서 로딩 오버레이(WBP_LoadingScreen) 표시용 */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFastTravelStarted, FName, BonfireId);
-/** 빠른 이동 완료 — UI에서 LoadingCutscene 숨김용 */
+/** 빠른 이동 완료 — UI에서 로딩 오버레이(WBP_LoadingScreen) 페이드아웃/숨김용 */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFastTravelCompleted);
 
 /**
@@ -232,7 +232,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
 	float FastTravelSettleTimeout = 15.0f;
 
-	/** 불러오기 시 SaveSubsystem이 직접 띄우는 로딩화면 위젯(WBP_LoadingCutscene). 재빌드 없이 ini로 변경 가능. */
+	/**
+	 * (폴백 값) 로딩 커버가 불투명해질 때까지 텔레포트/카메라 컷을 지연할 시간(초)
+	 * 평소에는 로딩 위젯(WBP_LoadingScreen)의 CoverFadeInSeconds를 따르고, 위젯 클래스가 아직 로드되지 않은 경우에만 이 값을 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
+	float FallbackCoverFadeInSeconds = 0.4f;
+
+	/** 불러오기 시 SaveSubsystem이 직접 띄우는 로딩화면 위젯 (부팅/빠른 이동과 통합된 WBP_LoadingScreen). 재빌드 없이 ini로 변경 가능. */
 	UPROPERTY(EditDefaultsOnly, Config, Category = "Retrieve|FastTravel")
 	TSoftClassPtr<UUserWidget> LoadingScreenWidgetClass;
 
@@ -254,11 +261,24 @@ public:
 	 * 빠른 이동/불러오기/리스폰 공용: 도착 위치로 텔레포트하고 월드 파티션 스트리밍이
 	 * 안정될 때까지 이동·충돌을 잠근 뒤 지면에 스냅한다(미로딩 낙하 방지).
 	 * 리스폰(GameMode::RespawnPlayerAtTransform)에서도 재사용한다.
+	 *
+	 * @param bCoverAlreadyOpaque  호출부가 이미 로딩 커버가 불투명해질 때까지 기다렸으면 true.
+	 *                             (기본값 false — 내부에서 CoverFadeInSeconds만큼 텔레포트를 지연한다)
 	 */
-	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute);
+	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
+	                           bool bCoverAlreadyOpaque = false);
+
+	/** 로딩 커버가 불투명해지기까지의 시간(초). 로딩 위젯 CDO의 값을 우선 사용한다. */
+	float GetCoverFadeInSeconds() const;
 
 private:
 	void FinishFastTravel();
+
+	/**
+	 * 커버가 불투명해진 뒤 보이는 작업(폰 텔레포트, 카메라 컷, 블로킹 스트리밍 플러시, 도착 폴링 시작)을 수행한다.
+	 * BeginStreamedTeleport에서 지연 호출된다.
+	 */
+	void ApplyStreamedTeleportUnderCover();
 
 	/** 불러오기 등에서 SaveSubsystem이 직접 로딩화면을 띄운다(빠른 이동은 WorldMapWidget이 띄움). */
 	void ShowLoadingScreen(APlayerController* PC);
@@ -298,6 +318,9 @@ private:
 	FTimerHandle FastTravelTimerHandle;
 	FTimerHandle FastTravelStreamPollTimerHandle;
 	FTimerHandle FastTravelFinishTimerHandle;
+
+	/** 커버가 불투명해질 때까지 텔레포트를 미루는 지연 타이머. */
+	FTimerHandle FastTravelCoverDelayTimerHandle;
 
 	UPROPERTY()
 	TObjectPtr<APlayerController> PendingFastTravelPC;

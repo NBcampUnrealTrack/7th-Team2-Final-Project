@@ -150,6 +150,7 @@ public:
 protected:
 	void HandleSessionStateChanged(ERetrieveSessionState Previous, ERetrieveSessionState NewState);
 	void SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState);
+	void PerformWidgetSwap(ERetrieveSessionState NewState);
 	void UpdateInputMode(ERetrieveSessionState NewState);
 	bool ShouldShowLoadingCover(ERetrieveSessionState Previous, ERetrieveSessionState NewState) const;
 
@@ -180,6 +181,9 @@ protected:
 	void ApplyGameplayCamera(); // 로컬 폰 표시 + 뷰 타겟 블렌드 -> 폰
 	AActor* FindMainMenuCamera() const;
 
+	/** 활성 로딩 커버가 완전히 불투명해지기까지 걸리는 시간(초). 커버가 없으면 0. */
+	float GetActiveCoverFadeInSeconds() const;
+
 	void ShowLoadingScreen();
 	void HideLoadingScreen();
 
@@ -189,7 +193,7 @@ protected:
 	/** 커버가 올라와 있는 동안 알림 표면들이 억제되도록 Channel.UI.RevealGate를 브로드캐스트합니다. */
 	void BroadcastRevealGate(bool bBlocked);
 
-	/** 부팅/메뉴 로딩 화면 위젯 (코스메틱). (빠른 이동용 WBP_LoadingCutscene이 아님) */
+	/** 부팅/메뉴 로딩 화면 위젯 (코스메틱). 부팅·부활 진입 전용 인스턴스이며, 빠른 이동/불러오기와 통합된 WBP_LoadingScreen을 가리킨다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|UI")
 	TSubclassOf<UUserWidget> LoadingScreenClass;
 	
@@ -217,6 +221,12 @@ protected:
 	bool bLoadingCoverActive = false;
 
 	FTimerHandle LoadingScreenTimerHandle;
+
+	/** 커버가 불투명해진 뒤 게임플레이 카메라로 전환하기 위한 지연 타이머. */
+	FTimerHandle CoverGatedCameraTimerHandle;
+
+	/** 커버가 불투명해진 뒤 최상위 위젯을 교체하기 위한 지연 타이머. */
+	FTimerHandle CoverGatedWidgetSwapTimerHandle;
 #pragma endregion
 
 #pragma region HUD ViewModel

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "TimerManager.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Subsystems/RetrieveCinematicSubsystem.h" // FRetrieveCinematicPlayParams (OpeningCinematicParams)
 #include "RetrieveGameMode.generated.h"
@@ -60,6 +61,9 @@ protected:
 	bool bSkipMainMenuOnBoot = false;
 	
 	FGameplayMessageListenerHandle PlayerDiedListener;
+
+	/** 로딩 커버가 불투명해진 뒤 리스폰(Revive)을 실행하기 위한 지연 타이머. */
+	FTimerHandle RespawnCoverDelayTimerHandle;
 
 #pragma region Opening Sequence (New Game)
 

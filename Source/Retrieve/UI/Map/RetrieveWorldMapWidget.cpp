@@ -7,6 +7,7 @@
 #include "World/RetrieveBonfireActor.h"
 #include "Save/RetrieveSaveSubsystem.h"
 #include "Player/RetrievePlayerController.h"
+#include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 #include "Camera/PlayerCameraManager.h"
@@ -1796,7 +1797,14 @@ void URetrieveWorldMapWidget::HandleFastTravelCompleted()
 {
 	if (IsValid(ActiveFastTravelLoadingOverlay))
 	{
-		ActiveFastTravelLoadingOverlay->RemoveFromParent();
+		if (URetrieveLoadingScreenWidget* LS = Cast<URetrieveLoadingScreenWidget>(ActiveFastTravelLoadingOverlay))
+		{
+			LS->PlayFadeOutAndRemove();
+		}
+		else
+		{
+			ActiveFastTravelLoadingOverlay->RemoveFromParent();
+		}
 	}
 	ActiveFastTravelLoadingOverlay = nullptr;
 

@@ -2,6 +2,12 @@
 
 void URetrieveLoadingScreenWidget::PlayFadeOutAndRemove()
 {
+	if (bFadeOutStarted)
+	{
+		return;
+	}
+	bFadeOutStarted = true;
+
 	if (FadeOutAnim)
 	{
 		FWidgetAnimationDynamicEvent EndDelegate;

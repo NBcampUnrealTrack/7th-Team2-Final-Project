@@ -16,6 +16,7 @@
 #include "Subsystems/SystemMessageSubsystem.h"
 #include "UObject/UObjectGlobals.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 #include "World/RetrieveRescueEncounter.h"
 #include "World/RetrieveLostCargoEncounter.h"
 
@@ -191,10 +192,33 @@ void ARetrieveGameMode::HandleRetry(APlayerController* Requestor)
 	// 잔류 위협으로 재사망하면 HandlePlayerDied의 TransitionTo(Result)가 "아직 Result 상태"라
 	// 동일 상태 전환으로 무시되고, 곧이어 InGame으로 넘어가 "죽은 폰 + InGame"(조작 가능한 시체)
 	// 소프트락이 됐다. 전환을 먼저 하면 재사망 시 Result가 정상적으로 다시 뜬다.
+	// 이 전환이 로딩 커버도 함께 띄우므로, 아래 CoverDelay 대기의 전제이기도 하다.
 	GS->TransitionTo(ERetrieveSessionState::InGame);
 
 	const FTransform RespawnTransform = GS->GetLastCheckpointOrFallback();
-	RespawnPlayerAtTransform(Requestor, RespawnTransform);
+
+	UGameInstance* GI = GetGameInstance();
+	URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	const float CoverDelay = SaveSubsystem ? SaveSubsystem->GetCoverFadeInSeconds() : 0.f;
+
+	if (CoverDelay > KINDA_SMALL_NUMBER)
+	{
+		TWeakObjectPtr<APlayerController> WeakRequestor(Requestor);
+		GetWorldTimerManager().SetTimer(
+			RespawnCoverDelayTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this, WeakRequestor, RespawnTransform]()
+			{
+				if (APlayerController* PC = WeakRequestor.Get())
+				{
+					RespawnPlayerAtTransform(PC, RespawnTransform);
+				}
+			}),
+			CoverDelay, false);
+	}
+	else
+	{
+		RespawnPlayerAtTransform(Requestor, RespawnTransform);
+	}
 }
 
 void ARetrieveGameMode::HandleQuitToMenu(APlayerController* Requestor)
@@ -328,7 +352,7 @@ void ARetrieveGameMode::RespawnPlayerAtTransform(APlayerController* Requestor, c
 		UGameInstance* GI = GetGameInstance();
 		if (URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr)
 		{
-			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None);
+			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None, true);
 		}
 	}
 	else if (Requestor)

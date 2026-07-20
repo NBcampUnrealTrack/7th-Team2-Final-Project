@@ -634,12 +634,40 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
 {
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget start"));
+
+	// 이전 전환에서 예약된 지연 스왑이 남아 있으면 취소한다(낡은 상태로 교체되는 것 방지).
+	UWorld* SwapWorld = GetWorld();
+	if (SwapWorld)
+	{
+		SwapWorld->GetTimerManager().ClearTimer(CoverGatedWidgetSwapTimerHandle);
+	}
+
 	const bool bShouldCover = ShouldShowLoadingCover(Previous, NewState);
 	if (bShouldCover)
 	{
 		ShowLoadingScreen();
 	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - loading cover done"));
+
+	// 커버가 올라오는 중이면 완전히 불투명해진 뒤에 위젯을 교체한다.
+	// 즉시 교체하면 반투명한 커버 너머로 메뉴가 사라지고 HUD가 나타나는 것이 그대로 보인다.
+	const float CoverDelay = bShouldCover ? GetActiveCoverFadeInSeconds() : 0.f;
+	if (CoverDelay > KINDA_SMALL_NUMBER && SwapWorld)
+	{
+		SwapWorld->GetTimerManager().SetTimer(
+			CoverGatedWidgetSwapTimerHandle,
+			FTimerDelegate::CreateUObject(this, &ARetrievePlayerController::PerformWidgetSwap, NewState),
+			CoverDelay, /*bLoop*/ false);
+		RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - swap deferred under cover"));
+		return;
+	}
+
+	PerformWidgetSwap(NewState);
+}
+
+void ARetrievePlayerController::PerformWidgetSwap(ERetrieveSessionState NewState)
+{
+	RetrieveDiagCheckpoint(TEXT("PlayerController::PerformWidgetSwap start"));
 
 	if (ActiveTopLevelWidget)
 	{
@@ -710,7 +738,7 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 	{
 		SetHUDHiddenForSetting(true);
 	}
-	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
+	RetrieveDiagCheckpoint(TEXT("PlayerController::PerformWidgetSwap end"));
 }
 
 bool ARetrievePlayerController::ShouldShowLoadingCover(ERetrieveSessionState Previous,
@@ -1022,6 +1050,14 @@ TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieve
 
 void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState NewState)
 {
+	UWorld* World = GetWorld();
+
+	// 상태가 바뀌면 이전 상태에서 예약해 둔 커버 지연 카메라 전환은 무효화한다.
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(CoverGatedCameraTimerHandle);
+	}
+
 	switch (NewState)
 	{
 	case ERetrieveSessionState::MainMenu:
@@ -1029,10 +1065,23 @@ void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState 
 		break;
 
 	case ERetrieveSessionState::InGame:
-		ApplyGameplayCamera();
+	{
+		// 커버가 완전히 불투명해진 뒤에 뷰 타깃을 옮김
+		const float CoverDelay = GetActiveCoverFadeInSeconds();
+		if (CoverDelay > KINDA_SMALL_NUMBER && World)
+		{
+			World->GetTimerManager().SetTimer(CoverGatedCameraTimerHandle, this,
+			                                  &ARetrievePlayerController::ApplyGameplayCamera,
+			                                  CoverDelay, false);
+		}
+		else
+		{
+			ApplyGameplayCamera();
+		}
+
 		if (ActiveLoadingScreen)
 		{
-			if (UWorld* World = GetWorld())
+			if (World)
 			{
 				World->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
 				                                  &ARetrievePlayerController::HideLoadingScreen,
@@ -1048,6 +1097,7 @@ void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState 
 			BroadcastRevealGate(false);
 		}
 		break;
+	}
 
 	default:
 		break;
@@ -1107,6 +1157,15 @@ AActor* ARetrievePlayerController::FindMainMenuCamera() const
 	TArray<AActor*> Found;
 	UGameplayStatics::GetAllActorsWithTag(this, MainMenuCameraTag, Found);
 	return Found.Num() > 0 ? Found[0] : nullptr;
+}
+
+float ARetrievePlayerController::GetActiveCoverFadeInSeconds() const
+{
+	if (const URetrieveLoadingScreenWidget* LS = Cast<URetrieveLoadingScreenWidget>(ActiveLoadingScreen))
+	{
+		return LS->GetCoverFadeInSeconds();
+	}
+	return 0.f;
 }
 
 void ARetrievePlayerController::ShowLoadingScreen()
