@@ -1474,7 +1474,10 @@ struct RETRIEVE_API FParryCounterData
 	TSoftObjectPtr<UAnimMontage> CounterMontage;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack", meta = (ClampMin = "0.0"))
-	float DamageMultiplier = 2.5f;
+	float NormalDamageMultiplier = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack", meta = (ClampMin = "0.0"))
+	float BossDamageMultiplier = 3.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Attack")
 	ERetrieveHitReactType HitReactType = ERetrieveHitReactType::Stagger;
@@ -1501,6 +1504,80 @@ struct RETRIEVE_API FParryCounterData
 	/** 넉백 상향(Z) 강도. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackUpwardStrength = 0.f;
+};
+
+// 무기별 패링 설정. SuccessMontage 유무가 이 무기의 패링 가능 여부를 게이팅한다(비면 R 방어동작 없음 = 활).
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FWeaponParryData
+{
+	GENERATED_BODY()
+
+	// R 방어 시도 모션. AnimNotifyState_ParryWindow를 여기 배치해 판정 창을 만든다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Attempt")
+	TSoftObjectPtr<UAnimMontage> ParryMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Attempt", meta = (ClampMin = "0.1"))
+	float ParryMontagePlayRate = 1.0f;
+
+	// 패링·가드가 성립하는 정면 반각(도). 이 밖(뒤/측면)의 공격은 막지 못한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Attempt", meta = (ClampMin = "0.0", ClampMax = "180.0"))
+	float BlockFrontHalfAngleDeg = 75.0f;
+
+	// 패링 성공 순간의 리액션. 비어있으면 이 무기는 패링 불가(게이트).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	TSoftObjectPtr<UAnimMontage> SuccessMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success", meta = (ClampMin = "0.1"))
+	float SuccessMontagePlayRate = 1.0f;
+
+	// 패링 성공 히트에 실리는 넉백(Strength=0이면 없음. 보스는 면역).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	FRetrieveKnockbackParams SuccessKnockback;
+
+	// 패링 성공 히트의 데미지 배수. 0이면 히트 없음(순수 방어).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success", meta = (ClampMin = "0.0"))
+	float SuccessDamageMultiplier = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	ERetrieveHitReactType SuccessHitReactType = ERetrieveHitReactType::Flinch;
+
+	// 카메라셰이크·데미지플로터 매칭 태그(미설정 시 Attack.HitSuccess.Heavy 폴백).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
+	FGameplayTag SuccessHitSuccessFeedbackTag;
+
+	// 피격자 리액션/피격SFX 매칭 태그(미설정 시 Hit.Heavy 폴백).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success", meta = (Categories = "GameplayEvent.Hit"))
+	FGameplayTag SuccessTargetHitFeedbackTag;
+
+	// 성공 몽타주의 AnimNotify_ParryImpact가 타이밍 맞춰 적용하는 데미지 GE.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	TSubclassOf<UGameplayEffect> SuccessDamageEffect;
+
+	// 카운터 창을 여는 스태거 GE(몹/보스 구분). 지속시간은 CounterWindowDuration과 맞춘다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	TSubclassOf<UGameplayEffect> StaggerEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
+	TSubclassOf<UGameplayEffect> BossStaggerEffect;
+
+	// 좌클릭 카운터 수용 시간(초). 패링 스태거 GE 지속시간과 맞춘다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Counter", meta = (ClampMin = "0.0"))
+	float CounterWindowDuration = 3.0f;
+
+	// 카운터 카메라 구도(타겟 뒤) 피치. 음수=내려다봄.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Counter|Camera")
+	float CounterCameraPitch = -15.f;
+
+	// 플레이어→타겟 방향 기준 요 오프셋(도). 0=정후방.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Counter|Camera")
+	float CounterCameraYawOffset = 0.f;
+
+	// 좌클릭 카운터(원소별 변형 지원).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Counter")
+	FParryCounterData CounterDefault;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Counter")
+	TArray<FParryCounterData> CounterVariants;
 };
 
 // 강공격(Heavy) 데이터
@@ -1568,6 +1645,10 @@ struct RETRIEVE_API FWeaponHeavyAttack
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
 	TSubclassOf<UGameplayEffect> ProjectileElementStatusEffect;
+
+	// 투사체가 실제 발사되는 순간 재생할 사운드(스폰 시점 아님).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|Projectile", meta = (EditCondition = "AttackType == EAttackExecutionType::Projectile"))
+	TSoftObjectPtr<USoundBase> ProjectileLaunchSound;
 
 	// AoE. 캐릭터 중심 구체 반경
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heavy|Attack|AoE", meta = (EditCondition = "AttackType == EAttackExecutionType::AreaOfEffect", ClampMin = "0.0"))

@@ -46,7 +46,8 @@ public:
 
 	// SetCameraBoomProfileOverride로 등록한 구도를 해제한다.
 	// 현재 활성 override와 ID가 다르면 무시해서, 늦게 끝난 어빌리티가 다른 구도를 지우지 않게 한다.
-	void ClearCameraBoomProfileOverride(FName OverrideId);
+	// RestoreArmBlendSpeed >= 0이면 원래 거리로 돌아가는 보간 속도를 이 값으로 덮어쓴다(작을수록 천천히 복귀).
+	void ClearCameraBoomProfileOverride(FName OverrideId, float RestoreArmBlendSpeed = -1.f);
 
 protected:
 	// 스프링암이 충돌/지연 계산을 끝낸 직후 호출됨

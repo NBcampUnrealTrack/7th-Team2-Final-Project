@@ -12,6 +12,7 @@ class UMeshComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UProjectileMovementComponent;
+class USoundBase;
 class USphereComponent;
 class UStaticMeshComponent;
 class UWorld;
@@ -46,6 +47,8 @@ struct FRetrieveProjectileSpawnParams
 	bool bHasAimPoint = false;
 	// 0이면 직선 비행(스태프 강공 등). >0이면 중력 낙차(활). 클수록 빨리 떨어진다.
 	float GravityScaleOverride = 0.f;
+	// 발사(Launch) 순간 재생할 사운드(스폰 시점 아님).
+	TSoftObjectPtr<USoundBase> LaunchSound;
 };
 
 /**
@@ -164,6 +167,8 @@ private:
 
 	// 지연 발사(ArmDelayedLaunch) 상태
 	FTimerHandle LaunchDelayTimerHandle;
+
+	TSoftObjectPtr<USoundBase> LaunchSound;
 	FVector PendingLaunchDirection = FVector::ZeroVector;
 	float PendingLaunchSpeed = 0.f;
 };

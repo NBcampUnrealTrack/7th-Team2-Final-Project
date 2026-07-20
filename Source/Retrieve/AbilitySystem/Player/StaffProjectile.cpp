@@ -14,6 +14,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameplayEffect.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "NiagaraComponent.h"
 #include "TimerManager.h"
@@ -111,6 +113,15 @@ void AStaffProjectile::Launch(const FVector& Direction, float Speed)
 	ProjectileMovement->InitialSpeed = Speed;
 	ProjectileMovement->MaxSpeed = Speed;
 	ProjectileMovement->Velocity = Direction.GetSafeNormal() * Speed;
+
+	// 발사 사운드는 스폰이 아니라 실제 발사 순간(즉발·지연 모두 이 함수를 통과)에 재생.
+	if (!LaunchSound.IsNull())
+	{
+		if (USoundBase* Sound = LaunchSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+		}
+	}
 }
 
 void AStaffProjectile::ArmDelayedLaunch(const FVector& Direction, float Speed, float Delay)
@@ -278,6 +289,7 @@ AStaffProjectile* AStaffProjectile::SpawnConfigured(UWorld* World, AActor* Avata
 
 	Projectile->ConfigureAttack(SourceASC, AvatarActor, Params.DamageMultiplier, Params.HitReactType,
 		Params.AttackTypeTag, Params.ElementTag, Params.ElementStatusEffect, Params.ChargeBonusEventTag);
+	Projectile->LaunchSound = Params.LaunchSound;
 	if (Params.LaunchDelay > 0.f)
 	{
 		// 스폰 후 잠깐 떠 있다 발사(얼음창 맺힘→발사 연출).

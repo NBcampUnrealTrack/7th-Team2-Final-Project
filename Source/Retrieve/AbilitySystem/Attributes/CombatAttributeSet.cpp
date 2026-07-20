@@ -6,7 +6,9 @@
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Combat/RetrieveKnockbackLibrary.h"
+#include "Data/WeaponAttackDefinition.h"
 #include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 #include "Perception/AISense_Damage.h"
@@ -360,53 +362,57 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	}
 
 	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetEffectContext();
-	
-	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying)
-		&& !SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
-	{
-		AActor* InstigatorActor = Context.GetInstigator();
-		AActor* CauserActor = Context.GetEffectCauser();
 
+	// 정면 판정(패링·가드 공용): 뒤/측면에서 온 공격은 막지 못한다.
+	AActor* InstigatorActor = Context.GetInstigator();
+	AActor* CauserActor = Context.GetEffectCauser();
+	const bool bBlockFromFront = IsAttackFromFront(TargetActor, CauserActor, InstigatorActor);
+
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying)
+		&& !SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable)
+		&& bBlockFromFront)
+	{
 		bool bAttackerIsBoss = false;
 		if (const UAbilitySystemComponent* AttackerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InstigatorActor))
 		{
 			bAttackerIsBoss = AttackerASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
 		}
 
-		// 보스 X = 기본 패리 가능 / 보스 O = Parryable 태그가 실린 공격만.
-		const bool bParryable = !bAttackerIsBoss || SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Parryable);
-		if (bParryable)
+		// 패링 타이밍만 맞으면 모든 비Unblockable 공격은 데미지 0(몹·보스 공통).
+		// 스태거+카운터 자격만 분리: 일반몹=항상, 보스=Attack.Type.Parryable 패턴일 때만.
+		const bool bCounterEligible = !bAttackerIsBoss || SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Parryable);
+
+		// (a) 자격이 있을 때만 공격자에게 "패리당함" 발행 → 공격자 GA가 self-stagger + cancel(공격 중단).
+		//     보스 비카운터 패턴은 데미지만 막고 공격을 끊지 않는다.
+		if (bCounterEligible && IsValid(InstigatorActor))
 		{
-			// (a) 공격자에게 "패리당함" 발행 → 공격자 GA가 self-stagger + cancel
-			if (IsValid(InstigatorActor))
-			{
-				FGameplayEventData ToAttacker;
-				ToAttacker.Instigator = InstigatorActor;
-				ToAttacker.Target = TargetActor;
-				ToAttacker.OptionalObject = CauserActor;
-				ToAttacker.EventTag = RetrieveGameplayTags::GameplayEvent_Parried;
-				ToAttacker.TargetTags = SpecTags;
-				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-					InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
-			}
-
-			// (b) 방어자에게 "패리 성공" 발행 → GA_Parry/Guard가 카운터 윈도우 부여 + Cue
-			FGameplayEventData ToVictim;
-			ToVictim.Instigator = TargetActor;
-			ToVictim.Target = TargetActor;
-			ToVictim.OptionalObject = InstigatorActor;
-			ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
+			FGameplayEventData ToAttacker;
+			ToAttacker.Instigator = InstigatorActor;
+			ToAttacker.Target = TargetActor;
+			ToAttacker.OptionalObject = CauserActor;
+			ToAttacker.EventTag = RetrieveGameplayTags::GameplayEvent_Parried;
+			ToAttacker.TargetTags = SpecTags;
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
-				TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
-
-			return 0.f;
+				InstigatorActor, RetrieveGameplayTags::GameplayEvent_Parried, ToAttacker);
 		}
+
+		// (b) 방어자에게 "패리 성공" 발행. EventMagnitude로 카운터 자격 전달(1=자격 / 0=단순 막기).
+		FGameplayEventData ToVictim;
+		ToVictim.Instigator = TargetActor;
+		ToVictim.Target = TargetActor;
+		ToVictim.OptionalObject = InstigatorActor;
+		ToVictim.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Success;
+		ToVictim.EventMagnitude = bCounterEligible ? 1.f : 0.f;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+			TargetActor, RetrieveGameplayTags::GameplayEvent_Parry_Success, ToVictim);
+
+		return 0.f;
 	}
 
 	// 2. GUARD
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
 
-	if (bGuarding)
+	if (bGuarding && bBlockFromFront)
 	{
 		if (SpecTags.HasTag(RetrieveGameplayTags::Attack_Property_GuardBreak) ||
 			SpecTags.HasTag(RetrieveGameplayTags::Attack_Type_Unblockable))
@@ -427,6 +433,35 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 	}
 	
 	return ApplyDefenseMitigation(RawDamage);
+}
+
+bool UCombatAttributeSet::IsAttackFromFront(const AActor* Defender, const AActor* Causer, const AActor* Instigator) const
+{
+	// 투사체는 Causer(투사체 위치)가 "날아온 방향", 근접은 보통 Causer=공격자. 둘 다 없으면 Instigator.
+	const AActor* Source = IsValid(Causer) ? Causer : Instigator;
+	if (!IsValid(Defender) || !IsValid(Source))
+	{
+		return true; // 출처 불명이면 기존 동작(막기 허용) 유지.
+	}
+
+	const FVector Forward = Defender->GetActorForwardVector().GetSafeNormal2D();
+	const FVector ToSource = (Source->GetActorLocation() - Defender->GetActorLocation()).GetSafeNormal2D();
+	if (Forward.IsNearlyZero() || ToSource.IsNearlyZero())
+	{
+		return true;
+	}
+
+	float HalfAngleDeg = 75.f;
+	if (const UWeaponComponent* Weapon = Defender->FindComponentByClass<UWeaponComponent>())
+	{
+		if (const UWeaponAttackDefinition* Def = Weapon->GetWeaponDataRef().AttackComboDefinition.LoadSynchronous())
+		{
+			HalfAngleDeg = Def->Parry.BlockFrontHalfAngleDeg;
+		}
+	}
+
+	const float CosHalf = FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(HalfAngleDeg, 0.f, 180.f)));
+	return FVector::DotProduct(Forward, ToSource) >= CosHalf;
 }
 
 void UCombatAttributeSet::ApplyLifeStealToSource(const FGameplayEffectModCallbackData& Data, float DamageDone, const FGameplayTagContainer& SpecTags) const
@@ -536,7 +571,8 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		const APawn* TargetPawn = Cast<APawn>(TargetActor);
 		const bool bSkipDefaultKnockback =
 			(TargetPawn && TargetPawn->IsPlayerControlled()) ||
-			Data.Target.HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+			Data.Target.HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss) ||
+			SourceTags.HasTag(RetrieveGameplayTags::Attack_Property_NoKnockback);
 		if (DefaultStrength > 0.f && !bSkipDefaultKnockback)
 		{
 			if (ACharacter* TargetCharacter = Cast<ACharacter>(TargetActor))

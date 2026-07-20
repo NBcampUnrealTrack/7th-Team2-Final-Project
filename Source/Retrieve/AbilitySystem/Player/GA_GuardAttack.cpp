@@ -195,21 +195,8 @@ bool UGA_GuardAttack::OpenNotifyParryWindow()
 
 void UGA_GuardAttack::CloseNotifyParryWindow()
 {
-	// NotifyState End에서 닫히는 정상 실패/만료도 "패리 시도 1회"로 본다.
-	// 그래서 window가 실제로 열린 적이 있으면 cooldown을 적용한다.
-	//
-	// 성공 경로:
-	// - UGA_ParryBase::HandleParrySuccess가 이미 CloseParryWindow + ApplyParryCooldown + StopParrySuccessTask를 수행한다.
-	// - 그 뒤 NotifyEnd가 다시 들어와도 bHadParryWindow가 false가 되므로 cooldown이 중복 적용되지 않는다.
-	const bool bHadParryWindow = bParryWindowOpened || ParryWindowHandle.IsValid();
-
+	// GuardAttack은 은퇴 — 남은 경로 안전을 위해 창만 닫는다.
 	CloseParryWindow();
-
-	if (bHadParryWindow)
-	{
-		ApplyParryCooldown();
-	}
-
 	StopParrySuccessTask();
 }
 

@@ -259,6 +259,7 @@ AStaffProjectile* UGA_HeavyAttack::SpawnOneProjectile(FVector SpawnOffset, bool 
 	Params.ElementTag = CachedElementTag;
 	Params.ElementStatusEffect = CachedVariant.ProjectileElementStatusEffect;
 	Params.ChargeBonusEventTag = CachedVariant.ChargeBonusEventTag;
+	Params.LaunchSound = CachedVariant.ProjectileLaunchSound;
 
 	UMeshComponent* WeaponMesh = IsValid(CachedWeaponComponent) ? CachedWeaponComponent->GetPrimaryEquippedWeaponMesh() : nullptr;
 	return AStaffProjectile::SpawnConfigured(World, AvatarActor, GetAbilitySystemComponentFromActorInfo(), WeaponMesh, CachedAimTarget, Params);

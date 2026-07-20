@@ -47,7 +47,9 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	// ALS가 매 프레임 SetActorRotation으로 회전을 직접 제어하므로
 	// bOrientRotationToMovement / RotationRate 라인은 제거됨 (이전 의도는 GAS 태그로 처리됨).
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
-	MoveComp->JumpZVelocity = 600.f;
+	// 점프 방방거림 방지: 중력을 키우고 그만큼 점프 속도도 올려 높이는 유지, 체공만 줄인다.
+	MoveComp->GravityScale = 1.75f;
+	MoveComp->JumpZVelocity = 800.f;
 	MoveComp->AirControl = 0.35f;
 
 	// 적의 RVO 회피가 플레이어를 장애물로 인식하도록 등록. Weight=1.0(>=1.0)이라 자기 회피 계산(CalcAvoidanceVelocity)이 스킵되어 플레이어 자신은 비켜서지 않음.

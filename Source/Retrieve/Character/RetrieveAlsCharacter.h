@@ -93,6 +93,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Action")
 	void SetSuppressLandingRoll(bool bSuppress) { bSuppressLandingRoll = bSuppress; }
 
+	/** 블링크 시작: 이동 과정이 안 보이도록 메시를 숨기고 낙하 데미지를 억제한다. 착지 또는 MaxDuration 후 자동 복원(EndBlink). */
+	void BeginBlink(float MaxDuration);
+
+	/** 내리막 고속 낙하: 중력을 강하게(GravityScale) 키워 바닥까지 빠르게 떨어지게 한다. EndBlink에서 원복. */
+	void SetBlinkFallGravity(float GravityScale);
+
+	/** 블링크 종료(착지/타이머/취소): 메시 다시 표시 + 중력·낙뎀억제 원복. */
+	void EndBlink();
+
 protected:
 	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaTime) override;
@@ -208,6 +217,12 @@ private:
 
 	/** true면 다음 착지 1회의 낙법을 억제 (NotifyLocomotionModeChanged에서 소비). JumpAttack이 발동 시 설정 */
 	bool bSuppressLandingRoll = false;
+
+	/** 블링크 진행 상태. true면 메시 숨김 + 착지 시 낙하 데미지·낙법 억제. BlinkTimer가 안전 해제. */
+	bool bBlinkActive = false;
+	bool bBlinkGravityBoosted = false;
+	float SavedGravityScale = 1.f;
+	FTimerHandle BlinkTimer;
 
 	/** true면 ALS velocity 회전을 가로채 facing 유지 (공격 종료 후 후방 회전 방지). 이동 입력 시 자동 해제 */
 	bool bHoldFacing = false;

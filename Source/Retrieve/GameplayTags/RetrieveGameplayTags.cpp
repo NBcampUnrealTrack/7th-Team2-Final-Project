@@ -149,6 +149,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property, "Attack.Property");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_Critical, "Attack.Property.Critical");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_NoKnockback, "Attack.Property.NoKnockback");
 
 	// ---- Hit react type
 	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type, "HitReact.Type");
@@ -516,6 +517,7 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Staff
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Cast, "GameplayCue.Staff.Cast");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Impact, "GameplayCue.Staff.Impact");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Blink, "GameplayCue.Blink");
 
 	// ---- Gameplay cues: Parry
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Parry_Success, "GameplayCue.Parry.Success");

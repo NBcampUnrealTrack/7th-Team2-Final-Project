@@ -22,4 +22,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat")
 	FGameplayTag EventTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Combat", meta = (ClampMin = "0.0"))
+	float DamageScale = 1.0f;
 };

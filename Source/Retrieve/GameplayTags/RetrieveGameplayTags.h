@@ -153,6 +153,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_GuardBreak);
 	// ExecCalc 크리티컬 굴림 성공 시 스펙에 동적 부착 — 플로터/큐 강조용
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_Critical);
+	// 전역 기본 넉백까지 스킵하는 히트(카운터 찌르기 등).
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_NoKnockback);
 
 	// ---- Hit react type
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type);
@@ -536,6 +538,7 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Staff
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Staff_Cast);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Staff_Impact);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Blink);
 
 	// ---- Gameplay cues: Parry
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Parry_Success);

@@ -63,13 +63,11 @@ public:
 
 	const FWeaponAbsorbCast* ResolveAbsorbVariant(const FGameplayTag& ElementTag) const;
 	
-	// --- Parry Counter ---
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter")
-	FParryCounterData ParryDefault;
+	// --- Parry (통합: 시도/성공/카운터) ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry")
+	FWeaponParryData Parry;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParryCounter")
-	TArray<FParryCounterData> ParryVariants;
-
+	// 좌클릭 카운터의 원소 변형 조회(Parry.CounterVariants → Parry.CounterDefault 폴백).
 	const FParryCounterData* ResolveParryVariant(const FGameplayTag& ElementTag) const;
 
 	// --- Guard Attack (optional) ---
@@ -83,11 +81,4 @@ public:
 	TArray<FWeaponHeavyAttack> HeavyVariants;
 
 	const FWeaponHeavyAttack* ResolveHeavyVariant(const FGameplayTag& ElementTag) const;
-
-	// --- Parry Success Reaction ---
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParrySuccess")
-	TSoftObjectPtr<UAnimMontage> ParrySuccessMontage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ParrySuccess", meta = (ClampMin = "0.1"))
-	float ParrySuccessMontagePlayRate = 1.0f;
 };

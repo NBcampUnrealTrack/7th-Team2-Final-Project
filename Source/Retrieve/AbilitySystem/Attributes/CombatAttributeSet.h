@@ -178,6 +178,8 @@ private:
 	float HandleIncomingDamage_Defense(const FGameplayEffectModCallbackData& Data, float RawDamage, const FGameplayTagContainer& SpecTags);
 	// 방어력 비율 감쇄: 받는 피해 = Damage * DefenseConstant/(DefenseConstant + Defense), 최소 1 보장
 	float ApplyDefenseMitigation(float Damage) const;
+	// 공격이 방어자 정면 아크(무기 DA의 Parry.BlockFrontHalfAngleDeg) 안에서 왔는지. 투사체는 Causer(투사체 위치) 기준, 근접은 Instigator.
+	bool IsAttackFromFront(const AActor* Defender, const AActor* Causer, const AActor* Instigator) const;
 	// 데미지 적용 후 카메라/플로터/리액션 시스템에 알릴 이벤트 발행
 	void BroadcastHitEvent(const struct FGameplayEffectModCallbackData& Data, float DamageDone) const;
 	// 공격자의 LifeStealRatio에 따라 최종 데미지 비율만큼 공격자 체력 회복 (환경/DoT/자기피격 제외)
