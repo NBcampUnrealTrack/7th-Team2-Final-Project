@@ -454,6 +454,7 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_SkipPrompt, "Channel.Cinematic.SkipPrompt");
 
 	// ---- Dialogue: 가위바위보 내기 토픽
 	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Start, "Dialogue.Bet.Start");

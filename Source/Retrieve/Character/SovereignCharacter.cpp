@@ -281,6 +281,30 @@ void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 	);
 }
 
+void ASovereignCharacter::FellOutOfWorld(const UDamageType& DmgType)
+{
+	// 주의: Super(엔진 기본)를 호출하지 않는다 — 기본 구현은 폰을 Destroy하는데,
+	// 파괴된 폰은 HandleRetry→RespawnPlayerAtTransform의 Revive 대상이 될 수 없어
+	// "죽었는데 영원히 리스폰 안 됨" 소프트락이 된다(즉사급 해저드 + 낙사 구덩이 조합에서 재현).
+
+	// 아직 사망 처리 전이면(순수 낙사 등) 정규 사망 흐름을 태운다 — Result 화면/부활 UI까지 정상 진행.
+	if (URetrieveHealthComponent* HC = GetHealthComponent())
+	{
+		HC->KillOwner(); // 이미 사망 진행 중이면 내부에서 no-op
+	}
+
+	// 래그돌 시체가 KillZ 아래로 무한 낙하하며 이 콜백이 매 틱 재진입하지 않도록 물리를 동결한다.
+	// (무브먼트 모드는 건드리지 않는다 — 래그돌 외 경로에서 MOVE_None을 걸면 Revive가 복구하지 못하고,
+	//  래그돌 경로는 ALS가 이미 무브먼트를 세워둔 상태다. Revive의 StopRagdoll/텔레포트가 상태를 복원한다.)
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		if (MeshComp->IsSimulatingPhysics())
+		{
+			MeshComp->SetSimulatePhysics(false);
+		}
+	}
+}
+
 void ASovereignCharacter::Revive(const FTransform& RespawnTransform)
 {
 	Super::Revive(RespawnTransform);

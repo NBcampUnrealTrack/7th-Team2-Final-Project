@@ -2,15 +2,15 @@
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
-#include "Settings/RetrieveSettingsSubsystem.h"
+#include "Components/PanelWidget.h"
 #include "Settings/RetrieveGameUserSettings.h"
+#include "Settings/RetrieveSettingsSubsystem.h"
+#include "UI/RetrieveSystemMessageWidget.h"
 #include "Engine/LocalPlayer.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Components/PanelWidget.h"
-#include "UI/RetrieveSystemMessageWidget.h"
 #include "Components/Combat/AttackFeedbackComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
@@ -427,6 +427,23 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 	if (Params.Event == IE_Pressed)
 	{
+		// 시네마틱 스킵: Space/ESC 연타(확인 창 내 2회). 시네마틱 중엔 DisableInput이 걸려 있지만
+		// InputKey는 뷰포트 raw 경로라 여기서 처리한다. 스킵 불가 컷씬이면 서브시스템이 false를
+		// 반환해 입력을 소비하지 않는다(ESC의 시스템 메뉴는 시네마틱 중 기존 차단이 그대로 유효).
+		if ((Params.Key == EKeys::SpaceBar || Params.Key == EKeys::Escape) && IsCinematicActive())
+		{
+			if (UWorld* World = GetWorld())
+			{
+				if (URetrieveCinematicSubsystem* Cinematic = World->GetSubsystem<URetrieveCinematicSubsystem>())
+				{
+					if (Cinematic->NotifySkipKeyPressed())
+					{
+						return true;
+					}
+				}
+			}
+		}
+
 		if (ActivePanel && Params.Key == EKeys::Escape)
 		{
 			CloseActivePanel();
@@ -467,7 +484,7 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 		// 패널이 열려있는 동안은 위에서 처리되지 않은 키보드/게임패드 입력을 차단한다.
 		// 마우스 버튼은 제외(월드맵 패닝·클릭은 Slate UI가 직접 처리).
-		if (ActivePanel && !Params.Key.IsMouseButton())
+		if (ActivePanel && !Params.Key.IsMouseButton()) 
 		{
 			return true;
 		}
@@ -683,19 +700,15 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 		}
 	}
 
-	// 인게임 진입 시에만 HUD 숨김을 적용한다(메인 메뉴/결과 화면 위젯은 통째로 사라지지 않도록).
-	if (NewState == ERetrieveSessionState::InGame)
+	// 시네마틱 재생 중에 위젯이 교체/생성된 경우(오프닝과 상태 전환 경합 등) 새 위젯도 숨김 대상에 포함
+	if (IsCinematicActive())
 	{
-		// 시네마틱 재생 중이면 새로 생성/교체된 HUD도 일괄 숨김(기존 동작).
-		if (IsCinematicActive())
-		{
-			SetHUDHiddenForCinematic(true);
-		}
-		// "HUD 숨기기" 설정이 켜져 있으면 새 HUD의 게임플레이 요소를 숨긴다(시스템 메시지는 유지).
-		if (IsHideHUDEnabled())
-		{
-			SetHUDHiddenForSetting(true);
-		}
+		SetHUDHiddenForCinematic(true);
+	}
+	// "HUD 숨기기" 설정이 켜져 있으면 새 HUD의 게임플레이 요소를 숨긴다(시스템 메시지는 유지).
+	if (IsHideHUDEnabled())
+	{
+		SetHUDHiddenForSetting(true);
 	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
 }
@@ -812,9 +825,7 @@ void ARetrievePlayerController::EnsureCinematicCloseListener()
 				{
 					PC->CloseConversation();
 				}
-				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원.
-				// (HUD 숨기기 설정은 별도 경로 SetHUDHiddenForSetting가 담당하며, 루트 자식만 접으므로
-				//  시네마틱이 루트를 복원해도 설정으로 접힌 자식들은 그대로 숨겨진 채 유지된다.)
+				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원
 				PC->SetHUDHiddenForCinematic(Message.bActive);
 			});
 }

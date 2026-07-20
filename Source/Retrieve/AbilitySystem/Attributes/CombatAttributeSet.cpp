@@ -182,6 +182,13 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffect
 			{
 				if (URetrieveHealthComponent* HealthComp = DamagedActor->FindComponentByClass<URetrieveHealthComponent>())
 				{
+					// 부활 보호 창: 부활 직후 시체 위치의 잔류 위협(해저드 틱/잔류 투사체)이
+					// 같은 프레임에 재사망시키면 Result 재전환이 무시돼 "죽은 폰 + InGame" 소프트락이 된다.
+					// 사망→부활 경로에서만 잠깐 활성(HealthComponent::Revive 참고).
+					if (HealthComp->IsReviveProtectionActive())
+					{
+						return; // IncomingDamage는 이미 0으로 소거됨 — 데미지/피격 이벤트 모두 무시
+					}
 					HealthComp->NotifyDamageContext(DamageContext.GetInstigator(), DamageContext.GetEffectCauser());
 				}
 			}

@@ -466,6 +466,8 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Dialogue_LineRequested);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_Changed);
+	/** 시네마틱 스킵 확인 프롬프트 표시/숨김 (payload: FRetrieveCinematicStatePayload.bActive). 오버레이 위젯이 구독해 "한 번 더 누르면 스킵" UI를 띄운다. */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_SkipPrompt);
 
 	// ---- Dialogue: 가위바위보 내기 토픽 (DT_Dialogue 행 없이 DialogueComponent가 직접 처리)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Start);

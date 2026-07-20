@@ -187,12 +187,14 @@ void ARetrieveGameMode::HandleRetry(APlayerController* Requestor)
 		return;
 	}
 
+	// 순서 중요: InGame 전환을 부활보다 먼저 한다. 반대 순서(부활 → InGame)에서는 부활 직후
+	// 잔류 위협으로 재사망하면 HandlePlayerDied의 TransitionTo(Result)가 "아직 Result 상태"라
+	// 동일 상태 전환으로 무시되고, 곧이어 InGame으로 넘어가 "죽은 폰 + InGame"(조작 가능한 시체)
+	// 소프트락이 됐다. 전환을 먼저 하면 재사망 시 Result가 정상적으로 다시 뜬다.
+	GS->TransitionTo(ERetrieveSessionState::InGame);
+
 	const FTransform RespawnTransform = GS->GetLastCheckpointOrFallback();
 	RespawnPlayerAtTransform(Requestor, RespawnTransform);
-
-	GS->TransitionTo(ERetrieveSessionState::Result == GS->GetSessionState()
-		                 ? ERetrieveSessionState::InGame
-		                 : ERetrieveSessionState::InGame);
 }
 
 void ARetrieveGameMode::HandleQuitToMenu(APlayerController* Requestor)
@@ -328,6 +330,16 @@ void ARetrieveGameMode::RespawnPlayerAtTransform(APlayerController* Requestor, c
 		{
 			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None);
 		}
+	}
+	else if (Requestor)
+	{
+		// 폰이 파괴/유실된 비정상 경로(외부 Destroy, 과거 빌드의 KillZ 파괴 등) 최후 방어:
+		// Revive 대상이 없으므로 기본 폰을 체크포인트에 새로 스폰해 빙의시킨다.
+		// (정상 경로는 위의 Revive 재사용 — 인벤토리/체력 컴포넌트 상태 유지)
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GameMode] RespawnPlayerAtTransform: 유효한 폰이 없어 RestartPlayerAtTransform 폴백으로 새 폰을 스폰합니다 (Requestor=%s)"),
+			*GetNameSafe(Requestor));
+		RestartPlayerAtTransform(Requestor, RespawnTransform);
 	}
 }
 

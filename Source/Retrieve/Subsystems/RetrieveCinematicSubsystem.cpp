@@ -9,9 +9,11 @@
 #include "Core/RetrieveGameState.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/RetrieveMessageTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
@@ -23,6 +25,9 @@
 namespace
 {
 	constexpr float CinematicAudioFadeSeconds = 0.8f;
+
+	// 스킵 확인 창(초): 첫 스킵 키 입력 후 이 시간 안에 한 번 더 누르면 스킵 확정.
+	constexpr float CinematicSkipConfirmWindowSeconds = 1.5f;
 }
 
 bool URetrieveCinematicSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -53,6 +58,7 @@ bool URetrieveCinematicSubsystem::PlayCinematic(ULevelSequence* Sequence, const 
 	ActivePlayerActor = OutActor;
 	ActiveParams = Params;
 	bFinishHandled = false;
+	LastSkipPressRealTime = -1.0;
 
 	SetCinematicStateOnGameState(true);
 	if (Params.bApplyCinematicTag)
@@ -100,6 +106,52 @@ void URetrieveCinematicSubsystem::StopCinematic()
 	}
 }
 
+bool URetrieveCinematicSubsystem::NotifySkipKeyPressed()
+{
+	UWorld* World = GetWorld();
+	if (!World || !IsActiveCinematicSkippable() || bFinishHandled)
+	{
+		return false;
+	}
+
+	const double Now = World->GetRealTimeSeconds();
+
+	// 확인 창 안의 두 번째 입력 → 스킵 확정
+	if (LastSkipPressRealTime >= 0.0 && (Now - LastSkipPressRealTime) <= CinematicSkipConfirmWindowSeconds)
+	{
+		LastSkipPressRealTime = -1.0;
+		World->GetTimerManager().ClearTimer(SkipPromptResetTimer);
+		SetSkipPromptVisible(false);
+		StopCinematic(); // OnStop → HandleSequenceFinished가 태그/입력/오디오/HUD 정리를 일괄 수행
+		return true;
+	}
+
+	// 첫 입력 → 확인 프롬프트 표시, 창이 지나면 자동으로 내림
+	LastSkipPressRealTime = Now;
+	SetSkipPromptVisible(true);
+	World->GetTimerManager().SetTimer(SkipPromptResetTimer,
+		FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			LastSkipPressRealTime = -1.0;
+			SetSkipPromptVisible(false);
+		}),
+		CinematicSkipConfirmWindowSeconds, false);
+	return true;
+}
+
+void URetrieveCinematicSubsystem::SetSkipPromptVisible(bool bVisible)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	FRetrieveCinematicStatePayload Payload;
+	Payload.bActive = bVisible;
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(
+		RetrieveGameplayTags::Channel_Cinematic_SkipPrompt, Payload);
+}
+
 void URetrieveCinematicSubsystem::HandleSequenceFinished()
 {
 	
@@ -108,6 +160,17 @@ void URetrieveCinematicSubsystem::HandleSequenceFinished()
 		return;
 	}
 	bFinishHandled = true;
+
+	// 스킵 확인 대기 상태 정리(자연 종료/중단 공통) — 프롬프트가 종료 후 화면에 남지 않도록.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SkipPromptResetTimer);
+	}
+	if (LastSkipPressRealTime >= 0.0)
+	{
+		LastSkipPressRealTime = -1.0;
+		SetSkipPromptVisible(false);
+	}
 
 	if (ActiveParams.bApplyCinematicTag)
 	{
@@ -126,6 +189,15 @@ void URetrieveCinematicSubsystem::HandleSequenceFinished()
 			FTimerDelegate::CreateWeakLambda(this, [this]() { RestoreLocalPawnAnimationMode(); }));
 	}
 	ApplyAudioSuppression(false);
+
+	// 시퀀스가 Time Dilation 트랙(슬로모 연출)을 쓰는 도중 스킵/중단되면, 섹션의
+	// When Finished=Restore State가 아니면 전역 슬로모가 잔류한다. PlayCinematic의
+	// 시작 정규화와 대칭으로 종료 시에도 방어적으로 원복한다(자연 종료 시엔 no-op).
+	if (UWorld* World = GetWorld();
+		World && !FMath::IsNearlyEqual(UGameplayStatics::GetGlobalTimeDilation(World), 1.f))
+	{
+		UGameplayStatics::SetGlobalTimeDilation(World, 1.f);
+	}
 
 	SetCinematicStateOnGameState(false);
 

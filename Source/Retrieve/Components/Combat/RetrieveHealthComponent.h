@@ -51,6 +51,12 @@ public:
 	void Revive();
 	void KillOwner();
 
+	/** 부활 직후 데미지 면역 창이 활성인지. 시체 위치의 잔류 위협(해저드 주기 틱/잔류 투사체)이
+	 * 부활 프레임에 즉시 재사망시키면, Result 재전환이 동일 상태로 무시된 채 InGame으로 넘어가
+	 * "죽은 폰 + InGame"(조작 가능한 시체) 소프트락이 된다. CombatAttributeSet의 데미지 적용부가 확인.
+	 * 사망→부활(Revive) 경로에서만 활성 — 모닥불 휴식의 적 ResetHealth에는 적용되지 않는다. */
+	bool IsReviveProtectionActive() const;
+
 public:
 	UPROPERTY(BlueprintAssignable)
 	FOnHealthChanged OnHealthChanged;
@@ -66,6 +72,10 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category="Retrieve|Health")
 	TWeakObjectPtr<AActor> LastDamageCauser;
+
+private:
+	/** 부활 보호 종료 시각(RealTimeSeconds, 딜레이션 무관). 음수 = 비활성. Revive()가 세팅. */
+	double ReviveProtectionEndRealTime = -1.0;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

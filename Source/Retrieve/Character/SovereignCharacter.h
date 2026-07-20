@@ -48,6 +48,11 @@ protected:
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
 	virtual void Revive(const FTransform& RespawnTransform) override;
 
+	/** KillZ 아래로 떨어져도 엔진 기본(Destroy)을 타지 않는다 — 플레이어 폰이 파괴되면
+	 * Result→부활의 Revive 대상이 사라져 영구 리스폰 불가 소프트락이 된다(낙사 구덩이 사망).
+	 * 대신 정규 사망 흐름을 태우고 시체를 제자리에 동결해 Revive가 수거하게 둔다. */
+	virtual void FellOutOfWorld(const UDamageType& DmgType) override;
+
 	virtual USpringArmComponent* GetCameraSpringArm() const override { return CameraSpringArm; }
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Components")
