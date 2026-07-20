@@ -82,6 +82,9 @@ protected:
 	void HandleOptionsClicked();
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void HandleCreditsClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
 	void HandleQuitClicked();
 
 private:

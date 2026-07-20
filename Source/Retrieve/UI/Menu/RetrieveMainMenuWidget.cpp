@@ -28,6 +28,10 @@ void URetrieveMainMenuWidget::NativeConstruct()
 	{
 		OptionsButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleOptionsClicked);
 	}
+	if (CreditsButton)
+	{
+		CreditsButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleCreditsClicked);
+	}
 	if (QuitButton)
 	{
 		QuitButton->OnClicked.AddDynamic(this, &URetrieveMainMenuWidget::HandleQuitClicked);
@@ -56,10 +60,6 @@ void URetrieveMainMenuWidget::NativeConstruct()
 	if (LoadGameButton)
 	{
 		LoadGameButton->SetIsEnabled(bSaveDataExists);
-	}
-	if (CreditsButton)
-	{
-		CreditsButton->SetIsEnabled(false);
 	}
 
 	ShowTitleCard();
@@ -139,6 +139,14 @@ void URetrieveMainMenuWidget::HandleOptionsClicked()
 	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
 	{
 		PC->OpenSettingsPanel();
+	}
+}
+
+void URetrieveMainMenuWidget::HandleCreditsClicked()
+{
+	if (ARetrievePlayerController* PC = GetRetrievePlayerController())
+	{
+		PC->OpenCreditsPanel();
 	}
 }
 

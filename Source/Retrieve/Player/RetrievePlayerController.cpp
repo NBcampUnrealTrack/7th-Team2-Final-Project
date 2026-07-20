@@ -153,6 +153,8 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Settings/WBP_SettingsScreen.WBP_SettingsScreen_C")));
 	LoadGamePanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_LoadGame.WBP_LoadGame_C")));
+	CreditsPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_Credits.WBP_Credits_C")));
 	SystemMenuClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_SystemMenu.WBP_SystemMenu_C")));
 	ControlsGuideClass = TSoftClassPtr<URetrieveGamePanelWidget>(
@@ -1429,6 +1431,25 @@ void ARetrievePlayerController::OpenControlsGuide()
 	{
 		URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(ActivePanel);
 	}
+}
+
+void ARetrievePlayerController::OpenCreditsPanel()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = CreditsPanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		// 값이 비어 있어도 알려진 경로로 폴백(에셋은 /Game/Retrieve/UI/Menu always-cook로 패키지 포함).
+		PanelClass = LoadClass<URetrieveGamePanelWidget>(
+			nullptr, TEXT("/Game/Retrieve/UI/Menu/WBP_Credits.WBP_Credits_C"));
+	}
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open credits: CreditsPanelClass is empty and fallback load failed."));
+		return;
+	}
+
+	// 메인메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
+	OpenExclusivePanel(PanelClass, EKeys::Escape);
 }
 
 void ARetrievePlayerController::CloseActivePanel()

@@ -350,6 +350,10 @@ public:
 	UFUNCTION(BlueprintCallable, Exec, Category = "Retrieve|Menu")
 	void OpenLoadGamePanel();
 
+	/** 메인메뉴 "크레딧" 버튼에서 여는 진입점. 크레딧 화면(WBP_Credits)을 연다. 현재 패널은 교체된다. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Menu")
+	void OpenCreditsPanel();
+
 	/** 순수 게임플레이 중 ESC로 여는 시스템 메뉴. SystemMenuClass가 비어 있으면 무시된다. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|UI")
 	void OpenSystemMenu();
@@ -403,6 +407,10 @@ protected:
 	/** 메인메뉴 불러오기 화면(WBP_LoadGame). 기본값은 C++ 생성자에서 지정, BP에서 오버라이드 가능. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
 	TSoftClassPtr<URetrieveGamePanelWidget> LoadGamePanelClass;
+
+	/** 메인메뉴 크레딧 화면(WBP_Credits). 기본값은 C++ 생성자에서 지정, BP에서 오버라이드 가능. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Menu")
+	TSoftClassPtr<URetrieveGamePanelWidget> CreditsPanelClass;
 
 	/** 시스템 메뉴 위젯(WBP_SystemMenu). BP_RetrievePlayerController에서 할당. 비어 있으면 ESC 시스템 메뉴는 비활성. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|UI")
