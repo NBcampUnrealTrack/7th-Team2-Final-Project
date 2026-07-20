@@ -2,6 +2,7 @@
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "RetrieveGameState.h"
+#include "Character/LumenCharacter.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Data/RetrieveOpeningSequenceAsset.h"
@@ -14,6 +15,7 @@
 #include "Subsystems/QuestNotificationSubsystem.h"
 #include "Subsystems/RetrieveCinematicSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
+#include "UI/Menu/RetrieveCreditsWidget.h"
 #include "UObject/UObjectGlobals.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -71,6 +73,10 @@ void ARetrieveGameMode::BeginPlay()
 			RetrieveGameplayTags::Channel_Player_Died, this, &ARetrieveGameMode::HandlePlayerDied);
 		RevealGateListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveRevealGatePayload>(
 			RetrieveGameplayTags::Channel_UI_RevealGate, this, &ARetrieveGameMode::HandleRevealGate);
+		QueenDefeatedListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FMonsterDiedPayload>(
+			RetrieveGameplayTags::Channel_Game_QueenDefeated, this, &ARetrieveGameMode::HandleQueenDefeated);
+		EndgameStepChangedListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveQuestStepPayload>(
+			RetrieveGameplayTags::Channel_Quest_StepChanged, this, &ARetrieveGameMode::HandleEndgameStepChanged);
 	}
 }
 
@@ -270,8 +276,32 @@ void ARetrieveGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(OpeningCinematicListener);
 			OpeningCinematicListener = FGameplayMessageListenerHandle();
 		}
+		if (QueenDefeatedListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(QueenDefeatedListener);
+			QueenDefeatedListener = FGameplayMessageListenerHandle();
+		}
+		if (EndgameStepChangedListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameStepChangedListener);
+			EndgameStepChangedListener = FGameplayMessageListenerHandle();
+		}
+		if (EndgameCinematicListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameCinematicListener);
+			EndgameCinematicListener = FGameplayMessageListenerHandle();
+		}
 		World->GetTimerManager().ClearTimer(OpeningBeatTimer);
+		World->GetTimerManager().ClearTimer(CreditsFallbackTimer);
 	}
+
+	if (URetrieveCreditsWidget* Credits = BoundCreditsWidget.Get())
+	{
+		Credits->OnCreditsCompleted.RemoveDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+	}
+	BoundCreditsWidget.Reset();
+	bCreditsActive = false;
+	PendingCreditsContinuation = nullptr;
 	
 	Super::EndPlay(EndPlayReason);
 }
@@ -397,6 +427,14 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 	{
 		Quest->ResetForTest();
 	}
+	
+	if (ALumenCharacter* Lumen = FindLumen())
+	{
+		Lumen->SetRetired(false);
+	}
+
+	bHandoverCinematicPlayed = false;
+	bEndgameSequenceStarted = false;
 }
 
 void ARetrieveGameMode::ArmOpeningSequence()
@@ -537,4 +575,233 @@ void ARetrieveGameMode::DebugStartOpeningSequence()
 	ArmOpeningSequence();
 	bOpeningArmed = false;
 	StartOpeningSequence();
+}
+
+void ARetrieveGameMode::HandleEndgameStepChanged(FGameplayTag /*Channel*/, const FRetrieveQuestStepPayload& Message)
+{
+	if (Message.StepTag != RetrieveGameplayTags::Quest_Step_TalkedToLumen_Castle || bHandoverCinematicPlayed)
+	{
+		return;
+	}
+
+	const ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+	bHandoverCinematicPlayed = true;
+	PlayEndgameThen(LumenCoreHandoverCinematic, LumenCoreHandoverParams, TFunction<void()>());
+}
+
+void ARetrieveGameMode::HandleQueenDefeated(FGameplayTag /*Channel*/, const FMonsterDiedPayload& /*Message*/)
+{
+	if (bEndgameSequenceStarted)
+	{
+		return;
+	}
+	bEndgameSequenceStarted = true;
+
+	if (ARetrieveGameState* GS = GetRetrieveGameState())
+	{
+		if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+		{
+			Quest->CompleteStep(RetrieveGameplayTags::Quest_Step_QueenDefeated); // Stage 7 완료
+		}
+	}
+
+	// 엔딩 컷씬(레벨 시퀀스) -> 크레딧(WBP) -> 메인메뉴
+	PlayEndgameThen(EndingCinematic, EndingCinematicParams,
+		[WeakThis = TWeakObjectPtr<ARetrieveGameMode>(this)]()
+		{
+			ARetrieveGameMode* GameMode = WeakThis.Get();
+			if (!GameMode)
+			{
+				return;
+			}
+			GameMode->ShowCreditsThen(
+				[WeakInner = TWeakObjectPtr<ARetrieveGameMode>(GameMode)]()
+				{
+					if (ARetrieveGameMode* Inner = WeakInner.Get())
+					{
+						Inner->FinishGame();
+					}
+				});
+		});
+}
+
+void ARetrieveGameMode::PlayEndgameThen(const TSoftObjectPtr<ULevelSequence>& Sequence,
+                                        const FRetrieveCinematicPlayParams& Params, TFunction<void()> Next)
+{
+	UWorld* World = GetWorld();
+	URetrieveCinematicSubsystem* CinematicSubsystem = World ? World->GetSubsystem<URetrieveCinematicSubsystem>() : nullptr;
+
+	// TODO(coop): 현재 재생은 호출한 머신 로컬(호스트)이다. 게스트 동시 재생은 CinematicState OnRep 확장 시.
+	const bool bStarted = (CinematicSubsystem && !Sequence.IsNull())
+		? CinematicSubsystem->PlayCinematicSoft(Sequence, Params)
+		: false;
+
+	if (!bStarted)
+	{
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	if (EndgameCinematicListener.IsValid())
+	{
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameCinematicListener);
+	}
+
+	EndgameCinematicListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveCinematicStatePayload>(
+		RetrieveGameplayTags::Channel_Cinematic_Changed,
+		[WeakThis = TWeakObjectPtr<ARetrieveGameMode>(this), Next](FGameplayTag, const FRetrieveCinematicStatePayload& Message)
+		{
+			ARetrieveGameMode* GameMode = WeakThis.Get();
+			if (!GameMode || Message.bActive)
+			{
+				return;
+			}
+			GameMode->EndgameCinematicListener.Unregister();
+
+			if (!Next)
+			{
+				return;
+			}
+			
+			if (UWorld* TickWorld = GameMode->GetWorld())
+			{
+				TickWorld->GetTimerManager().SetTimerForNextTick(
+					FTimerDelegate::CreateWeakLambda(GameMode, [Next]() { Next(); }));
+			}
+			else
+			{
+				Next();
+			}
+		});
+}
+
+void ARetrieveGameMode::ShowCreditsThen(TFunction<void()> Next)
+{
+	UWorld* World = GetWorld();
+
+	// TODO(coop): 호스트 로컬 UI. 게스트에게도 크레딧을 보여주려면 별도 전파가 필요하다.
+	ARetrievePlayerController* PC = World ? World->GetFirstPlayerController<ARetrievePlayerController>() : nullptr;
+	if (!PC)
+	{
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	// 메인메뉴 크레딧 버튼과 같은 진입점
+	PC->OpenCreditsPanel();
+
+	URetrieveCreditsWidget* Credits = Cast<URetrieveCreditsWidget>(PC->GetActivePanel());
+	if (!Credits)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GameMode] 크레딧 패널을 열지 못했습니다. 크레딧을 건너뛰고 엔딩을 마무리합니다."));
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	PendingCreditsContinuation = MoveTemp(Next);
+	bCreditsActive = true;
+
+	// 종료 통지: 끝까지 재생되거나 플레이어가 ESC로 스킵하면 위젯이 브로드캐스트.
+	BoundCreditsWidget = Credits;
+	Credits->OnCreditsCompleted.AddDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+
+	// 안전망: 통지가 영영 오지 않는 오작성 대비.
+	if (CreditsFallbackSeconds > 0.f)
+	{
+		World->GetTimerManager().SetTimer(CreditsFallbackTimer,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[GameMode] 크레딧 안전망 타이머 만료. OnCreditsCompleted 통지가 오지 않아 강제로 마무리합니다. ")
+					TEXT("WBP_Credits에 CreditsScrollBox가 있는지, bLoop가 켜져 있지 않은지 확인하세요."));
+				FinishCredits();
+			}),
+			CreditsFallbackSeconds, false);
+	}
+}
+
+void ARetrieveGameMode::HandleCreditsCompleted(bool /*bWasSkipped*/)
+{
+	FinishCredits();
+}
+
+void ARetrieveGameMode::FinishCredits()
+{
+	if (!bCreditsActive)
+	{
+		return;
+	}
+	bCreditsActive = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CreditsFallbackTimer);
+	}
+
+	if (URetrieveCreditsWidget* Credits = BoundCreditsWidget.Get())
+	{
+		Credits->OnCreditsCompleted.RemoveDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+	}
+	BoundCreditsWidget.Reset();
+	// 위젯이 CompleteCredits 직후 스스로 RequestClose를 호출
+
+	TFunction<void()> Next = MoveTemp(PendingCreditsContinuation);
+	PendingCreditsContinuation = nullptr;
+	if (!Next)
+	{
+		return;
+	}
+
+	if (UWorld* TickWorld = GetWorld())
+	{
+		TickWorld->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateWeakLambda(this, [Next]() { Next(); }));
+	}
+	else
+	{
+		Next();
+	}
+}
+
+void ARetrieveGameMode::FinishGame()
+{
+	ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS)
+	{
+		return;
+	}
+
+	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+	{
+		Quest->CompleteStep(RetrieveGameplayTags::Quest_Step_GameComplete);
+	}
+
+	// 승리는 Result(사망 화면)를 거치지 않음.
+	GS->TransitionTo(ERetrieveSessionState::MainMenu);
+}
+
+ALumenCharacter* ARetrieveGameMode::FindLumen() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ALumenCharacter> It(World); It; ++It)
+		{
+			return *It;
+		}
+	}
+	return nullptr;
 }

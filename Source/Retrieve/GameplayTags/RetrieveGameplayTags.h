@@ -591,6 +591,10 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Village);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_ExitedCave);
 
+	// Stage 6 (main quest) per-objective steps
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_EnteredCastleInterior);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Castle);
+
 	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_WakingFromTheDeep);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheForgottenForest);
@@ -600,6 +604,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheCorruptedGuardianWater);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ToTheEdge);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_StormTheCastle);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_FortyThousandDays);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ForgeAhead);
 
 	// ---- Dialogue
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_Lumen);
@@ -620,6 +626,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WhoAreYou);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_OurGoal);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_HowToFight);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_TakeCore);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Greeting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Weather);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Goodbye);

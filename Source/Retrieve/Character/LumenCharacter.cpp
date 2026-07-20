@@ -1,10 +1,16 @@
 #include "Character/LumenCharacter.h"
 
+#include "../Lumen/LumenAIController.h"
 #include "../Lumen/LumenFollowComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/World/RetrieveDialogueComponent.h"
+#include "Core/RetrieveGameState.h"
+#include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/RetrieveMessageTypes.h"
+#include "Quest/QuestBranchComponent.h"
 
 ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -44,4 +50,101 @@ ALumenCharacter::ALumenCharacter(const FObjectInitializer& ObjectInitializer) : 
 
 	FollowComponent = CreateDefaultSubobject<ULumenFollowComponent>(TEXT("FollowComponent"));
 	DialogueComponent = CreateDefaultSubobject<URetrieveDialogueComponent>(TEXT("DialogueComponent"));
+}
+
+void ALumenCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		StepChangedListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveQuestStepPayload>(
+			RetrieveGameplayTags::Channel_Quest_StepChanged, this, &ALumenCharacter::HandleQuestStepChanged);
+	}
+	
+	SyncRetiredFromQuestLedger();
+}
+
+void ALumenCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (StepChangedListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(StepChangedListener);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ALumenCharacter::HandleQuestStepChanged(FGameplayTag /*Channel*/, const FRetrieveQuestStepPayload& /*Message*/)
+{
+	SyncRetiredFromQuestLedger();
+}
+
+void ALumenCharacter::SyncRetiredFromQuestLedger()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	const ARetrieveGameState* GS = World ? World->GetGameState<ARetrieveGameState>() : nullptr;
+	const UQuestBranchComponent* Quest = GS ? GS->GetQuestBranchComponent() : nullptr;
+	if (!Quest)
+	{
+		return;
+	}
+
+	const bool bShouldRetire = Quest->IsStepCompleted(RetrieveGameplayTags::Quest_Step_TalkedToLumen_Castle);
+	if (bShouldRetire != bRetired)
+	{
+		SetRetired(bShouldRetire);
+	}
+}
+
+void ALumenCharacter::SetRetired(bool bInRetired, const FTransform* ParkXf)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bRetired = bInRetired;
+
+	if (bInRetired && ParkXf)
+	{
+		SetActorTransform(*ParkXf, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	if (ALumenAIController* AI = Cast<ALumenAIController>(GetController()))
+	{
+		AI->StopMovement();
+		AI->SetLogicRunning(!bInRetired);
+	}
+
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		if (bInRetired)
+		{
+			Move->StopMovementImmediately();
+			Move->DisableMovement();
+		}
+		else
+		{
+			Move->SetMovementMode(MOVE_Walking);
+		}
+	}
+
+	if (FollowComponent)
+	{
+		FollowComponent->SetRetired(bInRetired);
+	}
+	
+	// retire 후에도 새 대사로 상호작용 가능해야하므로 DialogueComponent는 그대로 둔다
 }

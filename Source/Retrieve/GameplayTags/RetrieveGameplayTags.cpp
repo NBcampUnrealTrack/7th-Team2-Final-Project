@@ -570,6 +570,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Village, "Quest.Step.TalkedToLumen.Village");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_ExitedCave, "Quest.Step.ExitedCave");
 
+	// Stage 6 (main quest) per-objective steps
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_EnteredCastleInterior, "Quest.Step.EnteredCastleInterior");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Castle, "Quest.Step.TalkedToLumen.Castle");
+
 	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_WakingFromTheDeep, "Quest.Main.WakingFromTheDeep");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheForgottenForest, "Quest.Main.TheForgottenForest");
@@ -579,6 +583,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheCorruptedGuardianWater, "Quest.Main.TheCorruptedGuardianWater");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ToTheEdge, "Quest.Main.ToTheEdge");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_StormTheCastle, "Quest.Main.StormTheCastle");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_FortyThousandDays, "Quest.Main.FortyThousandDays");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ForgeAhead, "Quest.Main.ForgeAhead");
 	
 	// ---- Dialogue
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
@@ -599,6 +605,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WhoAreYou, "Topic.Lumen.WhoAreYou");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_OurGoal, "Topic.Lumen.OurGoal");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_HowToFight, "Topic.Lumen.HowToFight");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_TakeCore, "Topic.Lumen.TakeCore");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Greeting, "Topic.NPC.VillagerTest.Greeting");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Weather, "Topic.NPC.VillagerTest.Weather");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Goodbye, "Topic.NPC.VillagerTest.Goodbye");
