@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "Components/MeshComponent.h"
 #include "Components/Player/WeaponComponent.h"
+#include "Components/Water/SwimDetectionComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 
 #if WITH_EDITOR
@@ -44,6 +45,26 @@ void URetrieveAlsAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
 	AActor* Owner = GetOwningActor();
+	const UAbilitySystemComponent* ASC = IsValid(Owner)
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner)
+		: nullptr;
+	bIsSwimming = IsValid(ASC) &&
+		ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming);
+	bIsUnderwater = IsValid(ASC) &&
+		ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Swimming_UnderWater);
+
+	const FVector Velocity = IsValid(Owner)
+		? Owner->GetVelocity()
+		: FVector::ZeroVector;
+	SwimSpeed = bIsSwimming
+		? (bIsUnderwater ? Velocity.Size() : Velocity.Size2D())
+		: 0.f;
+
+	const USwimDetectionComponent* SwimDetection = IsValid(Owner)
+		? Owner->FindComponentByClass<USwimDetectionComponent>()
+		: nullptr;
+	bSwimEntryFromFall = IsValid(SwimDetection) && SwimDetection->WasSwimEntryFromFall();
+
 	const UWeaponComponent* Weapon = IsValid(Owner) ? Owner->FindComponentByClass<UWeaponComponent>() : nullptr;
 	const UMeshComponent* BowMesh = IsValid(Weapon) ? Weapon->GetPrimaryEquippedWeaponMesh() : nullptr;
 
@@ -55,7 +76,7 @@ void URetrieveAlsAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// 알파 = Drawing(차징) 태그로 램프. 당김~홀드 ON, 발사 OFF. (비활/비활성 시 0)
 	float TargetAlpha = 0.f;
-	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner))
+	if (IsValid(ASC))
 	{
 		TargetAlpha = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_BowShot_Drawing) ? 1.f : 0.f;
 	}

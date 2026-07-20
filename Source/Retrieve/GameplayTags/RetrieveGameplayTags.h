@@ -19,6 +19,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Zoom);
 
 	// ---- Player abilities
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack_Fire);

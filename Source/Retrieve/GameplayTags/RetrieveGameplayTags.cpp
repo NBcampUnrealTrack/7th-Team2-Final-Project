@@ -17,6 +17,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_Zoom, "Input.Zoom");
 
 	// ---- Player abilities
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player, "Ability.Player");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Attack, "Ability.Player.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack, "Ability.Player.HeavyAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Fire, "Ability.Player.HeavyAttack.Fire");

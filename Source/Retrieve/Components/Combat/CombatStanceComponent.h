@@ -34,6 +34,9 @@ public:
 	// bInstant=true면 발검 몽타주 스킵 + 소켓 즉시 스냅(장착·공격發 발검).
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|CombatStance")
 	void NotifyDrawnActivity(bool bInstant = false);
+
+	// 수영 입수처럼 전투 연출을 재생할 수 없는 상황에서 즉시 납검한다.
+	void ForceSheatheWeapon();
 	
 	// ASC 연결 - 캐릭터의 ASC를 초기화시 호출(아래 1 ~ 4)
     void InitializeWithAbilitySystem(UAbilitySystemComponent* ASC);

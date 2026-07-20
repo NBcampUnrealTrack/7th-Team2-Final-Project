@@ -46,6 +46,17 @@ void UCombatStanceComponent::NotifyDrawnActivity(bool bInstant)
 	}
 }
 
+void UCombatStanceComponent::ForceSheatheWeapon()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(RelaxTimerHandle);
+		World->GetTimerManager().ClearTimer(SheatheTimerHandle);
+	}
+
+	SetStance(ERetrieveCombatStance::Sheathed, /*bInstant=*/true);
+}
+
 void UCombatStanceComponent::InitializeWithAbilitySystem(UAbilitySystemComponent* ASC)
 {
 	if (!IsValid(ASC) || OwnerASC == ASC)
