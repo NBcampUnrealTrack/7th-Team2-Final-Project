@@ -405,27 +405,8 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 		LastInputRealTimeSeconds = World->GetRealTimeSeconds();
 	}
 
-	// 라디얼 퀵슬롯 휠: 키를 누르고 있는 동안 열고, 떼면 방향 슬롯 사용
-	if (QuickSlotWheelKey.IsValid() && Params.Key == QuickSlotWheelKey)
-	{
-		if (Params.Event == IE_Pressed)
-		{
-			// 다른 패널이 열려 있지 않을 때만 인게임 휠을 연다
-			if (!ActivePanel && !bQuickSlotWheelOpen)
-			{
-				OpenQuickSlotWheel();
-				return true;
-			}
-		}
-		else if (Params.Event == IE_Released)
-		{
-			if (bQuickSlotWheelOpen)
-			{
-				CloseQuickSlotWheelAndUse();
-				return true;
-			}
-		}
-	}
+	// 라디얼 퀵슬롯 휠은 EnhancedInput IA_QuickSlotWheel(HeroComponent에서 Started/Completed 바인딩)이
+	// 소유한다. 여기서 raw 키를 가로채면 이중 입력이 되므로 처리하지 않는다.
 
 	if (Params.Event == IE_Pressed)
 	{
@@ -1817,8 +1798,9 @@ bool ARetrievePlayerController::TryHandlePanelShortcut(FKey Key)
 
 void ARetrievePlayerController::OpenQuickSlotWheel()
 {
-	// 시네마틱 중 차단 — 휠은 InputKey 직행 경로라 DisableInput으로 막히지 않고, 열리면 아이템 사용까지 이어진다.
-	if (bQuickSlotWheelOpen || !QuickSlotWheelClass || IsCinematicActive())
+	// 다른 패널이 열려 있거나(ActivePanel), 이미 열려 있거나, 시네마틱 중이면 열지 않는다.
+	// (예전엔 이 패널 가드가 InputKey 래퍼에 있었으나, EnhancedInput 경로로 옮기며 여기로 통합.)
+	if (bQuickSlotWheelOpen || ActivePanel || !QuickSlotWheelClass || IsCinematicActive())
 	{
 		return;
 	}

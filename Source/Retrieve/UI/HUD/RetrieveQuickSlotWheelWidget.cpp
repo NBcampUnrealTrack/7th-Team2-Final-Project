@@ -197,16 +197,16 @@ void URetrieveQuickSlotWheelWidget::OpenForUse()
 	// 인게임 사용 모드도 화면에 비해 너무 크므로 축소해서 표시
 	constexpr float UseModeScale = 0.45f;
 	SetRenderScale(FVector2D(UseModeScale, UseModeScale));
-	// 인게임(T키) 모드는 화면 중앙에 표시한다.
+	// 인게임 사용 모드는 화면 중앙에 표시한다.
 	SetRenderTranslation(FVector2D::ZeroVector);
 
-	// 인게임 T키 모드에서는 닫기 버튼을 숨긴다.
+	// 인게임 사용 모드에서는 닫기 버튼을 숨긴다.
 	if (Button_CloseWheel)
 	{
 		Button_CloseWheel->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	// 사용 모드에서는 입력(T 누름/뗌)을 플레이어 컨트롤러가 처리하므로
+	// 사용 모드에서는 입력(휠 키 누름/뗌)을 EnhancedInput(IA_QuickSlotWheel)→컨트롤러가 처리하므로
 	// 휠이 키보드 포커스를 가로채지 않도록 한다. (마우스 방향 선택은 NativeTick으로 동작)
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RefreshFromQuickSlots();
@@ -229,22 +229,6 @@ FReply URetrieveQuickSlotWheelWidget::NativeOnKeyDown(const FGeometry& InGeometr
 	}
 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
-}
-
-FReply URetrieveQuickSlotWheelWidget::NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
-{
-	// 인게임 사용 모드에서 휠을 연 키(T)를 떼면 하이라이트된 슬롯 사용 + 닫기
-	if (WheelMode == EQuickSlotWheelMode::Use)
-	{
-		const FKey Key = InKeyEvent.GetKey();
-		if (Key == EKeys::T)
-		{
-			ActivateHighlightedSlotAndClose();
-			return FReply::Handled();
-		}
-	}
-
-	return Super::NativeOnKeyUp(InGeometry, InKeyEvent);
 }
 
 void URetrieveQuickSlotWheelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)

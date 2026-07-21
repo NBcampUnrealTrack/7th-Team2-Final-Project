@@ -20,6 +20,7 @@
 #include "InputCoreTypes.h"
 #include "Input/RetrieveInputComponent.h"
 #include "Input/RetrieveInputConfig.h"
+#include "Player/RetrievePlayerController.h"
 #include "Settings/RetrieveGameUserSettings.h"
 
 
@@ -220,6 +221,16 @@ void URetrieveHeroComponent::BindPlayerInputs()
 
 	// Dash (Tap) — Tap trigger의 Triggered에 바인딩. 시간 내 떼면 1회 발동, 길게 누르면 발동 안 함(Sprint Hold가 작동).
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Dash, ETriggerEvent::Triggered, this, &ThisClass::Input_DashRequest, false);
+
+	// QuickSlot Wheel (Hold) — Started: 휠 열기 / Completed: 마우스 방향 슬롯 사용 후 닫기.
+	// IA를 직접 로드해 바인딩한다(DataTable/태그 경유 불필요). 옵션 리바인드·조작키 안내 UI는
+	// IMC 프로파일에서 액션 자산 이름("IA_QuickSlotWheel")으로 현재 키를 읽으므로 자동 연동된다.
+	if (const UInputAction* WheelAction = LoadObject<UInputAction>(
+			nullptr, TEXT("/Game/Retrieve/Input/Actions/IA_QuickSlotWheel.IA_QuickSlotWheel")))
+	{
+		RetrieveIC->BindAction(WheelAction, ETriggerEvent::Started,   this, &ThisClass::Input_QuickSlotWheelPressed);
+		RetrieveIC->BindAction(WheelAction, ETriggerEvent::Completed, this, &ThisClass::Input_QuickSlotWheelReleased);
+	}
 
 	bInputsBound = true;
 }
@@ -467,6 +478,32 @@ void URetrieveHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag
 		if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 		{
 			ASC->AbilityInputTagReleased(InputTag);
+		}
+	}
+}
+
+// --- 퀵슬롯 라디얼 휠 입력 ---
+// EnhancedInput IA_QuickSlotWheel(기본 V). Started에서 휠을 열고, Completed(키 뗌)에서 방향 슬롯 사용.
+// 실제 열기/닫기 로직과 가드는 컨트롤러가 소유하므로 여기서는 위임만 한다.
+
+void URetrieveHeroComponent::Input_QuickSlotWheelPressed()
+{
+	if (APawn* Pawn = GetPawn<APawn>())
+	{
+		if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(Pawn->GetController()))
+		{
+			PC->OpenQuickSlotWheel();
+		}
+	}
+}
+
+void URetrieveHeroComponent::Input_QuickSlotWheelReleased()
+{
+	if (APawn* Pawn = GetPawn<APawn>())
+	{
+		if (ARetrievePlayerController* PC = Cast<ARetrievePlayerController>(Pawn->GetController()))
+		{
+			PC->CloseQuickSlotWheelAndUse();
 		}
 	}
 }
