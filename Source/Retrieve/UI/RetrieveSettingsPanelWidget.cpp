@@ -184,6 +184,7 @@ namespace
 			{ TEXT("IA_Burst"),        TEXT("/Game/Retrieve/Input/Actions/IA_Burst.IA_Burst"),               TEXT("Retrieve.Burst"),       TEXT("버스트"),   TEXT("Key_Burst"),        TEXT("KeyBtn_Burst") },
 			{ TEXT("IA_Absorb"),       TEXT("/Game/Retrieve/Input/Actions/IA_Absorb.IA_Absorb"),             TEXT("Retrieve.Absorb"),      TEXT("흡수"),     TEXT("Key_Absorb"),       TEXT("KeyBtn_Absorb") },
 			{ TEXT("IA_RecallLumen"),  TEXT("/Game/Retrieve/Input/Actions/IA_RecallLumen.IA_RecallLumen"),   TEXT("Retrieve.RecallLumen"), TEXT("루멘 소환"),TEXT("Key_RecallLumen"),  TEXT("KeyBtn_RecallLumen") },
+			{ TEXT("IA_QuickSlotWheel"),TEXT("/Game/Retrieve/Input/Actions/IA_QuickSlotWheel.IA_QuickSlotWheel"),TEXT("Retrieve.QuickSlotWheel"),TEXT("퀵슬롯"),TEXT("Key_QuickSlot"),TEXT("KeyBtn_QuickSlot") },
 			{ TEXT("IA_ElementMode1"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode1.IA_ElementMode1"), TEXT("Retrieve.Element1"),    TEXT("원소 1"),   TEXT("Key_Element1"),     TEXT("KeyBtn_Element1") },
 			{ TEXT("IA_ElementMode2"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode2.IA_ElementMode2"), TEXT("Retrieve.Element2"),    TEXT("원소 2"),   TEXT("Key_Element2"),     TEXT("KeyBtn_Element2") },
 			{ TEXT("IA_ElementMode3"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode3.IA_ElementMode3"), TEXT("Retrieve.Element3"),    TEXT("원소 3"),   TEXT("Key_Element3"),     TEXT("KeyBtn_Element3") },
@@ -1035,6 +1036,7 @@ void URetrieveSettingsPanelWidget::BindPageEvents()
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element1", HandleRebindElement1)
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element2", HandleRebindElement2)
 	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_Element3", HandleRebindElement3)
+	BIND_PAGE_BUTTON(C::Controls, "KeyBtn_QuickSlot", HandleRebindQuickSlot)
 
 	BIND_PAGE_SLIDER(C::Audio, "Sld_Master", HandleMasterChanged)
 	BIND_PAGE_SLIDER(C::Audio, "Sld_Music", HandleMusicChanged)
@@ -2075,6 +2077,7 @@ DEFINE_REBIND_HANDLER(HandleRebindRecallLumen, "IA_RecallLumen", "Key_RecallLume
 DEFINE_REBIND_HANDLER(HandleRebindElement1, "IA_ElementMode1", "Key_Element1")
 DEFINE_REBIND_HANDLER(HandleRebindElement2, "IA_ElementMode2", "Key_Element2")
 DEFINE_REBIND_HANDLER(HandleRebindElement3, "IA_ElementMode3", "Key_Element3")
+DEFINE_REBIND_HANDLER(HandleRebindQuickSlot, "IA_QuickSlotWheel", "Key_QuickSlot")
 #undef DEFINE_REBIND_HANDLER
 
 #define DEFINE_AUDIO_HANDLER(Func, Channel, Label) \

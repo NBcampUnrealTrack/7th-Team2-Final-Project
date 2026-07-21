@@ -237,6 +237,7 @@ private:
 	UFUNCTION() void HandleRebindElement1();
 	UFUNCTION() void HandleRebindElement2();
 	UFUNCTION() void HandleRebindElement3();
+	UFUNCTION() void HandleRebindQuickSlot();
 
 	UFUNCTION() void HandleMasterChanged(float Value);
 	UFUNCTION() void HandleMusicChanged(float Value);

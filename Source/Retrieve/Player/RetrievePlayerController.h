@@ -424,15 +424,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Shop")
 	TSubclassOf<URetrieveGamePanelWidget> ShopPanelWidgetClass;
 
+public:
 	// ── 인게임 퀵슬롯 라디얼 휠 ──────────────────────────────────────────
-	// QuickSlotWheelKey를 누르고 있는 동안 휠을 열고, 떼면 마우스 방향 슬롯을 사용한다.
+	// EnhancedInput IA_QuickSlotWheel(기본 V)을 누르고 있는 동안 휠을 열고, 떼면 마우스 방향 슬롯을
+	// 사용한다. HeroComponent가 Started/Completed 트리거로 아래 두 함수를 호출한다(리바인드/안내 UI 연동).
 	void OpenQuickSlotWheel();
 	void CloseQuickSlotWheelAndUse();
 
-	/** 라디얼 휠을 여는(누르고 있는) 키. 기본 T. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|QuickSlot")
-	FKey QuickSlotWheelKey = EKeys::T;
-
+protected:
 	/** 인게임 라디얼 휠 위젯 클래스 (WBP_QuickSlotWheel). */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|QuickSlot")
 	TSubclassOf<URetrieveQuickSlotWheelWidget> QuickSlotWheelClass;

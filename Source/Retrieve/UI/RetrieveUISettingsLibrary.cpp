@@ -224,7 +224,7 @@ namespace
 	{
 		static const TSet<FKey> Reserved = {
 			EKeys::W, EKeys::A, EKeys::S, EKeys::D, // 이동
-			EKeys::T,                               // 퀵슬롯 휠
+			EKeys::T,                               // 월드맵 마커 배치(WorldMapWidget 하드코딩)
 			EKeys::N,                               // 미니맵 회전
 			EKeys::I,                               // 인벤토리
 			EKeys::M,                               // 월드맵
@@ -598,6 +598,7 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 		{ TEXT("IA_Guard"),        TEXT("방어"),      ActionColor },
 		{ TEXT("IA_Interaction"),  TEXT("상호작용"),  ActionColor },
 		{ TEXT("IA_RecallLumen"),  TEXT("루멘"),      SpecialFunctionColor },
+		{ TEXT("IA_QuickSlotWheel"), TEXT("퀵슬롯"),  SpecialActionColor },
 		{ TEXT("IA_Crouch"),       TEXT("앉기"),      SpecialActionColor },
 		{ TEXT("IA_Jump"),         TEXT("점프"),      SpecialActionColor },
 		{ TEXT("IA_ElementMode1"), TEXT("원소"),      SpecialActionColor },

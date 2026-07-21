@@ -367,11 +367,13 @@ void UWeaponComponent::ApplyElementModeMaterial()
 		return;
 	}
 
-	const int32 NumMats = SwordMesh->GetNumMaterials();
-	for (int32 i = 0; i < NumMats; ++i)
-	{
-		SwordMesh->SetMaterial(i, Material);
-	}
+	// 레이어 분리: 원소 모드는 무기 몸체 머티리얼을 덮지 않는다.
+	// (기존: 원소별 머티리얼이 몸체를 덮어 강화 오라 색을 가리고, 복원 로직이 없어
+	//  다른 원소 모드로 전환해도 잔상이 남던 문제 — 예: 불 모드인데 이전 바람의 초록이 유지)
+	// 무기 몸체색은 무기 고유색 + 강화 오라(SpawnWeaponEnhancementVFX)가 소유하고,
+	// 원소 해방은 empower VFX(스파크/외곽 아우라)로만 표현한다.
+	(void)SwordMesh;
+	(void)Material;
 }
 
 const FRetrieveWeaponDataRow* UWeaponComponent::FindWeaponData(FName WeaponItemId) const
@@ -727,26 +729,27 @@ void UWeaponComponent::SpawnWeaponEnhancementVFX()
 		return;
 	}
 
-	const FLinearColor AuraColor = CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Fire
-		? FLinearColor(0.5f, 0.023f, 0.002f, 1.f)   // 諛쒓킅 媛뺣룄 ?섑뼢: blown-out/釉붾８ 踰덉쭚 ?쒓굅 (?ъ뒪????諛섏쁺)
-		: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Water
-			? FLinearColor(0.0035f, 0.13f, 0.5f, 1.f)
-			: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Wind
-				? FLinearColor(0.01f, 0.5f, 0.075f, 1.f)
-				: FLinearColor(0.25f, 0.08f, 0.5f, 1.f);
+	// 강화 오라 색을 원소(어피니티)와 분리 — 무기 타입 기준으로 결정한다.
+	const FLinearColor AuraColor = CurrentWeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff
+		? FLinearColor(0.02f, 0.8f, 3.0f, 1.f)      // 스태프 = 청색
+		: CurrentWeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield
+			? FLinearColor(1.2f, 0.4f, 2.5f, 1.f)       // 검·방패 = 검보라
+			: CurrentWeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Bow
+				? FLinearColor(0.08f, 2.2f, 0.5f, 1.f)  // 활 = 에메랄드
+				: FLinearColor(1.2f, 0.4f, 2.5f, 1.f);  // 기타(쌍검/기본) = 검보라
 	// 媛뺥솕 ?덈꺼(1~10)??0~1濡??뺢퇋?? ?④퀎蹂?李⑥씠瑜??볤쾶 踰뚮━湲??꾪빐 理쒖?(?덈꺼1)??0??媛源앷쾶 ?붾떎.
 	const float TierAlpha = FMath::Clamp((static_cast<float>(Level) - 1.f) / 9.f, 0.f, 1.f);
 
 	// 媛뺥솕 ?④퀎媛 ?뺤떎??泥닿컧?섎룄濡?諛쒓킅/?ㅻ쾭?덉씠 諛앷린 ?먯껜瑜??덈꺼??鍮꾨??쒗궓??
 	// 理쒓퀬 ?덈꺼(10) = ?꾩옱 ?쒕떇??湲곗? 諛앷린(AuraColor), ??? ?덈꺼? ???섍쾶.
-	const float LevelIntensity = FMath::Lerp(0.28f, 1.0f, TierAlpha);
-	const FLinearColor ScaledColor = AuraColor * LevelIntensity;
+	const float LevelIntensity = FMath::Lerp(0.5f, 1.0f, TierAlpha);
+	const FLinearColor ScaledColor = AuraColor * LevelIntensity * 0.3f; // 발광 밝기 하향(0.3)
 
 	VFX->SetVariableStaticMesh(FName(TEXT("User.01 - Mesh -> Weapon")), TargetMesh->GetStaticMesh());
 	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Emissive")), ScaledColor);
 	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay")), ScaledColor * (0.5f + TierAlpha * 0.5f));
 	VFX->SetVariableLinearColor(FName(TEXT("User.03 - Color -> Overlay Noise")), ScaledColor);
-	VFX->SetVariableFloat(FName(TEXT("User.Sparks Amount")), FMath::Lerp(6.f, 110.f, TierAlpha));
+	VFX->SetVariableFloat(FName(TEXT("User.Sparks Amount")), FMath::Lerp(20.f, 110.f, TierAlpha));
 	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Width")), FMath::Lerp(5.f, 26.f, TierAlpha));
 	VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Lifetime")), FMath::Lerp(0.15f, 0.85f, TierAlpha));
 	VFX->ComponentTags.AddUnique(FName(TEXT("Retrieve.VFX.WeaponEnhancement")));
