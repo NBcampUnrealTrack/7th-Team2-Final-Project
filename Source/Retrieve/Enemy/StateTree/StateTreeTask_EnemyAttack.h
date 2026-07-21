@@ -28,9 +28,14 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.0"))
 	float MoveAcceptableRadius = 30.f;
 	
-	// 이 시간(초)을 초과하면 GA 완료 여부와 무관하게 Succeeded 반환
+	// 공격 요청 후 이 시간(초)을 초과하면 GA 완료 여부와 무관하게 Failed 반환
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.5"))
 	float MaxAttackDuration = 5.f;
+
+	// 공격 요청 전 접근 단계가 이 시간을 초과하면 Failed를 반환한다.
+	// 0이면 접근 타임아웃을 사용하지 않는다.
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
+	float MaxApproachDuration = 5.f;
 
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float AttackStartRangeTolerance = 20.f;
@@ -50,6 +55,7 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	float ElapsedTime = 0.f;
 	float TimeInSoftAttackRange = 0.f;
 	float TimeSinceAttackRequested = 0.f;
+	float ApproachElapsedTime = 0.f;
 	
 	bool bStartAttack = false;
 	bool bObservedPatternActive = false;

@@ -103,6 +103,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 	InstanceData.ElapsedTime = 0.f;
 	InstanceData.TimeInSoftAttackRange = 0.f;
 	InstanceData.TimeSinceAttackRequested = 0.f;
+	InstanceData.ApproachElapsedTime = 0.f;
 
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
@@ -185,6 +186,13 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 	if (!InstanceData.bStartAttack)
 	{
+		InstanceData.ApproachElapsedTime += DeltaTime;
+		if (InstanceData.MaxApproachDuration > 0.f
+			&& InstanceData.ApproachElapsedTime >= InstanceData.MaxApproachDuration)
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
 		const float AttackStartRange = InstanceData.AttackRange + InstanceData.AttackStartRangeTolerance;
 		ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
 		const bool bCanUseCurrentPatternRange =
@@ -343,7 +351,8 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 		}
 	}
 
-	if (InstanceData.ElapsedTime >= InstanceData.MaxAttackDuration)
+	if (InstanceData.bStartAttack
+		&& InstanceData.TimeSinceAttackRequested >= InstanceData.MaxAttackDuration)
 	{
 		return EStateTreeRunStatus::Failed;
 	}
@@ -356,11 +365,13 @@ void FStateTreeTask_EnemyAttack::ExitState(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	const bool bStartedAttack = InstanceData.bStartAttack;
+	const bool bHadAttackToken = InstanceData.bAttackTokenAcquired;
 
 	InstanceData.ElapsedTime = 0.f;
 	InstanceData.TimeInSoftAttackRange = 0.f;
 	InstanceData.TimeSinceAttackRequested = 0.f;
-	
+	InstanceData.ApproachElapsedTime = 0.f;
+
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
 	InstanceData.bAttackTokenAcquired = false;
@@ -376,10 +387,9 @@ void FStateTreeTask_EnemyAttack::ExitState(
 
 	if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
 	{
-		MoveComp->bUseRVOAvoidance = InstanceData.bOriginalUseRVOAvoidance;
-
 		if (InstanceData.bRotationSettingsCaptured)
 		{
+			MoveComp->bUseRVOAvoidance = InstanceData.bOriginalUseRVOAvoidance;
 			MoveComp->bOrientRotationToMovement = InstanceData.bOriginalOrientRotationToMovement;
 			MoveComp->bUseControllerDesiredRotation = InstanceData.bOriginalUseControllerDesiredRotation;
 			Pawn->bUseControllerRotationYaw = InstanceData.bOriginalUseControllerRotationYaw;
@@ -403,8 +413,11 @@ void FStateTreeTask_EnemyAttack::ExitState(
 
 	SetChaseAnimationTag(Pawn, false);
 
-	if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+	if (bHadAttackToken)
 	{
-		Enc->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
+		if (UEncirclementSubsystem* Enc = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>())
+		{
+			Enc->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
+		}
 	}
 }
