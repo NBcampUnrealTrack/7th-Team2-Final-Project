@@ -1,5 +1,6 @@
 #include "Lumen/LumenAIController.h"
 
+#include "Character/LumenCharacter.h"
 #include "Components/StateTreeAIComponent.h"
 
 ALumenAIController::ALumenAIController(const FObjectInitializer& ObjectInitializer)
@@ -16,9 +17,37 @@ void ALumenAIController::OnPossess(APawn* InPawn)
 
 void ALumenAIController::TryStartStateTree()
 {
+	if (const ALumenCharacter* Lumen = Cast<ALumenCharacter>(GetPawn()))
+	{
+		if (Lumen->IsRetired())
+		{
+			return;
+		}
+	}
+
 	if (StateTreeAIComp && !StateTreeAIComp->IsRunning())
 	{
 		StateTreeAIComp->StartLogic();
+	}
+}
+
+void ALumenAIController::SetLogicRunning(bool bRunning)
+{
+	if (!StateTreeAIComp)
+	{
+		return;
+	}
+
+	if (bRunning)
+	{
+		if (!StateTreeAIComp->IsRunning())
+		{
+			StateTreeAIComp->StartLogic(); // TryStartStateTree와 동일 경로
+		}
+	}
+	else
+	{
+		StateTreeAIComp->StopLogic(TEXT("LumenRetired"));
 	}
 }
 

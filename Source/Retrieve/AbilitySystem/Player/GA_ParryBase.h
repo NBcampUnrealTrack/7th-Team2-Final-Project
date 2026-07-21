@@ -11,11 +11,9 @@ class UGameplayEffect;
 /**
  * 패링 공용 베이스(추상).
  *
- * 이 베이스는 "언제 패링 윈도우를 열지"를 결정하지 않고, 열기/닫기/쿨다운/성공 처리만 제공한다.
- * - GA_Parry: 기존 비방패 패링. Activate 시 즉시 Open, 타이머/EndAbility로 Close.
- * - GA_GuardAttack: GuardAttack 몽타주의 NotifyState Begin/End로 Open/Close.
- *
- * 이 분리를 유지해야 기존 패링 감각을 보존하면서, 검방패 GuardAttack만 프레임 정확한 NotifyState 구조로 이전할 수 있다.
+ * 이 베이스는 "언제 패링 윈도우를 열지"를 결정하지 않고, 열기/닫기/성공 처리만 제공한다.
+ * 파생 GA(GA_Parry, GA_Guard)가 시도 몽타주의 AnimNotifyState_ParryWindow Begin/End에서
+ * OpenNotifyParryWindow/CloseNotifyParryWindow 훅으로 윈도우를 프레임 정확하게 여닫는다.
  */
 UCLASS(Abstract)
 class RETRIEVE_API UGA_ParryBase : public URetrieveGameplayAbility
@@ -28,42 +26,30 @@ public:
 protected:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
-	// 패링 윈도우만 연다. 쿨다운은 여기서 적용하지 않는다.
-	// 성공/실패/종료 시점에서 ApplyParryCooldown()을 별도로 호출해 window timing과 cooldown timing을 분리한다.
+	// 패링 윈도우(State.Player.Parrying)만 연다. 연타 억제는 쿨다운이 아니라 시도 몽타주 후딜(재발동 불가)이 담당한다.
 	bool OpenParryWindow();
 
 	// 패링 윈도우 GE를 명시적으로 제거한다. 성공, NotifyState End, Ability 종료에서 중복 호출되어도 안전해야 한다.
 	void CloseParryWindow();
 
-	// 다음 패링 시도를 제한하는 쿨다운만 적용한다. Guard 유지나 CounterWindow는 막지 않는 것이 설계 의도다.
-	void ApplyParryCooldown();
-	
 	void StartListeningForParrySuccess();
 	void StopParrySuccessTask();
 	void ExecuteParrySuccessCue() const;
-	void ApplyParryStagger(AActor* Attacker);
+
+	// 장착 무기의 패링 데이터(FWeaponParryData). 미장착/데이터 없음이면 nullptr.
+	const struct FWeaponParryData* ResolveParryData() const;
+	// 무기가 패링 가능한지(= Parry.SuccessMontage 존재).
+	bool WeaponCanParry() const;
+	void PlayParrySuccessMontage() const;
 
 	UFUNCTION()
 	void HandleParrySuccess(FGameplayEventData Payload);
 
 protected:
-	// Legacy GA_Parry는 duration GE를 사용할 수 있고, GuardAttack은 Infinite/Controlled GE를 사용한다.
-	// 둘 다 이 포인터로 주입하되, 실제 길이는 각 Ability의 Open/Close 타이밍 정책이 결정한다.
+	// State.Player.Parrying을 부여하는 윈도우 GE. 무기 무관 공용이라 GA에 둔다(DA 데이터 아님).
 	UPROPERTY(EditDefaultsOnly, Category = "Parry")
 	TSubclassOf<UGameplayEffect> ParryWindowEffect;
 
-	// 플레이어 본인에게 적용되는 "다음 패링 시도 제한" 효과다. 공격자/몬스터에게 적용되는 효과가 아니다.
-	UPROPERTY(EditDefaultsOnly, Category = "Parry")
-	TSubclassOf<UGameplayEffect> ParryCooldownEffect;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Parry")
-	TSubclassOf<UGameplayEffect> CounterWindowEffect;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Parry")
-	TSubclassOf<UGameplayEffect> ParryStaggerEffect;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Parry")
-	TSubclassOf<UGameplayEffect> BossParryStaggerEffect;
 
 	/** 패링 성공 시 짧게 부여하는 공격 어드밴티지 버프 (GE_ParryMomentum).
 	 *  미지정이면 C++ 기본 경로(/Game/Retrieve/AbilitySystem/Player/Advantage/GE_ParryMomentum)를 폴백 로드한다. */
@@ -92,7 +78,4 @@ protected:
 	UPROPERTY(Transient)
 	bool bParrySucceeded = false;
 
-	// 성공 처리와 EndAbility cleanup이 모두 호출될 수 있으므로 쿨다운 중복 적용을 막는다.
-	UPROPERTY(Transient)
-	bool bParryCooldownApplied = false;
 };

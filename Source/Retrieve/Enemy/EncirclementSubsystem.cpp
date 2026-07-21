@@ -162,11 +162,19 @@ void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requeste
 	}
 	if (FRing* Ring = Rings.Find(Target))
 	{
-		if (Ring->AttackTokens.Remove(Requester) > 0)
+		const int32 RemovedCount = Ring->AttackTokens.Remove(Requester);
+		if (RemovedCount > 0)
 		{
 			if (const UWorld* World = GetWorld())
 			{
 				Ring->TokenReleaseTime.Add(Requester, World->GetTimeSeconds());
+				// Debug 진단용 — Encircle.Debug >= 1일 때만 로그. 토큰 반환·쿨다운 시작 시점이
+				// 실제 관측되는지 확인 (대안 D 실험 판정에 사용).
+				if (CVarEncircleDebug.GetValueOnGameThread() >= 1)
+				{
+					UE_LOG(LogTemp, Log, TEXT("[Encircle] ReleaseAttackToken: %s Removed=%d Time=%.3f"),
+						*Requester->GetName(), RemovedCount, World->GetTimeSeconds());
+				}
 			}
 		}
 		CompactInvalidAttackTokens(*Ring);
@@ -296,6 +304,17 @@ int32 UEncirclementSubsystem::ShiftSlotExplicit(AActor* Target, AActor* Requeste
 	if (Ring.Slots[TargetSlotIndex].IsValid() && Ring.Slots[TargetSlotIndex] != Requester)
 	{
 		AActor* OccupyingEnemy = Ring.Slots[TargetSlotIndex].Get();
+
+		// 링에 빈 슬롯이 남아있다면 점유자와 자리를 바꾸지 않고 실패를 보고한다 —
+		// 호출부(ShiftOrbitSlot::Tick)가 다음 후보 슬롯을 계속 찾도록 하기 위함.
+		// 안 그러면 바로 다음 슬롯이 차 있을 때마다 불필요하게 서로 자리를 바꿔서
+		// 두 개체의 목적지가 동시에 반대로 바뀌고 RVO 진동을 유발한다.
+		const bool bHasEmptySlot = Ring.Slots.ContainsByPredicate(
+			[](const TWeakObjectPtr<AActor>& Slot) { return !Slot.IsValid(); });
+		if (bHasEmptySlot)
+		{
+			return INDEX_NONE;
+		}
 
 		// Swap with a non-attacking occupier so orbit movement can continue.
 		const int32 PastSlot = Ring.Slots.IndexOfByKey(Requester);
@@ -535,12 +554,21 @@ int32 UEncirclementSubsystem::DistanceToNearestOccupied(const FRing& Ring, int32
 
 void UEncirclementSubsystem::DrawDebug() const
 {
+	// 이 원/슬롯 점은 Subsystem 하드코딩 반경(InnerRadius/OuterRadius)만 사용해서
+	// 몬스터별 DT 반경이나 토큰 요청 가능 여부를 반영하지 못한다 — 실제 이동 목표와
+	// 다를 수 있다. Level 2부터만 참고용으로 그리고, Level 1은
+	// RetrieveEnemyTargetEvaluator가 그리는 실제 ChaseLocation만 보이게 한다.
+	if (CVarEncircleDebug.GetValueOnGameThread() < 2)
+	{
+		return;
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return;
 	}
-	
+
 	for (const auto& Pair : Rings)
 	{
 		AActor* Target = Pair.Key.Get();

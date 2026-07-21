@@ -36,6 +36,11 @@ struct FRetrieveCinematicPlayParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Cinematic")
 	bool bBlockPlayerControl = true;
 
+	/** Space/ESC 연타(확인 창 내 2회)로 이 시네마틱을 스킵할 수 있습니다.
+	 * 스토리상 반드시 봐야 하는 컷씬은 끄세요. 스킵은 StopCinematic과 동일한 정리 경로를 탑니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Cinematic")
+	bool bSkippable = true;
+
 	/** 재생 중 BGM(Music 채널)을 페이드로 끄고 종료 시 복원합니다.
 	 * 시퀀스 자체의 오디오 트랙도 Music 클래스로 분류돼 있으면 함께 눌리므로, 컷씬 전용 사운드는
 	 * SFX/Voice 채널(또는 미분류)로 두어야 합니다. */
@@ -78,6 +83,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Cinematic")
 	bool IsCinematicPlaying() const { return ActivePlayer != nullptr; }
+
+	/** 재생 중이고 스킵 허용(bSkippable) 컷씬인지. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Cinematic")
+	bool IsActiveCinematicSkippable() const { return IsCinematicPlaying() && ActiveParams.bSkippable; }
+
+	/** 스킵 키(Space/ESC) 입력 1회 통지. 첫 입력은 확인 프롬프트를 띄우고(Channel.Cinematic.SkipPrompt),
+	 * 확인 창 안의 두 번째 입력이 스킵을 확정한다. 스킵 불가/미재생이면 false(입력 미소비).
+	 * PC의 InputKey(뷰포트 raw 경로 — DisableInput과 무관하게 동작)가 호출한다. */
+	bool NotifySkipKeyPressed();
 
 	/** 시네마틱 종료 시 브로드캐스트(자연 종료/중단 공통, 1회). */
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Cinematic")
@@ -126,7 +140,14 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<USoundMix> AudioSuppressMix;
 
+	/** 스킵 확인 프롬프트 표시/숨김 브로드캐스트 (Channel.Cinematic.SkipPrompt). */
+	void SetSkipPromptVisible(bool bVisible);
+
 	FRetrieveCinematicPlayParams ActiveParams;
 	bool bFinishHandled = false;
 	bool bAudioSuppressed = false;
+
+	/** 마지막 스킵 키 입력 시각(RealTimeSeconds). 음수 = 확인 대기 아님. */
+	double LastSkipPressRealTime = -1.0;
+	FTimerHandle SkipPromptResetTimer;
 };

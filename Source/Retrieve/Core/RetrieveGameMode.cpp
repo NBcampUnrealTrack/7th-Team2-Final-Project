@@ -2,6 +2,7 @@
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "RetrieveGameState.h"
+#include "Character/LumenCharacter.h"
 #include "Character/RetrieveAlsCombatCharacter.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Data/RetrieveOpeningSequenceAsset.h"
@@ -14,7 +15,12 @@
 #include "Subsystems/QuestNotificationSubsystem.h"
 #include "Subsystems/RetrieveCinematicSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
+#include "UI/Menu/RetrieveCreditsWidget.h"
 #include "UObject/UObjectGlobals.h"
+#include "EngineUtils.h"
+#include "TimerManager.h"
+#include "World/RetrieveRescueEncounter.h"
+#include "World/RetrieveLostCargoEncounter.h"
 
 ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -67,6 +73,10 @@ void ARetrieveGameMode::BeginPlay()
 			RetrieveGameplayTags::Channel_Player_Died, this, &ARetrieveGameMode::HandlePlayerDied);
 		RevealGateListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveRevealGatePayload>(
 			RetrieveGameplayTags::Channel_UI_RevealGate, this, &ARetrieveGameMode::HandleRevealGate);
+		QueenDefeatedListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FMonsterDiedPayload>(
+			RetrieveGameplayTags::Channel_Game_QueenDefeated, this, &ARetrieveGameMode::HandleQueenDefeated);
+		EndgameStepChangedListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveQuestStepPayload>(
+			RetrieveGameplayTags::Channel_Quest_StepChanged, this, &ARetrieveGameMode::HandleEndgameStepChanged);
 	}
 }
 
@@ -184,12 +194,37 @@ void ARetrieveGameMode::HandleRetry(APlayerController* Requestor)
 		return;
 	}
 
-	const FTransform RespawnTransform = GS->GetLastCheckpointOrFallback();
-	RespawnPlayerAtTransform(Requestor, RespawnTransform);
+	// 순서 중요: InGame 전환을 부활보다 먼저 한다. 반대 순서(부활 → InGame)에서는 부활 직후
+	// 잔류 위협으로 재사망하면 HandlePlayerDied의 TransitionTo(Result)가 "아직 Result 상태"라
+	// 동일 상태 전환으로 무시되고, 곧이어 InGame으로 넘어가 "죽은 폰 + InGame"(조작 가능한 시체)
+	// 소프트락이 됐다. 전환을 먼저 하면 재사망 시 Result가 정상적으로 다시 뜬다.
+	// 이 전환이 로딩 커버도 함께 띄우므로, 아래 CoverDelay 대기의 전제이기도 하다.
+	GS->TransitionTo(ERetrieveSessionState::InGame);
 
-	GS->TransitionTo(ERetrieveSessionState::Result == GS->GetSessionState()
-		                 ? ERetrieveSessionState::InGame
-		                 : ERetrieveSessionState::InGame);
+	const FTransform RespawnTransform = GS->GetLastCheckpointOrFallback();
+
+	UGameInstance* GI = GetGameInstance();
+	URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	const float CoverDelay = SaveSubsystem ? SaveSubsystem->GetCoverFadeInSeconds() : 0.f;
+
+	if (CoverDelay > KINDA_SMALL_NUMBER)
+	{
+		TWeakObjectPtr<APlayerController> WeakRequestor(Requestor);
+		GetWorldTimerManager().SetTimer(
+			RespawnCoverDelayTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this, WeakRequestor, RespawnTransform]()
+			{
+				if (APlayerController* PC = WeakRequestor.Get())
+				{
+					RespawnPlayerAtTransform(PC, RespawnTransform);
+				}
+			}),
+			CoverDelay, false);
+	}
+	else
+	{
+		RespawnPlayerAtTransform(Requestor, RespawnTransform);
+	}
 }
 
 void ARetrieveGameMode::HandleQuitToMenu(APlayerController* Requestor)
@@ -241,8 +276,32 @@ void ARetrieveGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(OpeningCinematicListener);
 			OpeningCinematicListener = FGameplayMessageListenerHandle();
 		}
+		if (QueenDefeatedListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(QueenDefeatedListener);
+			QueenDefeatedListener = FGameplayMessageListenerHandle();
+		}
+		if (EndgameStepChangedListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameStepChangedListener);
+			EndgameStepChangedListener = FGameplayMessageListenerHandle();
+		}
+		if (EndgameCinematicListener.IsValid())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameCinematicListener);
+			EndgameCinematicListener = FGameplayMessageListenerHandle();
+		}
 		World->GetTimerManager().ClearTimer(OpeningBeatTimer);
+		World->GetTimerManager().ClearTimer(CreditsFallbackTimer);
 	}
+
+	if (URetrieveCreditsWidget* Credits = BoundCreditsWidget.Get())
+	{
+		Credits->OnCreditsCompleted.RemoveDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+	}
+	BoundCreditsWidget.Reset();
+	bCreditsActive = false;
+	PendingCreditsContinuation = nullptr;
 	
 	Super::EndPlay(EndPlayReason);
 }
@@ -323,8 +382,18 @@ void ARetrieveGameMode::RespawnPlayerAtTransform(APlayerController* Requestor, c
 		UGameInstance* GI = GetGameInstance();
 		if (URetrieveSaveSubsystem* SaveSubsystem = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr)
 		{
-			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None);
+			SaveSubsystem->BeginStreamedTeleport(Requestor, RespawnTransform, NAME_None, true);
 		}
+	}
+	else if (Requestor)
+	{
+		// 폰이 파괴/유실된 비정상 경로(외부 Destroy, 과거 빌드의 KillZ 파괴 등) 최후 방어:
+		// Revive 대상이 없으므로 기본 폰을 체크포인트에 새로 스폰해 빙의시킨다.
+		// (정상 경로는 위의 Revive 재사용 — 인벤토리/체력 컴포넌트 상태 유지)
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GameMode] RespawnPlayerAtTransform: 유효한 폰이 없어 RestartPlayerAtTransform 폴백으로 새 폰을 스폰합니다 (Requestor=%s)"),
+			*GetNameSafe(Requestor));
+		RestartPlayerAtTransform(Requestor, RespawnTransform);
 	}
 }
 
@@ -336,10 +405,36 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 		return;
 	}
 	GS->SeedDefaultCheckpointIfUnset();
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSubsystem = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSubsystem->ResetRescueEncountersForNewGame();
+		}
+	}
+
+	for (TActorIterator<ARetrieveRescueEncounter> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewGame();
+	}
+	for (TActorIterator<ARetrieveLostCargoEncounter> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewGame();
+	}
+
 	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
 	{
 		Quest->ResetForTest();
 	}
+	
+	if (ALumenCharacter* Lumen = FindLumen())
+	{
+		Lumen->SetRetired(false);
+	}
+
+	bHandoverCinematicPlayed = false;
+	bEndgameSequenceStarted = false;
 }
 
 void ARetrieveGameMode::ArmOpeningSequence()
@@ -480,4 +575,233 @@ void ARetrieveGameMode::DebugStartOpeningSequence()
 	ArmOpeningSequence();
 	bOpeningArmed = false;
 	StartOpeningSequence();
+}
+
+void ARetrieveGameMode::HandleEndgameStepChanged(FGameplayTag /*Channel*/, const FRetrieveQuestStepPayload& Message)
+{
+	if (Message.StepTag != RetrieveGameplayTags::Quest_Step_TalkedToLumen_Castle || bHandoverCinematicPlayed)
+	{
+		return;
+	}
+
+	const ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS || GS->GetSessionState() != ERetrieveSessionState::InGame)
+	{
+		return;
+	}
+	bHandoverCinematicPlayed = true;
+	PlayEndgameThen(LumenCoreHandoverCinematic, LumenCoreHandoverParams, TFunction<void()>());
+}
+
+void ARetrieveGameMode::HandleQueenDefeated(FGameplayTag /*Channel*/, const FMonsterDiedPayload& /*Message*/)
+{
+	if (bEndgameSequenceStarted)
+	{
+		return;
+	}
+	bEndgameSequenceStarted = true;
+
+	if (ARetrieveGameState* GS = GetRetrieveGameState())
+	{
+		if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+		{
+			Quest->CompleteStep(RetrieveGameplayTags::Quest_Step_QueenDefeated); // Stage 7 완료
+		}
+	}
+
+	// 엔딩 컷씬(레벨 시퀀스) -> 크레딧(WBP) -> 메인메뉴
+	PlayEndgameThen(EndingCinematic, EndingCinematicParams,
+		[WeakThis = TWeakObjectPtr<ARetrieveGameMode>(this)]()
+		{
+			ARetrieveGameMode* GameMode = WeakThis.Get();
+			if (!GameMode)
+			{
+				return;
+			}
+			GameMode->ShowCreditsThen(
+				[WeakInner = TWeakObjectPtr<ARetrieveGameMode>(GameMode)]()
+				{
+					if (ARetrieveGameMode* Inner = WeakInner.Get())
+					{
+						Inner->FinishGame();
+					}
+				});
+		});
+}
+
+void ARetrieveGameMode::PlayEndgameThen(const TSoftObjectPtr<ULevelSequence>& Sequence,
+                                        const FRetrieveCinematicPlayParams& Params, TFunction<void()> Next)
+{
+	UWorld* World = GetWorld();
+	URetrieveCinematicSubsystem* CinematicSubsystem = World ? World->GetSubsystem<URetrieveCinematicSubsystem>() : nullptr;
+
+	// TODO(coop): 현재 재생은 호출한 머신 로컬(호스트)이다. 게스트 동시 재생은 CinematicState OnRep 확장 시.
+	const bool bStarted = (CinematicSubsystem && !Sequence.IsNull())
+		? CinematicSubsystem->PlayCinematicSoft(Sequence, Params)
+		: false;
+
+	if (!bStarted)
+	{
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	if (EndgameCinematicListener.IsValid())
+	{
+		UGameplayMessageSubsystem::Get(World).UnregisterListener(EndgameCinematicListener);
+	}
+
+	EndgameCinematicListener = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrieveCinematicStatePayload>(
+		RetrieveGameplayTags::Channel_Cinematic_Changed,
+		[WeakThis = TWeakObjectPtr<ARetrieveGameMode>(this), Next](FGameplayTag, const FRetrieveCinematicStatePayload& Message)
+		{
+			ARetrieveGameMode* GameMode = WeakThis.Get();
+			if (!GameMode || Message.bActive)
+			{
+				return;
+			}
+			GameMode->EndgameCinematicListener.Unregister();
+
+			if (!Next)
+			{
+				return;
+			}
+			
+			if (UWorld* TickWorld = GameMode->GetWorld())
+			{
+				TickWorld->GetTimerManager().SetTimerForNextTick(
+					FTimerDelegate::CreateWeakLambda(GameMode, [Next]() { Next(); }));
+			}
+			else
+			{
+				Next();
+			}
+		});
+}
+
+void ARetrieveGameMode::ShowCreditsThen(TFunction<void()> Next)
+{
+	UWorld* World = GetWorld();
+
+	// TODO(coop): 호스트 로컬 UI. 게스트에게도 크레딧을 보여주려면 별도 전파가 필요하다.
+	ARetrievePlayerController* PC = World ? World->GetFirstPlayerController<ARetrievePlayerController>() : nullptr;
+	if (!PC)
+	{
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	// 메인메뉴 크레딧 버튼과 같은 진입점
+	PC->OpenCreditsPanel();
+
+	URetrieveCreditsWidget* Credits = Cast<URetrieveCreditsWidget>(PC->GetActivePanel());
+	if (!Credits)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GameMode] 크레딧 패널을 열지 못했습니다. 크레딧을 건너뛰고 엔딩을 마무리합니다."));
+		if (Next)
+		{
+			Next();
+		}
+		return;
+	}
+
+	PendingCreditsContinuation = MoveTemp(Next);
+	bCreditsActive = true;
+
+	// 종료 통지: 끝까지 재생되거나 플레이어가 ESC로 스킵하면 위젯이 브로드캐스트.
+	BoundCreditsWidget = Credits;
+	Credits->OnCreditsCompleted.AddDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+
+	// 안전망: 통지가 영영 오지 않는 오작성 대비.
+	if (CreditsFallbackSeconds > 0.f)
+	{
+		World->GetTimerManager().SetTimer(CreditsFallbackTimer,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[GameMode] 크레딧 안전망 타이머 만료. OnCreditsCompleted 통지가 오지 않아 강제로 마무리합니다. ")
+					TEXT("WBP_Credits에 CreditsScrollBox가 있는지, bLoop가 켜져 있지 않은지 확인하세요."));
+				FinishCredits();
+			}),
+			CreditsFallbackSeconds, false);
+	}
+}
+
+void ARetrieveGameMode::HandleCreditsCompleted(bool /*bWasSkipped*/)
+{
+	FinishCredits();
+}
+
+void ARetrieveGameMode::FinishCredits()
+{
+	if (!bCreditsActive)
+	{
+		return;
+	}
+	bCreditsActive = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CreditsFallbackTimer);
+	}
+
+	if (URetrieveCreditsWidget* Credits = BoundCreditsWidget.Get())
+	{
+		Credits->OnCreditsCompleted.RemoveDynamic(this, &ARetrieveGameMode::HandleCreditsCompleted);
+	}
+	BoundCreditsWidget.Reset();
+	// 위젯이 CompleteCredits 직후 스스로 RequestClose를 호출
+
+	TFunction<void()> Next = MoveTemp(PendingCreditsContinuation);
+	PendingCreditsContinuation = nullptr;
+	if (!Next)
+	{
+		return;
+	}
+
+	if (UWorld* TickWorld = GetWorld())
+	{
+		TickWorld->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateWeakLambda(this, [Next]() { Next(); }));
+	}
+	else
+	{
+		Next();
+	}
+}
+
+void ARetrieveGameMode::FinishGame()
+{
+	ARetrieveGameState* GS = GetRetrieveGameState();
+	if (!GS)
+	{
+		return;
+	}
+
+	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
+	{
+		Quest->CompleteStep(RetrieveGameplayTags::Quest_Step_GameComplete);
+	}
+
+	// 승리는 Result(사망 화면)를 거치지 않음.
+	GS->TransitionTo(ERetrieveSessionState::MainMenu);
+}
+
+ALumenCharacter* ARetrieveGameMode::FindLumen() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ALumenCharacter> It(World); It; ++It)
+		{
+			return *It;
+		}
+	}
+	return nullptr;
 }

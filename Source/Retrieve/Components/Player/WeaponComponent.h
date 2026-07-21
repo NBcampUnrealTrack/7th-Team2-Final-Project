@@ -12,8 +12,12 @@ class UGameplayEffect;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class URetrieveAbilitySystemComponent;
+class UElementUnlockComponent;
 class UMeshComponent;
+class UStaticMeshComponent;
 class USceneComponent;
+class UMaterialInterface;
+struct FGameplayEventData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponChangedSignature, FName, WeaponItemId);
 
@@ -74,6 +78,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Weapon")
 	void UnequipWeapon();
+
+	// 원소 모드 전환 이벤트(GameplayEvent.Element.ModeChange)를 구독해 장착 무기의
+	// ElementModeMaterials에 따라 검 머티리얼을 교체한다. 캐릭터가 ASC 준비 후 호출.
+	void InitializeWithAbilitySystem(URetrieveAbilitySystemComponent* InASC);
+	void UninitializeFromAbilitySystem();
 
 	// 상태 조회: 장착 여부 → 어떤 무기 → 데이터 → 전투 테이블 순으로 배치
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon")
@@ -184,6 +193,14 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> WeaponEnhancementVFXComponents;
 
+	// 원소 모드 강화(가디언 코어 흡수로 해방) 시 무기에 붙는 원소별 오라. 키 = Element.Fire/Water/Wind.
+	// 원소 머티리얼 없는 기본 무기에도 표시(플레이어 상태 연출). 활(Weapon.Type.Bow)은 제외.
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Weapon|Element Empower VFX")
+	TMap<FGameplayTag, TSoftObjectPtr<UNiagaraSystem>> ElementEmpowerVFX;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> ElementEmpowerVFXComponents;
+
 	// 노킹 상태(화살 장전됨). SetNockedArrowVisible에서 갱신. 드로우 전 장전 판정용(로컬 비주얼 상태).
 	bool bArrowNocked = false;
 
@@ -212,4 +229,28 @@ protected:
 	USceneComponent* FindAttachmentParent(const FRetrieveWeaponAttachmentData& Attachment) const;
 	void SpawnWeaponEnhancementVFX();
 	void ClearWeaponEnhancementVFX();
+
+	// 강화/원소 오라 공용: VFX를 붙일 주 무기 스태틱메시(bGeneratesHitVolume 우선) 선택.
+	UStaticMeshComponent* FindWeaponVFXTargetMesh() const;
+
+	// 원소 모드 강화 오라: 조건(장착 && 현재 모드 원소가 해방됨 && 활 아님) 재평가 후 스폰/제거.
+	void RefreshElementEmpowerVFX();
+	void ClearElementEmpowerVFX();
+
+	// ElementUnlockComponent::OnElementUnlocked 콜백. 장착 중 해방(가디언 처치 직후 같은 모드) 즉시 반영.
+	UFUNCTION()
+	void HandleElementUnlockedForVFX(FGameplayTag ElementTag);
+
+	// 원소 모드 전환 콜백(GenericGameplayEventCallbacks). payload의 InstigatorTags[0]가 새 원소.
+	void OnElementModeChanged(const FGameplayEventData* Payload);
+	// 현재 원소모드에 매핑된 머티리얼을 장착 검 메시에 적용(맵 비었거나 매핑 없으면 무시).
+	void ApplyElementModeMaterial();
+
+	// 원소 이벤트 구독 상태
+	TWeakObjectPtr<URetrieveAbilitySystemComponent> ElementEventASC;
+	FDelegateHandle ElementModeChangedHandle;
+	FGameplayTag CurrentElementModeTag;
+
+	// 원소 해방 상태 조회/구독용(오너 폰의 ElementUnlockComponent). Init 시 캐싱.
+	TWeakObjectPtr<UElementUnlockComponent> CachedElementUnlockComponent;
 };

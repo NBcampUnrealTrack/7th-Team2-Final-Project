@@ -122,7 +122,7 @@ void UGA_BowAim::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const 
 	{
 		if (UCombatStanceComponent* Stance = AvatarActor->FindComponentByClass<UCombatStanceComponent>())
 		{
-			Stance->NotifyCombatActivity(/*bFromAttack=*/false); // false → 발검 몽타주 재생
+			Stance->NotifyDrawnActivity(/*bInstant=*/false); // false → 발검 몽타주 재생
 		}
 	}
 

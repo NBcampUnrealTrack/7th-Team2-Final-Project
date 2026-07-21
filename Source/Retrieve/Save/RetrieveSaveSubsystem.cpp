@@ -22,6 +22,7 @@
 #include "ContentStreaming.h"
 #include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/Loading/RetrieveLoadingScreenWidget.h"
 #include "World/RetrieveBonfireActor.h"
 #include "Engine/SceneCapture2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -55,6 +56,12 @@ void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		CurrentSaveGame = Cast<URetrieveSaveGame>(
 			UGameplayStatics::LoadGameFromSlot(DefaultSaveSlotName, SaveUserIndex));
 		UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 레거시 Slot0 WorldState로 마이그레이션"));
+	}
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
 	}
 }
 
@@ -92,9 +99,13 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 		SlotSave->ActivatedBonfireTransforms = CurrentSaveGame->ActivatedBonfireTransforms;
 		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
 		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
+		SlotSave->HeroEvolutionCharge        = CurrentSaveGame->HeroEvolutionCharge;
+		SlotSave->bHeroEquipmentEvolved      = CurrentSaveGame->bHeroEquipmentEvolved;
 		SlotSave->ShopRepurchaseHistory      = CurrentSaveGame->ShopRepurchaseHistory;
 		SlotSave->DialogueRewardGrantCounts  = CurrentSaveGame->DialogueRewardGrantCounts;
 		SlotSave->RpsRewardGrantCounts       = CurrentSaveGame->RpsRewardGrantCounts;
+		SlotSave->RescueEncounters           = CurrentSaveGame->RescueEncounters;
+		SlotSave->LostCargoEncounters        = CurrentSaveGame->LostCargoEncounters;
 	}
 
 	// LoadSnapshot 기록
@@ -677,6 +688,64 @@ bool URetrieveSaveSubsystem::IsLumenEngraved() const
 	return CurrentSaveGame && CurrentSaveGame->bLumenEngraved;
 }
 
+// ── 잊혀진→전설 영웅 장비 진화 진행 상태 (월드 공유) ─────────────────────────────
+
+int32 URetrieveSaveSubsystem::GetHeroEvolutionCharge() const
+{
+	return CurrentSaveGame ? CurrentSaveGame->HeroEvolutionCharge : 0;
+}
+
+void URetrieveSaveSubsystem::SetHeroEvolutionCharge(int32 NewCharge)
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	const int32 Clamped = FMath::Max(0, NewCharge);
+	if (CurrentSaveGame->HeroEvolutionCharge == Clamped)
+	{
+		return;
+	}
+
+	CurrentSaveGame->HeroEvolutionCharge = Clamped;
+
+	// WorldState 슬롯에 자동 저장
+	UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+}
+
+bool URetrieveSaveSubsystem::IsHeroEquipmentEvolved() const
+{
+	return CurrentSaveGame && CurrentSaveGame->bHeroEquipmentEvolved;
+}
+
+void URetrieveSaveSubsystem::SetHeroEquipmentEvolved(bool bEvolved)
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	if (CurrentSaveGame->bHeroEquipmentEvolved == bEvolved)
+	{
+		return;
+	}
+
+	CurrentSaveGame->bHeroEquipmentEvolved = bEvolved;
+
+	// WorldState 슬롯에 자동 저장
+	const bool bSaved = UGameplayStatics::SaveGameToSlot(
+		CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveSubsystem] 영웅 장비 진화 상태 저장 — %s WorldState=%s"),
+		bEvolved ? TEXT("true") : TEXT("false"), bSaved ? TEXT("OK") : TEXT("FAIL"));
+}
+
 // ── 빠른 이동 (World Partition) ───────────────────────────────────────────────
 
 void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerController* PC)
@@ -714,7 +783,8 @@ void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerControl
 // 빠른 이동 / 불러오기 공용: 도착 위치로 텔레포트하고 스트리밍이 안정될 때까지 대기한다.
 // BonfireIdForRecompute가 유효하면 도착 후 살아있는 화톳불 ArrivalPoint로 위치를 재계산한다.
 // (불러오기는 저장된 정확한 좌표를 쓰므로 NAME_None을 넘긴다.)
-void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute)
+void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
+                                                   bool bCoverAlreadyOpaque)
 {
 	if (!IsValid(PC)) { return; }
 
@@ -731,6 +801,9 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] BeginStreamedTeleport: World 없음"));
 		return;
 	}
+
+	// 이전 요청이 남아 있으면 예약된 지연 텔레포트를 취소한다(중복 실행 방지).
+	World->GetTimerManager().ClearTimer(FastTravelCoverDelayTimerHandle);
 
 	PendingFastTravelPC = PC;
 	OnFastTravelStarted.Broadcast(BonfireIdForRecompute);
@@ -778,18 +851,8 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 	// 스트리밍/지면 스냅이 끝날 때까지 물리/충돌로 인한 밀림·낙하를 막는다.
 	Pawn->SetActorEnableCollision(false);
 
-	// 시작 즉시 목적지로 텔레포트한다.
-	// 이동/충돌을 끈 상태라 지면이 아직 로드되지 않아도 그 자리에 고정되어 떨어지지 않으며,
-	// 로딩 오버레이 타이밍과 무관하게 플레이어가 출발지에 보이지 않는다.
-	// 목적지 셀은 (a)플레이어 본인 스트리밍 소스 (b)아래 임시 소스 양쪽으로 로드된다.
-	Pawn->SetActorTransform(ArrivalTransform, false, nullptr, ETeleportType::TeleportPhysics);
-	if (PC->PlayerCameraManager)
-	{
-		// 카메라가 출발지→목적지로 블렌딩(축지법)하지 않도록 이번 프레임 컷을 강제한다.
-		PC->PlayerCameraManager->SetGameCameraCutThisFrame();
-	}
-
 	// 도착 위치에 임시 World Partition 스트리밍 소스를 스폰 → 목적지 셀 로딩을 유도한다.
+	// 텔레포트보다 먼저 등록 -> 커버가 페이드인되는 동안 목적지 셀이 미리 로드됨
 	CleanupFastTravelStreamingSource();
 	{
 		FActorSpawnParameters SpawnParams;
@@ -814,13 +877,51 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 		}
 	}
 
-	// 현재 위치에서 가능한 스트리밍 요청을 먼저 처리한다.
+	// 여기까지는 화면에 드러나지 않는 준비 작업
+	// 보이는 작업(텔레포트/카메라 컷/블로킹 플러시)은 로딩 커버가 완전히 불투명해진 뒤에 수행
+
+	const float CoverDelay = bCoverAlreadyOpaque ? 0.f : GetCoverFadeInSeconds();
+	if (CoverDelay > KINDA_SMALL_NUMBER)
+	{
+		World->GetTimerManager().SetTimer(FastTravelCoverDelayTimerHandle, this,
+		                                  &URetrieveSaveSubsystem::ApplyStreamedTeleportUnderCover, CoverDelay, false);
+	}
+	else
+	{
+		ApplyStreamedTeleportUnderCover();
+	}
+}
+
+void URetrieveSaveSubsystem::ApplyStreamedTeleportUnderCover()
+{
+	UWorld* World = GetWorld();
+	APawn* Pawn = PendingFastTravelPawn.Get();
+	if (!World || !IsValid(Pawn))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] ApplyStreamedTeleportUnderCover: 대상 소실 — 커버만 해제하고 중단."));
+		FinishFastTravel();
+		return;
+	}
+
+	// 목적지 셀은 (a)플레이어 본인 스트리밍 소스 (b)위에서 스폰한 임시 소스 양쪽으로 로드된다.
+	// 이동/충돌이 꺼져 있어 지면이 아직 로드되지 않아도 그 자리에 고정되어 떨어지지 않는다.
+	Pawn->SetActorTransform(PendingFastTravelArrival, false, nullptr, ETeleportType::TeleportPhysics);
+	if (APlayerController* PC = PendingFastTravelPC.Get())
+	{
+		if (PC->PlayerCameraManager)
+		{
+			// 카메라가 출발지→목적지로 블렌딩(축지법)하지 않도록 이번 프레임 컷을 강제한다.
+			PC->PlayerCameraManager->SetGameCameraCutThisFrame();
+		}
+	}
+
+	// 커버가 불투명해진 시점에서 수행
 	World->FlushLevelStreaming(EFlushLevelStreamingType::Full);
 
 	UE_LOG(LogTemp, Log,
 		TEXT("[SaveSubsystem] StreamedTeleport 준비 — BonfireId=%s Arrival=%s (목적지 스트리밍 대기 시작)"),
-		*BonfireIdForRecompute.ToString(),
-		*ArrivalTransform.GetLocation().ToString());
+		*PendingFastTravelBonfireId.ToString(),
+		*PendingFastTravelArrival.GetLocation().ToString());
 
 	// 고정 지연이 아니라 "목적지 스트리밍 완료"를 폴링한다.
 	FastTravelStreamElapsed = 0.0f;
@@ -830,6 +931,21 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 		&URetrieveSaveSubsystem::PollFastTravelStreaming,
 		FMath::Max(FastTravelStreamPollInterval, 0.02f),
 		/*bLoop*/ true);
+}
+
+float URetrieveSaveSubsystem::GetCoverFadeInSeconds() const
+{
+	// 로딩 위젯(WBP_LoadingScreen)의 CoverFadeInSeconds가 단일 소스.
+	// 클래스가 아직 로드되지 않은 경우에만 폴백 값을 쓴다.
+	if (UClass* WidgetClass = LoadingScreenWidgetClass.Get())
+	{
+		if (const URetrieveLoadingScreenWidget* CDO =
+			Cast<URetrieveLoadingScreenWidget>(WidgetClass->GetDefaultObject()))
+		{
+			return CDO->GetCoverFadeInSeconds();
+		}
+	}
+	return FallbackCoverFadeInSeconds;
 }
 
 void URetrieveSaveSubsystem::PollFastTravelStreaming()
@@ -1146,7 +1262,14 @@ void URetrieveSaveSubsystem::HideLoadingScreen()
 {
 	if (IsValid(ActiveLoadingScreen))
 	{
-		ActiveLoadingScreen->RemoveFromParent();
+		if (URetrieveLoadingScreenWidget* LS = Cast<URetrieveLoadingScreenWidget>(ActiveLoadingScreen))
+		{
+			LS->PlayFadeOutAndRemove();
+		}
+		else
+		{
+			ActiveLoadingScreen->RemoveFromParent();
+		}
 	}
 	ActiveLoadingScreen = nullptr;
 }
@@ -1159,6 +1282,7 @@ void URetrieveSaveSubsystem::FinishFastTravel()
 	{
 		World->GetTimerManager().ClearTimer(FastTravelStreamPollTimerHandle);
 		World->GetTimerManager().ClearTimer(FastTravelFinishTimerHandle);
+		World->GetTimerManager().ClearTimer(FastTravelCoverDelayTimerHandle);
 	}
 	CleanupFastTravelStreamingSource();
 	PendingFastTravelPawn = nullptr;
@@ -1191,4 +1315,19 @@ void URetrieveSaveSubsystem::FlushWorldState()
 	{
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
 	}
+}
+
+void URetrieveSaveSubsystem::ResetRescueEncountersForNewGame()
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		CurrentSaveGame->SlotIndex = -1;
+	}
+
+	CurrentSaveGame->RescueEncounters.Reset();
+	CurrentSaveGame->LostCargoEncounters.Reset();
+	CurrentSaveGame->QuestEncounters.Reset();
+	FlushWorldState();
 }

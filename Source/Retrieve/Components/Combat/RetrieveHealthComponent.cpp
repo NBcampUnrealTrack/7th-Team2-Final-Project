@@ -52,6 +52,25 @@ void URetrieveHealthComponent::Revive()
 	AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(StatusTags);
 
 	ResetHealth();
+
+	// 부활 보호 시작: 시체 위치(해저드 안/투사체 사이)에서 체력이 채워지는 순간 잔류 위협이
+	// 같은 프레임에 재사망시키는 것을 막는다. 리스폰 텔레포트 동안은 충돌이 꺼져 있어
+	// 대부분 안전하지만, 해저드 주기 타이머는 오버랩 목록 기반이라 이 창이 필요하다.
+	if (const UWorld* World = GetWorld())
+	{
+		constexpr double ReviveProtectionSeconds = 3.0;
+		ReviveProtectionEndRealTime = World->GetRealTimeSeconds() + ReviveProtectionSeconds;
+	}
+}
+
+bool URetrieveHealthComponent::IsReviveProtectionActive() const
+{
+	if (ReviveProtectionEndRealTime < 0.0)
+	{
+		return false;
+	}
+	const UWorld* World = GetWorld();
+	return World && World->GetRealTimeSeconds() <= ReviveProtectionEndRealTime;
 }
 
 void URetrieveHealthComponent::KillOwner()

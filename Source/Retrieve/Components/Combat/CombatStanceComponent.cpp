@@ -17,7 +17,7 @@ UCombatStanceComponent::UCombatStanceComponent(const FObjectInitializer& ObjectI
 
 void UCombatStanceComponent::NotifyCombatActivity(bool bFromAttack)
 {
-	SetStance(ERetrieveCombatStance::DrawnCombat, /*bInstant=*/bFromAttack); // 즉시 승격(공격發이면 발검 연출 스킵)
+	SetStance(ERetrieveCombatStance::DrawnCombat, /*bInstant=*/bFromAttack); // 전투 태세 승격(적 포착 전용 진입점)
 
 	if (UWorld* World = GetWorld())
 	{
@@ -25,6 +25,36 @@ void UCombatStanceComponent::NotifyCombatActivity(bool bFromAttack)
 		World->GetTimerManager().SetTimer(RelaxTimerHandle, this,
 			&UCombatStanceComponent::HandleRelaxTimer, FMath::Max(0.01f,RelaxDelay), false);
 	}
+}
+
+void UCombatStanceComponent::NotifyDrawnActivity(bool bInstant)
+{
+	// 납검 → 발검+평상. 이미 발검(Relaxed/Combat)이면 스탠스는 건드리지 않는다(Combat 강등 방지).
+	if (CurrentStance == ERetrieveCombatStance::Sheathed)
+	{
+		SetStance(ERetrieveCombatStance::DrawnRelaxed, bInstant);
+	}
+
+	// Relaxed일 때만 납검 디케이 재무장. Combat 중엔 기존 Relax→Sheathe 디케이에 맡긴다.
+	if (CurrentStance == ERetrieveCombatStance::DrawnRelaxed)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(SheatheTimerHandle, this,
+				&UCombatStanceComponent::HandleSheatheTimer, FMath::Max(0.01f, SheatheDelay), false);
+		}
+	}
+}
+
+void UCombatStanceComponent::ForceSheatheWeapon()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(RelaxTimerHandle);
+		World->GetTimerManager().ClearTimer(SheatheTimerHandle);
+	}
+
+	SetStance(ERetrieveCombatStance::Sheathed, /*bInstant=*/true);
 }
 
 void UCombatStanceComponent::InitializeWithAbilitySystem(UAbilitySystemComponent* ASC)
@@ -191,15 +221,9 @@ void UCombatStanceComponent::HandleRelaxTimer()
 
 void UCombatStanceComponent::HandleSheatheTimer()
 {
-	if (IsPlayerAttacking())
-	{
-		NotifyCombatActivity(/*bFromAttack=*/true);
-		return;
-	}
-
-	// 조준 지속 중이면 납검 보류 — 활을 겨눈 채 활이 등으로 들어가는 것 방지.
-	// 스탠스는 그대로 두고(손 유지) 타이머만 재무장해 조준 종료를 기다린다.
-	if (IsAiming())
+	// 공격/조준 지속 중이면 납검만 보류(Relaxed 유지, Combat 승격 없음 — Combat은 적 포착 전용).
+	// 스탠스는 그대로 두고(손 유지) 타이머만 재무장해 종료를 기다린다.
+	if (IsPlayerAttacking() || IsAiming())
 	{
 		if (UWorld* World = GetWorld())
 		{
@@ -231,8 +255,8 @@ void UCombatStanceComponent::HandleAbilityActivated(UGameplayAbility* Ability)
 		return;
 	}
 
-	// 강/대시/점프, 또는 이미 발검 상태의 평타 → 기존처럼 즉시 발검 + 스윙.
-	NotifyCombatActivity(/*bFromAttack=*/true);
+	// 강/대시/점프, 또는 이미 발검 상태의 평타 → 즉시 발검(Relaxed) + 스윙. Combat 승격은 적 포착 전용.
+	NotifyDrawnActivity(/*bInstant=*/true);
 }
 
 void UCombatStanceComponent::HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
@@ -264,7 +288,7 @@ void UCombatStanceComponent::HandleWeaponVisualsSpawned()
 
 void UCombatStanceComponent::HandleWeaponEquipped(FName /*WeaponItemId*/)
 {
-	// 장착 = 발검 활동. 연출은 Equip 몽타주가 담당하므로 상태/타이머만 승격한다.
-	// bFromAttack=true → bInstant=true → 발검(Draw) 몽타주는 스킵(Equip 몽타주와 이중 재생 방지).
-	NotifyCombatActivity(/*bFromAttack=*/true);
+	// 장착 = 발검 활동(Relaxed). 연출은 Equip 몽타주가 담당하므로 상태/타이머만 올린다.
+	// bInstant=true → 발검(Draw) 몽타주는 스킵(Equip 몽타주와 이중 재생 방지).
+	NotifyDrawnActivity(/*bInstant=*/true);
 }

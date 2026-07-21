@@ -25,8 +25,14 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-	
+
 	void HandleAbilitySystemInitialized();
+
+	/** 부활 후 "살아있는데 시체화된 상태"(래그돌/애님 정지/캡슐·이동 잠금/고아 LocomotionAction=입력 차단 잔존)를
+	 * 점검·복구한다. Revive의 시점 분산 타이머 + SaveSubsystem::OnFastTravelCompleted(스트리밍 리스폰/빠른이동 완료)가
+	 * 호출한다 — 고정 타이머만으로는 목적지 셀 스트리밍이 긴 리스폰(수 초~십수 초)에서 점검 창이 먼저 소진된다. */
+	UFUNCTION()
+	void ReassertAliveState();
 	
 	UFUNCTION()
 	virtual void HandleDeathStarted(AActor* OwningActor);

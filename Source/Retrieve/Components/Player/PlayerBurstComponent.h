@@ -48,6 +48,10 @@ private:
     // HitSource → 월드 좌표
     FVector ResolveSourceLocation(const FBurstHitInstance& Hit) const;
 
+    // 소유자 CombatAttributeSet.BurstRadiusMultiplier(기본 1.0). 모든 버스트 판정 반경에 곱한다.
+    // 전설 영웅 세트 등 "스킬 범위 배율" 효과의 단일 소비 지점.
+    float GetBurstRadiusScale() const;
+
     // 검(Sword) 히트용 멀티포인트 블레이드 트레이스 포인트 생성. GA_Attack::BuildTracePoints와 동일 방식.
     void BuildSwordTracePoints(const FBurstHitInstance& Hit, TArray<FVector>& OutPoints) const;
 

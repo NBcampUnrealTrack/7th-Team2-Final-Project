@@ -390,21 +390,21 @@ void URetrieveHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 		const ACharacter* Char = Cast<ACharacter>(Pawn);
 		const bool bAirborne = Char && Char->GetCharacterMovement() && Char->GetCharacterMovement()->IsFalling();
 
-		// Guard 중 Attack 입력은 일반 평타가 아니라 GuardAttack으로 치환한다.
-		// 단, 공중에서는 GuardAttack을 허용하지 않는다. 공중 Attack은 기존 JumpAttack/Attack 흐름이 처리한다.
+		// 좌클릭 카운터 라우팅: 패링으로 스태거된 대기 대상이 있으면 평타 대신 ParryCounter를 발동한다.
 		if (!bAirborne)
 		{
 			if (URetrievePawnExtensionComponent* PawnExt = URetrievePawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 			{
 				if (URetrieveAbilitySystemComponent* ASC = PawnExt->GetRetrieveAbilitySystemComponent())
 				{
-					// #통합: 카운터는 패리 성공 시 GameplayEvent.Parry.Counter로 자동 발동되므로, 평타 입력 라우팅 제거.
-
-					const bool bGuarding = ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding);
-					const bool bHasGuardAttack = ASC->HasActivatableAbilityWithInputTag(RetrieveGameplayTags::Ability_Player_GuardAttack);
-					if (bGuarding && bHasGuardAttack)
+					if (AActor* CounterTarget = ASC->GetPendingCounterTarget())
 					{
-						ASC->AbilityInputTagPressed(RetrieveGameplayTags::Ability_Player_GuardAttack);
+						FGameplayEventData CounterEvent;
+						CounterEvent.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Counter;
+						CounterEvent.Instigator = Pawn;
+						CounterEvent.Target = CounterTarget;
+						CounterEvent.OptionalObject = CounterTarget;
+						ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_Parry_Counter, &CounterEvent);
 						return;
 					}
 				}

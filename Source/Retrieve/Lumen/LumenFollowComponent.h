@@ -48,6 +48,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Lumen|Combat")
 	bool IsCowering() const { return Mode == EFollowMode::RetreatCombat; }
 
+	// ---- Retire ----
+	/* 호스트 전용. Retire 상태에서는 루멘이 제자리에 정지합니다. */
+	void SetRetired(bool bInRetired);
+	bool IsRetired() const { return bRetired; }
+
 	// ---- EQS 안전지대 ----
 	void RequestSafeSpotQuery();
 	bool HasValidSafeSpot() const { return bSafeSpotValid; }
@@ -126,4 +131,5 @@ private:
 	
 	bool bWaitRequested = false;
 	bool bSafeSpotValid = false;
+	bool bRetired = false;
 };

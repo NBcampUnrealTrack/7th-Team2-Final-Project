@@ -71,13 +71,21 @@ void UGA_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Sprinting, 0);
 	}
 
-	if (UAnimMontage* Montage = GuardMontage.LoadSynchronous())
+	// 가드 진입부 패링 판정 구독. 실제 창은 GuardMontage의 ANS_ParryWindow가 연다.
+	StartListeningForParrySuccess();
+
+	// 가드 진입 모션(= 패링 시도 몽타주, ANS_ParryWindow 호스트). 무기 DA의 Parry.ParryMontage에서 로드한다.
+	// 지속 블록 포즈는 ALS 오버레이(State.Player.Guarding → IsGuarding())가 담당하므로 몽타주가 없어도 가드는 성립한다.
+	if (const FWeaponParryData* ParryData = ResolveParryData())
 	{
-		MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, Montage, 1.f, NAME_None, /*bStopWhenAbilityEnds=*/true);
-		if (MontageTask)
+		if (UAnimMontage* Montage = ParryData->ParryMontage.LoadSynchronous())
 		{
-			MontageTask->ReadyForActivation();
+			MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+				this, NAME_None, Montage, ParryData->ParryMontagePlayRate, NAME_None, /*bStopWhenAbilityEnds=*/true);
+			if (MontageTask)
+			{
+				MontageTask->ReadyForActivation();
+			}
 		}
 	}
 
@@ -154,6 +162,20 @@ void UGA_Guard::HandleGuardStaminaTick()
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
 	}
+}
+
+bool UGA_Guard::OpenNotifyParryWindow()
+{
+	if (!WeaponCanParry())
+	{
+		return false;
+	}
+	return OpenParryWindow();
+}
+
+void UGA_Guard::CloseNotifyParryWindow()
+{
+	CloseParryWindow();
 }
 
 void UGA_Guard::StopRuntimeTasks()

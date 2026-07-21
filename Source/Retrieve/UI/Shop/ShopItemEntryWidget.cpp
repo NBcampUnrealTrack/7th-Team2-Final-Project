@@ -4,6 +4,7 @@
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "UI/Shop/ShopPanelWidget.h"
 
 void UShopItemEntryWidget::NativeConstruct()
 {
@@ -35,7 +36,11 @@ void UShopItemEntryWidget::SetupBuyEntry(FName InRowName, const FRetrieveShopIte
 
 	if (Text_Price)
 	{
-		Text_Price->SetText(FText::AsNumber(Row.BuyPrice));
+		// 목록에도 상점 구매가 배율(예: 해방 상인 0.5배)을 적용해 상세 결제가와 일치시킨다.
+		const UShopPanelWidget* OwnerPanel = GetTypedOuter<UShopPanelWidget>();
+		const float Multiplier = OwnerPanel ? OwnerPanel->GetActivePriceMultiplier() : 1.0f;
+		const int32 DisplayPrice = FMath::Max(0, FMath::RoundToInt(Row.BuyPrice * Multiplier));
+		Text_Price->SetText(FText::AsNumber(DisplayPrice));
 	}
 
 	if (Image_Icon && Icon)

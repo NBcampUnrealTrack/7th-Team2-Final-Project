@@ -44,7 +44,7 @@ struct FRetrieveEnemyTargetEvalInstanceData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	bool bTargetLost = true;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output")
 	FVector SpawnedLocation = FVector::ZeroVector;
 

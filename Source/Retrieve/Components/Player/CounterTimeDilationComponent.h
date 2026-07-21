@@ -4,6 +4,8 @@
 #include "Components/ActorComponent.h"
 #include "CounterTimeDilationComponent.generated.h"
 
+class APlayerController;
+
 /**
  * 카운터(패리→ParryCounter) 성공 시의 슬로우 연출 상태.
  * 글로벌 타임 딜레이션을 쓰므로 싱글(NM_Standalone) 전용이다. 멀티에선 전체가 no-op.
@@ -45,6 +47,14 @@ public:
 	// 시네마틱 등 외부 연출이 시작될 때 호출. 진행 중인 슬로우를 즉시 원복하고 Idle로 되돌린다.
 	void CancelImmediately();
 
+	// 카운터 카메라 구도: 현재 시점을 저장하고 FramingRot(타겟 뒤)로 부드럽게 블렌드 + 룩 입력 잠금.
+	void BeginCounterCamera(APlayerController* PC, const FRotator& FramingRot, float BlendSpeed);
+	// 카운터 종료: 저장해 둔 원래 시점으로 다시 블렌드하고, 다 돌아오면 룩 입력을 푼다.
+	void EndCounterCamera();
+
+	// 히트스톱: 대상(적)의 CustomTimeDilation만 낮춰 순간 정지(플레이어/글로벌 딜레이션과 충돌 없음). Standalone 전용.
+	void DoHitStop(AActor* Target, float RealDuration, float TimeScale);
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -54,6 +64,12 @@ private:
 
 	// 상태 전이(진입 시 elapsed 리셋 + Tick on/off). 상태별 딜레이션도 여기서 적용한다.
 	void SetState(ECounterTimeDilationState NewState);
+
+	// 슬로우 상태/히트스톱 중 하나라도 진행 중이면 Tick 유지, 전부 끝나면 끈다.
+	void UpdateTickEnabled();
+
+	// 진행 중인 히트스톱을 즉시 원복(레벨 전환·Idle 안전장치).
+	void RestoreHitStop();
 
 	// 글로벌/플레이어 딜레이션 적용 헬퍼.
 	void ApplyGlobalDilation(float Dilation);
@@ -87,4 +103,16 @@ private:
 
 	// Ending 진입 시점의 플레이어 딜레이션(복구 보간 시작값). 러시 후=1/SlowFactor, 미진입 만료=1.0.
 	float EndingStartPlayerDilation = 1.f;
+
+	// --- 히트스톱(대상 CustomTimeDilation) ---
+	TWeakObjectPtr<AActor> HitStopActor;
+	float HitStopRealRemaining = 0.f;
+
+	// --- 카운터 카메라 회전 블렌드(control rotation) ---
+	TWeakObjectPtr<APlayerController> CounterCamPC;
+	FRotator CounterCamSavedRot = FRotator::ZeroRotator;  // 진입 직전 원래 시점(복귀 목표)
+	FRotator CounterCamTargetRot = FRotator::ZeroRotator; // 현재 블렌드 목표
+	float CounterCamBlendSpeed = 8.f;                     // RInterpTo 속도
+	bool bCounterCamActive = false;
+	bool bCounterCamReturning = false;                    // true면 원래 시점으로 복귀 중(완료 시 룩 잠금 해제)
 };

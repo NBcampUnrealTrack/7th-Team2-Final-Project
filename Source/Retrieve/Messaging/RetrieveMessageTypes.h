@@ -94,6 +94,10 @@ struct FRetrieveDamageDealtPayload
 	// 피격 강도 태그(GameplayEvent.Hit.Normal/.Heavy) - 피격 측 흔들림 조회 키
 	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
 	FGameplayTag TargetEventTag;
+	// 타격 접점(월드). 플로터 표시 위치용 — GA가 EffectContext에 넣은 HitResult.ImpactPoint.
+	// ZeroVector면 수신부에서 "액터 머리 위".
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Combat")
+	FVector HitLocation = FVector::ZeroVector;
 };
 
 // ---- 활 차징 ------------------------------------------------------

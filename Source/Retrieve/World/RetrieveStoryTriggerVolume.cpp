@@ -61,13 +61,15 @@ void ARetrieveStoryTriggerVolume::HandleBeginOverlap(UPrimitiveComponent* Overla
 		}
 	}
 
-	// 2) 퀘스트 스텝 완료 (원장이 선행 조건/중복을 검사).
+	// 2) 퀘스트 스텝 완료 (원장이 선행 조건/중복을 검사). 성공했을 때만 일회성 볼륨을 소진시킴.
 	if (CompleteStepTag.IsValid())
 	{
 		if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
 		{
-			Quest->CompleteStep(CompleteStepTag);
-			bDidSomething = true;
+			if (Quest->CompleteStep(CompleteStepTag))
+			{
+				bDidSomething = true;
+			}
 		}
 	}
 

@@ -3,8 +3,12 @@
 #include "Components/Inventory/InventoryComponent.h"
 #include "Settings/RetrieveGameUserSettings.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTags/RetrieveGameplayTags.h"
+#include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "UI/RetrieveItemPickupToastWidget.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 라이프사이클
@@ -36,7 +40,18 @@ void URetrieveToastManagerWidget::NativeDestruct()
 	{
 		BoundInventoryComp->OnItemAdded.RemoveDynamic(
 			this, &URetrieveToastManagerWidget::OnInventoryItemAdded);
+		BoundInventoryComp->OnCurrencyChanged.RemoveDynamic(
+			this, &URetrieveToastManagerWidget::OnCurrencyChanged);
 		BoundInventoryComp = nullptr;
+	}
+
+	if (PickupListenerHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			UGameplayMessageSubsystem::Get(World).UnregisterListener(PickupListenerHandle);
+		}
+		PickupListenerHandle = FGameplayMessageListenerHandle();
 	}
 
 	// 남아있는 토스트 즉시 정리
@@ -67,7 +82,21 @@ void URetrieveToastManagerWidget::BindToInventory()
 
 	InvComp->OnItemAdded.AddDynamic(
 		this, &URetrieveToastManagerWidget::OnInventoryItemAdded);
+
+	// 통화(골드) 증가 토스트: 현재 소지금을 기준값으로 잡아 로드/초기화 스팸을 방지한다.
+	LastCurrency = InvComp->GetCurrency();
+	InvComp->OnCurrencyChanged.AddDynamic(
+		this, &URetrieveToastManagerWidget::OnCurrencyChanged);
+
 	BoundInventoryComp = InvComp;
+
+	// 인벤토리 미경유 획득(퀘스트 물건 등) 토스트 메시지 구독.
+	if (UWorld* World = GetWorld())
+	{
+		PickupListenerHandle = UGameplayMessageSubsystem::Get(World).RegisterListener<FRetrievePickupToastPayload>(
+			RetrieveGameplayTags::Channel_UI_PickupToast,
+			this, &URetrieveToastManagerWidget::HandlePickupMessage);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,12 +130,6 @@ void URetrieveToastManagerWidget::OnInventoryItemAdded(
 		return;
 	}
 
-	// ── 최대 개수 초과 시 가장 오래된 토스트 제거 ──────────────────
-	if (ActiveToasts.Num() >= MaxToasts)
-	{
-		RemoveToast(ActiveToasts[0]);
-	}
-
 	// ── 토스트 위젯 생성 ───────────────────────────────────────────
 	UUserWidget* Toast = CreateWidget<UUserWidget>(this, ToastClass);
 	if (!Toast) { return; }
@@ -125,6 +148,89 @@ void URetrieveToastManagerWidget::OnInventoryItemAdded(
 			FInitToastParams Params{ ItemId, ItemCategoryTag, Quantity };
 			Toast->ProcessEvent(Func, &Params);
 		}
+	}
+
+	FinalizeToast(Toast);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 골드(통화) 증가 → 토스트
+// ─────────────────────────────────────────────────────────────────────────────
+
+void URetrieveToastManagerWidget::OnCurrencyChanged(int32 NewAmount)
+{
+	const int32 Delta = NewAmount - LastCurrency;
+	LastCurrency = NewAmount;
+
+	// 증가분만 알린다(소비/차감은 토스트 없음).
+	if (Delta <= 0)
+	{
+		return;
+	}
+
+	UTexture2D* GoldIcon = LoadObject<UTexture2D>(
+		nullptr,
+		TEXT("/Game/External/UIFantasyWarriorHUD/Textures/Icons_Inventory/"
+		     "T_ICON_FantasyWarrior_Inventory_Currency01_Clean."
+		     "T_ICON_FantasyWarrior_Inventory_Currency01_Clean"));
+
+	SpawnCustomToast(
+		NSLOCTEXT("Retrieve", "GoldToastTitle", "골드"),
+		GoldIcon,
+		FText::FromString(FString::Printf(TEXT("+%d"), Delta)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 퀘스트 물건 회수 등 메시지 → 토스트
+// ─────────────────────────────────────────────────────────────────────────────
+
+void URetrieveToastManagerWidget::HandlePickupMessage(
+	FGameplayTag Channel, const FRetrievePickupToastPayload& Payload)
+{
+	SpawnCustomToast(Payload.Title, Payload.Icon, Payload.QuantityText);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 커스텀 토스트 생성(골드/퀘스트 물건 공용)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void URetrieveToastManagerWidget::SpawnCustomToast(
+	const FText& Title, UTexture2D* Icon, const FText& QuantityText)
+{
+	if (const URetrieveGameUserSettings* Settings = URetrieveGameUserSettings::Get();
+		Settings && Settings->bHideHUD)
+	{
+		return;
+	}
+
+	const TSubclassOf<UUserWidget> ToastClass = LoadClass<UUserWidget>(
+		nullptr,
+		TEXT("/Game/Retrieve/UI/Interaction/WBP_ItemPickupToast.WBP_ItemPickupToast_C"));
+	if (!ToastClass) { return; }
+
+	UUserWidget* Toast = CreateWidget<UUserWidget>(this, ToastClass);
+	if (!Toast) { return; }
+
+	if (URetrieveItemPickupToastWidget* ToastWidget = Cast<URetrieveItemPickupToastWidget>(Toast))
+	{
+		ToastWidget->InitCustomToast(Title, Icon, QuantityText);
+	}
+
+	FinalizeToast(Toast);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 토스트 큐잉·배치·수명(공통)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void URetrieveToastManagerWidget::FinalizeToast(UUserWidget* Toast)
+{
+	if (!IsValid(Toast)) { return; }
+
+	// ── 최대 개수 초과 시 가장 오래된 토스트 제거 ──────────────────
+	if (ActiveToasts.Num() >= MaxToasts)
+	{
+		RemoveToast(ActiveToasts[0]);
 	}
 
 	// SetToastSlotIndex(ActiveToasts.Num(), ToastStartY, ToastSlotH) 호출

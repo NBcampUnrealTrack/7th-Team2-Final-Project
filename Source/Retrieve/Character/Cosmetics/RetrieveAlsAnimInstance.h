@@ -30,6 +30,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Weapon", Transient)
 	FGameplayTag WeaponTypeTag;
 
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Swim")
+	bool bIsSwimming = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Swim")
+	bool bIsUnderwater = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Swim")
+	bool bSwimEntryFromFall = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Retrieve|Swim")
+	float SwimSpeed = 0.f;
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Weapon",
 		Meta = (BlueprintThreadSafe, ReturnDisplayName = "Weapon Type Tag"))
 	const FGameplayTag& GetWeaponTypeTag() const { return WeaponTypeTag; }

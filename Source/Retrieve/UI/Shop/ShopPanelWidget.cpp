@@ -1069,6 +1069,11 @@ void UShopPanelWidget::RefreshBuyList()
 	}
 }
 
+float UShopPanelWidget::GetActivePriceMultiplier() const
+{
+	return ShopDefinition ? ShopDefinition->PriceMultiplier : 1.0f;
+}
+
 void UShopPanelWidget::RefreshBuyDetail()
 {
 	if (SelectedBuyRowName.IsNone() || !ShopDefinition) return;

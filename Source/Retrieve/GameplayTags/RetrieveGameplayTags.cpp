@@ -1,4 +1,4 @@
-﻿#include "RetrieveGameplayTags.h"
+#include "RetrieveGameplayTags.h"
 
 namespace RetrieveGameplayTags
 {
@@ -17,6 +17,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_Zoom, "Input.Zoom");
 
 	// ---- Player abilities
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Player, "Ability.Player");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_Attack, "Ability.Player.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack, "Ability.Player.HeavyAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player_HeavyAttack_Fire, "Ability.Player.HeavyAttack.Fire");
@@ -148,6 +149,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property, "Attack.Property");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_GuardBreak, "Attack.Property.GuardBreak");
 	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_Critical, "Attack.Property.Critical");
+	UE_DEFINE_GAMEPLAY_TAG(Attack_Property_NoKnockback, "Attack.Property.NoKnockback");
 
 	// ---- Hit react type
 	UE_DEFINE_GAMEPLAY_TAG(HitReact_Type, "HitReact.Type");
@@ -389,6 +391,9 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Steam, "UI.Buff.Resonance.Steam");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Storm, "UI.Buff.Resonance.Storm");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Mist, "UI.Buff.Resonance.Mist");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Condensation, "UI.Buff.Resonance.Condensation");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Heat, "UI.Buff.Resonance.Heat");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Frost, "UI.Buff.Resonance.Frost");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_Resonance_Trinity, "UI.Buff.Resonance.Trinity");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet, "UI.Buff.ArmorSet");
 	UE_DEFINE_GAMEPLAY_TAG(UI_Buff_ArmorSet_Berserker_2pc, "UI.Buff.ArmorSet.Berserker.2pc");
@@ -450,6 +455,7 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Dialogue_LineRequested, "Channel.Dialogue.LineRequested");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_Changed, "Channel.Cinematic.Changed");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_Cinematic_SkipPrompt, "Channel.Cinematic.SkipPrompt");
 
 	// ---- Dialogue: 가위바위보 내기 토픽
 	UE_DEFINE_GAMEPLAY_TAG(Dialogue_Bet_Start, "Dialogue.Bet.Start");
@@ -465,6 +471,7 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: UI Quest notification / Reveal gate
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_QuestNotification, "Channel.UI.QuestNotification");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_RevealGate, "Channel.UI.RevealGate");
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_PickupToast, "Channel.UI.PickupToast");
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");
@@ -510,6 +517,7 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Staff
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Cast, "GameplayCue.Staff.Cast");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Staff_Impact, "GameplayCue.Staff.Impact");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Blink, "GameplayCue.Blink");
 
 	// ---- Gameplay cues: Parry
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Parry_Success, "GameplayCue.Parry.Success");
@@ -562,6 +570,10 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Village, "Quest.Step.TalkedToLumen.Village");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_ExitedCave, "Quest.Step.ExitedCave");
 
+	// Stage 6 (main quest) per-objective steps
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_EnteredCastleInterior, "Quest.Step.EnteredCastleInterior");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Step_TalkedToLumen_Castle, "Quest.Step.TalkedToLumen.Castle");
+
 	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_WakingFromTheDeep, "Quest.Main.WakingFromTheDeep");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheForgottenForest, "Quest.Main.TheForgottenForest");
@@ -571,6 +583,8 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_TheCorruptedGuardianWater, "Quest.Main.TheCorruptedGuardianWater");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ToTheEdge, "Quest.Main.ToTheEdge");
 	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_StormTheCastle, "Quest.Main.StormTheCastle");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_FortyThousandDays, "Quest.Main.FortyThousandDays");
+	UE_DEFINE_GAMEPLAY_TAG(Quest_Main_ForgeAhead, "Quest.Main.ForgeAhead");
 	
 	// ---- Dialogue
 	UE_DEFINE_GAMEPLAY_TAG(Speaker_Lumen, "Speaker.Lumen");
@@ -591,6 +605,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_WhoAreYou, "Topic.Lumen.WhoAreYou");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_OurGoal, "Topic.Lumen.OurGoal");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_HowToFight, "Topic.Lumen.HowToFight");
+	UE_DEFINE_GAMEPLAY_TAG(Topic_Lumen_TakeCore, "Topic.Lumen.TakeCore");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Greeting, "Topic.NPC.VillagerTest.Greeting");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Weather, "Topic.NPC.VillagerTest.Weather");
 	UE_DEFINE_GAMEPLAY_TAG(Topic_NPC_VillagerTest_Goodbye, "Topic.NPC.VillagerTest.Goodbye");

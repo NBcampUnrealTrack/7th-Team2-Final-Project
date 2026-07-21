@@ -66,7 +66,12 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::EnterState(
 	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	InstanceData.ElapsedTime = InstanceData.StrafeInterval;
+	// opt-in=false: 기존 동작 유지 (첫 Tick에서 즉시 만료 상태 → 첫 슬롯 요청 지연 없음)
+	// opt-in=true : 도착 후에만 누적한다는 원칙과 충돌하므로 0으로 시작.
+	//               최초 슬롯 배정은 아래 Tick 게이트가 별개로 즉시 처리.
+	InstanceData.ElapsedTime = InstanceData.bWaitForArrivalBeforeShift
+		? 0.f
+		: InstanceData.StrafeInterval;
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
@@ -99,6 +104,61 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 	FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+
+	// === opt-in 게이팅 (opt-in=false면 이 블록 통째로 스킵) ===
+	// opt-in=true 몬스터:
+	//   MinOccupants 미달 → 스킵 (기존 정책 보존)
+	//   슬롯 없음 → 즉시 RequestSlot + ElapsedTime=0 + 반환 (같은 틱에 Shift하지 않음)
+	//   슬롯 있고 미도착 → ElapsedTime=0 리셋 후 반환 (도착 후에만 아래 흐름의 누적 시작)
+	// 이 게이트를 ElapsedTime += DeltaTime 이전에 두어 이동 중 실질적으로 누적이 없다.
+	if (InstanceData.bWaitForArrivalBeforeShift)
+	{
+		if (APawn* GatePawn = Context.GetExternalDataPtr(PawnHandle))
+		{
+			UEncirclementSubsystem* GateEncSub = IsValid(InstanceData.TargetActor)
+				? GatePawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>()
+				: nullptr;
+			if (GateEncSub)
+			{
+				// MinOccupants 정책은 opt-in 여부와 무관하게 동일하게 보존.
+				if (GateEncSub->GetCommittedCount(InstanceData.TargetActor)
+					< InstanceData.MinOccupantsToCircle)
+				{
+					InstanceData.ElapsedTime = 0.f;
+					return EStateTreeRunStatus::Running;
+				}
+
+				const int32 GateSlot = GateEncSub->GetCurrentSlot(InstanceData.TargetActor, GatePawn);
+				if (GateSlot == INDEX_NONE)
+				{
+					// 최초 슬롯 배정은 도착 여부와 관계없이 즉시 요청.
+					// Evaluator가 보통 먼저 배정하지만 Task 자체가 그 사실에 의존하지 않도록.
+					const int32 RequestedSlot = GateEncSub->RequestSlot(InstanceData.TargetActor, GatePawn);
+					if (RequestedSlot == INDEX_NONE)
+					{
+						UE_LOG(LogStateTree, Warning, TEXT("[%s] CurrentSlot not found and slot request failed"), *GatePawn->GetName());
+					}
+					// 새로 배정한 슬롯을 같은 틱에 다시 Shift하지 않는다.
+					InstanceData.ElapsedTime = 0.f;
+					return EStateTreeRunStatus::Running;
+				}
+
+				// ChaseLocation은 Evaluator에서 바인딩된 실제 Move To 목적지
+				// (Inner/Outer, 노이즈, DT 오버라이드 모두 반영). GetSlotLocation 재계산은
+				// 항상 Inner 값이라 실제 목적지와 어긋나므로 반드시 이 값을 써야 한다.
+				const bool bReachedSlot = !InstanceData.ChaseLocation.IsNearlyZero()
+					&& FVector::DistSquared2D(GatePawn->GetActorLocation(), InstanceData.ChaseLocation)
+						<= FMath::Square(InstanceData.ArrivalRadius);
+				if (!bReachedSlot)
+				{
+					InstanceData.ElapsedTime = 0.f;
+					return EStateTreeRunStatus::Running;
+				}
+			}
+		}
+	}
+
+	// === 여기부터 기존 코드 완전 보존 (opt-in=false는 위 블록 스킵 후 여기부터 실행) ===
 	InstanceData.ElapsedTime += DeltaTime;
 
 	if (InstanceData.ElapsedTime < InstanceData.StrafeInterval)

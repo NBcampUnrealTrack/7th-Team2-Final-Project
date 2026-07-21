@@ -103,10 +103,6 @@ protected:
 	
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Ability|Parry")
 	void StartListeningForParried();
-	
-	// TODO(하민): 패리 스태거는 방어자 push 경로(UGA_ParryBase::ApplyParryStagger)로 일원화됨. 향후 제거 예정
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Ability|Parry")
-	TSubclassOf<UGameplayEffect> ParriedStaggerEffect;
 
 	// 플레이어 현재 원소 모드 태그(PlayerState 조회). 없으면 EmptyTag.
 	FGameplayTag ResolveCurrentElementTag() const;

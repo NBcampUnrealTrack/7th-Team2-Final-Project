@@ -358,8 +358,13 @@ void UConversationViewModel::AppendGoodbyeIfMissing()
 {
 	const bool bHasGoodbye = Topics.ContainsByPredicate(
 		[](const FRetrieveDialogueTopic& Topic) { return !Topic.TopicId.IsValid(); });
+	const bool bRequiresTakeCoreChoice = Topics.ContainsByPredicate(
+		[](const FRetrieveDialogueTopic& Topic)
+		{
+			return Topic.TopicId.MatchesTagExact(RetrieveGameplayTags::Topic_Lumen_TakeCore);
+		});
 
-	if (bCurrentAutoEndAfterLines && !HasSelectableTopics())
+	if (bRequiresTakeCoreChoice || (bCurrentAutoEndAfterLines && !HasSelectableTopics()))
 	{
 		return;
 	}

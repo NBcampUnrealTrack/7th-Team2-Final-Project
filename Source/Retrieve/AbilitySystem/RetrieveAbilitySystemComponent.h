@@ -93,7 +93,7 @@ public:
 	bool IsAttackCancelIntentAllowed(const FGameplayTag& IntentTag) const;
 
 	// 카운터 타겟 산출용 약참조 저장/조회. 카운터 성공 시 ParryCounter 대시를 때려박기 위해 UGA_ParryCounter가 사용한다.
-	void SetPendingCounterTarget(AActor* InTarget);
+	void SetPendingCounterTarget(AActor* InTarget, float WindowDuration = 0.f);
 	AActor* GetPendingCounterTarget() const;
 	void ClearPendingCounterTarget();
 
@@ -130,6 +130,15 @@ protected:
 
 	// 카운터 성공시 Parry Counter 대시를 때려박기 위한 대상을 약참조로 저장
 	TWeakObjectPtr<AActor> PendingCounterTarget;
+
+	// 카운터 수용 시간이 지나면 PendingCounterTarget을 자동 소멸시키는 타이머.
+	FTimerHandle PendingCounterClearTimer;
+
+	// 카운터 가능 윈도우 동안 아바타(플레이어) 메시에 붉은 아웃라인(커스텀뎁스 스텐실)을 켜고 끈다.
+	void SetCounterReadyHighlight(bool bEnabled);
+
+	// 카운터 아웃라인용 커스텀뎁스 스텐실 값(PostProcess 머티리얼이 이 값을 붉게 그린다). 락온(255)과 구분.
+	static constexpr int32 CounterReadyStencilValue = 252;
 
 	// 카운터 대시가 직접 등록한 워프 타겟을 RetrieveAttackWarp Notify가 덮어쓰지 않게 막는다.
 	bool bCounterWarpTargetLocked = false;

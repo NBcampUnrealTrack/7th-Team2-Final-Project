@@ -3,9 +3,12 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimMontage.h"
 #include "Components/Element/ElementGaugeComponent.h"
-#include "Components/Player/CounterTimeDilationComponent.h"
+#include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Data/WeaponAttackDefinition.h"
+#include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "UObject/SoftObjectPath.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
@@ -23,12 +26,6 @@ bool UGA_ParryBase::OpenParryWindow()
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!IsValid(ASC) || !ParryWindowEffect)
 	{
-		return false;
-	}
-	
-	if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Cooldown_Player_Parry))
-	{
-		// 쿨다운 중에는 window 자체를 열지 않는다. GuardAttack은 이 상태에서 발동도 차단할 예정이다.
 		return false;
 	}
 	
@@ -67,37 +64,6 @@ void UGA_ParryBase::CloseParryWindow()
 	bParryWindowOpened = false;
 }
 
-void UGA_ParryBase::ApplyParryCooldown()
-{
-	// Cooldown은 패링 시도자 자신에게만 적용된다.
-	// Guard 자체나 ParryCounter를 막는 목적이 아니라 다음 ParryWindow 오픈만 제한하는 목적이다.
-	if (bParryCooldownApplied || !ParryCooldownEffect)
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-
-	if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::Cooldown_Player_Parry))
-	{
-		bParryCooldownApplied = true;
-		return;
-	}
-
-	FGameplayEffectSpecHandle SpecHandle = MakeSourcedSpec(ParryCooldownEffect, GetAbilityLevel());
-	if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid())
-	{
-		return;
-	}
-
-	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-	bParryCooldownApplied = true;
-}
-
 void UGA_ParryBase::StartListeningForParrySuccess()
 {
 	StopParrySuccessTask();
@@ -124,18 +90,34 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 {
 	bParrySucceeded = true;
 
-	// 성공 즉시 window를 닫아 같은 NotifyState/GE 구간에서 다중 패링이 연쇄 발생하지 않게 한다.
-	// 이후 CounterWindow는 별도로 열리므로 "패링 성공 보상"은 유지된다.
+	// 성공 즉시 window를 닫아 같은 구간에서 다중 패링이 연쇄되지 않게 한다.
 	CloseParryWindow();
-	ApplyParryCooldown();
 	StopParrySuccessTask();
-	
+
 	LastParriedAttacker = const_cast<AActor*>(Cast<AActor>(Payload.OptionalObject));
+
+	ExecuteParrySuccessCue();
+
+	// 카운터 자격(EventMagnitude): 1=일반몹/보스 카운터패턴, 0=보스 단순 막기.
+	// 자격 없으면 데미지만 막고(판정부에서 이미 0) 스태거·카운터·리액션 없이 종료.
+	if (Payload.EventMagnitude <= 0.f)
+	{
+		return;
+	}
+
+	PlayParrySuccessMontage();
+
+	// 카운터 대상 저장 + 수용 시간(무기 데이터). 만료 시 ASC가 대상 소멸. 카운터는 좌클릭 입력으로만 발동.
 	if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
-		RetrieveASC->SetPendingCounterTarget(LastParriedAttacker.Get());
+		float CounterWindow = 0.f;
+		if (const FWeaponParryData* ParryData = ResolveParryData())
+		{
+			CounterWindow = ParryData->CounterWindowDuration;
+		}
+		RetrieveASC->SetPendingCounterTarget(LastParriedAttacker.Get(), CounterWindow);
 	}
-	
+
 	// 패리 성공 시 스태미너 회복(스태미너 소모 설정 맵의 RestoreAmount, 이 어빌리티 StaminaCostTag 항목).
 	FStaminaCostRow StaminaRow;
 	if (GetStaminaCostRow(StaminaRow) && StaminaRow.RestoreAmount > 0.f)
@@ -167,33 +149,8 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 		}
 	}
 
-	// 성공 피드백만 즉시 실행한다.
-	// 카운터 대시는 GA_ParryCounter가 Attack 입력으로 발동된 뒤 ParrySuccessMontage를 재생한다.
-	ExecuteParrySuccessCue();
-
-	// 카운터 선택 대기 연출 시작.
-	// 입력이 없으면 CounterTimeDilationComponent가 만료 시 원복하고,
-	// 입력이 있으면 카운터 ability가 EnterReboost()로 대시 전환을 시작한다.
-	if (AActor* Avatar = GetAvatarActorFromActorInfo())
-	{
-		if (UCounterTimeDilationComponent* TimeComp = Avatar->FindComponentByClass<UCounterTimeDilationComponent>())
-		{
-			TimeComp->StartWindowSlow();
-		}
-	}
-
-	// 적 반응 확정: 비보스=ParryStaggerEffect, 보스=BossParryStaggerEffect(약화)
-	ApplyParryStagger(LastParriedAttacker.Get());
-	
-	if (AActor* CounterAvatar = GetAvatarActorFromActorInfo())
-	{
-		FGameplayEventData CounterEvent;
-		CounterEvent.EventTag = RetrieveGameplayTags::GameplayEvent_Parry_Counter;
-		CounterEvent.Instigator = CounterAvatar;
-		CounterEvent.Target = LastParriedAttacker.Get();
-		CounterEvent.OptionalObject = LastParriedAttacker.Get();
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(CounterAvatar, RetrieveGameplayTags::GameplayEvent_Parry_Counter, CounterEvent);
-	}
+	// 타격+스태거는 즉시가 아니라 성공 몽타주의 AnimNotify_ParryImpact(방패 미는 프레임)가
+	// PendingCounterTarget에게 적용한다. 여기선 대상만 확정(SetPendingCounterTarget)해 둔다.
 }
 
 void UGA_ParryBase::ExecuteParrySuccessCue() const
@@ -207,45 +164,51 @@ void UGA_ParryBase::ExecuteParrySuccessCue() const
 	}
 }
 
-void UGA_ParryBase::ApplyParryStagger(AActor* Attacker)
-{
-	if (!HasAuthority(&GetCurrentActivationInfoRef()) || !IsValid(Attacker))
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Attacker);
-	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-	if (!TargetASC || !SourceASC)
-	{
-		return;
-	}
-
-	const TSubclassOf<UGameplayEffect> StaggerGE = SelectEffectByTargetType(TargetASC, ParryStaggerEffect, BossParryStaggerEffect);
-	const FGameplayEffectSpecHandle Spec = MakeSourcedSpec(StaggerGE, GetAbilityLevel());
-	if (Spec.IsValid())
-	{
-		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
-	}
-}
-
 void UGA_ParryBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	// 실패/만료/취소 경로에서도 window가 열린 적이 있으면 cooldown을 적용한다.
-	// CloseParryWindow()가 상태를 false로 만들기 때문에 먼저 스냅샷을 잡는다.
-	const bool bHadParryWindow = bParryWindowOpened || ParryWindowHandle.IsValid();
-	
 	CloseParryWindow();
-	
-	if (bHadParryWindow && !bParryCooldownApplied)
-	{
-		ApplyParryCooldown();
-	}
-	
 	StopParrySuccessTask();
-	
+
 	bParrySucceeded = false;
-	bParryCooldownApplied = false;
-	
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+const FWeaponParryData* UGA_ParryBase::ResolveParryData() const
+{
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	const UWeaponComponent* Weapon = Avatar ? Avatar->FindComponentByClass<UWeaponComponent>() : nullptr;
+	if (!IsValid(Weapon) || !Weapon->IsEquipped())
+	{
+		return nullptr;
+	}
+
+	const UWeaponAttackDefinition* Def = Weapon->GetWeaponDataRef().AttackComboDefinition.LoadSynchronous();
+	return Def ? &Def->Parry : nullptr;
+}
+
+bool UGA_ParryBase::WeaponCanParry() const
+{
+	const FWeaponParryData* ParryData = ResolveParryData();
+	return ParryData && !ParryData->SuccessMontage.IsNull();
+}
+
+void UGA_ParryBase::PlayParrySuccessMontage() const
+{
+	const FWeaponParryData* ParryData = ResolveParryData();
+	if (!ParryData || ParryData->SuccessMontage.IsNull())
+	{
+		return;
+	}
+
+	ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	if (UAnimMontage* Montage = ParryData->SuccessMontage.LoadSynchronous())
+	{
+		Character->PlayAnimMontage(Montage, ParryData->SuccessMontagePlayRate);
+	}
 }

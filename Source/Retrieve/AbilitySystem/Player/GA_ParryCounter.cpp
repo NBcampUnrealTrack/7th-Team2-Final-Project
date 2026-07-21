@@ -10,7 +10,10 @@
 #include "MotionWarpingComponent.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "Combat/RetrieveTargetingLibrary.h"
+#include "Components/Pawn/RetrieveCameraBoom.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/Enemy/EpicMonsterGroggyComponent.h"
+#include "Components/LockOn/LockOnComponent.h"
 #include "Components/Player/CounterTimeDilationComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/WeaponAttackDefinition.h"
@@ -45,9 +48,18 @@ UGA_ParryCounter::UGA_ParryCounter()
 	ApplyCommonActionBlocks();
 
 	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Attacking);
-	
+	// 카운터 진행 동안 무적(전투 피해 무시).
+	ActivationOwnedTags.AddTag(RetrieveGameplayTags::State_Player_Invincible);
+
 	CancelAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+
+	// 카운터 몽타주가 끝날 때까지 다른 입력으로 끊기지 않게 주요 전투 입력을 막는다(어빌리티 수명=몽타주 수명).
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Type_Attack);
 	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Guard);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Parry);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Dash);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Blink);
+	BlockAbilitiesWithTag.AddTag(RetrieveGameplayTags::Ability_Player_Burst);
 }
 
 bool UGA_ParryCounter::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -98,8 +110,16 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
-	
-	UAnimMontage* Montage = ComboDefinition->ParrySuccessMontage.LoadSynchronous();
+
+	const FParryCounterData* CounterData = ComboDefinition->ResolveParryVariant(ResolveCurrentElementTag());
+	if (!CounterData)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
+	CachedParryCounterData = *CounterData;
+
+	UAnimMontage* Montage = CachedParryCounterData.CounterMontage.LoadSynchronous();
 	if (!IsValid(Montage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -115,8 +135,35 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 
 	RegisterCounterWarpTarget();
 
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+
+	// 카운터 전용 카메라 구도와 충돌하지 않게 락온을 푼다.
+	if (ULockOnComponent* LockOn = Avatar ? Avatar->FindComponentByClass<ULockOnComponent>() : nullptr)
+	{
+		if (LockOn->IsLockedOn())
+		{
+			LockOn->StopLockOn();
+		}
+	}
+
+	// 타겟 뒤 구도로 블렌드 + 룩 잠금. EndAbility에서 원래 시점으로 복귀.
+	APlayerController* PC = CurrentActorInfo ? CurrentActorInfo->PlayerController.Get() : nullptr;
+	UCounterTimeDilationComponent* CameraComp = Avatar ? Avatar->FindComponentByClass<UCounterTimeDilationComponent>() : nullptr;
+	if (IsValid(PC) && IsValid(CameraComp))
+	{
+		FRotator FramingRot = PC->GetControlRotation();
+		const FVector ToTarget = (CachedCounterTarget->GetActorLocation() - Avatar->GetActorLocation()).GetSafeNormal2D();
+		if (!ToTarget.IsNearlyZero())
+		{
+			FramingRot = FRotator(ComboDefinition->Parry.CounterCameraPitch,
+				ToTarget.Rotation().Yaw + ComboDefinition->Parry.CounterCameraYawOffset, 0.f);
+		}
+		CameraComp->BeginCounterCamera(PC, FramingRot, CounterCameraBlendSpeed);
+	}
+
+	// 창당 1회 발행되는 Impact.Begin을 구독 → ANS_AttackImpact 창 하나 = 카운터 히트 하나(찌르기/내려치기 2히트).
 	ImpactEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, RetrieveGameplayTags::GameplayEvent_Attack_Impact, nullptr, false, true);
+		this, RetrieveGameplayTags::GameplayEvent_Attack_Impact_Begin, nullptr, false, true);
 	if (ImpactEventTask)
 	{
 		ImpactEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
@@ -124,7 +171,7 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	}
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, Montage, ComboDefinition->ParrySuccessMontagePlayRate, NAME_None, true);
+		this, NAME_None, Montage, 1.f, NAME_None, true);
 	if (!MontageTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -204,7 +251,7 @@ void UGA_ParryCounter::ClearCounterWarpTarget()
 	}
 }
 
-void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
+void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor, float DamageScale, bool bFirstHit)
 {
 	if (!HasAuthority(&GetCurrentActivationInfoRef()))
 	{
@@ -229,18 +276,33 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 		return;
 	}
 
+	const bool bTargetIsBoss = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss);
+	const float DamageMul = (bTargetIsBoss ? CachedParryCounterData.BossDamageMultiplier : CachedParryCounterData.NormalDamageMultiplier) * DamageScale;
+
 	FGameplayEffectSpecHandle Spec = MakeSourcedSpec(DamageEffectClass, GetAbilityLevel());
 	if (Spec.IsValid() && Spec.Data.IsValid())
 	{
-		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, CounterDamageMultiplier);
-		if (CounterKnockbackStrength > 0.f)
+		// 임팩트 파티클(GameplayCue.Combat.Hit)은 컨텍스트 HitResult 위치에 뜬다. 카운터는 트레이스가 없어
+		// 대상 위치를 HitResult로 직접 넣어야 파티클이 (0,0,0)이 아닌 대상에 표시된다(일반 공격과 동일).
+		FHitResult CounterHit;
+		CounterHit.Location = TargetActor->GetActorLocation();
+		CounterHit.ImpactPoint = TargetActor->GetActorLocation();
+		Spec.Data->GetContext().AddHitResult(CounterHit, /*bReset=*/true);
+
+		Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Damage_Mul, DamageMul);
+		// 넉백은 마무리 히트(내려치기)에만. 찌르기(첫 히트)는 밀치지 않는다(전역 기본 넉백도 태그로 차단).
+		if (!bFirstHit && CachedParryCounterData.KnockbackStrength > 0.f)
 		{
-			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, CounterKnockbackStrength);
-			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, CounterKnockbackUpwardStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_Strength, CachedParryCounterData.KnockbackStrength);
+			Spec.Data->SetSetByCallerMagnitude(RetrieveGameplayTags::Data_Knockback_UpwardStrength, CachedParryCounterData.KnockbackUpwardStrength);
+		}
+		else
+		{
+			Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Property_NoKnockback);
 		}
 		Spec.Data->AddDynamicAssetTag(RetrieveGameplayTags::Attack_Type_Normal);
 
-		if (const FGameplayTag ReactTag = HitReactTypeToTag(CounterHitReactType); ReactTag.IsValid())
+		if (const FGameplayTag ReactTag = HitReactTypeToTag(CachedParryCounterData.HitReactType); ReactTag.IsValid())
 		{
 			Spec.Data->AddDynamicAssetTag(ReactTag);
 		}
@@ -250,14 +312,14 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 			ResolveCurrentElementTag(),
 			RetrieveGameplayTags::Attack_Type_Normal,
 			FGameplayTag(),
-			HitReactTypeToTag(CounterHitReactType));
+			HitReactTypeToTag(CachedParryCounterData.HitReactType));
 
-		const FGameplayTag HitSuccessTag = CounterHitSuccessFeedbackTag.IsValid()
-		? CounterHitSuccessFeedbackTag
+		const FGameplayTag HitSuccessTag = CachedParryCounterData.HitSuccessFeedbackTag.IsValid()
+		? CachedParryCounterData.HitSuccessFeedbackTag
 		: RetrieveGameplayTags::GameplayEvent_Attack_HitSuccess_Heavy;
 
-		const FGameplayTag TargetHitTag = CounterTargetHitFeedbackTag.IsValid()
-		? CounterTargetHitFeedbackTag
+		const FGameplayTag TargetHitTag = CachedParryCounterData.TargetHitFeedbackTag.IsValid()
+		? CachedParryCounterData.TargetHitFeedbackTag
 		: RetrieveGameplayTags::GameplayEvent_Hit_Heavy;
 
 		Spec.Data->AddDynamicAssetTag(HitSuccessTag);
@@ -266,13 +328,28 @@ void UGA_ParryCounter::ApplyCounterToTarget(AActor* TargetActor)
 		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 	}
 
-	if (bApplyGroggyOnImpact)
+	UE_LOG(LogRetrieveCombat, Log, TEXT("[ParryCounter] Hit applied to %s (DamageMul=%.2f, Scale=%.2f)"),
+		*GetNameSafe(TargetActor), DamageMul, DamageScale);
+
+	// 그로기는 첫 히트에만.
+	if (!bFirstHit)
 	{
-		TryApplyMonsterGroggy(TargetActor, CounterGroggyDuration);
+		return;
 	}
 
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[ParryCounter] Counter applied to %s (DamageMul=%.2f)"),
-		*GetNameSafe(TargetActor), CounterDamageMultiplier);
+	// 그로기: 대상 타입별 GE(있으면). 없으면 몬스터 그로기 컴포넌트로 폴백.
+	if (const TSubclassOf<UGameplayEffect> GroggyGE = bTargetIsBoss ? CachedParryCounterData.BossGroggyEffect : CachedParryCounterData.NormalGroggyEffect)
+	{
+		const FGameplayEffectSpecHandle GroggySpec = MakeSourcedSpec(GroggyGE, GetAbilityLevel());
+		if (GroggySpec.IsValid() && GroggySpec.Data.IsValid())
+		{
+			SourceASC->ApplyGameplayEffectSpecToTarget(*GroggySpec.Data.Get(), TargetASC);
+		}
+	}
+	else
+	{
+		TryApplyMonsterGroggy(TargetActor, CachedParryCounterData.GroggyDuration);
+	}
 }
 
 bool UGA_ParryCounter::TryApplyMonsterGroggy(AActor* TargetActor, float Duration) const
@@ -304,15 +381,18 @@ bool UGA_ParryCounter::TryApplyMonsterGroggy(AActor* TargetActor, float Duration
 	return true;
 }
 
-void UGA_ParryCounter::HandleImpactEvent(FGameplayEventData /*Payload*/)
+void UGA_ParryCounter::HandleImpactEvent(FGameplayEventData Payload)
 {
-	if (!IsActive() || bCounterImpactApplied)
+	if (!IsActive())
 	{
 		return;
 	}
 
-	bCounterImpactApplied = true;
-	ApplyCounterToTarget(CachedCounterTarget.Get());
+	// EventMagnitude = 이 창의 ANS_AttackImpact.DamageScale.
+	const float HitDamageScale = Payload.EventMagnitude > 0.f ? Payload.EventMagnitude : 1.f;
+	const bool bFirstHit = (CounterHitIndex == 0);
+	++CounterHitIndex;
+	ApplyCounterToTarget(CachedCounterTarget.Get(), HitDamageScale, bFirstHit);
 }
 
 void UGA_ParryCounter::HandleMontageCompleted()
@@ -347,9 +427,27 @@ void UGA_ParryCounter::EndAbility(const FGameplayAbilitySpecHandle Handle, const
 		RetrieveASC->ClearPendingCounterTarget();
 	}
 
+	// 카운터 카메라 원복(복귀 완료 시 컴포넌트가 룩 잠금 해제).
+	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UCounterTimeDilationComponent* CameraComp = Avatar->FindComponentByClass<UCounterTimeDilationComponent>())
+		{
+			CameraComp->EndCounterCamera();
+		}
+	}
+
 	CachedWeaponComponent = nullptr;
 	CachedCounterTarget.Reset();
-	bCounterImpactApplied = false;
+	CounterHitIndex = 0;
+
+	// 줌 복귀 안전장치: 원복 노티가 없거나 카운터가 중단돼도 유저 카메라 거리로 돌아오게 한다(프로파일 해제).
+	if (AActor* Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (URetrieveCameraBoom* Boom = Avatar->FindComponentByClass<URetrieveCameraBoom>())
+		{
+			Boom->ClearCameraBoomProfileOverride(FName(TEXT("ParryCounter")));
+		}
+	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -42,6 +42,9 @@ public:
 	/** WBP에 내장된 CraftResultPopupWidget에 강화 성공/실패 결과를 표시한다. */
 	void ShowCraftResult(bool bSuccess, UTexture2D* Icon);
 
+	/** 배치(여러 개 확률 제작) 결과를 "성공 N / 실패 M" 요약 팝업으로 1회 표시한다. */
+	void ShowCraftResultSummary(int32 SuccessCount, int32 FailCount, UTexture2D* Icon);
+
 	// ── 탭 색상 (에디터에서 조정 가능, 재빌드 불필요) ──
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Bonfire|Tab")
 	FLinearColor TabActiveColor = FLinearColor(0.10f, 0.42f, 0.82f, 1.0f);

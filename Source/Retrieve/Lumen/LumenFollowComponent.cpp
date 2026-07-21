@@ -37,7 +37,7 @@ namespace
 	{
 		ACharacter* Lumen = Comp ? Cast<ACharacter>(Comp->GetOwner()) : nullptr;
 		UWorld* World = Lumen ? Lumen->GetWorld() : nullptr;
-		if (!World || !Lumen->HasAuthority())
+		if (!World || !Lumen->HasAuthority() || Comp->IsRetired())
 		{
 			return;
 		}
@@ -291,6 +291,22 @@ void ULumenFollowComponent::SetModeFromStateTree(EFollowMode NewMode)
 	OnRep_Mode();
 }
 
+// ---- Retire --------------------------------------------------------------------------------------
+
+void ULumenFollowComponent::SetRetired(bool bInRetired)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || bRetired == bInRetired)
+	{
+		return;
+	}
+	bRetired = bInRetired;
+
+	if (!bRetired)
+	{
+		bWaitRequested = false;
+	}
+}
+
 // ---- Command ------------------------------------------------------------------------------------
 
 void ULumenFollowComponent::HandleToggleWaitBroadcast(const FRetrieveLumenCommandPayload& /*Payload*/)
@@ -314,6 +330,11 @@ void ULumenFollowComponent::HandleRecallBroadcast(const FRetrieveLumenCommandPay
 {
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
+		if (bRetired)
+		{
+			return;
+		}
+
 		// 소환은 Wait을 해제하여 ST가 Follow로 복귀하도록 함
 		bWaitRequested = false;
 
@@ -345,7 +366,7 @@ void ULumenFollowComponent::HandleRecallBroadcast(const FRetrieveLumenCommandPay
 
 void ULumenFollowComponent::TickIdle()
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority())
+	if (!GetOwner() || !GetOwner()->HasAuthority() || bRetired)
 	{
 		return;
 	}

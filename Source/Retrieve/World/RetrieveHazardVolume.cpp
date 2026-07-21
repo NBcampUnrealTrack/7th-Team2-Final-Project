@@ -108,6 +108,13 @@ void ARetrieveHazardVolume::ApplyPeriodicDamage()
 			It.RemoveCurrent();
 			continue;
 		}
+		// 부활 텔레포트/충돌 해제 등으로 EndOverlap을 놓친 잔존 항목 방어 —
+		// 실제로 더 이상 겹쳐 있지 않으면 데미지 없이 목록에서 제거한다.
+		if (HazardVolume && !HazardVolume->IsOverlappingActor(TargetActor))
+		{
+			It.RemoveCurrent();
+			continue;
+		}
 		bAnyValid = true;
 		ApplyDamageTo(TargetActor);
 	}

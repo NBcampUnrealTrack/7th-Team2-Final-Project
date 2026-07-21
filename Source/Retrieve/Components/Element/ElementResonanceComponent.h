@@ -46,6 +46,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Resonance")
 	TArray<FName> GetActiveResonanceIds() const;
 
+	/** 활성 공명이 하나라도 있으면 true. 공명 중엔 어튠 스택 적립을 막는 데 사용(GA_Absorb). */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Resonance")
+	bool HasActiveResonance() const { return ActiveResonanceHandles.Num() > 0; }
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Resonance")
 	FOnResonanceChanged OnResonanceChanged;
 
@@ -87,9 +91,6 @@ private:
 
 	/** 공명 재료로 사용한 흡수 스택과 대응하는 능력치 버프 GE를 지정 수만큼 제거. */
 	void ConsumeAbsorbStacks(const FGameplayTag& AttuneTag, int32 StacksToConsume);
-
-	/** 기존 공명에서 사용하지 않고 남은 재료를 흡수/어튠 스택으로 되돌린다. */
-	void RestoreAbsorbStacks(const FGameplayTag& AttuneTag, int32 StacksToRestore);
 
 	static bool IsAttuneSpec(const FGameplayEffectSpec& Spec);
 };

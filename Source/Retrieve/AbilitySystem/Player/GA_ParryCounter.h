@@ -35,7 +35,8 @@ private:
 	void RegisterCounterWarpTarget();
 	void ClearCounterWarpTarget();
 
-	void ApplyCounterToTarget(AActor* TargetActor);
+	// DamageScale=창별 데미지 배수(ANS_AttackImpact). 그로기는 첫 히트(찌르기)에만, 넉백은 이후(마무리) 히트에만.
+	void ApplyCounterToTarget(AActor* TargetActor, float DamageScale, bool bFirstHit);
 
 	bool TryApplyMonsterGroggy(AActor* TargetActor, float Duration) const;
 
@@ -48,30 +49,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
-	float CounterDamageMultiplier = 2.5f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage")
-	ERetrieveHitReactType CounterHitReactType = ERetrieveHitReactType::Stagger;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (Categories = "GameplayEvent.Attack.HitSuccess"))
-	FGameplayTag CounterHitSuccessFeedbackTag;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (Categories = "GameplayEvent.Hit"))
-	FGameplayTag CounterTargetHitFeedbackTag;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
-	float CounterKnockbackStrength = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Damage", meta = (ClampMin = "0.0"))
-	float CounterKnockbackUpwardStrength = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Groggy")
-	bool bApplyGroggyOnImpact = true;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Groggy", meta = (ClampMin = "0.0"))
-	float CounterGroggyDuration = 3.f;
-
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|MotionWarping", meta = (ClampMin = "0.0"))
 	float CounterWarpStandoffOffset = 50.f;
 
@@ -81,11 +58,20 @@ private:
 	UPROPERTY(Transient)
 	FRetrieveWeaponDataRow CachedWeaponData;
 
+	// 발동 시점에 확정한 무기별 카운터 데이터(배율/그로기/넉백/리액트/피드백).
+	UPROPERTY(Transient)
+	FParryCounterData CachedParryCounterData;
+
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> CachedCounterTarget;
 
+	// 카운터 콤보 내 임팩트 히트 수(0=첫 히트).
 	UPROPERTY(Transient)
-	bool bCounterImpactApplied = false;
+	int32 CounterHitIndex = 0;
+
+	// 타겟 뒤 구도 블렌드 속도(클수록 빠름).
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|ParryCounter|Camera", meta = (ClampMin = "0.1"))
+	float CounterCameraBlendSpeed = 8.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWeaponComponent> CachedWeaponComponent;

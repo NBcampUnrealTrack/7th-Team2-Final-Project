@@ -13,6 +13,7 @@
 #include "Components/Player/RetrieveHeroComponent.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "Components/Element/ElementResonanceComponent.h"
+#include "Components/Player/HeroEquipmentEvolutionComponent.h"
 #include "Components/Element/ElementUnlockComponent.h"
 #include "Components/Player/StaminaComponent.h"
 #include "Components/Player/PlayerBurstComponent.h"
@@ -46,7 +47,9 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	// ALS가 매 프레임 SetActorRotation으로 회전을 직접 제어하므로
 	// bOrientRotationToMovement / RotationRate 라인은 제거됨 (이전 의도는 GAS 태그로 처리됨).
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
-	MoveComp->JumpZVelocity = 600.f;
+	// 점프 방방거림 방지: 중력을 키우고 그만큼 점프 속도도 올려 높이는 유지, 체공만 줄인다.
+	MoveComp->GravityScale = 1.75f;
+	MoveComp->JumpZVelocity = 800.f;
 	MoveComp->AirControl = 0.35f;
 
 	// 적의 RVO 회피가 플레이어를 장애물로 인식하도록 등록. Weight=1.0(>=1.0)이라 자기 회피 계산(CalcAvoidanceVelocity)이 스킵되어 플레이어 자신은 비켜서지 않음.
@@ -85,6 +88,7 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 	PawnCosmeticComponent = CreateDefaultSubobject<URetrievePawnCosmeticComponent>(TEXT("PawnCosmeticComponent"));
 	CombatStanceComponent = CreateDefaultSubobject<UCombatStanceComponent>(TEXT("CombatStanceComponent"));
 	PlayerBurstComponent = CreateDefaultSubobject<UPlayerBurstComponent>(TEXT("PlayerBurstComponent"));
+	HeroEquipmentEvolutionComponent = CreateDefaultSubobject<UHeroEquipmentEvolutionComponent>(TEXT("HeroEquipmentEvolutionComponent"));
 	ElementUnlockComponent = CreateDefaultSubobject<UElementUnlockComponent>(TEXT("ElementUnlockComponent"));
 	BuffUIBroadcastComponent = CreateDefaultSubobject<URetrieveBuffUIBroadcastComponent>(TEXT("BuffUIBroadcastComponent"));
 	MotionWarpingComponent = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComponent"));
@@ -184,6 +188,16 @@ void ASovereignCharacter::InitializeAbilitySystem()
 		ElementResonanceComponent->InitializeWithAbilitySystem(ASC);
 	}
 
+	if (HeroEquipmentEvolutionComponent)
+	{
+		HeroEquipmentEvolutionComponent->InitializeWithAbilitySystem(ASC);
+	}
+
+	if (WeaponComponent)
+	{
+		WeaponComponent->InitializeWithAbilitySystem(ASC);
+	}
+
 	if (BuffUIBroadcastComponent)
 	{
 		BuffUIBroadcastComponent->RefreshAbilitySystemBinding();
@@ -219,6 +233,16 @@ void ASovereignCharacter::UnPossessed()
 	if (ElementResonanceComponent)
 	{
 		ElementResonanceComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (HeroEquipmentEvolutionComponent)
+	{
+		HeroEquipmentEvolutionComponent->UninitializeFromAbilitySystem();
+	}
+
+	if (WeaponComponent)
+	{
+		WeaponComponent->UninitializeFromAbilitySystem();
 	}
 
 	if (StaminaComponent)
@@ -257,6 +281,30 @@ void ASovereignCharacter::HandleDeathStarted(AActor* OwningActor)
 		RetrieveGameplayTags::Channel_Player_Died, 
 		Payload
 	);
+}
+
+void ASovereignCharacter::FellOutOfWorld(const UDamageType& DmgType)
+{
+	// 주의: Super(엔진 기본)를 호출하지 않는다 — 기본 구현은 폰을 Destroy하는데,
+	// 파괴된 폰은 HandleRetry→RespawnPlayerAtTransform의 Revive 대상이 될 수 없어
+	// "죽었는데 영원히 리스폰 안 됨" 소프트락이 된다(즉사급 해저드 + 낙사 구덩이 조합에서 재현).
+
+	// 아직 사망 처리 전이면(순수 낙사 등) 정규 사망 흐름을 태운다 — Result 화면/부활 UI까지 정상 진행.
+	if (URetrieveHealthComponent* HC = GetHealthComponent())
+	{
+		HC->KillOwner(); // 이미 사망 진행 중이면 내부에서 no-op
+	}
+
+	// 래그돌 시체가 KillZ 아래로 무한 낙하하며 이 콜백이 매 틱 재진입하지 않도록 물리를 동결한다.
+	// (무브먼트 모드는 건드리지 않는다 — 래그돌 외 경로에서 MOVE_None을 걸면 Revive가 복구하지 못하고,
+	//  래그돌 경로는 ALS가 이미 무브먼트를 세워둔 상태다. Revive의 StopRagdoll/텔레포트가 상태를 복원한다.)
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		if (MeshComp->IsSimulatingPhysics())
+		{
+			MeshComp->SetSimulatePhysics(false);
+		}
+	}
 }
 
 void ASovereignCharacter::Revive(const FTransform& RespawnTransform)

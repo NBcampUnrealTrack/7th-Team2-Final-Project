@@ -35,6 +35,8 @@ public:
 
 	/** 현재 진입한 물 영역 Provider(없으면 무효). FX 등 외부가 활성 수역 질의. */
 	const TScriptInterface<IRetrieveWaterProvider>& GetCurrentWater() const { return CurrentWater; }
+	/** 마지막 수영 진입 직전 MovementMode가 Falling이었는지 반환. */
+	bool WasSwimEntryFromFall() const { return bSwimEntryFromFall; }
 
 	FOnSwimWaterRegionChanged OnSwimWaterRegionChanged;
 	
@@ -58,6 +60,7 @@ private:
 	void SetSwimming(bool bEnable);
 
 	bool bSwimming = false; // 수영 상태 단일 소스(IsSwimming은 Flying에서 false라 대체)
+	bool bSwimEntryFromFall = false; // 입수 전환 애니메이션 선택용. 다음 수영 진입 때 덮어쓴다.
 
 	UPROPERTY(Transient)
 	TScriptInterface<IRetrieveWaterProvider> CurrentWater;

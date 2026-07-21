@@ -26,6 +26,10 @@ public:
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
+	// AnimNotifyState_ParryWindow 훅: 가드 진입부 프레임에만 패링 판정을 켠다(홀드는 블록 유지).
+	virtual bool OpenNotifyParryWindow() override;
+	virtual void CloseNotifyParryWindow() override;
+
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
@@ -38,9 +42,6 @@ private:
 	void StopRuntimeTasks();
 
 private:
-	UPROPERTY(EditDefaultsOnly, Category = "Guard")
-	TSoftObjectPtr<UAnimMontage> GuardMontage;
-
 	UPROPERTY(EditDefaultsOnly, Category = "Guard")
 	TSubclassOf<UGameplayEffect> GuardBreakStaggerEffect;
 

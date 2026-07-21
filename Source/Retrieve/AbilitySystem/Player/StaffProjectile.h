@@ -12,10 +12,13 @@ class UMeshComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UProjectileMovementComponent;
+class USoundBase;
 class USphereComponent;
 class UStaticMeshComponent;
 class UWorld;
 class AStaffProjectile;
+class UAudioComponent;
+class USoundBase;
 
 // 투사체 스폰 파라미터(스태프 강공·활 공용)
 struct FRetrieveProjectileSpawnParams
@@ -44,6 +47,8 @@ struct FRetrieveProjectileSpawnParams
 	bool bHasAimPoint = false;
 	// 0이면 직선 비행(스태프 강공 등). >0이면 중력 낙차(활). 클수록 빨리 떨어진다.
 	float GravityScaleOverride = 0.f;
+	// 발사(Launch) 순간 재생할 사운드(스폰 시점 아님).
+	TSoftObjectPtr<USoundBase> LaunchSound;
 };
 
 /**
@@ -97,7 +102,8 @@ private:
 	void ApplyHitToTarget(AActor* TargetActor, UAbilitySystemComponent* TargetASC, const FHitResult& SweepResult);
 	// ArmDelayedLaunch 타이머 콜백: 저장한 방향/속도로 발사.
 	void HandleDelayedLaunch();
-
+	void PlayImpactSFX(const FVector& Location);
+	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USphereComponent> CollisionSphere;
@@ -119,6 +125,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Damage")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
+	// 화살 Whoosh 사운드 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaffProjectile|SFX",	meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> FlightSFXComponent;
+	
+	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly, Category = "StaffProjectile|SFX")
+	TObjectPtr<USoundBase> FlightSFX;
+	
+	// 피격시 사운드
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|SFX")
+	TObjectPtr<USoundBase> ImpactSFX;
+	
+	// 중복 착탄음 방지
+	bool bImpactSFXPlayed = false;
+	
 	// 넉백 강도. 적중 시 URetrieveKnockbackLibrary::ApplyKnockbackFromSource로 적용.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StaffProjectile|Knockback", meta = (ClampMin = "0.0"))
 	float KnockbackStrength = 0.f;
@@ -147,6 +167,8 @@ private:
 
 	// 지연 발사(ArmDelayedLaunch) 상태
 	FTimerHandle LaunchDelayTimerHandle;
+
+	TSoftObjectPtr<USoundBase> LaunchSound;
 	FVector PendingLaunchDirection = FVector::ZeroVector;
 	float PendingLaunchSpeed = 0.f;
 };

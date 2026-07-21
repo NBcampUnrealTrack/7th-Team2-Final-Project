@@ -278,7 +278,7 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	int32 RadialVolleyCount = 1;
 	float RadialVolleyYawOffset = 0.f;
 
-	if (USkeletalMeshComponent* Mesh = AvatarActor->FindComponentByClass<USkeletalMeshComponent>())
+	if (USkeletalMeshComponent* Mesh = ResolveProjectileSpawnMesh(AvatarActor))
 	{
 		if (!SpawnSocketName.IsNone() && Mesh->DoesSocketExist(SpawnSocketName))
 		{
@@ -348,14 +348,11 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	default:
 		if (CachedTargetActor)
 		{
-			FVector AimLocation = CachedTargetActor->GetActorLocation();
-
-			if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(CachedTargetActor->GetRootComponent()))
+			const FVector AimedDirection = ResolveAimedProjectileDirection(SpawnLocation, CachedTargetActor);
+			if (!AimedDirection.IsNearlyZero())
 			{
-				AimLocation = RootPrimitive->Bounds.Origin;
+				Direction = AimedDirection;
 			}
-
-			Direction = (AimLocation - SpawnLocation).GetSafeNormal();
 		}
 		break;
 	}
@@ -438,6 +435,29 @@ void UGA_ShootProjectiles::SpawnProjectile()
 	{
 		SpawnOneProjectile(Direction, ActiveProjectileConfig.ProjectileSpeed, ProjectileIndex, ActiveProjectileCount);
 	}
+}
+
+USkeletalMeshComponent* UGA_ShootProjectiles::ResolveProjectileSpawnMesh(AActor* AvatarActor) const
+{
+	return AvatarActor ? AvatarActor->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
+}
+
+FVector UGA_ShootProjectiles::ResolveAimedProjectileDirection(
+	const FVector& SpawnLocation,
+	AActor* TargetActor) const
+{
+	if (!IsValid(TargetActor))
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector AimLocation = TargetActor->GetActorLocation();
+	if (const UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(TargetActor->GetRootComponent()))
+	{
+		AimLocation = RootPrimitive->Bounds.Origin;
+	}
+
+	return (AimLocation - SpawnLocation).GetSafeNormal();
 }
 
 TSubclassOf<AEnemyProjectile> UGA_ShootProjectiles::ResolveProjectileClass() const

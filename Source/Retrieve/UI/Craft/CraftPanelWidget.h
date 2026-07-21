@@ -17,6 +17,7 @@ class USlider;
 class USizeBox;
 class UVerticalBox;
 class UDataTable;
+class UTexture2D;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FCraftPanelCraftedSignature, FName, RecipeId, bool, bSuccess);
 
 /** 제작 카테고리 사이드바 항목 */
@@ -242,6 +243,9 @@ private:
 	void BeginTimedCraft();
 	void HandleTimedCraftComplete();
 
+	/** 강화 성공/실패 팝업에 쓸 결과 아이콘을 로드한다. */
+	UTexture2D* LoadCraftResultIcon(bool bSuccess) const;
+
 	UFUNCTION()
 	void HandleCraftButtonClicked();
 
@@ -301,6 +305,13 @@ private:
 	FName PendingRecipeId;
 	int32 PendingCraftCount = 0;
 	ECraftCategory PendingCraftCategory = ECraftCategory::Consumable;
+
+	// ── 배치(확률제 2개 이상) 결과 집계 ─────────────────────────────────────
+	// 한 프레임에 팝업을 여러 번 띄우면 단일 인스턴스가 덮어써져 마지막 결과만 보이므로,
+	// 배치 동안에는 개별 팝업을 억제하고 성공/실패를 누적한 뒤 종료 후 요약 팝업을 1회만 띄운다.
+	bool bBatchResultInProgress = false;
+	int32 BatchSuccessCount = 0;
+	int32 BatchFailCount = 0;
 
 	static const FLinearColor CraftButtonEnabledColor;
 	static const FLinearColor CraftButtonDisabledColor;

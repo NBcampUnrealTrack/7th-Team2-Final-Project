@@ -70,14 +70,14 @@ const FWeaponAbsorbCast* UWeaponAttackDefinition::ResolveAbsorbVariant(const FGa
 
 const FParryCounterData* UWeaponAttackDefinition::ResolveParryVariant(const FGameplayTag& ElementTag) const
 {
-	for (const FParryCounterData& Variant : ParryVariants)
+	for (const FParryCounterData& Variant : Parry.CounterVariants)
 	{
 		if (Variant.ElementTag == ElementTag && !Variant.CounterMontage.IsNull())
 		{
 			return &Variant;
 		}
 	}
-	return !ParryDefault.CounterMontage.IsNull() ? &ParryDefault : nullptr;
+	return !Parry.CounterDefault.CounterMontage.IsNull() ? &Parry.CounterDefault : nullptr;
 }
 
 const FWeaponHeavyAttack* UWeaponAttackDefinition::ResolveHeavyVariant(const FGameplayTag& ElementTag) const

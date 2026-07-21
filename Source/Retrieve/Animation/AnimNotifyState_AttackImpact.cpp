@@ -37,6 +37,7 @@ void UAnimNotifyState_AttackImpact::NotifyBegin(USkeletalMeshComponent* MeshComp
 	FGameplayEventData BeginPayload;
 	BeginPayload.EventTag = RetrieveGameplayTags::GameplayEvent_Attack_Impact_Begin;
 	BeginPayload.Instigator = OwnerActor;
+	BeginPayload.EventMagnitude = DamageScale;
 
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(OwnerActor, BeginPayload.EventTag, BeginPayload);
 }

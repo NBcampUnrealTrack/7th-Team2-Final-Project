@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "NativeGameplayTags.h"
 
@@ -19,6 +19,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Zoom);
 
 	// ---- Player abilities
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_Attack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player_HeavyAttack_Fire);
@@ -152,6 +153,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_GuardBreak);
 	// ExecCalc 크리티컬 굴림 성공 시 스펙에 동적 부착 — 플로터/큐 강조용
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_Critical);
+	// 전역 기본 넉백까지 스킵하는 히트(카운터 찌르기 등).
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Property_NoKnockback);
 
 	// ---- Hit react type
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact_Type);
@@ -400,6 +403,9 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Steam);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Storm);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Mist);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Condensation);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Heat);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Frost);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_Resonance_Trinity);
 	// 방어구 세트 보너스 발동 시 버프 바 표기 (세트 GE의 AssetTag로 부착)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Buff_ArmorSet);
@@ -462,6 +468,8 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: Dialogue / Cinematic
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Dialogue_LineRequested);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_Changed);
+	/** 시네마틱 스킵 확인 프롬프트 표시/숨김 (payload: FRetrieveCinematicStatePayload.bActive). 오버레이 위젯이 구독해 "한 번 더 누르면 스킵" UI를 띄운다. */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Cinematic_SkipPrompt);
 
 	// ---- Dialogue: 가위바위보 내기 토픽 (DT_Dialogue 행 없이 DialogueComponent가 직접 처리)
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Dialogue_Bet_Start);
@@ -477,6 +485,8 @@ namespace RetrieveGameplayTags
 	// ---- Message channels: UI Quest notification / Reveal gate
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_QuestNotification);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_RevealGate);
+	// 인벤토리 미경유 획득(퀘스트 물건 등)의 아이템 획득 토스트 트리거.
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_PickupToast);
 
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Bow_Charge);	
 
@@ -528,6 +538,7 @@ namespace RetrieveGameplayTags
 	// ---- Gameplay cues: Staff
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Staff_Cast);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Staff_Impact);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Blink);
 
 	// ---- Gameplay cues: Parry
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Parry_Success);
@@ -580,6 +591,10 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Village);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_ExitedCave);
 
+	// Stage 6 (main quest) per-objective steps
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_EnteredCastleInterior);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Step_TalkedToLumen_Castle);
+
 	// ---- Quest definitions (DT_Quest QuestIds) — tag leaf matches the quest DisplayName
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_WakingFromTheDeep);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheForgottenForest);
@@ -589,6 +604,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_TheCorruptedGuardianWater);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ToTheEdge);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_StormTheCastle);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_FortyThousandDays);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Quest_Main_ForgeAhead);
 
 	// ---- Dialogue
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speaker_Lumen);
@@ -609,6 +626,7 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_WhoAreYou);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_OurGoal);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_HowToFight);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_Lumen_TakeCore);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Greeting);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Weather);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Topic_NPC_VillagerTest_Goodbye);

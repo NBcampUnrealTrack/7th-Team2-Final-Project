@@ -49,6 +49,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void SetGravityScale(float GravityScale);
 
+	/** 중력 탄도용 설정. MaxSpeed clamp를 해제하여 중력 가속이 실제 궤적에 반영되게 한다. */
+	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
+	void SetBallisticGravityScale(float GravityScale);
+
 	UFUNCTION(BlueprintCallable, Category="EnemyProjectile")
 	void SetHitReactType(ERetrieveHitReactType InHitReactType);
 

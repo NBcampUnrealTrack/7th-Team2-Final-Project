@@ -5,8 +5,11 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Character/Cosmetics/RetrieveAlsAnimInstance.h"
 #include "Character/Cosmetics/SovereignAnimInstance.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "TimerManager.h"
 
 void URetrieveAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor)
 {
@@ -277,15 +280,32 @@ bool URetrieveAbilitySystemComponent::IsAttackCancelIntentAllowed(const FGamepla
 	return Count && *Count > 0;
 }
 
-void URetrieveAbilitySystemComponent::SetPendingCounterTarget(AActor* InTarget)
+void URetrieveAbilitySystemComponent::SetPendingCounterTarget(AActor* InTarget, float WindowDuration)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PendingCounterClearTimer);
+	}
+
 	if (IsValid(InTarget))
 	{
 		PendingCounterTarget = InTarget;
+		SetCounterReadyHighlight(true);
+
+		// 카운터 수용 시간이 지나면 자동 소멸(패링 스태거 회복과 동기). 0이면 수동 소멸까지 유지.
+		if (WindowDuration > 0.f)
+		{
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(
+					PendingCounterClearTimer, this, &URetrieveAbilitySystemComponent::ClearPendingCounterTarget, WindowDuration, false);
+			}
+		}
 		return;
 	}
 
 	PendingCounterTarget.Reset();
+	SetCounterReadyHighlight(false);
 }
 
 AActor* URetrieveAbilitySystemComponent::GetPendingCounterTarget() const
@@ -295,7 +315,36 @@ AActor* URetrieveAbilitySystemComponent::GetPendingCounterTarget() const
 
 void URetrieveAbilitySystemComponent::ClearPendingCounterTarget()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PendingCounterClearTimer);
+	}
 	PendingCounterTarget.Reset();
+	SetCounterReadyHighlight(false);
+}
+
+void URetrieveAbilitySystemComponent::SetCounterReadyHighlight(bool bEnabled)
+{
+	AActor* Avatar = GetAvatarActor();
+	if (!IsValid(Avatar))
+	{
+		return;
+	}
+
+	TInlineComponentArray<UPrimitiveComponent*> Prims;
+	Avatar->GetComponents<UPrimitiveComponent>(Prims);
+	for (UPrimitiveComponent* Prim : Prims)
+	{
+		if (!IsValid(Prim))
+		{
+			continue;
+		}
+		Prim->SetRenderCustomDepth(bEnabled);
+		if (bEnabled)
+		{
+			Prim->SetCustomDepthStencilValue(CounterReadyStencilValue);
+		}
+	}
 }
 
 void URetrieveAbilitySystemComponent::SetCounterWarpTargetLocked(bool bInLocked)

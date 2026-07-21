@@ -4,6 +4,8 @@
 #include "GameplayTagContainer.h"
 #include "RetrieveGameplayMessageTypes.generated.h"
 
+class UTexture2D;
+
 /**
  * Channel.Monster.Died 페이로드.
  * 적 사망 시 AEnemyCharacter::HandleDeathStarted 가 발행.
@@ -90,4 +92,27 @@ struct RETRIEVE_API FSpawnGroupClearedPayload
 	/** 신호를 발행한 스포너. */
 	UPROPERTY(BlueprintReadOnly)
 	TWeakObjectPtr<AActor> Spawner;
+};
+
+/**
+ * Channel.UI.PickupToast 페이로드.
+ * 인벤토리에 들어가지 않는 획득(퀘스트 물건 회수 등)을 아이템 획득 토스트로
+ * 시각 피드백하기 위해 발행. ToastManager(WBP_ToastManager)가 구독해 커스텀 토스트를 띄운다.
+ */
+USTRUCT(BlueprintType)
+struct RETRIEVE_API FRetrievePickupToastPayload
+{
+	GENERATED_BODY()
+
+	/** 토스트에 표시할 이름/문구. */
+	UPROPERTY(BlueprintReadOnly)
+	FText Title;
+
+	/** 토스트에 표시할 아이콘 텍스처(맵 아이콘 재활용 등). 없으면 아이콘 미표시. */
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UTexture2D> Icon = nullptr;
+
+	/** 수량 표시 문구(예: "+100", "×3"). 비어 있으면 수량 숨김. */
+	UPROPERTY(BlueprintReadOnly)
+	FText QuantityText;
 };

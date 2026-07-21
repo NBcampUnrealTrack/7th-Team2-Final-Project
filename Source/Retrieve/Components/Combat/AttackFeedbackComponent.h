@@ -45,7 +45,7 @@ private:
 	// GMS Channel.Combat.DamageDealt 리스너 콜백 — 플로터 스폰(자기판정 포함)
 	void HandleDamageDealt(FGameplayTag Channel, const FRetrieveDamageDealtPayload& Payload);
 	// 타겟 머리 위에 대미지 숫자 플로터 스폰(또는 풀에서 재사용). 스폰 시 1회 투영.
-	void SpawnDamageFloater(const AActor* Target, float DamageValue, const FHitFeedback& Feedback);
+	void SpawnDamageFloater(const AActor* Target, const FVector& HitLocation, float DamageValue, const FHitFeedback& Feedback);
 	// 애니메이션이 끝난 플로터를 뷰포트에서 떼고 풀로 회수(OnFinished에 바인딩됨)
 	void ReleaseFloater(URetrieveDamageFloaterWidget* Floater);
 	// 이벤트 -> 피드백 매핑 데이터 테이블

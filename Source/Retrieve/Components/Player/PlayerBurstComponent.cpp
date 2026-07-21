@@ -1,6 +1,7 @@
 ﻿#include "Components/Player/PlayerBurstComponent.h"
 
 #include "AbilitySystem/Player/BurstProjectile.h"
+#include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
@@ -232,12 +233,31 @@ void UPlayerBurstComponent::BuildSwordTracePoints(const FBurstHitInstance& Hit, 
 	OutPoints.Add(ResolveSourceLocation(Hit));
 }
 
+float UPlayerBurstComponent::GetBurstRadiusScale() const
+{
+	const AActor* Owner = GetOwner();
+	if (!IsValid(Owner)) return 1.f;
+
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(const_cast<AActor*>(Owner)))
+	{
+		if (const UCombatAttributeSet* CombatSet = ASC->GetSet<UCombatAttributeSet>())
+		{
+			// 0/음수 방어(어트리뷰트는 Clamp로 >=0). 최소 스케일 보장으로 반경 소멸 방지.
+			return FMath::Max(0.01f, CombatSet->GetBurstRadiusMultiplier());
+		}
+	}
+	return 1.f;
+}
+
 void UPlayerBurstComponent::SweepAndApply(const FBurstHitInstance& Hit, const FVector& CurrentOrigin, float Radius, int32 HitIndex)
 {
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner) || !bHasActiveSpec) return;
 	if (!Owner->HasAuthority()) return;
 	if (!IsValid(ActiveSpec.DamageEffect)) return;
+
+	// 스킬 범위 배율(전설 영웅 세트 등) 적용.
+	Radius *= GetBurstRadiusScale();
 
 	UWorld* World = Owner->GetWorld();
 	if (!IsValid(World)) return;
@@ -638,7 +658,7 @@ void UPlayerBurstComponent::DoConeHit(const FBurstHitInstance& Hit, int32 HitInd
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
 
-	const float Radius = ActiveSpec.ConeRadius;
+	const float Radius = ActiveSpec.ConeRadius * GetBurstRadiusScale();
 	if (Radius <= 0.f) return;
 
 	UWorld* World = Owner->GetWorld();
@@ -701,7 +721,7 @@ void UPlayerBurstComponent::DoAreaContinuousHit(const FBurstHitInstance& Hit, in
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
 
-	const float Radius = ActiveSpec.AoeRadius;
+	const float Radius = ActiveSpec.AoeRadius * GetBurstRadiusScale();
 	if (Radius <= 0.f) return;
 
 	UWorld* World = Owner->GetWorld();
@@ -783,6 +803,8 @@ void UPlayerBurstComponent::ApplyLandingImpact(const FVector& Center, float Radi
 {
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner) || !Owner->HasAuthority() || !bHasActiveSpec || !IsValid(ActiveSpec.DamageEffect)) return;
+	// 착지 슬램 반경도 스킬 범위 배율을 따른다.
+	Radius *= GetBurstRadiusScale();
 	if (Radius <= 0.f) return;
 
 	UWorld* World = Owner->GetWorld();

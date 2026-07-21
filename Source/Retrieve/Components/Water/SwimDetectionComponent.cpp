@@ -1,9 +1,11 @@
 
 #include "SwimDetectionComponent.h"
 
+#include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/Combat/CombatStanceComponent.h"
 #include "Components/Pawn/RetrieveCharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -316,12 +318,30 @@ void USwimDetectionComponent::SetSwimming(bool bEnable)
 	
 	if (bEnable)
 	{
-		// Flying = 중력 off + 자유 3D + 수면 상향 클램프 없음(MOVE_Swimming 한계 회피).
-		CMC->SetMovementMode(MOVE_Flying);
+		// MOVE_Flying으로 바꾸기 전에 진입 직전 상태를 보존한다.
+		bSwimEntryFromFall = CMC->MovementMode == MOVE_Falling;
+
 		if (ASC)
 		{
 			ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Swimming, 1);
+
+			if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(ASC))
+			{
+				RetrieveASC->ClearAbilityInput();
+			}
+
+			FGameplayTagContainer PlayerAbilityTags;
+			PlayerAbilityTags.AddTag(RetrieveGameplayTags::Ability_Player);
+			ASC->CancelAbilities(&PlayerAbilityTags);
 		}
+
+		if (UCombatStanceComponent* CombatStance = OwnerCharacter->FindComponentByClass<UCombatStanceComponent>())
+		{
+			CombatStance->ForceSheatheWeapon();
+		}
+
+		// Flying = 중력 off + 자유 3D + 수면 상향 클램프 없음(MOVE_Swimming 한계 회피).
+		CMC->SetMovementMode(MOVE_Flying);
 		
 		if (URetrieveCharacterMovementComponent* RetrieveCMC = Cast<URetrieveCharacterMovementComponent>(CMC))
 		{

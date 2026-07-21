@@ -258,6 +258,15 @@ void UBonfireMenuWidget::ShowCraftResult(bool bSuccess, UTexture2D* Icon)
 	}
 }
 
+void UBonfireMenuWidget::ShowCraftResultSummary(int32 SuccessCount, int32 FailCount, UTexture2D* Icon)
+{
+	if (UCraftResultPopupWidget* ResultPopup =
+		Cast<UCraftResultPopupWidget>(GetWidgetFromName(TEXT("CraftResultPopupWidget"))))
+	{
+		ResultPopup->ShowResultSummary(SuccessCount, FailCount, Icon);
+	}
+}
+
 void UBonfireMenuWidget::HandleConfirmOverwriteClicked()
 {
 	PerformSelectedSlotSave();

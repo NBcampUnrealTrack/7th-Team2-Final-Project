@@ -1,16 +1,16 @@
-﻿#include "Player/RetrievePlayerController.h"
+#include "Player/RetrievePlayerController.h"
 
 #include "Diagnostics/RetrieveDiagLog.h"
 #include "MVVMSubsystem.h"
-#include "Settings/RetrieveSettingsSubsystem.h"
+#include "Components/PanelWidget.h"
 #include "Settings/RetrieveGameUserSettings.h"
+#include "Settings/RetrieveSettingsSubsystem.h"
+#include "UI/RetrieveSystemMessageWidget.h"
 #include "Engine/LocalPlayer.h"
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
 #include "RetrievePlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Components/PanelWidget.h"
-#include "UI/RetrieveSystemMessageWidget.h"
 #include "Components/Combat/AttackFeedbackComponent.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
@@ -153,6 +153,8 @@ ARetrievePlayerController::ARetrievePlayerController(const FObjectInitializer& O
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Settings/WBP_SettingsScreen.WBP_SettingsScreen_C")));
 	LoadGamePanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_LoadGame.WBP_LoadGame_C")));
+	CreditsPanelClass = TSoftClassPtr<URetrieveGamePanelWidget>(
+		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_Credits.WBP_Credits_C")));
 	SystemMenuClass = TSoftClassPtr<URetrieveGamePanelWidget>(
 		FSoftObjectPath(TEXT("/Game/Retrieve/UI/Menu/WBP_SystemMenu.WBP_SystemMenu_C")));
 	ControlsGuideClass = TSoftClassPtr<URetrieveGamePanelWidget>(
@@ -427,6 +429,23 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 	if (Params.Event == IE_Pressed)
 	{
+		// 시네마틱 스킵: Space/ESC 연타(확인 창 내 2회). 시네마틱 중엔 DisableInput이 걸려 있지만
+		// InputKey는 뷰포트 raw 경로라 여기서 처리한다. 스킵 불가 컷씬이면 서브시스템이 false를
+		// 반환해 입력을 소비하지 않는다(ESC의 시스템 메뉴는 시네마틱 중 기존 차단이 그대로 유효).
+		if ((Params.Key == EKeys::SpaceBar || Params.Key == EKeys::Escape) && IsCinematicActive())
+		{
+			if (UWorld* World = GetWorld())
+			{
+				if (URetrieveCinematicSubsystem* Cinematic = World->GetSubsystem<URetrieveCinematicSubsystem>())
+				{
+					if (Cinematic->NotifySkipKeyPressed())
+					{
+						return true;
+					}
+				}
+			}
+		}
+
 		if (ActivePanel && Params.Key == EKeys::Escape)
 		{
 			CloseActivePanel();
@@ -467,7 +486,7 @@ bool ARetrievePlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 		// 패널이 열려있는 동안은 위에서 처리되지 않은 키보드/게임패드 입력을 차단한다.
 		// 마우스 버튼은 제외(월드맵 패닝·클릭은 Slate UI가 직접 처리).
-		if (ActivePanel && !Params.Key.IsMouseButton())
+		if (ActivePanel && !Params.Key.IsMouseButton()) 
 		{
 			return true;
 		}
@@ -617,12 +636,40 @@ void ARetrievePlayerController::HandleSessionStateChanged(ERetrieveSessionState 
 void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous, ERetrieveSessionState NewState)
 {
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget start"));
+
+	// 이전 전환에서 예약된 지연 스왑이 남아 있으면 취소한다(낡은 상태로 교체되는 것 방지).
+	UWorld* SwapWorld = GetWorld();
+	if (SwapWorld)
+	{
+		SwapWorld->GetTimerManager().ClearTimer(CoverGatedWidgetSwapTimerHandle);
+	}
+
 	const bool bShouldCover = ShouldShowLoadingCover(Previous, NewState);
 	if (bShouldCover)
 	{
 		ShowLoadingScreen();
 	}
 	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - loading cover done"));
+
+	// 커버가 올라오는 중이면 완전히 불투명해진 뒤에 위젯을 교체한다.
+	// 즉시 교체하면 반투명한 커버 너머로 메뉴가 사라지고 HUD가 나타나는 것이 그대로 보인다.
+	const float CoverDelay = bShouldCover ? GetActiveCoverFadeInSeconds() : 0.f;
+	if (CoverDelay > KINDA_SMALL_NUMBER && SwapWorld)
+	{
+		SwapWorld->GetTimerManager().SetTimer(
+			CoverGatedWidgetSwapTimerHandle,
+			FTimerDelegate::CreateUObject(this, &ARetrievePlayerController::PerformWidgetSwap, NewState),
+			CoverDelay, /*bLoop*/ false);
+		RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget - swap deferred under cover"));
+		return;
+	}
+
+	PerformWidgetSwap(NewState);
+}
+
+void ARetrievePlayerController::PerformWidgetSwap(ERetrieveSessionState NewState)
+{
+	RetrieveDiagCheckpoint(TEXT("PlayerController::PerformWidgetSwap start"));
 
 	if (ActiveTopLevelWidget)
 	{
@@ -683,21 +730,17 @@ void ARetrievePlayerController::SwapActiveWidget(ERetrieveSessionState Previous,
 		}
 	}
 
-	// 인게임 진입 시에만 HUD 숨김을 적용한다(메인 메뉴/결과 화면 위젯은 통째로 사라지지 않도록).
-	if (NewState == ERetrieveSessionState::InGame)
+	// 시네마틱 재생 중에 위젯이 교체/생성된 경우(오프닝과 상태 전환 경합 등) 새 위젯도 숨김 대상에 포함
+	if (IsCinematicActive())
 	{
-		// 시네마틱 재생 중이면 새로 생성/교체된 HUD도 일괄 숨김(기존 동작).
-		if (IsCinematicActive())
-		{
-			SetHUDHiddenForCinematic(true);
-		}
-		// "HUD 숨기기" 설정이 켜져 있으면 새 HUD의 게임플레이 요소를 숨긴다(시스템 메시지는 유지).
-		if (IsHideHUDEnabled())
-		{
-			SetHUDHiddenForSetting(true);
-		}
+		SetHUDHiddenForCinematic(true);
 	}
-	RetrieveDiagCheckpoint(TEXT("PlayerController::SwapActiveWidget end"));
+	// "HUD 숨기기" 설정이 켜져 있으면 새 HUD의 게임플레이 요소를 숨긴다(시스템 메시지는 유지).
+	if (IsHideHUDEnabled())
+	{
+		SetHUDHiddenForSetting(true);
+	}
+	RetrieveDiagCheckpoint(TEXT("PlayerController::PerformWidgetSwap end"));
 }
 
 bool ARetrievePlayerController::ShouldShowLoadingCover(ERetrieveSessionState Previous,
@@ -812,9 +855,7 @@ void ARetrievePlayerController::EnsureCinematicCloseListener()
 				{
 					PC->CloseConversation();
 				}
-				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원.
-				// (HUD 숨기기 설정은 별도 경로 SetHUDHiddenForSetting가 담당하며, 루트 자식만 접으므로
-				//  시네마틱이 루트를 복원해도 설정으로 접힌 자식들은 그대로 숨겨진 채 유지된다.)
+				// 시네마틱 동안 HUD 루트/토스트 일괄 숨김, 종료 시 복원
 				PC->SetHUDHiddenForCinematic(Message.bActive);
 			});
 }
@@ -1011,6 +1052,14 @@ TSubclassOf<UUserWidget> ARetrievePlayerController::ResolveWidgetClass(ERetrieve
 
 void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState NewState)
 {
+	UWorld* World = GetWorld();
+
+	// 상태가 바뀌면 이전 상태에서 예약해 둔 커버 지연 카메라 전환은 무효화한다.
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(CoverGatedCameraTimerHandle);
+	}
+
 	switch (NewState)
 	{
 	case ERetrieveSessionState::MainMenu:
@@ -1018,10 +1067,23 @@ void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState 
 		break;
 
 	case ERetrieveSessionState::InGame:
-		ApplyGameplayCamera();
+	{
+		// 커버가 완전히 불투명해진 뒤에 뷰 타깃을 옮김
+		const float CoverDelay = GetActiveCoverFadeInSeconds();
+		if (CoverDelay > KINDA_SMALL_NUMBER && World)
+		{
+			World->GetTimerManager().SetTimer(CoverGatedCameraTimerHandle, this,
+			                                  &ARetrievePlayerController::ApplyGameplayCamera,
+			                                  CoverDelay, false);
+		}
+		else
+		{
+			ApplyGameplayCamera();
+		}
+
 		if (ActiveLoadingScreen)
 		{
-			if (UWorld* World = GetWorld())
+			if (World)
 			{
 				World->GetTimerManager().SetTimer(LoadingScreenTimerHandle, this,
 				                                  &ARetrievePlayerController::HideLoadingScreen,
@@ -1037,6 +1099,7 @@ void ARetrievePlayerController::HandleSessionPresentation(ERetrieveSessionState 
 			BroadcastRevealGate(false);
 		}
 		break;
+	}
 
 	default:
 		break;
@@ -1096,6 +1159,15 @@ AActor* ARetrievePlayerController::FindMainMenuCamera() const
 	TArray<AActor*> Found;
 	UGameplayStatics::GetAllActorsWithTag(this, MainMenuCameraTag, Found);
 	return Found.Num() > 0 ? Found[0] : nullptr;
+}
+
+float ARetrievePlayerController::GetActiveCoverFadeInSeconds() const
+{
+	if (const URetrieveLoadingScreenWidget* LS = Cast<URetrieveLoadingScreenWidget>(ActiveLoadingScreen))
+	{
+		return LS->GetCoverFadeInSeconds();
+	}
+	return 0.f;
 }
 
 void ARetrievePlayerController::ShowLoadingScreen()
@@ -1359,6 +1431,25 @@ void ARetrievePlayerController::OpenControlsGuide()
 	{
 		URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(ActivePanel);
 	}
+}
+
+void ARetrievePlayerController::OpenCreditsPanel()
+{
+	TSubclassOf<URetrieveGamePanelWidget> PanelClass = CreditsPanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		// 값이 비어 있어도 알려진 경로로 폴백(에셋은 /Game/Retrieve/UI/Menu always-cook로 패키지 포함).
+		PanelClass = LoadClass<URetrieveGamePanelWidget>(
+			nullptr, TEXT("/Game/Retrieve/UI/Menu/WBP_Credits.WBP_Credits_C"));
+	}
+	if (!PanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to open credits: CreditsPanelClass is empty and fallback load failed."));
+		return;
+	}
+
+	// 메인메뉴에서 호출되므로, OpenExclusivePanel이 현재 패널을 교체하고 ESC로 닫히게 한다.
+	OpenExclusivePanel(PanelClass, EKeys::Escape);
 }
 
 void ARetrievePlayerController::CloseActivePanel()
@@ -2094,6 +2185,12 @@ void ARetrievePlayerController::Server_RequestLumenToggleWait_Implementation()
 
 void ARetrievePlayerController::CloseConversation()
 {
+	AActor* ClosedDialogueNPC = CurrentDialogueNPC;
+	if (ClosedDialogueNPC)
+	{
+		Server_NotifyDialogueClosed(ClosedDialogueNPC);
+	}
+
 	// NPC 유휴 애니메이션 복귀
 	if (CurrentDialogueNPC)
 	{
@@ -2146,6 +2243,27 @@ void ARetrievePlayerController::CloseConversation()
 	FRetrieveDialogueChangedPayload Payload;
 	Payload.bActive = false;
 	UGameplayMessageSubsystem::Get(this).BroadcastMessage(RetrieveGameplayTags::Channel_UI_DialogueChanged, Payload);
+}
+
+void ARetrievePlayerController::Server_NotifyDialogueClosed_Implementation(AActor* NPC)
+{
+	APawn* PlayerPawn = GetPawn();
+	if (!IsValid(NPC) || !IsValid(PlayerPawn))
+	{
+		return;
+	}
+
+	constexpr float MaxDialogueCloseDistance = 1200.0f;
+	if (FVector::DistSquared(PlayerPawn->GetActorLocation(), NPC->GetActorLocation())
+		> FMath::Square(MaxDialogueCloseDistance))
+	{
+		return;
+	}
+
+	if (URetrieveDialogueComponent* Dialogue = NPC->FindComponentByClass<URetrieveDialogueComponent>())
+	{
+		Dialogue->NotifyDialogueClosed(PlayerPawn);
+	}
 }
 
 void ARetrievePlayerController::UpdateHUDNarrativeVisibility()

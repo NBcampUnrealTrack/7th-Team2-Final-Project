@@ -61,13 +61,19 @@ void URetrieveCameraBoom::SetCameraBoomProfileOverride(FName OverrideId, const F
 	ActiveCameraProfileOverride = Profile;
 }
 
-void URetrieveCameraBoom::ClearCameraBoomProfileOverride(FName OverrideId)
+void URetrieveCameraBoom::ClearCameraBoomProfileOverride(FName OverrideId, float RestoreArmBlendSpeed)
 {
 	// 현재 활성 override를 건 쪽만 해제할 수 있다.
 	// 늦게 끝난 다른 어빌리티가 새로 올라온 카메라 구도를 지우는 상황을 막는다.
 	if (!bHasCameraProfileOverride || ActiveCameraProfileOverrideId != OverrideId)
 	{
 		return;
+	}
+
+	// 복귀 보간은 ReturnCameraProfile.ArmBlendSpeed를 따르므로, 여기서 덮어써 복귀 템포를 제어한다.
+	if (RestoreArmBlendSpeed >= 0.f && bHasReturnCameraProfile)
+	{
+		ReturnCameraProfile.ArmBlendSpeed = RestoreArmBlendSpeed;
 	}
 
 	bHasCameraProfileOverride = false;

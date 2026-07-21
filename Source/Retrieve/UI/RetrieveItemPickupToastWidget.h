@@ -31,6 +31,15 @@ public:
 	void InitToast(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity);
 
 	/**
+	 * DataTable 조회 없이 직접 지정한 이름/아이콘/수량 문구로 토스트를 채운다.
+	 * 골드 획득·퀘스트 물건 회수 등 인벤토리 아이템이 아닌 획득 피드백에 사용.
+	 * @param Icon         표시할 아이콘(없으면 아이콘 숨김)
+	 * @param QuantityText 수량 문구(예: "+100"). 비어 있으면 수량 숨김.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|HUD")
+	void InitCustomToast(const FText& Title, UTexture2D* Icon, const FText& InQuantityText);
+
+	/**
 	 * 스택 내 슬롯 인덱스를 설정한다.
 	 * HUD에서 토스트를 추가/제거할 때마다 호출해 겹침 없이 수직으로 정렬한다.
 	 * @param SlotIndex  0 = 가장 위 슬롯
@@ -78,4 +87,10 @@ private:
 
 	/** ItemCategoryTag를 기반으로 적절한 DataTable에서 DisplayName을 조회한다. */
 	static FText LookupItemDisplayName(FName ItemId, FGameplayTag ItemCategoryTag);
+
+	/** 이름이 토스트 고정 폭을 넘으면 폰트 크기를 줄여 잘림을 방지한다(짧은 이름은 기본 크기 유지). */
+	void ApplyNameAutoFit(const FText& Name);
+
+	// 최초 호출 시 WBP에 설정된 기본 폰트 크기를 캐싱(토스트 재사용 시 원복 기준).
+	int32 BaseNameFontSize = 0;
 };

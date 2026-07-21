@@ -24,6 +24,7 @@ URetrieveGameplayAbility::URetrieveGameplayAbility(const FObjectInitializer& Obj
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
 	ReplicationPolicy = EGameplayAbilityReplicationPolicy::ReplicateNo;
+	ActivationBlockedTags.AddTag(RetrieveGameplayTags::State_Player_Swimming);
 }
 
 FGameplayTag URetrieveGameplayAbility::ResolveCurrentElementTag() const

@@ -3,9 +3,12 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "RetrieveToastManagerWidget.generated.h"
 
 class UInventoryComponent;
+class UTexture2D;
+struct FRetrievePickupToastPayload;
 
 /**
  * 아이템 획득 토스트 알림을 독립적으로 관리하는 위젯.
@@ -40,14 +43,33 @@ private:
 	UFUNCTION()
 	void OnInventoryItemAdded(FName ItemId, FGameplayTag ItemCategoryTag, int32 Quantity);
 
+	/** 골드 등 통화 변경 시 증가분만 토스트로 표시. */
+	UFUNCTION()
+	void OnCurrencyChanged(int32 NewAmount);
+
 	/** NativeConstruct에서 TimerManager를 통해 지연 호출 */
 	void BindToInventory();
+
+	/** Channel.UI.PickupToast 메시지(퀘스트 물건 회수 등) 수신 → 커스텀 토스트. */
+	void HandlePickupMessage(FGameplayTag Channel, const FRetrievePickupToastPayload& Payload);
+
+	/** 이름/아이콘/수량 문구를 직접 지정해 토스트를 생성·큐잉한다. */
+	void SpawnCustomToast(const FText& Title, UTexture2D* Icon, const FText& QuantityText);
+
+	/** 생성된 토스트를 큐에 넣고 슬롯 배치 + 자동 제거 타이머를 건다(공통 처리). */
+	void FinalizeToast(UUserWidget* Toast);
 
 	UPROPERTY()
 	TObjectPtr<UInventoryComponent> BoundInventoryComp;
 
 	/** 0.3초 지연 바인딩용 타이머 핸들 */
 	FTimerHandle BindDelayHandle;
+
+	/** 통화 증가분 계산용 직전 값. 바인딩 시점에 현재 소지금으로 초기화(로드 스팸 방지). */
+	int32 LastCurrency = 0;
+
+	/** Channel.UI.PickupToast 리스너 핸들. */
+	FGameplayMessageListenerHandle PickupListenerHandle;
 
 	// ── 토스트 큐 ──────────────────────────────────────────────────
 	/** 현재 화면에 표시 중인 토스트 위젯 목록 (오래된 순) */

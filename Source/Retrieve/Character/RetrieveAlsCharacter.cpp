@@ -5,6 +5,7 @@
 #include "AbilitySystem/Attributes/CombatAttributeSet.h"
 #include "AlsAnimationInstance.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/Combat/CombatReactionComponent.h"
 #include "Components/Pawn/RetrieveCharacterMovementComponent.h"
 #include "Components/Player/RetrieveHeroComponent.h"
@@ -12,6 +13,7 @@
 #include "Field/FieldSystemObjects.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "TimerManager.h"
 #include "GameplayEffect.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Logging/RetrieveLogChannels.h"
@@ -504,6 +506,14 @@ void ARetrieveAlsCharacter::NotifyLocomotionModeChanged(const FGameplayTag& Prev
 
 void ARetrieveAlsCharacter::HandleLandingImpact(float FallHeight)
 {
+	// 블링크 착지: 메시 복원 + 중력 원복 + 낙하 데미지·낙법 억제.
+	if (bBlinkActive)
+	{
+		EndBlink();
+		SetSuppressLandingRoll(true);
+		return;
+	}
+
 	// 깊은 물(수영=MOVE_Flying)은 Grounded 착지가 안 떠서 이 함수 자체가 안 불린다 → 물 가드 불필요.
 	// 얕은 물(Wade=Walking)은 땅처럼 낙하 데미지가 들어간다(의도).
 	if (FallHeight < FallDamageStartHeight)
@@ -566,6 +576,58 @@ void ARetrieveAlsCharacter::ApplyFallDamage(float FallHeight)
 		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
 
 		UE_LOG(LogRetrieveCombat, Log, TEXT("[Fall] Damage=%.1f (FallHeight=%.0f)"), Damage, FallHeight);
+	}
+}
+
+void ARetrieveAlsCharacter::BeginBlink(float MaxDuration)
+{
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetVisibility(false, /*bPropagateToChildren=*/true);
+	}
+	bBlinkActive = true;
+
+	GetWorldTimerManager().ClearTimer(BlinkTimer);
+	if (MaxDuration > 0.f)
+	{
+		// 착지가 안 잡히는 경우(허공 등) 대비 안전 복원.
+		GetWorldTimerManager().SetTimer(BlinkTimer, this, &ARetrieveAlsCharacter::EndBlink, MaxDuration, false);
+	}
+}
+
+void ARetrieveAlsCharacter::SetBlinkFallGravity(float GravityScale)
+{
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		if (!bBlinkGravityBoosted)
+		{
+			SavedGravityScale = Movement->GravityScale; // 원래 값은 최초 부스트 때만 저장
+			bBlinkGravityBoosted = true;
+		}
+		Movement->GravityScale = GravityScale;
+	}
+}
+
+void ARetrieveAlsCharacter::EndBlink()
+{
+	GetWorldTimerManager().ClearTimer(BlinkTimer);
+
+	if (bBlinkGravityBoosted)
+	{
+		if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+		{
+			Movement->GravityScale = SavedGravityScale;
+		}
+		bBlinkGravityBoosted = false;
+	}
+
+	if (bBlinkActive)
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->SetVisibility(true, /*bPropagateToChildren=*/true);
+		}
+		bBlinkActive = false;
 	}
 }
 

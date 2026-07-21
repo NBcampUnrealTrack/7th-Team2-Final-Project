@@ -1,11 +1,13 @@
 #include "Components/Player/WeaponComponent.h"
 
 #include "AbilitySystem/RetrieveAbilitySystemComponent.h"
+#include "Components/Element/ElementUnlockComponent.h"
 #include "Components/Pawn/RetrievePawnExtensionComponent.h"
 #include "Components/SceneComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
@@ -24,6 +26,12 @@ UWeaponComponent::UWeaponComponent(const FObjectInitializer& ObjectInitializer)
 	EnhancementVFXTier1 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier1.NS_WeaponEnhance_Tier1")));
 	EnhancementVFXTier2 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier2.NS_WeaponEnhance_Tier2")));
 	EnhancementVFXTier3 = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/Enhancement/NS_WeaponEnhance_Tier3.NS_WeaponEnhance_Tier3")));
+	ElementEmpowerVFX.Add(RetrieveGameplayTags::Element_Fire,
+		TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/ElementEmpower/NS_WeaponElementEmpower_Fire.NS_WeaponElementEmpower_Fire"))));
+	ElementEmpowerVFX.Add(RetrieveGameplayTags::Element_Water,
+		TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/ElementEmpower/NS_WeaponElementEmpower_Water.NS_WeaponElementEmpower_Water"))));
+	ElementEmpowerVFX.Add(RetrieveGameplayTags::Element_Wind,
+		TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/Retrieve/VFX/Weapons/ElementEmpower/NS_WeaponElementEmpower_Wind.NS_WeaponElementEmpower_Wind"))));
 }
 
 void UWeaponComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -57,14 +65,14 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 		return true;
 	}
 
-	ClearWeaponData(); // 이전 무기 '데이터만' 정리 (OLD 메시는 Pending으로 넘겨 교체 연출이 끝낼 때 파괴)
+	ClearWeaponData(); // ?댁쟾 臾닿린 '?곗씠?곕쭔' ?뺣━ (OLD 硫붿떆??Pending?쇰줈 ?섍꺼 援먯껜 ?곗텧???앸궪 ???뚭눼)
 	if (!ApplyWeaponData(WeaponItemId, *WeaponData))
 	{
 		return false;
 	}
 
-	// OLD 메시를 NEW 스폰과 분리해 Pending으로 옮긴다. 즉시 숨겨 NEW(노티로 등장)와 겹치지 않게 하고,
-	// 실제 파괴는 교체 몽타주 끝(또는 fallback 즉시)으로 미룬다.
+	// OLD 硫붿떆瑜?NEW ?ㅽ룿怨?遺꾨━??Pending?쇰줈 ??릿?? 利됱떆 ?④꺼 NEW(?명떚濡??깆옣)? 寃뱀튂吏 ?딄쾶 ?섍퀬,
+	// ?ㅼ젣 ?뚭눼??援먯껜 紐쏀?二????먮뒗 fallback 利됱떆)?쇰줈 誘몃，??
 	for (const FRetrieveEquippedWeaponMesh& OldPart : EquippedWeaponMeshComponents)
 	{
 		if (OldPart.Mesh)
@@ -76,10 +84,10 @@ bool UWeaponComponent::EquipWeapon(FName WeaponItemId)
 	EquippedWeaponMeshComponents.Reset();
 	WeaponAttachParts.Reset();
 
-	// NEW 레이어로 먼저 relink → GA가 NEW EquipMontage를 읽도록 broadcast를 트리거보다 앞에 둔다.
+	// NEW ?덉씠?대줈 癒쇱? relink ??GA媛 NEW EquipMontage瑜??쎈룄濡?broadcast瑜??몃━嫄곕낫???욎뿉 ?붾떎.
 	OnWeaponEquipped.Broadcast(CurrentWeaponDataRow);
 
-	// 연출/비주얼은 GA가. 트리거 실패(미부여/몽타주 없음)면 OLD 즉시 파괴 + 데이터로 리빌드.
+	// ?곗텧/鍮꾩＜?쇱? GA媛. ?몃━嫄??ㅽ뙣(誘몃???紐쏀?二??놁쓬)硫?OLD 利됱떆 ?뚭눼 + ?곗씠?곕줈 由щ퉴??
 	if (!TryTriggerEquipTransition(RetrieveGameplayTags::GameplayEvent_Player_EquipWeapon))
 	{
 		DestroyPendingVisuals();
@@ -98,11 +106,11 @@ void UWeaponComponent::UnequipWeapon()
 
 	ClearWeaponData();
 
-	// 해제 연출은 '벗는' 무기(=현재 링크된 레이어)의 UnequipMontage.
-	// relink(Unarmed) 전에 트리거해 레이어가 살아있을 때 참조를 잡게 한다.
+	// ?댁젣 ?곗텧? '踰쀫뒗' 臾닿린(=?꾩옱 留곹겕???덉씠????UnequipMontage.
+	// relink(Unarmed) ?꾩뿉 ?몃━嫄고빐 ?덉씠?닿? ?댁븘?덉쓣 ??李몄“瑜??↔쾶 ?쒕떎.
 	const bool bTriggered = TryTriggerEquipTransition(RetrieveGameplayTags::GameplayEvent_Player_UnequipWeapon);
 
-	OnWeaponUnequipped.Broadcast(PreviousWeaponId); // → Cosmetic이 Unarmed로 relink
+	OnWeaponUnequipped.Broadcast(PreviousWeaponId); // ??Cosmetic??Unarmed濡?relink
 
 	if (!bTriggered)
 	{
@@ -112,7 +120,7 @@ void UWeaponComponent::UnequipWeapon()
 
 void UWeaponComponent::ClearWeaponData()
 {
-	// 무기 공격력 GE 먼저 제거 (ClearGrantedWeaponAbilities 전에 수행)
+	// 臾닿린 怨듦꺽??GE 癒쇱? ?쒓굅 (ClearGrantedWeaponAbilities ?꾩뿉 ?섑뻾)
 	if (HasAuthorityToModify() && WeaponAttackPowerEffectHandle.IsValid())
 	{
 		if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
@@ -134,12 +142,15 @@ void UWeaponComponent::SpawnWeaponVisuals()
 {
 	if (IsEquipped())
 	{
-		// 손 소켓에 스폰. 납검 상태 보정은 스폰 직후 OnWeaponVisualsSpawned을 받는 CombatStance가
-		// SetWeaponDrawn으로 처리한다(이 신호는 모든 스폰 경로의 단일 통로 — fallback/OnRep/장착 노티 공통).
-		// Equip 전환 중이면 숨겨서 스폰 → 발검 노티가 손에 부착하며 보이게 한다(검→방패 순차 등장).
+		// ???뚯폆???ㅽ룿. ?⑷? ?곹깭 蹂댁젙? ?ㅽ룿 吏곹썑 OnWeaponVisualsSpawned??諛쏅뒗 CombatStance媛
+		// SetWeaponDrawn?쇰줈 泥섎━?쒕떎(???좏샇??紐⑤뱺 ?ㅽ룿 寃쎈줈???⑥씪 ?듬줈 ??fallback/OnRep/?μ갑 ?명떚 怨듯넻).
+		// Equip ?꾪솚 以묒씠硫??④꺼???ㅽ룿 ??諛쒓? ?명떚媛 ?먯뿉 遺李⑺븯硫?蹂댁씠寃??쒕떎(寃?믩갑???쒖감 ?깆옣).
 		ApplyWeaponVisuals(CurrentWeaponData, /*bSpawnHidden=*/IsEquipTransitionActive());
 		SpawnWeaponEnhancementVFX();
+		RefreshElementEmpowerVFX();
 		OnWeaponVisualsSpawned.Broadcast();
+		// ?덈줈 ?ㅽ룿??寃???꾩옱 ?먯냼紐⑤뱶 癒명떚由ъ뼹??利됱떆 諛섏쁺(臾닿린 援먯껜쨌?ъ옣李????.
+		ApplyElementModeMaterial();
 	}
 }
 
@@ -165,7 +176,7 @@ void UWeaponComponent::FinalizeEquipTransitionVisuals()
 {
 	if (IsEquipped())
 	{
-		// Equip 완료 — draw 노티가 블렌드로 누락됐을 수 있으니 전 파트를 보이게 강제(손 소켓에 스폰돼 있음).
+		// Equip ?꾨즺 ??draw ?명떚媛 釉붾젋?쒕줈 ?꾨씫?먯쓣 ???덉쑝?????뚰듃瑜?蹂댁씠寃?媛뺤젣(???뚯폆???ㅽ룿???덉쓬).
 		for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
 		{
 			if (IsValid(Part.Mesh))
@@ -176,7 +187,7 @@ void UWeaponComponent::FinalizeEquipTransitionVisuals()
 	}
 	else
 	{
-		// Unequip 완료 — 파괴 노티가 누락됐을 수 있으니 메시 정리 보장.
+		// Unequip ?꾨즺 ???뚭눼 ?명떚媛 ?꾨씫?먯쓣 ???덉쑝??硫붿떆 ?뺣━ 蹂댁옣.
 		ClearWeaponVisuals();
 	}
 }
@@ -199,7 +210,7 @@ void UWeaponComponent::OnRep_CurrentWeaponDataRow()
 {
 	const FName ReplicatedWeaponId = CurrentWeaponDataRow;
 
-	// 클라이언트는 복제된 RowName 기준으로 비주얼과 UI용 캐시만 갱신
+	// ?대씪?댁뼵?몃뒗 蹂듭젣??RowName 湲곗??쇰줈 鍮꾩＜?쇨낵 UI??罹먯떆留?媛깆떊
 	CurrentWeaponData = FRetrieveWeaponDataRow();
 	CurrentWeaponTypeTag = FGameplayTag();
 	CurrentWeaponAffinityTag = FGameplayTag();
@@ -213,9 +224,9 @@ void UWeaponComponent::OnRep_CurrentWeaponDataRow()
 
 	if (const FRetrieveWeaponDataRow* WeaponData = FindWeaponData(ReplicatedWeaponId))
 	{
-		ApplyWeaponData(ReplicatedWeaponId, *WeaponData); // 클라: 캐시만 (어빌리티/GE는 권위 가드)
-		OnWeaponEquipped.Broadcast(ReplicatedWeaponId);   // → Cosmetic relink
-		ReconcileVisuals();                               // 원격 즉시 스폰 (연출 생략)
+		ApplyWeaponData(ReplicatedWeaponId, *WeaponData); // ?대씪: 罹먯떆留?(?대퉴由ы떚/GE??沅뚯쐞 媛??
+		OnWeaponEquipped.Broadcast(ReplicatedWeaponId);   // ??Cosmetic relink
+		ReconcileVisuals();                               // ?먭꺽 利됱떆 ?ㅽ룿 (?곗텧 ?앸왂)
 	}
 }
 
@@ -227,6 +238,140 @@ URetrieveAbilitySystemComponent* UWeaponComponent::GetRetrieveAbilitySystemCompo
 		: nullptr;
 
 	return PawnExt ? PawnExt->GetRetrieveAbilitySystemComponent() : nullptr;
+}
+
+void UWeaponComponent::InitializeWithAbilitySystem(URetrieveAbilitySystemComponent* InASC)
+{
+	if (!InASC)
+	{
+		return;
+	}
+
+	// ?숈씪 ASC ?ъ큹湲고솕硫??щ컮?몃뵫 ?놁씠 ?꾩옱 ?곹깭留?諛섏쁺
+	if (ElementEventASC.Get() == InASC && ElementModeChangedHandle.IsValid())
+	{
+		ApplyElementModeMaterial();
+		RefreshElementEmpowerVFX();
+		return;
+	}
+
+	UninitializeFromAbilitySystem();
+	ElementEventASC = InASC;
+
+	ElementModeChangedHandle = InASC->GenericGameplayEventCallbacks
+		.FindOrAdd(RetrieveGameplayTags::GameplayEvent_Element_ModeChange)
+		.AddUObject(this, &UWeaponComponent::OnElementModeChanged);
+
+	// ?꾩옱 ?먯냼紐⑤뱶瑜?ASC ?쒓렇濡?珥덇린???μ갑 ?좏뻾 ??利됱떆 ?щ컮瑜???諛섏쁺)
+	if (InASC->HasMatchingGameplayTag(RetrieveGameplayTags::Element_Fire))
+	{
+		CurrentElementModeTag = RetrieveGameplayTags::Element_Fire;
+	}
+	else if (InASC->HasMatchingGameplayTag(RetrieveGameplayTags::Element_Water))
+	{
+		CurrentElementModeTag = RetrieveGameplayTags::Element_Water;
+	}
+	else if (InASC->HasMatchingGameplayTag(RetrieveGameplayTags::Element_Wind))
+	{
+		CurrentElementModeTag = RetrieveGameplayTags::Element_Wind;
+	}
+	else
+	{
+		CurrentElementModeTag = FGameplayTag();
+	}
+
+	ApplyElementModeMaterial();
+
+	// ?먯냼 ?대갑 ?곹깭 援щ룆. ElementUnlockComponent媛 Weapon蹂대떎 癒쇱? init?섎?濡?SovereignCharacter)
+	// ?몄씠釉?蹂듭썝???대갑 紐⑸줉?????쒖젏 Refresh?먯꽌 諛붾줈 ?쎌쓣 ???덈떎.
+	if (const AActor* Owner = GetOwner())
+	{
+		if (UElementUnlockComponent* Unlock = Owner->FindComponentByClass<UElementUnlockComponent>())
+		{
+			CachedElementUnlockComponent = Unlock;
+			Unlock->OnElementUnlocked.AddUniqueDynamic(this, &UWeaponComponent::HandleElementUnlockedForVFX);
+		}
+	}
+	RefreshElementEmpowerVFX();
+}
+
+void UWeaponComponent::UninitializeFromAbilitySystem()
+{
+	if (UElementUnlockComponent* Unlock = CachedElementUnlockComponent.Get())
+	{
+		Unlock->OnElementUnlocked.RemoveDynamic(this, &UWeaponComponent::HandleElementUnlockedForVFX);
+	}
+	CachedElementUnlockComponent = nullptr;
+
+	if (URetrieveAbilitySystemComponent* ASC = ElementEventASC.Get())
+	{
+		if (ElementModeChangedHandle.IsValid())
+		{
+			if (FGameplayEventMulticastDelegate* Delegate =
+				ASC->GenericGameplayEventCallbacks.Find(RetrieveGameplayTags::GameplayEvent_Element_ModeChange))
+			{
+				Delegate->Remove(ElementModeChangedHandle);
+			}
+		}
+	}
+	ElementModeChangedHandle.Reset();
+	ElementEventASC = nullptr;
+}
+
+void UWeaponComponent::OnElementModeChanged(const FGameplayEventData* Payload)
+{
+	if (Payload && !Payload->InstigatorTags.IsEmpty())
+	{
+		TArray<FGameplayTag> Tags;
+		Payload->InstigatorTags.GetGameplayTagArray(Tags);
+		CurrentElementModeTag = Tags.Num() > 0 ? Tags[0] : FGameplayTag();
+	}
+	else
+	{
+		CurrentElementModeTag = FGameplayTag();
+	}
+
+	ApplyElementModeMaterial();
+	RefreshElementEmpowerVFX();
+}
+
+void UWeaponComponent::ApplyElementModeMaterial()
+{
+	if (!IsEquipped() || !CurrentElementModeTag.IsValid())
+	{
+		return;
+	}
+
+	const TMap<FGameplayTag, TSoftObjectPtr<UMaterialInterface>>& ElementMats = CurrentWeaponData.ElementModeMaterials;
+	if (ElementMats.Num() == 0)
+	{
+		return; // 湲곕낯 臾닿린(?먯냼蹂?癒명떚由ъ뼹 誘몄??? ???꾨Т寃껊룄 ?섏? ?딆쓬
+	}
+
+	const TSoftObjectPtr<UMaterialInterface>* MatPtr = ElementMats.Find(CurrentElementModeTag);
+	if (!MatPtr)
+	{
+		return;
+	}
+
+	UMaterialInterface* Material = MatPtr->LoadSynchronous();
+	if (!Material)
+	{
+		return;
+	}
+
+	// 寃(二?臾닿린 硫붿떆)??紐⑤뱺 癒명떚由ъ뼹 ?щ’???곸슜.
+	UMeshComponent* SwordMesh = GetPrimaryEquippedWeaponMesh();
+	if (!IsValid(SwordMesh))
+	{
+		return;
+	}
+
+	const int32 NumMats = SwordMesh->GetNumMaterials();
+	for (int32 i = 0; i < NumMats; ++i)
+	{
+		SwordMesh->SetMaterial(i, Material);
+	}
 }
 
 const FRetrieveWeaponDataRow* UWeaponComponent::FindWeaponData(FName WeaponItemId) const
@@ -241,7 +386,7 @@ const FRetrieveWeaponDataRow* UWeaponComponent::FindWeaponData(FName WeaponItemI
 
 void UWeaponComponent::ClearGrantedWeaponAbilities()
 {
-	// 서버에서 부여한 무기 전용 어빌리티만 회수
+	// ?쒕쾭?먯꽌 遺?ы븳 臾닿린 ?꾩슜 ?대퉴由ы떚留??뚯닔
 	if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
 	{
 		WeaponGrantedHandles.TakeFromAbilitySystem(ASC);
@@ -251,6 +396,7 @@ void UWeaponComponent::ClearGrantedWeaponAbilities()
 void UWeaponComponent::ClearWeaponVisuals()
 {
 	ClearWeaponEnhancementVFX();
+	ClearElementEmpowerVFX();
 	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 	{
 		if (Part.Mesh)
@@ -350,8 +496,8 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 {
 	if (HasAuthorityToModify())
 	{
-		// AbilitySet 부여와 무기 공격력 GE 적용은 서버에서만 처리
-		// 클라이언트 OnRep 경로는 비주얼만 갱신
+		// AbilitySet 遺?ъ? 臾닿린 怨듦꺽??GE ?곸슜? ?쒕쾭?먯꽌留?泥섎━
+		// ?대씪?댁뼵??OnRep 寃쎈줈??鍮꾩＜?쇰쭔 媛깆떊
 		if (URetrieveAbilitySystemComponent* ASC = GetRetrieveAbilitySystemComponent())
 		{
 			if (URetrieveAbilitySet* AbilitySet = Cast<URetrieveAbilitySet>(WeaponData.WeaponAbilitySet.TryLoad()))
@@ -359,7 +505,7 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 				AbilitySet->GiveToAbilitySystem(ASC, &WeaponGrantedHandles, GetOwner());
 			}
 
-			// 무기 AttackPower를 캐릭터 어트리뷰트에 가산
+			// 臾닿린 AttackPower瑜?罹먮┃???댄듃由щ럭?몄뿉 媛??
 			// GE_WeaponAttackPower: Infinite, Add on AttackPower, SetByCaller(Data.Weapon.AttackPower)
 			if (WeaponAttackPowerEffect && WeaponData.AttackPower > 0.0f)
 			{
@@ -383,8 +529,8 @@ bool UWeaponComponent::ApplyWeaponData(FName WeaponItemId, const FRetrieveWeapon
 	CurrentWeaponTypeTag = WeaponData.WeaponTypeTag;
 	CurrentWeaponAffinityTag = WeaponData.WeaponAffinityTag;
 
-	// 비주얼 스폰과 OnWeaponEquipped 브로드캐스트는 호출자(EquipWeapon / OnRep)가 담당한다.
-	// (교체 연출 타이밍 제어 + relink 순서 보장을 위해 데이터 적용과 분리)
+	// 鍮꾩＜???ㅽ룿怨?OnWeaponEquipped 釉뚮줈?쒖틦?ㅽ듃???몄텧??EquipWeapon / OnRep)媛 ?대떦?쒕떎.
+	// (援먯껜 ?곗텧 ??대컢 ?쒖뼱 + relink ?쒖꽌 蹂댁옣???꾪빐 ?곗씠???곸슜怨?遺꾨━)
 	return true;
 }
 
@@ -395,8 +541,8 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		return false;
 	}
 
-	// 등(수납) 소켓을 스폰 시점에 무기 타입으로 1번 해석해 파트에 캐싱한다.
-	// (이후 SetWeaponDrawn은 파트값만 쓰므로 Unequip으로 타입 태그가 지워져도 납검 위치가 유지된다)
+	// ???섎궔) ?뚯폆???ㅽ룿 ?쒖젏??臾닿린 ??낆쑝濡?1踰??댁꽍???뚰듃??罹먯떛?쒕떎.
+	// (?댄썑 SetWeaponDrawn? ?뚰듃媛믩쭔 ?곕?濡?Unequip?쇰줈 ????쒓렇媛 吏?뚯졇???⑷? ?꾩튂媛 ?좎??쒕떎)
 	const URetrieveWeaponSocketSettings* SocketSettings = GetDefault<URetrieveWeaponSocketSettings>();
 	const FRetrieveSheathedSocketMap* SheathedMap = SocketSettings
 		? SocketSettings->SocketsByWeaponType.Find(CurrentWeaponTypeTag)
@@ -439,21 +585,21 @@ bool UWeaponComponent::ApplyWeaponVisuals(const FRetrieveWeaponDataRow& WeaponDa
 		MeshPart.TraceStartSocket = Attachment.TraceStartSocketNameOverride;
 		MeshPart.TraceEndSocket = Attachment.TraceEndSocketNameOverride;
 
-		// 발검/납검 소켓 스왑용 기록(손=AttachSocketName, 오프셋 보존). 등 소켓은 SetWeaponDrawn에서 레이어 맵으로 해석.
+		// 諛쒓?/?⑷? ?뚯폆 ?ㅼ솑??湲곕줉(??AttachSocketName, ?ㅽ봽??蹂댁〈). ???뚯폆? SetWeaponDrawn?먯꽌 ?덉씠??留듭쑝濡??댁꽍.
 		FRetrieveEquippedWeaponPart& Part = WeaponAttachParts.AddDefaulted_GetRef();
 		Part.Mesh = WeaponMeshComponent;
 		Part.DrawnSocket = Attachment.AttachSocketName;
 		Part.SheathedSocket = SheathedMap ? SheathedMap->DrawnToSheathed.FindRef(Attachment.AttachSocketName) : NAME_None;
 		Part.RelativeTransform = Attachment.RelativeTransform;
 
-		// 노킹 화살 스폰 가시성은 데이터로: 무한(항상 노킹)=visible, 유한=hidden(Reload 노티가 표시).
+		// ?명궧 ?붿궡 ?ㅽ룿 媛?쒖꽦? ?곗씠?곕줈: 臾댄븳(??긽 ?명궧)=visible, ?좏븳=hidden(Reload ?명떚媛 ?쒖떆).
 		if (Attachment.bIsNockedArrow)
 		{
 			WeaponMeshComponent->SetVisibility(Attachment.bNockedArrowStartsVisible, /*bPropagateToChildren=*/true);
 			NockedArrowMeshes.Add(WeaponMeshComponent);
 			if (Attachment.bNockedArrowStartsVisible)
 			{
-				bArrowNocked = true; // 스폰부터 노킹 → GA가 장전 스킵(무한 활)
+				bArrowNocked = true; // ?ㅽ룿遺???명궧 ??GA媛 ?μ쟾 ?ㅽ궢(臾댄븳 ??
 			}
 		}
 
@@ -467,7 +613,7 @@ void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket, bool b
 {
 	for (const FRetrieveEquippedWeaponPart& Part : WeaponAttachParts)
 	{
-		// 특정 파트만 지정된 경우(검/방패 타이밍 분리) 나머지는 건너뛴다. None이면 전체 처리.
+		// ?뱀젙 ?뚰듃留?吏?뺣맂 寃쎌슦(寃/諛⑺뙣 ??대컢 遺꾨━) ?섎㉧吏??嫄대꼫?대떎. None?대㈃ ?꾩껜 泥섎━.
 		if (!OnlyDrawnSocket.IsNone() && Part.DrawnSocket != OnlyDrawnSocket)
 		{
 			continue;
@@ -479,17 +625,17 @@ void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket, bool b
 			continue;
 		}
 
-		// 숨김 지시(등 소켓 없는 방패 등): 소켓 스왑 없이 Hidden 처리. 곧 ClearWeapon이 파괴한다.
+		// ?④? 吏?????뚯폆 ?녿뒗 諛⑺뙣 ??: ?뚯폆 ?ㅼ솑 ?놁씠 Hidden 泥섎━. 怨?ClearWeapon???뚭눼?쒕떎.
 		if (bSetHidden)
 		{
 			Mesh->SetVisibility(false, /*bPropagateToChildren=*/true);
 			continue;
 		}
 
-		// 이 호출이 대상한 파트는 보이게 한다(Equip 중 hidden 스폰 → 발검 노티가 여기서 등장).
+		// ???몄텧????곹븳 ?뚰듃??蹂댁씠寃??쒕떎(Equip 以?hidden ?ㅽ룿 ??諛쒓? ?명떚媛 ?ш린???깆옣).
 		Mesh->SetVisibility(true, /*bPropagateToChildren=*/true);
 
-		// 납검 소켓 매핑이 없는 파트는 그대로 둔다(예: 항상 손에 있는 무기 등).
+		// ?⑷? ?뚯폆 留ㅽ븨???녿뒗 ?뚰듃??洹몃?濡??붾떎(?? ??긽 ?먯뿉 ?덈뒗 臾닿린 ??.
 		const FName TargetSocket = bDrawn ? Part.DrawnSocket : Part.SheathedSocket;
 		if (TargetSocket.IsNone())
 		{
@@ -503,7 +649,7 @@ void UWeaponComponent::SetWeaponDrawn(bool bDrawn, FName OnlyDrawnSocket, bool b
 		}
 
 		Mesh->AttachToComponent(AttachParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TargetSocket);
-		Mesh->SetRelativeTransform(Part.RelativeTransform); // SnapToTarget이 0으로 만든 오프셋 복원
+		Mesh->SetRelativeTransform(Part.RelativeTransform); // SnapToTarget??0?쇰줈 留뚮뱺 ?ㅽ봽??蹂듭썝
 	}
 }
 
@@ -520,15 +666,8 @@ void UWeaponComponent::ClearWeaponEnhancementVFX()
 	WeaponEnhancementVFXComponents.Reset();
 }
 
-void UWeaponComponent::SpawnWeaponEnhancementVFX()
+UStaticMeshComponent* UWeaponComponent::FindWeaponVFXTargetMesh() const
 {
-	ClearWeaponEnhancementVFX();
-
-	if (CurrentWeaponData.EnhancementLevel <= 0)
-	{
-		return;
-	}
-
 	UStaticMeshComponent* TargetMesh = nullptr;
 	for (const FRetrieveEquippedWeaponMesh& Part : EquippedWeaponMeshComponents)
 	{
@@ -546,9 +685,22 @@ void UWeaponComponent::SpawnWeaponEnhancementVFX()
 			}
 		}
 	}
+	return TargetMesh; // ?먮낯 Aura ?쒖뒪?쒖씠 StaticMesh ?낅젰?뺤씠???ㅼ펷?덊깉 臾닿린???쒖쇅?쒕떎.
+}
+
+void UWeaponComponent::SpawnWeaponEnhancementVFX()
+{
+	ClearWeaponEnhancementVFX();
+
+	if (CurrentWeaponData.EnhancementLevel <= 0)
+	{
+		return;
+	}
+
+	UStaticMeshComponent* TargetMesh = FindWeaponVFXTargetMesh();
 	if (!TargetMesh)
 	{
-		return; // 원본 Aura 시스템이 StaticMesh 입력형이라 스켈레탈 무기는 제외한다.
+		return;
 	}
 
 	const int32 Level = CurrentWeaponData.EnhancementLevel;
@@ -576,17 +728,17 @@ void UWeaponComponent::SpawnWeaponEnhancementVFX()
 	}
 
 	const FLinearColor AuraColor = CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Fire
-		? FLinearColor(0.5f, 0.023f, 0.002f, 1.f)   // 발광 강도 하향: blown-out/블룸 번짐 제거 (재스폰 시 반영)
+		? FLinearColor(0.5f, 0.023f, 0.002f, 1.f)   // 諛쒓킅 媛뺣룄 ?섑뼢: blown-out/釉붾８ 踰덉쭚 ?쒓굅 (?ъ뒪????諛섏쁺)
 		: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Water
 			? FLinearColor(0.0035f, 0.13f, 0.5f, 1.f)
 			: CurrentWeaponAffinityTag == RetrieveGameplayTags::Weapon_Affinity_Wind
 				? FLinearColor(0.01f, 0.5f, 0.075f, 1.f)
 				: FLinearColor(0.25f, 0.08f, 0.5f, 1.f);
-	// 강화 레벨(1~10)을 0~1로 정규화. 단계별 차이를 넓게 벌리기 위해 최저(레벨1)도 0에 가깝게 둔다.
+	// 媛뺥솕 ?덈꺼(1~10)??0~1濡??뺢퇋?? ?④퀎蹂?李⑥씠瑜??볤쾶 踰뚮━湲??꾪빐 理쒖?(?덈꺼1)??0??媛源앷쾶 ?붾떎.
 	const float TierAlpha = FMath::Clamp((static_cast<float>(Level) - 1.f) / 9.f, 0.f, 1.f);
 
-	// 강화 단계가 확실히 체감되도록 발광/오버레이 밝기 자체를 레벨에 비례시킨다.
-	// 최고 레벨(10) = 현재 튜닝된 기준 밝기(AuraColor), 낮은 레벨은 은은하게.
+	// 媛뺥솕 ?④퀎媛 ?뺤떎??泥닿컧?섎룄濡?諛쒓킅/?ㅻ쾭?덉씠 諛앷린 ?먯껜瑜??덈꺼??鍮꾨??쒗궓??
+	// 理쒓퀬 ?덈꺼(10) = ?꾩옱 ?쒕떇??湲곗? 諛앷린(AuraColor), ??? ?덈꺼? ???섍쾶.
 	const float LevelIntensity = FMath::Lerp(0.28f, 1.0f, TierAlpha);
 	const FLinearColor ScaledColor = AuraColor * LevelIntensity;
 
@@ -600,6 +752,142 @@ void UWeaponComponent::SpawnWeaponEnhancementVFX()
 	VFX->ComponentTags.AddUnique(FName(TEXT("Retrieve.VFX.WeaponEnhancement")));
 	VFX->Activate(true);
 	WeaponEnhancementVFXComponents.Add(VFX);
+}
+
+void UWeaponComponent::ClearElementEmpowerVFX()
+{
+	for (UNiagaraComponent* Component : ElementEmpowerVFXComponents)
+	{
+		if (IsValid(Component))
+		{
+			Component->DeactivateImmediate();
+			Component->DestroyComponent();
+		}
+	}
+	ElementEmpowerVFXComponents.Reset();
+}
+
+void UWeaponComponent::RefreshElementEmpowerVFX()
+{
+	ClearElementEmpowerVFX();
+
+	if (!IsEquipped() || !CurrentElementModeTag.IsValid())
+	{
+		return;
+	}
+
+	// ???쒖쇅 ???먯냼 ?ㅻ씪??洹쇱젒(寃瑜? ?꾩슜 ?곗텧.
+	if (CurrentWeaponTypeTag.MatchesTagExact(RetrieveGameplayTags::Weapon_Type_Bow))
+	{
+		return;
+	}
+
+	// 媛?붿뼵 肄붿뼱 ?≪닔濡??꾩옱 紐⑤뱶 ?먯냼媛 ?대갑(媛뺥솕)???곹깭?먯꽌留??쒖떆.
+	const UElementUnlockComponent* Unlock = CachedElementUnlockComponent.Get();
+	if (!Unlock || !Unlock->IsElementUnlocked(CurrentElementModeTag))
+	{
+		return;
+	}
+
+	const TSoftObjectPtr<UNiagaraSystem>* SystemPtr = ElementEmpowerVFX.Find(CurrentElementModeTag);
+	if (!SystemPtr)
+	{
+		return;
+	}
+	UNiagaraSystem* System = SystemPtr->LoadSynchronous();
+	if (!System)
+	{
+		return;
+	}
+
+	UStaticMeshComponent* TargetMesh = FindWeaponVFXTargetMesh();
+	if (!TargetMesh)
+	{
+		return;
+	}
+
+	UNiagaraComponent* VFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		System,
+		TargetMesh,
+		NAME_None,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		EAttachLocation::KeepRelativeOffset,
+		/*bAutoDestroy=*/false,
+		/*bAutoActivate=*/false);
+	if (!VFX)
+	{
+		return;
+	}
+
+	VFX->SetVariableStaticMesh(FName(TEXT("User.01 - Mesh -> Weapon")), TargetMesh->GetStaticMesh());
+
+	// ?ㅽ뙆???ㅽ룿 ?ㅻ┛?붾? 臾닿린 濡쒖뺄 諛붿슫利덉뿉 留욎텣??寃/諛⑺뙣/吏?≪씠 湲몄씠쨌?먭퍡 ?먮룞 ???.
+	// Midpoint 0.5 = ?ㅻ┛?붽? Offset Z 湲곗? ?곹븯 ?移???硫붿떆 以묒떖???볦쑝硫?臾닿린 ?꾩껜瑜???뒗??
+	if (const UStaticMesh* StaticMesh = TargetMesh->GetStaticMesh())
+	{
+		const FBoxSphereBounds Bounds = StaticMesh->GetBounds();
+		// 諛섍꼍? ?뉗? 異?移쇰궇 ?먭퍡) 湲곗? + ?쎄컙??蹂쇰ⅷ ??媛????max) 湲곗??대㈃ 遺덇만??移쇰궇?먯꽌 ?좎꽌 ?⑹뼱??蹂댁씤??
+		const float WeaponRadius =
+			FMath::Clamp(static_cast<float>(FMath::Min(Bounds.BoxExtent.X, Bounds.BoxExtent.Y)) + 4.f, 6.f, 10.f);
+		VFX->SetVariableFloat(FName(TEXT("User.Sparks Radius")), WeaponRadius);
+        // The weapon mesh pivot is attached to the hand socket. Emit from that pivot toward
+        // the farther Z end instead of emitting symmetrically around the mesh center.
+        const float PositiveLength = FMath::Max(0.f, static_cast<float>(Bounds.Origin.Z + Bounds.BoxExtent.Z));
+        const float NegativeLength = FMath::Max(0.f, static_cast<float>(-(Bounds.Origin.Z - Bounds.BoxExtent.Z)));
+        const bool bExtendsTowardPositiveZ = PositiveLength >= NegativeLength;
+        const float HandToTipLength = FMath::Max(PositiveLength, NegativeLength);
+
+        VFX->SetVariableFloat(FName(TEXT("User.Sparks Height")), HandToTipLength);
+        VFX->SetVariableFloat(FName(TEXT("User.Sparks Midpoint")), bExtendsTowardPositiveZ ? 0.f : 1.f);
+        VFX->SetVariableFloat(FName(TEXT("User.08 - Offset Z - Sparks")), 0.f);
+        VFX->SetVariableFloat(FName(TEXT("User.08 - Offset Z - Trail/Smoke")), 0.f);
+
+        if (CurrentElementModeTag.MatchesTagExact(RetrieveGameplayTags::Element_Wind))
+        {
+            // Wind helix follows the mesh's longest local axis, regardless of import orientation.
+            FVector DrillAxis = FVector::ZeroVector;
+            float DrillLength = 0.f;
+            int32 DrillAxisIndex = 0;
+            for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+            {
+                const float PositiveAxisLength = FMath::Max(0.f, static_cast<float>(Bounds.Origin[AxisIndex] + Bounds.BoxExtent[AxisIndex]));
+                const float NegativeAxisLength = FMath::Max(0.f, static_cast<float>(-(Bounds.Origin[AxisIndex] - Bounds.BoxExtent[AxisIndex])));
+                const float CandidateLength = FMath::Max(PositiveAxisLength, NegativeAxisLength);
+                if (CandidateLength > DrillLength)
+                {
+                    DrillLength = CandidateLength;
+                    DrillAxisIndex = AxisIndex;
+                    DrillAxis = FVector::ZeroVector;
+                    DrillAxis[AxisIndex] = PositiveAxisLength >= NegativeAxisLength ? 1.f : -1.f;
+                }
+            }
+
+            const int32 TransverseAxisA = (DrillAxisIndex + 1) % 3;
+            const int32 TransverseAxisB = (DrillAxisIndex + 2) % 3;
+            const float DrillWeaponRadius = FMath::Clamp(
+                static_cast<float>(FMath::Min(Bounds.BoxExtent[TransverseAxisA], Bounds.BoxExtent[TransverseAxisB])) + 4.f,
+                6.f, 12.f);
+
+            VFX->SetVariableVec3(FName(TEXT("User.WindDrillAxis")), DrillAxis);
+            VFX->SetVariableFloat(FName(TEXT("User.WindDrillHeight")), DrillLength);
+            VFX->SetVariableFloat(FName(TEXT("User.WindDrillBaseRadius")), FMath::Max(DrillWeaponRadius * 1.65f, 12.f));
+            VFX->SetVariableFloat(FName(TEXT("User.WindDrillTipRadius")), 0.8f);
+            VFX->SetVariableFloat(FName(TEXT("User.WindDrillTurns")), FMath::Clamp(DrillLength / 32.f, 3.5f, 5.25f));
+            VFX->SetVariableFloat(FName(TEXT("User.WindDrillTaperPower")), 1.15f);
+            VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Width")), 4.5f);
+            VFX->SetVariableFloat(FName(TEXT("User.Trail Ribbon Lifetime")), 0.75f);
+        }
+	}
+
+	VFX->ComponentTags.AddUnique(FName(TEXT("Retrieve.VFX.WeaponElementEmpower")));
+	VFX->Activate(true);
+	ElementEmpowerVFXComponents.Add(VFX);
+}
+
+void UWeaponComponent::HandleElementUnlockedForVFX(FGameplayTag /*ElementTag*/)
+{
+	RefreshElementEmpowerVFX();
 }
 UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeaponAttachmentData& Attachment) const
 {
@@ -621,7 +909,7 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Comp->SetGenerateOverlapEvents(false);
 		Comp->SetCanEverAffectNavigation(false);
-		// PartName 태그 — attachment의 OwnerComponentTag 타깃이 이 파트를 찾게 한다(예: 화살 → 활 메시).
+		// PartName ?쒓렇 ??attachment??OwnerComponentTag ?源껋씠 ???뚰듃瑜?李얘쾶 ?쒕떎(?? ?붿궡 ????硫붿떆).
 		if (!Attachment.PartName.IsNone())
 		{
 			Comp->ComponentTags.Add(Attachment.PartName);
@@ -639,12 +927,12 @@ UMeshComponent* UWeaponComponent::CreateWeaponMeshComponent(const FRetrieveWeapo
 	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Comp->SetGenerateOverlapEvents(false);
 	Comp->SetCanEverAffectNavigation(false);
-	// PartName 태그(OwnerComponentTag 타깃용).
+	// PartName ?쒓렇(OwnerComponentTag ?源껋슜).
 	if (!Attachment.PartName.IsNone())
 	{
 		Comp->ComponentTags.Add(Attachment.PartName);
 	}
-	// 메인 AnimBP 지정 시 붙인다 — 활 메시가 사격 몽타주를 재생하려면 필요(Slot 포함 ABP).
+	// 硫붿씤 AnimBP 吏????遺숈씤??????硫붿떆媛 ?ш꺽 紐쏀?二쇰? ?ъ깮?섎젮硫??꾩슂(Slot ?ы븿 ABP).
 	if (TSubclassOf<UAnimInstance> AnimClass = Attachment.MeshAnimClass.LoadSynchronous())
 	{
 		Comp->SetAnimInstanceClass(AnimClass);
@@ -721,7 +1009,7 @@ USceneComponent* UWeaponComponent::FindAttachmentParent(
 		}
 	}
 
-	// 단일 메시 구조: 무기는 항상 leader 스켈레톤(GetMesh)의 소켓에 확정 부착한다.
-	// 모듈러 파츠는 같은 스켈레톤을 LeaderPose로 공유하므로 파츠를 고르면 소켓이 중복 매칭된다.
+	// ?⑥씪 硫붿떆 援ъ“: 臾닿린????긽 leader ?ㅼ펷?덊넠(GetMesh)???뚯폆???뺤젙 遺李⑺븳??
+	// 紐⑤뱢???뚯툩??媛숈? ?ㅼ펷?덊넠??LeaderPose濡?怨듭쑀?섎?濡??뚯툩瑜?怨좊Ⅴ硫??뚯폆??以묐났 留ㅼ묶?쒕떎.
 	return HasSocket(CharacterOwner->GetMesh()) ? CharacterOwner->GetMesh() : nullptr;
 }
