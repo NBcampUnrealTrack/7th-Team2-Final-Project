@@ -326,6 +326,20 @@ void URetrievePawnCosmeticComponent::ApplyVisualLayout()
 	ApplyMorphTargetsToSpawnedParts();
 }
 
+void URetrievePawnCosmeticComponent::RefreshModularVisibility()
+{
+	// 통짜 leader: 모듈러 바디가 있으면 숨기고(파츠가 실물), 없으면 통짜가 실물이므로 보인다.
+	if (USkeletalMeshComponent* LeaderMesh = GetLeaderMeshComponent())
+	{
+		const bool bHasModularBody = SpawnedDefaultBodyParts.Num() > 0;
+		LeaderMesh->SetVisibility(!bHasModularBody, /*bPropagateToChildren=*/false);
+	}
+
+	// 기본 바디 파츠 억제 재적용: 외부(Blink 등)가 propagate=true로 자식을 전부 켜면
+	// 방어구가 가려야 할 맨몸 파츠까지 되살아나므로, 억제 상태를 다시 씌운다.
+	RefreshDefaultPartVisibility();
+}
+
 void URetrievePawnCosmeticComponent::ApplyDefaultBodyPartSet(const URetrieveModularPartSet* PartSet)
 {
 	ClearDefaultBodyParts();

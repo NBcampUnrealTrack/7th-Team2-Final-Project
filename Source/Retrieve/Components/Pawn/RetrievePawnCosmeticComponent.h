@@ -43,6 +43,10 @@ public:
 	void ClearEquipmentVisualSlot(FGameplayTag EquipmentSlotTag);
 	void ClearAllEquipmentVisualSlots();
 	void RefreshCosmeticState();
+	// 모듈러 가시성 전체 재보장: 통짜 leader(모듈러 바디 유무 기준)와 기본 바디 파츠 억제 상태를 다시 적용한다.
+	// ApplyVisualLayout의 조기 return과 무관하게 항상 실행되므로, 외부(Blink 등)가 propagate=true로
+	// 자식을 전부 켜서 헤집은 가시성을 정상 상태로 되돌리는 데 쓴다.
+	void RefreshModularVisibility();
 
 	const TMap<FName, float>& GetCurrentMorphTargets() const { return CurrentMorphTargets; }
 

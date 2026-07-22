@@ -211,6 +211,18 @@ void ASovereignCharacter::InitializeAbilitySystem()
     }
 }
 
+void ASovereignCharacter::EndBlink()
+{
+	// 부모가 통짜 leader를 propagate=true로 되살린다(파츠 포함). 통짜는 모듈러 바디가 있으면
+	// 숨겨진 상태여야 하므로, Cosmetic이 leader 가시성만 규칙대로 다시 바로잡는다(같은 프레임, 깜빡임 없음).
+	Super::EndBlink();
+
+	if (PawnCosmeticComponent)
+	{
+		PawnCosmeticComponent->RefreshModularVisibility();
+	}
+}
+
 void ASovereignCharacter::UnPossessed()
 {
 	Super::UnPossessed();  // 부모의 PawnExtensionComponent 해제 포함

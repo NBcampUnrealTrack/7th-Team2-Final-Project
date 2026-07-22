@@ -42,6 +42,9 @@ public:
 		return FGenericTeamId(static_cast<uint8>(Team));
 	}
 
+	// Blink 종료 시 통짜 leader가 propagate=true로 되살아나므로, Cosmetic 규칙대로 가시성을 재보장한다.
+	virtual void EndBlink() override;
+
 protected:
 	virtual void InitializeAbilitySystem() override;
 	virtual void UnPossessed() override;

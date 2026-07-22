@@ -100,7 +100,7 @@ public:
 	void SetBlinkFallGravity(float GravityScale);
 
 	/** 블링크 종료(착지/타이머/취소): 메시 다시 표시 + 중력·낙뎀억제 원복. */
-	void EndBlink();
+	virtual void EndBlink();
 
 protected:
 	virtual void PostInitializeComponents() override;
