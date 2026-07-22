@@ -146,6 +146,8 @@ void UWeaponComponent::SpawnWeaponVisuals()
 		// SetWeaponDrawn?쇰줈 泥섎━?쒕떎(???좏샇??紐⑤뱺 ?ㅽ룿 寃쎈줈???⑥씪 ?듬줈 ??fallback/OnRep/?μ갑 ?명떚 怨듯넻).
 		// Equip ?꾪솚 以묒씠硫??④꺼???ㅽ룿 ??諛쒓? ?명떚媛 ?먯뿉 遺李⑺븯硫?蹂댁씠寃??쒕떎(寃?믩갑???쒖감 ?깆옣).
 		ApplyWeaponVisuals(CurrentWeaponData, /*bSpawnHidden=*/IsEquipTransitionActive());
+		// 원소 머티리얼 교체 무기(전설검 등)의 원본 머티리얼을 강화 VFX/교체 전에 캐시 → 원소 해제 시 복원용.
+		CacheSwordBaseMaterials();
 		SpawnWeaponEnhancementVFX();
 		RefreshElementEmpowerVFX();
 		OnWeaponVisualsSpawned.Broadcast();
@@ -337,27 +339,27 @@ void UWeaponComponent::OnElementModeChanged(const FGameplayEventData* Payload)
 
 void UWeaponComponent::ApplyElementModeMaterial()
 {
-	if (!IsEquipped() || !CurrentElementModeTag.IsValid())
+	if (!IsEquipped())
 	{
 		return;
 	}
 
+	// 원소별 전용 머티리얼을 정의한 무기(예: 전설검)만 몸체 머티리얼을 교체한다.
+	// 비어 있으면(일반 무기) 아래에서 return → 무기 고유색 + 강화 오라(SpawnWeaponEnhancementVFX)가 유지된다.
 	const TMap<FGameplayTag, TSoftObjectPtr<UMaterialInterface>>& ElementMats = CurrentWeaponData.ElementModeMaterials;
 	if (ElementMats.Num() == 0)
 	{
 		return; // 湲곕낯 臾닿린(?먯냼蹂?癒명떚由ъ뼹 誘몄??? ???꾨Т寃껊룄 ?섏? ?딆쓬
 	}
 
-	const TSoftObjectPtr<UMaterialInterface>* MatPtr = ElementMats.Find(CurrentElementModeTag);
-	if (!MatPtr)
+	// 현재 원소 모드에 매핑된 머티리얼(없으면 nullptr → 아래에서 원본 복원).
+	UMaterialInterface* Material = nullptr;
+	if (CurrentElementModeTag.IsValid())
 	{
-		return;
-	}
-
-	UMaterialInterface* Material = MatPtr->LoadSynchronous();
-	if (!Material)
-	{
-		return;
+		if (const TSoftObjectPtr<UMaterialInterface>* MatPtr = ElementMats.Find(CurrentElementModeTag))
+		{
+			Material = MatPtr->LoadSynchronous();
+		}
 	}
 
 	// 寃(二?臾닿린 硫붿떆)??紐⑤뱺 癒명떚由ъ뼹 ?щ’???곸슜.
@@ -367,13 +369,56 @@ void UWeaponComponent::ApplyElementModeMaterial()
 		return;
 	}
 
-	// 레이어 분리: 원소 모드는 무기 몸체 머티리얼을 덮지 않는다.
-	// (기존: 원소별 머티리얼이 몸체를 덮어 강화 오라 색을 가리고, 복원 로직이 없어
-	//  다른 원소 모드로 전환해도 잔상이 남던 문제 — 예: 불 모드인데 이전 바람의 초록이 유지)
-	// 무기 몸체색은 무기 고유색 + 강화 오라(SpawnWeaponEnhancementVFX)가 소유하고,
-	// 원소 해방은 empower VFX(스파크/외곽 아우라)로만 표현한다.
-	(void)SwordMesh;
-	(void)Material;
+	// 원소 머티리얼이 있으면 검 몸체의 모든 슬롯에 적용, 없으면 원본으로 복원(잔상 방지).
+	if (Material)
+	{
+		const int32 NumSlots = SwordMesh->GetNumMaterials();
+		for (int32 SlotIndex = 0; SlotIndex < NumSlots; ++SlotIndex)
+		{
+			SwordMesh->SetMaterial(SlotIndex, Material);
+		}
+	}
+	else
+	{
+		RestoreSwordBaseMaterials(SwordMesh);
+	}
+}
+
+void UWeaponComponent::CacheSwordBaseMaterials()
+{
+	CachedSwordBaseMaterials.Reset();
+
+	// 원소별 머티리얼을 정의한 무기만 캐시한다(다른 무기는 머티리얼을 교체하지 않으므로 불필요).
+	if (CurrentWeaponData.ElementModeMaterials.Num() == 0)
+	{
+		return;
+	}
+
+	UMeshComponent* SwordMesh = GetPrimaryEquippedWeaponMesh();
+	if (!IsValid(SwordMesh))
+	{
+		return;
+	}
+
+	const int32 NumSlots = SwordMesh->GetNumMaterials();
+	for (int32 SlotIndex = 0; SlotIndex < NumSlots; ++SlotIndex)
+	{
+		CachedSwordBaseMaterials.Add(SwordMesh->GetMaterial(SlotIndex));
+	}
+}
+
+void UWeaponComponent::RestoreSwordBaseMaterials(UMeshComponent* SwordMesh)
+{
+	if (!IsValid(SwordMesh))
+	{
+		return;
+	}
+
+	const int32 NumSlots = FMath::Min(CachedSwordBaseMaterials.Num(), SwordMesh->GetNumMaterials());
+	for (int32 SlotIndex = 0; SlotIndex < NumSlots; ++SlotIndex)
+	{
+		SwordMesh->SetMaterial(SlotIndex, CachedSwordBaseMaterials[SlotIndex]);
+	}
 }
 
 const FRetrieveWeaponDataRow* UWeaponComponent::FindWeaponData(FName WeaponItemId) const

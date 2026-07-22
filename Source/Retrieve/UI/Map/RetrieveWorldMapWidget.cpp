@@ -1221,6 +1221,17 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 				CandidateBottomRight.X,
 				CandidateBottomRight.Y
 			);
+			// MapViewport는 이 위젯의 자식이므로 정상 geometry는 항상 위젯 경계 안에 포함된다.
+			// 해상도 변경 직후의 스테일 캐시 geometry가 위젯 밖으로 크게 벗어난 경우, 아래
+			// 교집합이 rect를 위젯 안으로 잘라내면서 커버리지·중심 검사를 통과시켜 버리는
+			// 구멍이 있었다(창모드 해상도 조절 시 맵이 우하단 축소 박스로 그려지는 회귀).
+			// → 교집합 이전의 원본 rect가 위젯 안에 포함되는지 먼저 검증하고, 벗어나면 폴백한다.
+			const float ContainTol = 2.0f;
+			const bool bContained =
+				CandidateRect.Left   >= -ContainTol &&
+				CandidateRect.Top    >= -ContainTol &&
+				CandidateRect.Right  <= WidgetSize.X + ContainTol &&
+				CandidateRect.Bottom <= WidgetSize.Y + ContainTol;
 			CandidateRect = CandidateRect.IntersectionWith(WidgetRect);
 
 			const float CandidateW = CandidateRect.Right - CandidateRect.Left;
@@ -1240,7 +1251,7 @@ void URetrieveWorldMapWidget::GetMapViewRect(const FGeometry& AllottedGeometry, 
 			const bool bCentered =
 				FMath::Abs(CandCenter.X - WidgetCenter.X) <= WidgetSize.X * 0.25f &&
 				FMath::Abs(CandCenter.Y - WidgetCenter.Y) <= WidgetSize.Y * 0.25f;
-			if (CandidateW > 1.0f && CandidateH > 1.0f && bCoversEnough && bCentered)
+			if (CandidateW > 1.0f && CandidateH > 1.0f && bContained && bCoversEnough && bCentered)
 			{
 				OutTopLeft = FVector2D(CandidateRect.Left, CandidateRect.Top);
 				OutSize = FVector2D(CandidateW, CandidateH);

@@ -270,7 +270,9 @@ FText URetrieveItemPickupToastWidget::LookupItemDisplayName(FName ItemId, FGamep
 	// LoadObject에 전체 경로(패키지.오브젝트) 사용 — 경로만 쓰면 찾지 못할 수 있음.
 	auto FromWeapon = [ItemId]() -> FText
 	{
-		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Items/DT_WeaponData.DT_WeaponData")))
+		// DT_WeaponData는 /Weapons/에 있다. 과거 /Items/ 경로는 에디터 전용 리다이렉터라 쿠킹 패키지에서
+		// 스트립되어 로드 실패 → 무기 이름이 ID로 뜨던 버그. 실제 경로로 직접 로드한다.
+		if (const UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Retrieve/Data/Weapons/DT_WeaponData.DT_WeaponData")))
 			if (const FRetrieveWeaponDataRow* Row = DT->FindRow<FRetrieveWeaponDataRow>(ItemId, TEXT("InitToast"), false))
 				if (!Row->DisplayName.IsEmptyOrWhitespace()) return Row->DisplayName;
 		return FText::GetEmpty();

@@ -244,12 +244,21 @@ protected:
 	// 원소 모드 전환 콜백(GenericGameplayEventCallbacks). payload의 InstigatorTags[0]가 새 원소.
 	void OnElementModeChanged(const FGameplayEventData* Payload);
 	// 현재 원소모드에 매핑된 머티리얼을 장착 검 메시에 적용(맵 비었거나 매핑 없으면 무시).
+	// ElementModeMaterials가 정의된 무기(예: 전설검)만 몸체 머티리얼을 교체하고, 원소 해제 시 원본으로 복원한다.
 	void ApplyElementModeMaterial();
+	// 원소 머티리얼 교체 무기의 주 무기 메시 원본 머티리얼을 슬롯별로 캐시(스폰 시 1회). 다른 무기는 캐시하지 않는다.
+	void CacheSwordBaseMaterials();
+	// 캐시해 둔 원본 머티리얼로 주 무기 메시를 되돌린다(원소 해제·미보유 시 잔상 방지).
+	void RestoreSwordBaseMaterials(UMeshComponent* SwordMesh);
 
 	// 원소 이벤트 구독 상태
 	TWeakObjectPtr<URetrieveAbilitySystemComponent> ElementEventASC;
 	FDelegateHandle ElementModeChangedHandle;
 	FGameplayTag CurrentElementModeTag;
+
+	// 원소 머티리얼을 교체하는 무기의 주 무기 메시 원본 머티리얼(슬롯별). 원소 해제 시 복원용.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> CachedSwordBaseMaterials;
 
 	// 원소 해방 상태 조회/구독용(오너 폰의 ElementUnlockComponent). Init 시 캐싱.
 	TWeakObjectPtr<UElementUnlockComponent> CachedElementUnlockComponent;
