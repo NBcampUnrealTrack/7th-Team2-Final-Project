@@ -75,6 +75,20 @@ if exist "%PROJECT_DIR%Saved\Cooked" (
 if exist "%PROJECT_DIR%Saved\StagedBuilds" (
     rmdir /s /q "%PROJECT_DIR%Saved\StagedBuilds"
 )
+
+REM --------------------------------------------------------------
+REM Also delete the previous archived build. If we keep it and this
+REM run fails mid-way (e.g. cook failure), the stale Retrieve.exe
+REM from the old build makes the success check below pass and the
+REM script prints PACKAGING SUCCEEDED for a build that never
+REM happened - and testers end up running days-old content.
+REM (2026-07-20: cook failed at 09:10 but the 07-16 build was still
+REM in ..\Package, so the failure went unnoticed.)
+REM --------------------------------------------------------------
+if exist "%ARCHIVE_DIR%\Windows" (
+    echo Deleting previous archived build so a failed run cannot look successful...
+    rmdir /s /q "%ARCHIVE_DIR%\Windows"
+)
 echo.
 
 echo Starting packaging - this can take several minutes.

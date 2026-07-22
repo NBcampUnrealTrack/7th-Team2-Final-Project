@@ -220,9 +220,12 @@ void ARetrieveRescueEncounter::ApplyState()
 			Mesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 			if (UAnimInstance* AnimInstance = Mesh->GetAnimInstance())
 			{
-				static UAnimMontage* CaptiveMontage = LoadObject<UAnimMontage>(
+				// static 원시 포인터 캐싱은 몽타주가 GC 수거된 뒤 댕글링 → 패키지에서 Montage_Play 시
+				// 쓰레기 주소 역참조로 ACCESS_VIOLATION 크래시. GC 루트가 아니므로 매 호출 시 로드한다
+				// (이미 로드돼 있으면 빠른 조회, 재생 중엔 AnimInstance가 몽타주를 참조해 유지됨).
+				UAnimMontage* CaptiveMontage = LoadObject<UAnimMontage>(
 					nullptr, TEXT("/Game/Retrieve/Character/Animations/Rescue/AM_RescuePray_Kneeling.AM_RescuePray_Kneeling"));
-				static UAnimMontage* ExitMontage = LoadObject<UAnimMontage>(
+				UAnimMontage* ExitMontage = LoadObject<UAnimMontage>(
 					nullptr, TEXT("/Game/Retrieve/Character/Animations/Rescue/AM_RescuePray_Kneeling_Exit.AM_RescuePray_Kneeling_Exit"));
 
 				if (State == ERetrieveRescueEncounterState::EnemiesAlive && CaptiveMontage)
