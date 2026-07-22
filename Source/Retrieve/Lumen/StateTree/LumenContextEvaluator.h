@@ -55,12 +55,14 @@ struct RETRIEVE_API FLumenContextEvaluator : public FStateTreeEvaluatorCommonBas
 	virtual void TreeStart(FStateTreeExecutionContext& Context) const override;
 	virtual void Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
 
+	// Legacy serialized setting. Retreat 판단은 이제 거리 대신 몬스터의 실제 인식 타깃을 사용합니다.
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float ThreatNearRadius = 700.f;
 
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float ThreatScanInterval = 0.2f;
 
+	// Legacy serialized setting. Retreat 판단은 이제 거리 대신 몬스터의 실제 인식 타깃을 사용합니다.
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.0"))
 	float HostCombatRadius = 3500.f;
 

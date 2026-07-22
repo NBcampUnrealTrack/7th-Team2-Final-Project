@@ -31,6 +31,10 @@ public:
 	float GetEffectiveSightRadius() const;
 	float GetEffectiveLoseSightRadius() const;
 
+	/** Enemy Target Evaluator가 현재 추적 중인 대상을 다른 AI 시스템에 공유합니다. */
+	void SetRecognizedTarget(AActor* InTarget);
+	bool IsRecognizingTarget(const AActor* Target) const;
+
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
@@ -44,6 +48,8 @@ private:
 	
 	void RestartStateTree();
 	void TryStartStateTree();
+
+	TWeakObjectPtr<AActor> RecognizedTarget;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|AI")

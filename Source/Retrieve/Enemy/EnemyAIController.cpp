@@ -43,6 +43,7 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
 void AEnemyAIController::OnUnPossess()
 {
+	RecognizedTarget.Reset();
 	Super::OnUnPossess();
 }
 
@@ -112,6 +113,8 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 
 void AEnemyAIController::Deactivate()
 {
+	RecognizedTarget.Reset();
+
 	if (StateTreeAIComp && StateTreeAIComp->IsRunning())
 	{
 		StateTreeAIComp->StopLogic("Deactivated");
@@ -177,6 +180,16 @@ float AEnemyAIController::GetEffectiveLoseSightRadius() const
 		return Row->LoseSightRadius;
 	}
 	return LoseSightRadius;
+}
+
+void AEnemyAIController::SetRecognizedTarget(AActor* InTarget)
+{
+	RecognizedTarget = InTarget;
+}
+
+bool AEnemyAIController::IsRecognizingTarget(const AActor* Target) const
+{
+	return IsValid(Target) && RecognizedTarget.Get() == Target;
 }
 
 float AEnemyAIController::GetEffectivePeripheralVisionAngleDegrees() const

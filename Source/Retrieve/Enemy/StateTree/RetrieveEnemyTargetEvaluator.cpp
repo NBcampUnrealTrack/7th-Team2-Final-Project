@@ -91,6 +91,11 @@ namespace
 		UEncirclementSubsystem* EncirclementSubsystem,
 		APawn* Pawn)
 	{
+		if (AEnemyAIController* EnemyAIController = Pawn ? Cast<AEnemyAIController>(Pawn->GetController()) : nullptr)
+		{
+			EnemyAIController->SetRecognizedTarget(nullptr);
+		}
+
 		if (!IsValid(InstanceData.TargetPlayer))
 		{
 			InstanceData.TargetPlayer = nullptr;
@@ -124,8 +129,7 @@ bool FRetrieveEnemyTargetEvaluator::Link(FStateTreeLinker& Linker)
 void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Context) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	
-	
+
 	InstanceData.TargetPlayer = nullptr;
 	InstanceData.DistanceToTarget = 0.f;
 	InstanceData.bTargetLost = true;
@@ -133,6 +137,12 @@ void FRetrieveEnemyTargetEvaluator::TreeStart(FStateTreeExecutionContext& Contex
 	// 첫 Tick에서 즉시 쿼리하도록 AccumulatedTime을 임계값으로 초기화
 	
 	InstanceData.AccumulatedTime = TickInterval;
+
+	if (AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(
+		Context.GetExternalDataPtr(AIControllerHandle)))
+	{
+		EnemyAIController->SetRecognizedTarget(nullptr);
+	}
 	
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (Pawn)
@@ -194,6 +204,12 @@ void FRetrieveEnemyTargetEvaluator::TreeStop(FStateTreeExecutionContext& Context
 			EncirclementSubsystem->ReleaseSlot(InstanceData.TargetPlayer, Pawn);
 			EncirclementSubsystem->ReleaseAttackToken(InstanceData.TargetPlayer, Pawn);
 		}
+	}
+
+	if (AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(
+		Context.GetExternalDataPtr(AIControllerHandle)))
+	{
+		EnemyAIController->SetRecognizedTarget(nullptr);
 	}
 }
 
@@ -768,5 +784,10 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		InstanceData.bAttackApproachable = false;
 		InstanceData.bSpecialAttackable = false;
 		InstanceData.bHasAerialPhase = false;
+	}
+
+	if (AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(AIController))
+	{
+		EnemyAIController->SetRecognizedTarget(InstanceData.bOutOfChaseRange ? nullptr : InstanceData.TargetPlayer);
 	}
 }
