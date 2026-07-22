@@ -4,10 +4,10 @@
 
 > 잃어버린 원소의 조각을 되찾아 세계의 봉인을 다시 여는 3D 액션 RPG.
 
+<img width="1672" height="941" alt="team2_title" src="https://github.com/user-attachments/assets/adf7d84b-f84c-4ed4-b985-8b0bcef47e6f" />
 **7기 Team2 Final Project — Retrieve**
 Unreal Engine 5.7 기반, 8인 팀 개발.
 
-<!-- gif 배치 예정: 타이틀 로고 / 대표 플레이 컷 -->
 
 ---
 
@@ -51,6 +51,7 @@ Retrieve는 원소의 힘이 사라진 세계를 배경으로 하는 3인칭 액
 ---
 
 ## 플레이 이미지
+<img width="800" height="455" alt="2026-07-21220706-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/2cfcd7b6-4f60-48f0-afb2-cee7b9e68a65" />
 
 <!-- gif 배치 예정: 전투 콤보 -->
 <!-- gif 배치 예정: 원소 게이지·버스트 발동 -->
