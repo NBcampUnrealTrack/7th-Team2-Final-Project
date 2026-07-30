@@ -21,6 +21,7 @@
 #include "Logging/RetrieveLogChannels.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
+#include "Combat/WeaponTraceLibrary.h"
 
 void UEnemyCombatComponent::Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots)
 {
@@ -705,8 +706,92 @@ void UEnemyCombatComponent::SetActiveHitbox(USphereComponent* NewHitbox)
 	}
 }
 
+void UEnemyCombatComponent::ActivateWeaponHitbox()
+{
+	bWeaponSweepActive = false;
+	PreviousWeaponTracePoints.Reset();
+	HitActors.Empty();
+
+	const FMonsterPatternRow* Row = PatternTable && !ActivePatternRowName.IsNone()
+		? PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName, TEXT("ActivateWeaponHitbox"))
+		: nullptr;
+	
+	if (!Row || !Row->bUseWeaponSweepTrace) return;
+
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetOwner());
+	if (!Enemy || !Enemy->GetWeaponMeshComponent())
+	{
+		UE_LOG(LogRetrieveCombat, Warning, TEXT("[%s] bUseWeaponSweepTrace=true but GetWeaponMeshComponent() is null."), *GetNameSafe(GetOwner()));
+		return;
+	}
+
+	bWeaponSweepActive = true;
+}
+
+void UEnemyCombatComponent::TickWeaponHitbox()
+{
+	if (!bWeaponSweepActive) return;
+
+	const FMonsterPatternRow* Row = PatternTable && !ActivePatternRowName.IsNone()
+		? PatternTable->FindRow<FMonsterPatternRow>(ActivePatternRowName, TEXT("TickWeaponHitbox"))
+		: nullptr;
+	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetOwner());
+	UMeshComponent* WeaponMesh = (Row && Enemy) ? Enemy->GetWeaponMeshComponent() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Row || !WeaponMesh || !World) return;
+
+	FWeaponTraceSegment Seg;
+	if (!URetrieveWeaponTraceLibrary::BuildBoundsTrace(
+			WeaponMesh, Row->WeaponTraceRadiusScale, Row->WeaponTraceLengthPadding,
+			3, Seg) || !Seg.IsValidTrace())
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EnemyWeaponSweep), false, GetOwner());
+	const FCollisionShape PartShape = FCollisionShape::MakeSphere(Seg.Radius);
+
+	auto SweepAndApply = [&](const FVector& SegStart, const FVector& SegEnd)
+	{
+		TArray<FHitResult> SegmentHits;
+		bool bHit = World->SweepMultiByObjectType(SegmentHits, SegStart, SegEnd, FQuat::Identity, ObjectQueryParams, PartShape, QueryParams);
+		if (bHit)
+		{
+
+			for (const FHitResult& Hit : SegmentHits)
+			{
+				ApplyHitToActor(Hit.GetActor(), Hit);
+			}
+		}
+		if (bDebugDrawTrace)
+		{
+			constexpr float DebugLife = -1.0f;
+			DrawDebugLine(World, SegStart, SegEnd, bHit ? FColor::Green : FColor::Red, false, DebugLife, 0, 0.5f);
+			DrawDebugSphere(World, SegEnd, Seg.Radius, 8, bHit ? FColor::Green : FColor::Red, false, DebugLife);
+		}
+	};
+
+	for (int32 i = 0; i + 1 < Seg.Points.Num(); ++i)
+		SweepAndApply(Seg.Points[i], Seg.Points[i + 1]);
+
+	if (PreviousWeaponTracePoints.Num() == Seg.Points.Num())
+	{
+		for (int32 i = 0; i < Seg.Points.Num(); ++i)
+			SweepAndApply(PreviousWeaponTracePoints[i], Seg.Points[i]);
+	}
+	PreviousWeaponTracePoints = Seg.Points;
+}
+
+void UEnemyCombatComponent::DeactivateWeaponHitbox()
+{
+	bWeaponSweepActive = false;
+	PreviousWeaponTracePoints.Reset();
+}
+
 void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+                                            UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (!OtherActor || OtherActor == GetOwner())
 	{

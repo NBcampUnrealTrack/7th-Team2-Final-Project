@@ -82,6 +82,10 @@ public:
 	
 	void SetActiveHitbox(USphereComponent* NewHitbox);
 	
+	void ActivateWeaponHitbox();
+	void TickWeaponHitbox();
+	void DeactivateWeaponHitbox();
+	
 private:
 	UFUNCTION()
 	void OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -141,4 +145,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Combat|SpecialAttack", meta = (ClampMin = "0.0"))
 	float SpecialAttackRetryCooldownDuration = 1.5f;
+	
+	TArray<FVector> PreviousWeaponTracePoints;
+	bool bWeaponSweepActive = false;
+	UPROPERTY(EditAnywhere)
+	bool bDebugDrawTrace = false;
 };

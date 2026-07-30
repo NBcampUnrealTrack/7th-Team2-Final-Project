@@ -28,14 +28,30 @@ void UAnimNotifyState_EnemyHitboxWindow::NotifyBegin(USkeletalMeshComponent* Mes
 		UEnemyCombatComponent* EnemyCombatComponent = Enemy->GetComponentByClass<UEnemyCombatComponent>();
 		if (EnemyCombatComponent)
 		{
+			EnemyCombatComponent->ActivateWeaponHitbox();
 			EnemyCombatComponent->ActivateHitbox(BoneName, Offset, Radius);
 		}
 	}
 }
 
+void UAnimNotifyState_EnemyHitboxWindow::NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
+	float FrameDeltaTime, const FAnimNotifyEventReference& EventReference)
+{
+	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime, EventReference);
+	if (!MeshComp || !MeshComp->GetOwner()) return;
+	
+	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(MeshComp->GetOwner()))
+	{
+		if (UEnemyCombatComponent* EnemyCombatComponent = Enemy->GetComponentByClass<UEnemyCombatComponent>())
+		{
+			EnemyCombatComponent->TickWeaponHitbox();
+		}
+	}
+}
+
 void UAnimNotifyState_EnemyHitboxWindow::NotifyEnd(USkeletalMeshComponent* MeshComp,
-	UAnimSequenceBase* Animation,
-	const FAnimNotifyEventReference& EventReference)
+                                                   UAnimSequenceBase* Animation,
+                                                   const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
 	
@@ -55,6 +71,7 @@ void UAnimNotifyState_EnemyHitboxWindow::NotifyEnd(USkeletalMeshComponent* MeshC
 		if (EnemyCombatComponent)
 		{
 			EnemyCombatComponent->DeactivateHitbox();
+			EnemyCombatComponent->DeactivateWeaponHitbox();
 		}
 	}
 }

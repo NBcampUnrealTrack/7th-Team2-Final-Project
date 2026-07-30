@@ -605,6 +605,18 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 피격 판정 HitBox의 본의로부터의 Offset */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
 	FVector HitboxOffset = FVector::ZeroVector;
+	
+	/** 무기 콜리전 사용 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
+	bool bUseWeaponSweepTrace = false;
+
+	/** 무기 콜리전 두께 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(EditCondition="bUseWeaponSweepTrace", ClampMin="0.0"))
+	float WeaponTraceRadiusScale = 1.0f;
+
+	/** 무기 콜리전 패딩*/
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(EditCondition="bUseWeaponSweepTrace"))
+	float WeaponTraceLengthPadding = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -743,6 +755,8 @@ struct RETRIEVE_API FMonsterDataRow : public FTableRowBase
 	/** DT_EnemyDrop의 Row 키 목록. 각 행을 DropChance로 독립 굴림해 드랍한다. 비어있으면 드랍 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Drop")
 	TArray<FName> DropRows;
+	
+	
 };
 
 USTRUCT(BlueprintType)

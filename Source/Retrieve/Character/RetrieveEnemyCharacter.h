@@ -80,6 +80,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Enemy|Epic")
 	bool HasAerialPhase() const;
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintPure, Category="Retrieve|Combat|Weapon")
+	UMeshComponent* GetWeaponMeshComponent() const;
+	virtual UMeshComponent* GetWeaponMeshComponent_Implementation() const { return nullptr; }
+	
 	virtual bool ShouldUseStateTreeAerialPhase() const { return HasAerialPhase(); }
 
 	void SetAerialSpecialAttackReady(bool bReady);
