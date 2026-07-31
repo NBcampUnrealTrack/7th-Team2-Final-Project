@@ -31,6 +31,28 @@ struct FRetrieveLostCargoSaveData
 	uint8 State = 0;
 };
 
+/** SaveVersion 4 이하 가디언 저장 데이터 마이그레이션 전용. */
+UENUM()
+enum class ERetrieveGuardianSaveState : uint8
+{
+	Alive,
+	CoreAvailable,
+	CoreConsumed
+};
+
+/** SaveVersion 4 이하 가디언 저장 데이터 마이그레이션 전용. */
+USTRUCT()
+struct FRetrieveGuardianSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	ERetrieveGuardianSaveState State = ERetrieveGuardianSaveState::Alive;
+
+	UPROPERTY()
+	FTransform CoreTransform;
+};
+
 /** 제너릭 퀘스트 인카운터의 목표 1개 진행도(바이트 블롭). */
 USTRUCT()
 struct FRetrieveQuestObjectiveSaveData
@@ -158,7 +180,7 @@ public:
 	int32 ScreenshotHeight = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
-	int32 SaveVersion = 2;
+	int32 SaveVersion = 5;
 
 	/** 상점 판매 재구매 히스토리 (최대 20건 FIFO). 판매 시 기록, 재구매 시 제거 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
@@ -182,4 +204,18 @@ public:
 	/** 대화 분기 선택 기록 (ChoiceId → 선택된 태그) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Quest")
 	TMap<FName, FGameplayTag> QuestChoiceHistory;
+
+	// ── 월드 기믹 델타 상태 (문/레버/퍼즐/파괴물, 슬롯별) ──────────────────────────
+
+	/** 월드 기믹 상태 델타. 키=액터 PersistentId, 값=상태코드(0/1). 로드 시 키 없으면 액터 기본값. */
+	UPROPERTY()
+	TMap<FName, uint8> WorldObjectStates;
+
+	/** 가디언 처치 후 아직 획득하지 않은 코어 위치. 획득 완료 여부는 UnlockedElements가 권위값이다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save|Guardian")
+	TMap<FGameplayTag, FTransform> PendingGuardianCores;
+
+	/** SaveVersion 4 이하 호환 전용. 마이그레이션 후 비워진다. */
+	UPROPERTY()
+	TMap<FGameplayTag, FRetrieveGuardianSaveData> GuardianStates;
 };

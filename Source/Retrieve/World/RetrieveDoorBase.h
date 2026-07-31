@@ -40,6 +40,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** bOpen 상태를 비주얼(BP 이벤트)에 반영. bInstant면 애니메이션 없이 즉시. */
 	void ApplyDoorState(bool bInstant);
@@ -66,4 +67,22 @@ protected:
 	/** 열림 상태 (권한이 바꾸고 복제 → 클라 OnRep으로 비주얼 반영). */
 	UPROPERTY(ReplicatedUsing = OnRep_bOpen, BlueprintReadOnly, Category = "Retrieve|Door")
 	bool bOpen = false;
+
+	/** 세이브 슬롯 저장 키. 비우면 액터 이름으로 폴백. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Door")
+	FName PersistentId;
+
+private:
+	/** 저장/복원용 안정 ID. PersistentId 우선, 없으면 액터 이름. */
+	FName GetSaveId() const;
+
+	/** 세이브 서브시스템 조회(없으면 nullptr). */
+	class URetrieveSaveSubsystem* GetSaveSubsystem() const;
+
+	/** 현재 bOpen을 라이브 세이브 상태에 기록(호스트). */
+	void PushDoorStateToSave() const;
+
+	/** 세이브(슬롯)에서 상태를 읽어 즉시 적용. 키 없으면 bStartOpen 기본. 호스트. */
+	UFUNCTION()
+	void HandleSaveLoaded();
 };

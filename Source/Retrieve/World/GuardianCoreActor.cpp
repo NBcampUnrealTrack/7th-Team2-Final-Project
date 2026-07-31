@@ -3,6 +3,7 @@
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Save/RetrieveSaveSubsystem.h"
 
 
 AGuardianCoreActor::AGuardianCoreActor()
@@ -49,6 +50,13 @@ void AGuardianCoreActor::HandleCoreInteracted(AActor* InteractionInstigator)
 	}
 
 	GS->ApplyGuardianCoreEmpowerment(GuardianDefeatedStep, GS->GetHostPawn());
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->RemovePendingGuardianCore(ElementTag);
+		}
+	}
 	UE_LOG(LogTemp, Warning, TEXT("[GuardianCore] %s: '%s' 완료 + 강화, 코어 획득"), *GetName(), *GuardianDefeatedStep.ToString());
 	Destroy();
 }

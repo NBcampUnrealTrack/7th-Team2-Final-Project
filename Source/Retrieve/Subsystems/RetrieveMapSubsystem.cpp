@@ -1,6 +1,7 @@
 #include "Subsystems/RetrieveMapSubsystem.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapConfigDataAsset.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "World/RetrieveIndoorMapCaptureActor.h"
 #include "World/RetrieveMinimapAreaVolume.h"
 
@@ -11,6 +12,32 @@
 #include "Landscape.h"
 #include "RenderUtils.h"
 #include "UObject/UObjectIterator.h"
+
+void URetrieveMapSubsystem::SeedDefaultActivatedBonfires()
+{
+	// MapConfig는 lazy 로드다. 미니맵/월드맵이 뜨기 전(예: 부팅 직후 새 게임)에 호출돼도
+	// 시딩이 조용히 건너뛰어지지 않도록 먼저 로드를 보장한다(이미 로드됐으면 즉시 반환).
+	EnsureMapConfigLoaded();
+	if (!MapConfig || !MapConfig->WorldMapIconData) { return; }
+
+	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!SaveSub) { return; }
+
+	for (const FRetrieveMapIconEntry& Entry : MapConfig->WorldMapIconData->Icons)
+	{
+		if (Entry.IconType != ERetrieveMapIconType::Bonfire) { continue; }
+		if (!Entry.bStartActivated || Entry.BonfireId.IsNone()) { continue; }
+
+		FTransform Arrival = Entry.ArrivalTransform;
+		if (Arrival.GetLocation().IsNearlyZero())
+		{
+			Arrival = FTransform(Entry.WorldLocation);
+		}
+		// 이미 활성 기록이 있으면 RegisterDefaultBonfire 내부에서 덮어쓰지 않는다.
+		SaveSub->RegisterDefaultBonfire(Entry.BonfireId, Arrival);
+	}
+}
 
 void URetrieveMapSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -778,5 +805,17 @@ void URetrieveMapSubsystem::SetRevealMaskData(const TArray<uint8>& InData, int32
 	RevealMaskTexture = nullptr; // 해상도 변동 대비 재생성
 	bRevealMaskDirty = true;
 	EnsureRevealMask();
+	FlushRevealMaskToTexture();
+}
+
+void URetrieveMapSubsystem::ResetRevealMask()
+{
+	if (RevealResolution <= 0 || RevealMask.Num() == 0)
+	{
+		return; // 아직 초기화된 마스크 없음 — 새 세션이 어차피 미탐색으로 시작.
+	}
+
+	FMemory::Memzero(RevealMask.GetData(), RevealMask.Num());
+	bRevealMaskDirty = true;
 	FlushRevealMaskToTexture();
 }

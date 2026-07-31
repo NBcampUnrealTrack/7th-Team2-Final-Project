@@ -8,10 +8,12 @@
 #include "Components/Combat/RetrieveHealthComponent.h"
 #include "Components/SphereComponent.h"
 #include "Character/RetrieveEnemyCharacter.h"
+#include "Character/RetrieveBossCharacter.h"
 #include "Components/Enemy/BossHPBarComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
+#include "Save/RetrieveSaveSubsystem.h"
 
 ASpawnerBase::ASpawnerBase()
 {
@@ -74,6 +76,16 @@ void ASpawnerBase::BeginPlay()
 						Spawner->ForceRespawnAllDeadEntries();
 					}
 				});
+
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+			{
+				SaveSub->OnWorldObjectStatesChanged.AddUniqueDynamic(
+					this, &ASpawnerBase::HandleSaveLoaded);
+				HandleSaveLoaded();
+			}
+		}
 	}
 }
 
@@ -96,6 +108,14 @@ void ASpawnerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (UWorld* World = GetWorld())
 	{
 		UGameplayMessageSubsystem::Get(World).UnregisterListener(RestListenerHandle);
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+			{
+				SaveSub->OnWorldObjectStatesChanged.RemoveDynamic(
+					this, &ASpawnerBase::HandleSaveLoaded);
+			}
+		}
 	}
 
 	DespawnAll();
@@ -130,6 +150,10 @@ void ASpawnerBase::SpawnAll()
 		{
 			continue;
 		}
+		if (IsSpawnEntrySuppressed(i))
+		{
+			continue;
+		}
 
 		const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
 		APawn* Pawn = EntryPawns[i].Get();
@@ -150,21 +174,7 @@ void ASpawnerBase::SpawnAll()
 		}
 		else
 		{
-			// 없음 → 신규 스폰
-			Pawn = World->SpawnActorDeferred<APawn>(
-				Entry.PawnData->PawnClass, SpawnTransform, nullptr, nullptr,
-				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-
-			if (Pawn)
-			{
-				if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
-				{
-					Enemy->SetRespawnable(Entry.bIsRespawnable);
-					Enemy->OnDeathEnded.AddDynamic(this, &ASpawnerBase::OnEnemyDeath);
-				}
-				Pawn->FinishSpawning(SpawnTransform);
-				EntryPawns[i] = Pawn;
-			}
+			Pawn = SpawnEntry(i, SpawnTransform);
 		}
 
 		if (Pawn)
@@ -174,6 +184,105 @@ void ASpawnerBase::SpawnAll()
 	}
 
 	bIsSpawned = true;
+}
+
+APawn* ASpawnerBase::SpawnEntry(int32 EntryIndex, const FTransform& SpawnTransform)
+{
+	if (!SpawnList.IsValidIndex(EntryIndex)) { return nullptr; }
+
+	const FSpawnEntry& Entry = SpawnList[EntryIndex];
+	UWorld* World = GetWorld();
+	if (!World || !Entry.PawnData || !Entry.PawnData->PawnClass) { return nullptr; }
+
+	APawn* Pawn = World->SpawnActorDeferred<APawn>(
+		Entry.PawnData->PawnClass, SpawnTransform, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Pawn) { return nullptr; }
+
+	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
+	{
+		Enemy->SetRespawnable(Entry.bIsRespawnable);
+		Enemy->OnDeathEnded.AddUniqueDynamic(this, &ASpawnerBase::OnEnemyDeath);
+	}
+	Pawn->FinishSpawning(SpawnTransform);
+	EntryPawns[EntryIndex] = Pawn;
+	return Pawn;
+}
+
+void ASpawnerBase::HandleSaveLoaded()
+{
+	if (!HasAuthority()) { return; }
+
+	if (!GetWorld()) { return; }
+
+	if (EntryPawns.Num() != SpawnList.Num())
+	{
+		EntryPawns.SetNum(SpawnList.Num());
+	}
+
+	for (int32 i = 0; i < SpawnList.Num(); ++i)
+	{
+		const FSpawnEntry& Entry = SpawnList[i];
+		if (!Entry.PawnData || !Entry.PawnData->PawnClass) { continue; }
+
+		const ARetrieveBossCharacter* BossCDO =
+			Cast<ARetrieveBossCharacter>(Entry.PawnData->PawnClass->GetDefaultObject());
+		if (!BossCDO) { continue; }
+
+		const FGameplayTag Element = BossCDO->GetUnlockElementTag();
+		if (!Element.IsValid()) { continue; }
+
+		APawn* Pawn = EntryPawns[i].Get();
+		if (IsSpawnEntrySuppressed(i))
+		{
+			if (IsValid(Pawn))
+			{
+				SpawnedPawns.RemoveAll([Pawn](const TWeakObjectPtr<APawn>& WeakPawn)
+				{
+					return WeakPawn.Get() == Pawn;
+				});
+				Pawn->Destroy();
+			}
+			EntryPawns[i] = nullptr;
+			continue;
+		}
+
+		FVector SpawnLocation;
+		if (!TryGetSpawnLocation(i, SpawnLocation)) { continue; }
+		const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
+
+		// 범위 밖이라면 죽은 런타임 인스턴스만 폐기하고, 다음 진입 때 정상 신규 스폰한다.
+		if (!IsPlayerInSpawnRange())
+		{
+			if (IsValid(Pawn))
+			{
+				URetrieveHealthComponent* Health =
+					Pawn->FindComponentByClass<URetrieveHealthComponent>();
+				if (Health && Health->IsDeadOrDying())
+				{
+					Pawn->Destroy();
+					EntryPawns[i] = nullptr;
+				}
+			}
+			bIsSpawned = false;
+			continue;
+		}
+
+		if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
+		{
+			Enemy->ActivateEnemy(SpawnTransform, true);
+		}
+		else if (!Pawn)
+		{
+			Pawn = SpawnEntry(i, SpawnTransform);
+		}
+
+		if (Pawn)
+		{
+			SpawnedPawns.AddUnique(Pawn);
+			bIsSpawned = true;
+		}
+	}
 }
 
 void ASpawnerBase::DespawnAll()
@@ -216,6 +325,13 @@ void ASpawnerBase::DespawnAll()
 
 void ASpawnerBase::TryRespawnEntry(int32 EntryIndex)
 {
+	if (!SpawnList.IsValidIndex(EntryIndex)
+		|| !SpawnList[EntryIndex].PawnData
+		|| IsSpawnEntrySuppressed(EntryIndex))
+	{
+		return;
+	}
+
 	APawn* Pawn = EntryPawns[EntryIndex].Get();
 	if (!Pawn)
 	{
@@ -274,6 +390,31 @@ bool ASpawnerBase::TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) c
 	}
 
 	return false;
+}
+
+bool ASpawnerBase::IsSpawnEntrySuppressed(int32 EntryIndex) const
+{
+	if (!SpawnList.IsValidIndex(EntryIndex)
+		|| !SpawnList[EntryIndex].PawnData
+		|| !SpawnList[EntryIndex].PawnData->PawnClass)
+	{
+		return false;
+	}
+
+	const ARetrieveBossCharacter* BossCDO =
+		Cast<ARetrieveBossCharacter>(
+			SpawnList[EntryIndex].PawnData->PawnClass->GetDefaultObject());
+	const FGameplayTag Element = BossCDO
+		? BossCDO->GetUnlockElementTag()
+		: FGameplayTag();
+	if (!Element.IsValid()) { return false; }
+
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	return SaveSub
+		&& (SaveSub->IsElementUnlocked(Element)
+			|| SaveSub->HasPendingGuardianCore(Element));
 }
 
 bool ASpawnerBase::IsTriggerActor(const AActor* OtherActor) const

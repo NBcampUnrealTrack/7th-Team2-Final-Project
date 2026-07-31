@@ -38,6 +38,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** InteractionResponse.OnApplied 바인딩 — 상호작용 시 레버 토글. */
 	UFUNCTION()
@@ -69,4 +70,16 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_bActivated, BlueprintReadOnly, Category = "Retrieve|Lever")
 	bool bActivated = false;
+
+	/** 세이브 슬롯 저장 키. 비우면 액터 이름으로 폴백. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Lever")
+	FName PersistentId;
+
+private:
+	FName GetSaveId() const;
+	class URetrieveSaveSubsystem* GetSaveSubsystem() const;
+	void PushLeverStateToSave() const;
+
+	UFUNCTION()
+	void HandleSaveLoaded();
 };

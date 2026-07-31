@@ -55,9 +55,14 @@ protected:
 	virtual void SpawnAll();
 	virtual void DespawnAll();
 	void TryRespawnEntry(int32 EntryIndex);
+	APawn* SpawnEntry(int32 EntryIndex, const FTransform& SpawnTransform);
+
+	UFUNCTION()
+	void HandleSaveLoaded();
 
 private:
 	bool TryGetSpawnLocation(int32 EntryIndex, FVector& OutLocation) const;
+	bool IsSpawnEntrySuppressed(int32 EntryIndex) const;
 	bool IsTriggerActor(const AActor* OtherActor) const;
 
 	/** 트리거 액터(플레이어)가 현재 DespawnSphere 범위 안에 있는지. */

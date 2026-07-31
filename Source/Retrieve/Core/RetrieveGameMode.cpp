@@ -21,6 +21,7 @@
 #include "TimerManager.h"
 #include "World/RetrieveRescueEncounter.h"
 #include "World/RetrieveLostCargoEncounter.h"
+#include "World/RetrieveQuestEncounter.h"
 
 ARetrieveGameMode::ARetrieveGameMode(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -112,8 +113,7 @@ void ARetrieveGameMode::HandleNewGame(APlayerController* Requestor)
 	}
 
 
-	// TODO: 필드 리셋 훅(봉인 게이트, 가디언 코어) 추가
-	ResetWorldForNewGame();
+	ResetNewGameState();
 	ArmOpeningSequence(); // Awakening은 Reveal 이후 타이밍이 조절된 비트로 발생함 (StartOpeningSequence 참고)
 
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
@@ -325,7 +325,8 @@ bool ARetrieveGameMode::IsRequestorHost(const APlayerController* Requestor) cons
 void ARetrieveGameMode::BootstrapNewGameQuest()
 {
 	// 개발용 패스트 패스(bSkipMainMenuOnBoot): 리셋 후 Awakening을 동기적으로 발생, 타이밍 오프닝 없음.
-	ResetWorldForNewGame();
+	ResetNewGameState();
+
 	if (ARetrieveGameState* GS = GetRetrieveGameState())
 	{
 		if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
@@ -404,7 +405,7 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 	{
 		return;
 	}
-	GS->SeedDefaultCheckpointIfUnset();
+	GS->ResetCheckpointForNewGame();
 
 	if (UGameInstance* GI = GetGameInstance())
 	{
@@ -422,6 +423,10 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 	{
 		It->ResetForNewGame();
 	}
+	for (TActorIterator<ARetrieveQuestEncounter> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewGame();
+	}
 
 	if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
 	{
@@ -435,6 +440,20 @@ void ARetrieveGameMode::ResetWorldForNewGame()
 
 	bHandoverCinematicPlayed = false;
 	bEndgameSequenceStarted = false;
+}
+
+void ARetrieveGameMode::ResetNewGameState()
+{
+	ResetWorldForNewGame();
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub =
+			GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->ResetProgressForNewGame();
+		}
+	}
 }
 
 void ARetrieveGameMode::ArmOpeningSequence()

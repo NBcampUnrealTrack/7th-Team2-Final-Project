@@ -161,6 +161,43 @@ void ARetrieveBonfireActor::BeginPlay()
 		World->GetTimerManager().SetTimerForNextTick(
 			FTimerDelegate::CreateUObject(this, &ARetrieveBonfireActor::HandleDeferredVisualStateSync));
 	}
+
+	// 로드는 in-place라 BeginPlay가 다시 안 돈다. 로드 완료 시 슬롯 기준으로 활성 상태를 재적용하도록 구독.
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->OnWorldObjectStatesChanged.AddUniqueDynamic(this, &ARetrieveBonfireActor::HandleSaveLoaded);
+		}
+	}
+}
+
+void ARetrieveBonfireActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->OnWorldObjectStatesChanged.RemoveDynamic(this, &ARetrieveBonfireActor::HandleSaveLoaded);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ARetrieveBonfireActor::HandleSaveLoaded()
+{
+	if (BonfireId.IsNone()) { return; }
+
+	UGameInstance* GI = GetGameInstance();
+	if (!GI) { return; }
+
+	URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>();
+	if (!SaveSub) { return; }
+
+	// 전부-되돌리기: 로드된 슬롯 기준으로 활성 상태를 재적용(켜기/끄기). 세이브엔 되쓰지 않고 시각만 갱신.
+	bIsActivated = SaveSub->IsBonfireActivated(BonfireId);
+	ApplyBonfireVisualState();
 }
 
 void ARetrieveBonfireActor::EnsureBonfireId()
@@ -461,11 +498,10 @@ void ARetrieveBonfireActor::TryRestoreActivationFromSave()
 	{
 		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
 		{
-			if (SaveSub->IsBonfireActivated(BonfireId))
+			bIsActivated = SaveSub->IsBonfireActivated(BonfireId);
+			ApplyActivatedState(false);
+			if (bIsActivated)
 			{
-				// 파일에 이미 활성화 기록 → 시각/상태만 복원 (중복 등록 방지)
-				bIsActivated = true;
-				ApplyActivatedState(false);
 				UE_LOG(LogTemp, Log,
 					TEXT("[BonfireActor] 저장 파일에서 활성화 복원 — BonfireId=%s"),
 					*BonfireId.ToString());

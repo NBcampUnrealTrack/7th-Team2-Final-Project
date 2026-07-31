@@ -3,6 +3,7 @@
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 #include "World/RetrieveBonfireActor.h"
+#include "Save/RetrieveSaveSubsystem.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/Border.h"
@@ -246,7 +247,12 @@ void URetrieveMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	const FVector PlayerLocation = PC->GetPawn()->GetActorLocation();
 
 	// 전장의 안개: 플레이어 주변을 주기적으로 공개하고 dirty면 GPU 텍스처에 반영한다.
-	if (bEnableFogOfWar)
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	const bool bCanRecordExploration = !SaveSub || !SaveSub->IsApplyingSave();
+
+	if (bEnableFogOfWar && bCanRecordExploration)
 	{
 		FogRevealAccum += InDeltaTime;
 		if (FogRevealAccum >= FogRevealInterval)

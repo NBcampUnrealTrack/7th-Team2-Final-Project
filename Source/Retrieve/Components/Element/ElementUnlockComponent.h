@@ -77,6 +77,13 @@ protected:
 	/** WorldState(SaveSubsystem)로부터 해방 목록 / 각인 상태 복원. 호스트 전용. */
 	void LoadFromPersistentState();
 
+	/** 세이브 로드 완료 시 슬롯 기준으로 해방/각인 상태를 재동기화(전부-되돌리기). */
+	UFUNCTION()
+	void HandleSaveLoaded();
+
+	/** 현재 원소 모드가 회수(미해금)됐으면 기본 Fire 모드로 강제 전환한다. 호스트 전용. */
+	void EnsureValidElementModeAfterLoad();
+
 	URetrieveSaveSubsystem* GetSaveSubsystem() const;
 
 	/** AreAllElementsUnlocked 판정 기준 집합. 생성자에서 Fire/Water/Wind로 초기화. */

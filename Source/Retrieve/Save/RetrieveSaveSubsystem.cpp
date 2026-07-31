@@ -36,12 +36,13 @@
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Messaging/RetrieveMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "UObject/UObjectGlobals.h"
 
 void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// WorldState 슬롯 로드 (화톳불 활성화 정보 복원)
+	// 마지막 현재 세션 자동 저장 복원
 	if (UGameplayStatics::DoesSaveGameExist(WorldStateSlotName, SaveUserIndex))
 	{
 		CurrentSaveGame = Cast<URetrieveSaveGame>(
@@ -57,12 +58,11 @@ void URetrieveSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			UGameplayStatics::LoadGameFromSlot(DefaultSaveSlotName, SaveUserIndex));
 		UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 레거시 Slot0 WorldState로 마이그레이션"));
 	}
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	MigrateSaveGame(CurrentSaveGame);
+	GetOrCreateCurrentSaveGame();
+	ActiveSlotIndex = CurrentSaveGame && IsValidSaveSlot(CurrentSaveGame->SlotIndex)
+		? CurrentSaveGame->SlotIndex
+		: -1;
 }
 
 // ── 슬롯 이름 ──────────────────────────────────────────────────────────────────
@@ -91,21 +91,6 @@ bool URetrieveSaveSubsystem::WriteSaveToSlot(URetrieveSaveGame* SlotSave,
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] WriteSaveToSlot: Pawn 없음"));
 		return false;
-	}
-
-	// 월드 공유 상태 복사 (WorldState에서)
-	if (CurrentSaveGame)
-	{
-		SlotSave->ActivatedBonfireTransforms = CurrentSaveGame->ActivatedBonfireTransforms;
-		SlotSave->UnlockedElements           = CurrentSaveGame->UnlockedElements;
-		SlotSave->bLumenEngraved             = CurrentSaveGame->bLumenEngraved;
-		SlotSave->HeroEvolutionCharge        = CurrentSaveGame->HeroEvolutionCharge;
-		SlotSave->bHeroEquipmentEvolved      = CurrentSaveGame->bHeroEquipmentEvolved;
-		SlotSave->ShopRepurchaseHistory      = CurrentSaveGame->ShopRepurchaseHistory;
-		SlotSave->DialogueRewardGrantCounts  = CurrentSaveGame->DialogueRewardGrantCounts;
-		SlotSave->RpsRewardGrantCounts       = CurrentSaveGame->RpsRewardGrantCounts;
-		SlotSave->RescueEncounters           = CurrentSaveGame->RescueEncounters;
-		SlotSave->LostCargoEncounters        = CurrentSaveGame->LostCargoEncounters;
 	}
 
 	// LoadSnapshot 기록
@@ -317,6 +302,12 @@ bool URetrieveSaveSubsystem::CaptureSaveThumbnail(APlayerController* PC, URetrie
 bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerController* PC)
 {
 	if (!IsValid(PC)) { return false; }
+	if (bIsApplyingSave)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[SaveSubsystem] 다른 슬롯 불러오기가 진행 중입니다. Slot=%s"), *SlotName);
+		return false;
+	}
 
 	if (!UGameplayStatics::DoesSaveGameExist(SlotName, SaveUserIndex))
 	{
@@ -332,74 +323,123 @@ bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerCo
 		return false;
 	}
 
-	// CurrentSaveGame을 로드된 슬롯으로 교체 (화톳불 활성화 상태도 복원됨)
-	CurrentSaveGame = Loaded;
-
 	APawn* Pawn = PC->GetPawn();
 	if (!IsValid(Pawn))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] ReadSaveFromSlot: Pawn 없음"));
 		return false;
 	}
+	MigrateSaveGame(Loaded);
 
-	UInventoryComponent* Inventory = FindInventoryComponent(Pawn);
-	if (Inventory)
+	// 슬롯 스냅샷은 스트리밍과 텔레포트가 끝날 때까지 현재 세션과 분리한다.
+	// 로드 도중 발생한 탐색/자동저장/월드 이벤트는 기존 세션에만 반영되고,
+	// 최종 커밋 시 폐기되므로 선택한 슬롯을 오염시키지 않는다.
+	PendingLoadGame = Loaded;
+	PendingLoadSlotName = SlotName;
+	bIsApplyingSave = true;
+
+	const FRetrieveLoadSnapshotData& Snapshot = PendingLoadGame->LoadSnapshot;
+	ShowLoadingScreen(PC);
+	if (!BeginStreamedTeleport(PC, Snapshot.PlayerTransform, NAME_None))
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[SaveSubsystem] 로드 스트리밍 시작 실패 — Slot=%s"), *SlotName);
+		HideLoadingScreen();
+		PendingLoadGame = nullptr;
+		PendingLoadSlotName.Reset();
+		bIsApplyingSave = false;
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 로드 트랜잭션 시작 — BonfireId=%s Slot=%s"),
+		*Snapshot.BonfireId.ToString(), *SlotName);
+	return true;
+}
+
+void URetrieveSaveSubsystem::FinalizePendingLoad()
+{
+	if (!bIsApplyingSave || !PendingLoadGame)
+	{
+		return;
+	}
+
+	APlayerController* PC = PendingFastTravelPC.Get();
+	APawn* Pawn = IsValid(PC) ? PC->GetPawn() : nullptr;
+	UWorld* World = IsValid(PC) ? PC->GetWorld() : nullptr;
+	if (!IsValid(Pawn) || !World)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[SaveSubsystem] 로드 최종 적용 실패 — PlayerController/Pawn/World가 유효하지 않습니다."));
+		PendingLoadGame = nullptr;
+		PendingLoadSlotName.Reset();
+		bIsApplyingSave = false;
+		return;
+	}
+
+	CurrentSaveGame = PendingLoadGame;
+	PendingLoadGame = nullptr;
+	ActiveSlotIndex = IsValidSaveSlot(CurrentSaveGame->SlotIndex)
+		? CurrentSaveGame->SlotIndex
+		: -1;
+
+	if (UInventoryComponent* Inventory = FindInventoryComponent(Pawn))
 	{
 		Inventory->ApplyInventorySaveData(CurrentSaveGame->InventoryProgress.Inventory);
 	}
 
-	// 퀘스트 진행 상태 복원. 개별 스텝 알림을 재생하지 않기 위해 알림 베이스라인을
-	// 복원된 상태로 재시딩한 뒤, UI(트래커/퀘스트로그)에는 갱신 신호만 한 번 보낸다.
-	if (UWorld* World = PC->GetWorld())
+	if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
 	{
-		if (ARetrieveGameState* GS = World->GetGameState<ARetrieveGameState>())
+		if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
 		{
-			if (UQuestBranchComponent* Quest = GS->GetQuestBranchComponent())
-			{
-				Quest->ApplyQuestSaveData(CurrentSaveGame->CompletedQuestSteps,
-					CurrentSaveGame->CurrentTrackerStep, CurrentSaveGame->QuestChoiceHistory);
-			}
+			Quest->ApplyQuestSaveData(CurrentSaveGame->CompletedQuestSteps,
+				CurrentSaveGame->CurrentTrackerStep, CurrentSaveGame->QuestChoiceHistory);
 		}
-
-		if (UQuestNotificationSubsystem* NotificationSubsystem = World->GetSubsystem<UQuestNotificationSubsystem>())
-		{
-			NotificationSubsystem->ResetBaseline();
-		}
-
-		// 전장의 안개 탐색 마스크 복원 (bounds 초기화 전이라도 raw 마스크는 안전하게 세팅됨)
-		if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
-		{
-			if (CurrentSaveGame->ExploredMaskResolution > 0)
-			{
-				MapSub->SetRevealMaskData(CurrentSaveGame->ExploredMask,
-					CurrentSaveGame->ExploredMaskResolution);
-			}
-		}
-
-		FRetrieveQuestStepPayload RefreshMessage;
-		RefreshMessage.StepTag = CurrentSaveGame->CurrentTrackerStep;
-		UGameplayMessageSubsystem::Get(World).BroadcastMessage(
-			RetrieveGameplayTags::Channel_Quest_StepChanged, RefreshMessage);
+		GS->SetLastCheckpointBonfire(CurrentSaveGame->LoadSnapshot.BonfireId);
 	}
 
-	const FRetrieveLoadSnapshotData& Snapshot = CurrentSaveGame->LoadSnapshot;
-	// 저장된 위치로 텔레포트 — 빠른 이동과 동일하게 로딩화면을 띄우고
-	// 목적지 스트리밍이 안정될 때까지 대기한 뒤 안착시킨다(직접 SetActorTransform 대신).
-	// 저장된 정확한 플레이어 좌표를 쓰므로 화톳불 재계산은 하지 않는다(NAME_None).
-	ShowLoadingScreen(PC);
-	BeginStreamedTeleport(PC, Snapshot.PlayerTransform, NAME_None);
+	if (UQuestNotificationSubsystem* NotificationSubsystem =
+		World->GetSubsystem<UQuestNotificationSubsystem>())
+	{
+		NotificationSubsystem->ResetBaseline();
+	}
+
+	// 플레이어가 저장 위치에 도착한 뒤 적용해야 이전 지역 Tick이
+	// 선택한 슬롯의 탐색 마스크를 다시 밝히지 않는다.
+	if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
+	{
+		if (CurrentSaveGame->ExploredMaskResolution > 0)
+		{
+			MapSub->SetRevealMaskData(CurrentSaveGame->ExploredMask,
+				CurrentSaveGame->ExploredMaskResolution);
+		}
+		else
+		{
+			MapSub->ResetRevealMask();
+		}
+	}
+
+	FRetrieveQuestStepPayload RefreshMessage;
+	RefreshMessage.StepTag = CurrentSaveGame->CurrentTrackerStep;
+	UGameplayMessageSubsystem::Get(World).BroadcastMessage(
+		RetrieveGameplayTags::Channel_Quest_StepChanged, RefreshMessage);
 
 	if (URetrieveHealthComponent* HealthComp =
 		Pawn->FindComponentByClass<URetrieveHealthComponent>())
 	{
-		// [GAS 연결 필요] HealthComp->SetHealth(Snapshot.SavedHealth);
-		UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 복원 HP=%.1f (GAS 연결 필요)"), Snapshot.SavedHealth);
+		// [GAS 연결 필요] HealthComp->SetHealth(CurrentSaveGame->LoadSnapshot.SavedHealth);
+		UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 복원 HP=%.1f (GAS 연결 필요)"),
+			CurrentSaveGame->LoadSnapshot.SavedHealth);
 	}
 
+	// 퀘스트/인벤토리/지도까지 커밋된 뒤 현재 로드된 월드 액터를 슬롯 기준으로 재동기화한다.
+	OnWorldObjectStatesChanged.Broadcast();
+
+	const FString CompletedSlotName = PendingLoadSlotName;
+	PendingLoadSlotName.Reset();
+	bIsApplyingSave = false;
 	OnLoadCompleted.Broadcast();
-	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 로드 완료 — BonfireId=%s Slot=%s"),
-		*Snapshot.BonfireId.ToString(), *SlotName);
-	return true;
+
+	UE_LOG(LogTemp, Log, TEXT("[SaveSubsystem] 로드 트랜잭션 완료 — BonfireId=%s Slot=%s"),
+		*CurrentSaveGame->LoadSnapshot.BonfireId.ToString(), *CompletedSlotName);
 }
 
 // ── 멀티슬롯 저장 / 로드 ───────────────────────────────────────────────────────
@@ -407,22 +447,37 @@ bool URetrieveSaveSubsystem::ReadSaveFromSlot(const FString& SlotName, APlayerCo
 bool URetrieveSaveSubsystem::SaveToSlot(APlayerController* PC, FName BonfireId,
                                          int32 SlotIndex, const FString& BonfireDisplayName)
 {
+	if (bIsApplyingSave)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] 불러오기 중에는 저장할 수 없습니다."));
+		return false;
+	}
+
 	if (!IsValidSaveSlot(SlotIndex))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] SaveToSlot: 유효하지 않은 SlotIndex=%d"), SlotIndex);
 		return false;
 	}
 
-	URetrieveSaveGame* SlotSave = Cast<URetrieveSaveGame>(
-		UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+	URetrieveSaveGame* SlotSave = CurrentSaveGame
+		? DuplicateObject<URetrieveSaveGame>(CurrentSaveGame, this)
+		: Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+	if (!SlotSave) { return false; }
+
 	SlotSave->SlotIndex         = SlotIndex;
 	SlotSave->BonfireDisplayName = BonfireDisplayName;
+	SlotSave->ScreenshotPng.Reset();
+	SlotSave->ScreenshotWidth = 0;
+	SlotSave->ScreenshotHeight = 0;
 
 	const FString SlotName = GetSlotName(SlotIndex);
 	const bool bSuccess = WriteSaveToSlot(SlotSave, SlotName, PC, BonfireId);
 	if (bSuccess)
 	{
+		CurrentSaveGame = SlotSave;
 		ActiveSlotIndex = SlotIndex;
+		FlushWorldState();
 	}
 	return bSuccess;
 }
@@ -435,13 +490,7 @@ bool URetrieveSaveSubsystem::LoadFromSlot(APlayerController* PC, int32 SlotIndex
 		return false;
 	}
 
-	const FString SlotName = GetSlotName(SlotIndex);
-	const bool bSuccess = ReadSaveFromSlot(SlotName, PC);
-	if (bSuccess)
-	{
-		ActiveSlotIndex = SlotIndex;
-	}
-	return bSuccess;
+	return ReadSaveFromSlot(GetSlotName(SlotIndex), PC);
 }
 
 URetrieveSaveGame* URetrieveSaveSubsystem::GetSaveGameForSlot(int32 SlotIndex) const
@@ -527,14 +576,10 @@ bool URetrieveSaveSubsystem::HasSaveGameForPlayer(APlayerController* /*PC*/) con
 void URetrieveSaveSubsystem::MarkBonfireActivated(FName BonfireId, FTransform ArrivalTransform,
                                                    const FString& /*BonfireDisplayName*/)
 {
+	if (bIsApplyingSave) { return; }
 	if (BonfireId.IsNone()) { return; }
 
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	CurrentSaveGame->ActivatedBonfireTransforms.Emplace(BonfireId, ArrivalTransform);
 
@@ -556,13 +601,9 @@ bool URetrieveSaveSubsystem::IsBonfireActivated(FName BonfireId) const
 void URetrieveSaveSubsystem::RegisterDefaultBonfire(FName BonfireId, const FTransform& ArrivalTransform)
 {
 	if (BonfireId.IsNone()) { return; }
+	if (bIsApplyingSave || ActiveSlotIndex >= 0) { return; }
 
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	// 이미 활성 기록이 있으면(실제 세이브 등) 덮어쓰지 않는다 — 진행 상태 우선.
 	if (CurrentSaveGame->ActivatedBonfireTransforms.Contains(BonfireId)) { return; }
@@ -570,6 +611,50 @@ void URetrieveSaveSubsystem::RegisterDefaultBonfire(FName BonfireId, const FTran
 	// 디스크 저장 없이 인메모리로만 등록 → 실제 세이브 파일 오염 방지.
 	CurrentSaveGame->ActivatedBonfireTransforms.Emplace(BonfireId, ArrivalTransform);
 
+}
+
+void URetrieveSaveSubsystem::SetPendingGuardianCore(
+	FGameplayTag ElementTag,
+	const FTransform& CoreTransform)
+{
+	if (!ElementTag.IsValid() || bIsApplyingSave) { return; }
+
+	if (!GetOrCreateCurrentSaveGame()) { return; }
+
+	CurrentSaveGame->PendingGuardianCores.FindOrAdd(ElementTag) = CoreTransform;
+	FlushWorldState();
+}
+
+void URetrieveSaveSubsystem::RemovePendingGuardianCore(FGameplayTag ElementTag)
+{
+	if (!CurrentSaveGame || !ElementTag.IsValid() || bIsApplyingSave) { return; }
+
+	if (CurrentSaveGame->PendingGuardianCores.Remove(ElementTag) > 0)
+	{
+		FlushWorldState();
+	}
+}
+
+bool URetrieveSaveSubsystem::TryGetPendingGuardianCore(
+	FGameplayTag ElementTag,
+	FTransform& OutTransform) const
+{
+	if (!CurrentSaveGame || !ElementTag.IsValid()) { return false; }
+
+	if (const FTransform* Found =
+		CurrentSaveGame->PendingGuardianCores.Find(ElementTag))
+	{
+		OutTransform = *Found;
+		return true;
+	}
+	return false;
+}
+
+bool URetrieveSaveSubsystem::HasPendingGuardianCore(FGameplayTag ElementTag) const
+{
+	return CurrentSaveGame
+		&& ElementTag.IsValid()
+		&& CurrentSaveGame->PendingGuardianCores.Contains(ElementTag);
 }
 
 int32 URetrieveSaveSubsystem::GetNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet) const
@@ -587,17 +672,13 @@ int32 URetrieveSaveSubsystem::GetNpcRewardGrantCount(FGameplayTag SpeakerTag, bo
 
 void URetrieveSaveSubsystem::IncrementNpcRewardGrantCount(FGameplayTag SpeakerTag, bool bRpsBet)
 {
+	if (bIsApplyingSave) { return; }
 	if (!SpeakerTag.IsValid())
 	{
 		return;
 	}
 
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	TMap<FGameplayTag, int32>& Counts = bRpsBet
 		? CurrentSaveGame->RpsRewardGrantCounts
@@ -619,18 +700,26 @@ bool URetrieveSaveSubsystem::GetBonfireTransform(FName BonfireId, FTransform& Ou
 	return false;
 }
 
+bool URetrieveSaveSubsystem::TryGetFastTravelDestination(
+	FName BonfireId,
+	FTransform& OutTransform) const
+{
+	if (bIsApplyingSave || !IsBonfireActivated(BonfireId))
+	{
+		return false;
+	}
+
+	return GetBonfireTransform(BonfireId, OutTransform);
+}
+
 // ── 원소 해방 (월드 공유 진행 상태) ────────────────────────────────────────────
 
 void URetrieveSaveSubsystem::MarkElementUnlocked(FGameplayTag ElementTag)
 {
+	if (bIsApplyingSave) { return; }
 	if (!ElementTag.IsValid()) { return; }
 
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	if (CurrentSaveGame->UnlockedElements.HasTagExact(ElementTag))
 	{
@@ -660,12 +749,8 @@ FGameplayTagContainer URetrieveSaveSubsystem::GetUnlockedElements() const
 
 void URetrieveSaveSubsystem::SetLumenEngraved(bool bEngraved)
 {
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (bIsApplyingSave) { return; }
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	if (CurrentSaveGame->bLumenEngraved == bEngraved)
 	{
@@ -697,12 +782,8 @@ int32 URetrieveSaveSubsystem::GetHeroEvolutionCharge() const
 
 void URetrieveSaveSubsystem::SetHeroEvolutionCharge(int32 NewCharge)
 {
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (bIsApplyingSave) { return; }
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	const int32 Clamped = FMath::Max(0, NewCharge);
 	if (CurrentSaveGame->HeroEvolutionCharge == Clamped)
@@ -723,12 +804,8 @@ bool URetrieveSaveSubsystem::IsHeroEquipmentEvolved() const
 
 void URetrieveSaveSubsystem::SetHeroEquipmentEvolved(bool bEvolved)
 {
-	if (!CurrentSaveGame)
-	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
-		CurrentSaveGame->SlotIndex = -1;
-	}
+	if (bIsApplyingSave) { return; }
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	if (CurrentSaveGame->bHeroEquipmentEvolved == bEvolved)
 	{
@@ -750,6 +827,7 @@ void URetrieveSaveSubsystem::SetHeroEquipmentEvolved(bool bEvolved)
 
 void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerController* PC)
 {
+	if (bIsApplyingSave) { return; }
 	if (!IsValid(PC) || BonfireId.IsNone())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] FastTravel: 유효하지 않은 인자"));
@@ -757,9 +835,9 @@ void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerControl
 	}
 
 	FTransform ArrivalTransform;
-	if (!GetBonfireTransform(BonfireId, ArrivalTransform))
+	if (!TryGetFastTravelDestination(BonfireId, ArrivalTransform))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] FastTravel: %s 화톳불 Transform 없음"),
+		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] FastTravel 불가 — BonfireId=%s"),
 			*BonfireId.ToString());
 		return;
 	}
@@ -783,23 +861,23 @@ void URetrieveSaveSubsystem::FastTravelToBonfire(FName BonfireId, APlayerControl
 // 빠른 이동 / 불러오기 공용: 도착 위치로 텔레포트하고 스트리밍이 안정될 때까지 대기한다.
 // BonfireIdForRecompute가 유효하면 도착 후 살아있는 화톳불 ArrivalPoint로 위치를 재계산한다.
 // (불러오기는 저장된 정확한 좌표를 쓰므로 NAME_None을 넘긴다.)
-void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
+bool URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
                                                    bool bCoverAlreadyOpaque)
 {
-	if (!IsValid(PC)) { return; }
+	if (!IsValid(PC)) { return false; }
 
 	APawn* Pawn = PC->GetPawn();
 	if (!IsValid(Pawn))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] BeginStreamedTeleport: Pawn 없음"));
-		return;
+		return false;
 	}
 
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[SaveSubsystem] BeginStreamedTeleport: World 없음"));
-		return;
+		return false;
 	}
 
 	// 이전 요청이 남아 있으면 예약된 지연 텔레포트를 취소한다(중복 실행 방지).
@@ -890,6 +968,7 @@ void URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 	{
 		ApplyStreamedTeleportUnderCover();
 	}
+	return true;
 }
 
 void URetrieveSaveSubsystem::ApplyStreamedTeleportUnderCover()
@@ -1285,6 +1364,10 @@ void URetrieveSaveSubsystem::FinishFastTravel()
 		World->GetTimerManager().ClearTimer(FastTravelCoverDelayTimerHandle);
 	}
 	CleanupFastTravelStreamingSource();
+
+	// 슬롯 로드는 목적지 도착 후에만 스냅샷을 현재 세션에 커밋한다.
+	FinalizePendingLoad();
+
 	PendingFastTravelPawn = nullptr;
 	PendingFastTravelCharMove = nullptr;
 
@@ -1309,22 +1392,124 @@ bool URetrieveSaveSubsystem::IsValidSaveSlot(int32 SlotIndex)
 	return SlotIndex >= 0 && SlotIndex < MaxSaveSlots;
 }
 
+URetrieveSaveGame* URetrieveSaveSubsystem::GetOrCreateCurrentSaveGame()
+{
+	if (!CurrentSaveGame)
+	{
+		CurrentSaveGame = Cast<URetrieveSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		if (CurrentSaveGame)
+		{
+			CurrentSaveGame->SlotIndex = -1;
+		}
+	}
+	return CurrentSaveGame;
+}
+
+void URetrieveSaveSubsystem::MigrateSaveGame(URetrieveSaveGame* SaveGame)
+{
+	if (!SaveGame || SaveGame->SaveVersion >= 5)
+	{
+		return;
+	}
+
+	for (const TPair<FGameplayTag, FRetrieveGuardianSaveData>& Pair : SaveGame->GuardianStates)
+	{
+		if (Pair.Key.IsValid()
+			&& Pair.Value.State == ERetrieveGuardianSaveState::CoreAvailable)
+		{
+			SaveGame->PendingGuardianCores.FindOrAdd(Pair.Key) = Pair.Value.CoreTransform;
+		}
+	}
+
+	SaveGame->GuardianStates.Reset();
+	SaveGame->SaveVersion = 5;
+}
+
 void URetrieveSaveSubsystem::FlushWorldState()
 {
+	if (bIsApplyingSave) { return; }
 	if (CurrentSaveGame)
 	{
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
 	}
 }
 
-void URetrieveSaveSubsystem::ResetRescueEncountersForNewGame()
+void URetrieveSaveSubsystem::SetWorldObjectState(FName Id, uint8 State)
 {
-	if (!CurrentSaveGame)
+	if (bIsApplyingSave) { return; }
+	if (Id.IsNone()) { return; }
+
+	URetrieveSaveGame* SaveGame = GetOrCreateCurrentSaveGame();
+	if (!SaveGame) { return; }
+	SaveGame->WorldObjectStates.Add(Id, State);
+}
+
+bool URetrieveSaveSubsystem::TryGetWorldObjectState(FName Id, uint8& OutState) const
+{
+	if (!CurrentSaveGame || Id.IsNone())
 	{
-		CurrentSaveGame = Cast<URetrieveSaveGame>(
-			UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+		return false;
+	}
+
+	if (const uint8* Found = CurrentSaveGame->WorldObjectStates.Find(Id))
+	{
+		OutState = *Found;
+		return true;
+	}
+	return false;
+}
+
+void URetrieveSaveSubsystem::ClearWorldObjectStates()
+{
+	if (CurrentSaveGame)
+	{
+		CurrentSaveGame->WorldObjectStates.Reset();
+	}
+	// 기믹 + 월드공유(화톳불/원소/루멘/상점)가 현재 CurrentSaveGame/빈 맵 기준으로 재적용하도록 알림.
+	OnWorldObjectStatesChanged.Broadcast();
+}
+
+void URetrieveSaveSubsystem::ResetProgressForNewGame()
+{
+	// 새 게임: 인메모리 진행 상태를 새 객체로 완전 초기화(이전 세션/디스크의 월드공유가 안 남도록).
+	CurrentSaveGame = Cast<URetrieveSaveGame>(
+		UGameplayStatics::CreateSaveGameObject(URetrieveSaveGame::StaticClass()));
+	if (CurrentSaveGame)
+	{
 		CurrentSaveGame->SlotIndex = -1;
 	}
+	ActiveSlotIndex = -1;           // 이전 게임의 활성 슬롯 인덱스 초기화
+
+	// WorldState 파일을 빈 상태로 덮어써 다음 부팅이 이전 진행을 물고 오지 않게 한다(수동 슬롯 불변).
+	if (CurrentSaveGame)
+	{
+		const bool bSaved = UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+		if (!bSaved)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[SaveSubsystem] 새 게임 WorldState 초기화 저장 실패"));
+		}
+	}
+
+	// 기본 활성 화톳불을 인메모리로 재시딩(위젯 생성 여부와 무관, 디스크엔 저장 안 함).
+	// 브로드캐스트 전에 시딩해야 화톳불 액터가 재동기화 시 기본 화톳불을 켠다.
+	// 전장의 안개 탐색 마스크도 함께 초기화(같은 세션 새 게임 시 이전 탐색이 남지 않도록).
+	if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+	{
+		if (URetrieveMapSubsystem* MapSub = World->GetSubsystem<URetrieveMapSubsystem>())
+		{
+			MapSub->SeedDefaultActivatedBonfires();
+			MapSub->ResetRevealMask();
+		}
+	}
+
+	// 전 액터 재동기화: 기믹은 빈 맵 → 기본값, 화톳불은 시딩된 기본만 켜짐, 원소/상점 리셋.
+	OnWorldObjectStatesChanged.Broadcast();
+}
+
+void URetrieveSaveSubsystem::ResetRescueEncountersForNewGame()
+{
+	if (!GetOrCreateCurrentSaveGame()) { return; }
 
 	CurrentSaveGame->RescueEncounters.Reset();
 	CurrentSaveGame->LostCargoEncounters.Reset();

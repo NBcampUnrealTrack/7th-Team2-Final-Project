@@ -43,10 +43,21 @@ void UElementUnlockComponent::InitializeWithAbilitySystem(UAbilitySystemComponen
 
 	// 이미 해금된 원소 모드로 빙의했을 수 있으므로 즉시 재평가.
 	RefreshAwakeningEffect();
+
+	// 로드는 in-place라 폰 재빙의 없이 진행된다. 로드 완료 시 슬롯 기준으로 재동기화하도록 구독.
+	if (URetrieveSaveSubsystem* Save = GetSaveSubsystem())
+	{
+		Save->OnWorldObjectStatesChanged.AddUniqueDynamic(this, &UElementUnlockComponent::HandleSaveLoaded);
+	}
 }
 
 void UElementUnlockComponent::UninitializeFromAbilitySystem()
 {
+	if (URetrieveSaveSubsystem* Save = GetSaveSubsystem())
+	{
+		Save->OnWorldObjectStatesChanged.RemoveDynamic(this, &UElementUnlockComponent::HandleSaveLoaded);
+	}
+
 	if (UAbilitySystemComponent* CachedASC = ASC.Get())
 	{
 		if (auto* AbsorbDelegate = CachedASC->GenericGameplayEventCallbacks.Find(RetrieveGameplayTags::GameplayEvent_Core_Absorb))
@@ -183,6 +194,56 @@ void UElementUnlockComponent::LoadFromPersistentState()
 		UnlockedElements = Save->GetUnlockedElements();
 		bLumenEngraved = Save->IsLumenEngraved();
 	}
+}
+
+void UElementUnlockComponent::HandleSaveLoaded()
+{
+	// 전부-되돌리기: 로드된 슬롯 기준으로 해방/각인 플래그를 다시 읽고 각성 버프를 재평가.
+	LoadFromPersistentState();
+	RefreshAwakeningEffect();
+
+	// 현재 모드가 회수된 원소면 기본 Fire 모드로 강제 전환.
+	EnsureValidElementModeAfterLoad();
+}
+
+void UElementUnlockComponent::EnsureValidElementModeAfterLoad()
+{
+	UAbilitySystemComponent* CachedASC = ASC.Get();
+	if (!CachedASC) { return; }
+
+	const AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority()) { return; }
+
+	// 현재 Water/Wind 모드인데 그 원소가 미해금이면(로드로 회수) 기본 Fire 모드로 되돌린다.
+	// Fire 모드는 스폰 기본이자 항상 허용되는 상태라 건드리지 않는다. (모드 전환은 해금 게이팅 없음)
+	const bool bInLockedWater =
+		CachedASC->HasMatchingGameplayTag(RetrieveGameplayTags::Element_Water) &&
+		!IsElementUnlocked(RetrieveGameplayTags::Element_Water);
+	const bool bInLockedWind =
+		CachedASC->HasMatchingGameplayTag(RetrieveGameplayTags::Element_Wind) &&
+		!IsElementUnlocked(RetrieveGameplayTags::Element_Wind);
+
+	if (!bInLockedWater && !bInLockedWind)
+	{
+		return;
+	}
+
+	// GA_SetElement_Base와 동일 시퀀스: 전 모드 태그 클리어 → Fire만 세팅 → ModeChange 발행.
+	CachedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::Element_Fire,  0);
+	CachedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::Element_Water, 0);
+	CachedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::Element_Wind,  0);
+	CachedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::Element_None,  0);
+	CachedASC->AddLooseGameplayTag(RetrieveGameplayTags::Element_Fire);
+
+	FGameplayEventData Payload;
+	Payload.EventTag = RetrieveGameplayTags::GameplayEvent_Element_ModeChange;
+	if (AActor* Avatar = CachedASC->GetAvatarActor())
+	{
+		Payload.Instigator = Avatar;
+		Payload.Target = Avatar;
+	}
+	Payload.InstigatorTags.AddTag(RetrieveGameplayTags::Element_Fire);
+	CachedASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 }
 
 URetrieveSaveSubsystem* UElementUnlockComponent::GetSaveSubsystem() const

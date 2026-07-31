@@ -164,35 +164,6 @@ void URetrieveWorldMapWidget::NativeConstruct()
 		}
 	}
 
-	// 에디터에서 활성으로 배치된 모닥불을 세이브 서브시스템에 인메모리 시드.
-	// → WP 스트리밍/액터 로드 여부와 무관하게 활성 표시 + 빠른이동 가능.
-	SeedDefaultActivatedBonfires();
-}
-
-void URetrieveWorldMapWidget::SeedDefaultActivatedBonfires()
-{
-	if (!WorldMapIconData) { return; }
-
-	UGameInstance* GI = GetGameInstance();
-	URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
-	if (!SaveSub) { return; }
-
-	for (const FRetrieveMapIconEntry& Entry : WorldMapIconData->Icons)
-	{
-		if (Entry.IconType != ERetrieveMapIconType::Bonfire) { continue; }
-		if (!Entry.bStartActivated || Entry.BonfireId.IsNone()) { continue; }
-
-		// ArrivalTransform이 (0,0,0)로 구워진 경우(에디터 스캔 시 ArrivalPoint 미확정 등)
-		// 모닥불 본체 위치(WorldLocation)를 도착 기준으로 폴백한다. Z는 텔레포트 시 지면 스냅으로 보정.
-		FTransform Arrival = Entry.ArrivalTransform;
-		if (Arrival.GetLocation().IsNearlyZero())
-		{
-			Arrival = FTransform(Entry.WorldLocation);
-		}
-
-		// 이미 활성 기록이 있으면 RegisterDefaultBonfire 내부에서 덮어쓰지 않는다.
-		SaveSub->RegisterDefaultBonfire(Entry.BonfireId, Arrival);
-	}
 }
 
 // ---------- 공개 함수 ----------
@@ -1418,6 +1389,10 @@ const URetrieveMapIconComponent* URetrieveWorldMapWidget::HitTestBonfireIcon(
 	UWorld* World = GetWorld();
 	URetrieveMapSubsystem* MapSub = World ? World->GetSubsystem<URetrieveMapSubsystem>() : nullptr;
 	if (!MapSub || !MapSub->HasValidBounds()) { return nullptr; }
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!SaveSub || SaveSub->IsApplyingSave()) { return nullptr; }
 
 	FVector2D MapViewTopLeft, MapViewSize;
 	// NativePaint 캐시 파라미터 사용 → 드로잉과 동일한 좌표계로 히트 판정
@@ -1455,7 +1430,8 @@ const URetrieveMapIconComponent* URetrieveWorldMapWidget::HitTestBonfireIcon(
 	{
 		if (!IsValid(Icon) || !IsValid(Icon->GetOwner())) { continue; }
 		const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(Icon->GetOwner());
-		if (!Bonfire || !Bonfire->IsActivated()) { continue; }
+		if (!Bonfire || Bonfire->BonfireId.IsNone()
+			|| !SaveSub->IsBonfireActivated(Bonfire->BonfireId)) { continue; }
 
 		const FVector2D IconUV     = MapSub->WorldToUV(Icon->GetOwner()->GetActorLocation());
 		const FVector2D IconScreen = UVToScreen(IconUV, Center, ScaledW, ScaledH);
@@ -1470,7 +1446,8 @@ const URetrieveMapIconComponent* URetrieveWorldMapWidget::HitTestBonfireIcon(
 	for (TActorIterator<ARetrieveBonfireActor> It(World); It; ++It)
 	{
 		const ARetrieveBonfireActor* Bonfire = *It;
-		if (!IsValid(Bonfire) || !Bonfire->IsActivated() ||
+		if (!IsValid(Bonfire) || Bonfire->BonfireId.IsNone()
+			|| !SaveSub->IsBonfireActivated(Bonfire->BonfireId) ||
 			!IsValid(Bonfire->MapIconComponent))
 		{
 			continue;
@@ -1505,7 +1482,11 @@ bool URetrieveWorldMapWidget::TryBroadcastBonfireDoubleClick(
 	if (HitIcon)
 	{
 		const ARetrieveBonfireActor* Bonfire = Cast<ARetrieveBonfireActor>(HitIcon->GetOwner());
-		if (Bonfire && Bonfire->IsActivated())
+		const UGameInstance* GI = GetGameInstance();
+		const URetrieveSaveSubsystem* SaveSub =
+			GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+		if (Bonfire && SaveSub
+			&& SaveSub->IsBonfireActivated(Bonfire->BonfireId))
 		{
 			bDoubleClickConsumed = true;
 			LastClickedBonfireId = NAME_None;
@@ -1595,46 +1576,12 @@ bool URetrieveWorldMapWidget::IsBonfireEntryActivated(const FRetrieveMapIconEntr
 		return false;
 	}
 
-	// 에디터에서 활성으로 배치된 모닥불은 액터/세이브와 무관하게 항상 활성으로 표시.
-	if (Entry.bStartActivated)
-	{
-		return true;
-	}
-
 	const UGameInstance* GI = GetGameInstance();
 	const URetrieveSaveSubsystem* SaveSub = GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
-	if (SaveSub && !Entry.BonfireId.IsNone() && SaveSub->IsBonfireActivated(Entry.BonfireId))
-	{
-		return true;
-	}
-
-	const UWorld* World = GetWorld();
-	if (!World)
-	{
-		return false;
-	}
-
-	const float MatchRadiusSq = FMath::Square(FMath::Max(BonfireActivationCheckRadius, 50.0f));
-	for (TActorIterator<ARetrieveBonfireActor> It(World); It; ++It)
-	{
-		const ARetrieveBonfireActor* Bonfire = *It;
-		if (!IsValid(Bonfire) || !Bonfire->IsActivated())
-		{
-			continue;
-		}
-
-		if (!Entry.BonfireId.IsNone() && Bonfire->BonfireId == Entry.BonfireId)
-		{
-			return true;
-		}
-
-		if (FVector::DistSquared(Bonfire->GetActorLocation(), Entry.WorldLocation) <= MatchRadiusSq)
-		{
-			return true;
-		}
-	}
-
-	return false;
+	return SaveSub
+		&& !SaveSub->IsApplyingSave()
+		&& !Entry.BonfireId.IsNone()
+		&& SaveSub->IsBonfireActivated(Entry.BonfireId);
 }
 
 bool URetrieveWorldMapWidget::HandleBonfireIconClick(
@@ -1659,7 +1606,11 @@ bool URetrieveWorldMapWidget::HandleBonfireIconClick(
 	const ARetrieveBonfireActor* Bonfire =
 		HitIcon ? Cast<ARetrieveBonfireActor>(HitIcon->GetOwner()) : nullptr;
 
-	if (!Bonfire || !Bonfire->IsActivated())
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!Bonfire || !SaveSub || SaveSub->IsApplyingSave()
+		|| !SaveSub->IsBonfireActivated(Bonfire->BonfireId))
 	{
 		UE_LOG(LogTemp, Log,
 			TEXT("[WorldMap] No activated bonfire icon at mouse press - Hit=(%.1f, %.1f)"),
@@ -1694,7 +1645,11 @@ bool URetrieveWorldMapWidget::HandleBonfireIconClick(
 bool URetrieveWorldMapWidget::TryOpenFastTravelDialog(const ARetrieveBonfireActor& Bonfire)
 {
 	APlayerController* PC = GetWorldMapPlayerController();
-	if (!PC || !FastTravelDialogClass)
+	const UGameInstance* GI = GetGameInstance();
+	const URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!PC || !FastTravelDialogClass || !SaveSub || SaveSub->IsApplyingSave()
+		|| !SaveSub->IsBonfireActivated(Bonfire.BonfireId))
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[WorldMap] 빠른 이동 확인 창 생성 실패 — PC=%s DialogClass=%s"),
@@ -1772,7 +1727,7 @@ void URetrieveWorldMapWidget::HandleFastTravelConfirmClicked()
 		GameInstance ? GameInstance->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
 	FTransform ArrivalTransform;
 	if (!PC || TargetBonfireId.IsNone() || !SaveSubsystem ||
-		!SaveSubsystem->GetBonfireTransform(TargetBonfireId, ArrivalTransform))
+		!SaveSubsystem->TryGetFastTravelDestination(TargetBonfireId, ArrivalTransform))
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("[WorldMap] Fast travel confirm failed - PC=%s SaveSubsystem=%s BonfireId=%s"),

@@ -427,6 +427,16 @@ void ARetrieveGameState::SeedDefaultCheckpointIfUnset()
 	LastCheckpointBonfireId = DefaultStartBonfireId; // NAME_None일 수 있음, getter가 PlayerStart로 폴백
 }
 
+void ARetrieveGameState::ResetCheckpointForNewGame()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// 이전 세션 체크포인트를 무시하고 새 게임 기본값으로 강제 초기화.
+	LastCheckpointBonfireId = DefaultStartBonfireId;
+}
+
 FTransform ARetrieveGameState::GetLastCheckpointOrFallback() const
 {
 	const URetrieveSaveSubsystem* SaveSubsystem = GetGameInstance()

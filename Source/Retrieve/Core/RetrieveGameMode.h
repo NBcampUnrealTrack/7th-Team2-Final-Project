@@ -74,6 +74,7 @@ protected:
 protected:
 	/** 새 게임을 위해 퀘스트 원장을 리셋하고 체크포인트를 시딩합니다. Awakening은 발생시키지 않습니다. */
 	void ResetWorldForNewGame();
+	void ResetNewGameState();
 	
 	/** 오프닝 준비: 알림 베이스라인을 리셋하고 Reveal 게이트 해제를 기다립니다. */
 	void ArmOpeningSequence();

@@ -6,8 +6,10 @@
 #include "SealGateActor.generated.h"
 
 class URetrieveInteractionResponseComponent;
+class URetrieveSaveSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrieveOnSealGateOpened);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRetrieveOnSealGateClosed);
 
 /**
  * 성 지역의 출입을 제한하는 봉인 관문. 레벨에 배치되는 UIM 타겟.
@@ -29,16 +31,24 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|SealGate")
 	FRetrieveOnSealGateOpened OnGateOpened;
 
+	/** 로드로 닫힌 상태를 복원할 때도 발동됩니다. BP에서 문짝/Collision을 닫힌 값으로 맞춥니다. */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|SealGate")
+	FRetrieveOnSealGateClosed OnGateClosed;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UFUNCTION()
 	void HandleInteracted(AActor* InteractionInstigator);
 
 	UFUNCTION()
 	void OnRep_bOpened();
+
+	UFUNCTION()
+	void HandleSaveLoaded();
 
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|SealGate")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -56,4 +66,7 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_bOpened)
 	bool bOpened = false;
+
+private:
+	URetrieveSaveSubsystem* GetSaveSubsystem() const;
 };

@@ -6,6 +6,8 @@
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
+#include "Engine/GameInstance.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "NiagaraFunctionLibrary.h"
@@ -45,8 +47,17 @@ void ARetrieveDestructibleResourceActor::BeginPlay()
 	{
 		HitBaseRelativeTransform = IntactMesh->GetRelativeTransform();
 		bHitBaseTransformCaptured = true;
+		DefaultIntactCollision = IntactMesh->GetCollisionEnabled();
 	}
 	CreateCrackMIDs();
+
+	if (!HasAuthority()) { return; }
+
+	HandleSaveLoaded();   // 재시작 로드 시 이미 채굴된 자원이면 제거
+
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (!IsValid(SaveSub)) { return; }
+	SaveSub->OnWorldObjectStatesChanged.AddUniqueDynamic(this, &ARetrieveDestructibleResourceActor::HandleSaveLoaded);
 }
 
 void ARetrieveDestructibleResourceActor::CreateCrackMIDs()
@@ -88,6 +99,19 @@ void ARetrieveDestructibleResourceActor::UpdateCrackProgress(float Progress)
 void ARetrieveDestructibleResourceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopHitShake();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(BrokenHideTimerHandle);
+	}
+
+	// EndPlay는 Super를 항상 호출해야 하므로 early return 대신 단일 if만 사용.
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (IsValid(SaveSub))
+	{
+		SaveSub->OnWorldObjectStatesChanged.RemoveDynamic(this, &ARetrieveDestructibleResourceActor::HandleSaveLoaded);
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -136,6 +160,12 @@ void ARetrieveDestructibleResourceActor::BreakResource(AActor* Attacker, const F
 	bBroken = true;
 	IntactMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// 세이브에 파괴 상태 기록(재시작 로드 시 이 자원은 제거됨).
+	if (URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem())
+	{
+		SaveSub->SetWorldObjectState(GetSaveId(), 1);
+	}
+
 	if (RewardComponent)
 	{
 		RewardComponent->HandleInteractionApplied(Attacker);
@@ -145,7 +175,116 @@ void ARetrieveDestructibleResourceActor::BreakResource(AActor* Attacker, const F
 
 	MulticastPlayBreak(ImpactPoint);
 	ForceNetUpdate();
-	SetLifeSpan(BrokenLifeSpan);
+
+	// Option A: Destroy(SetLifeSpan) 대신 일정 시간 뒤 숨김 — 액터를 복원용으로 유지.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(BrokenHideTimerHandle, this,
+			&ARetrieveDestructibleResourceActor::HideBrokenResource, BrokenLifeSpan, false);
+	}
+}
+
+FName ARetrieveDestructibleResourceActor::GetSaveId() const
+{
+	return PersistentId.IsNone() ? GetFName() : PersistentId;
+}
+
+URetrieveSaveSubsystem* ARetrieveDestructibleResourceActor::GetSaveSubsystem() const
+{
+	UGameInstance* GI = GetGameInstance();
+	if (!IsValid(GI)) { return nullptr; }
+	return GI->GetSubsystem<URetrieveSaveSubsystem>();
+}
+
+void ARetrieveDestructibleResourceActor::HandleSaveLoaded()
+{
+	if (!HasAuthority()) { return; }
+
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (!IsValid(SaveSub)) { return; }
+
+	uint8 State = 0;
+	const bool bWantBroken = SaveSub->TryGetWorldObjectState(GetSaveId(), State) && (State != 0);
+
+	// 무조건 목표 상태 적용(파편 연출 중 로드 등 경계 케이스 안전).
+	if (bWantBroken)
+	{
+		ApplyDepletedInstant();   // 채굴됨 → 즉시 고갈
+	}
+	else
+	{
+		ApplyIntactState();       // 미채굴 → 온전 복원
+	}
+
+	ForceNetUpdate();
+}
+
+void ARetrieveDestructibleResourceActor::HideBrokenResource()
+{
+	// 파괴 연출 종료 후 "채굴됨" 상태로 숨긴다(Destroy 대신). bHidden은 복제되어 클라도 숨겨진다.
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	if (FracturedMesh)
+	{
+		FracturedMesh->SetSimulatePhysics(false);
+		FracturedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+
+void ARetrieveDestructibleResourceActor::ApplyDepletedInstant()
+{
+	// 로드: 이미 채굴된 자원을 연출/보상 없이 즉시 고갈 상태로.
+	// [MP TODO] bActorEnableCollision/이 함수 자체는 복제되지 않는다. 코업 도입 시 클라의 OnRep_Broken이
+	// ApplyBrokenVisual로 FracturedMesh 충돌을 켜 "안 보이는 충돌체"가 남을 수 있음 →
+	// Intact/Breaking/Depleted RepNotify 상태 복제 or Reliable NetMulticast로 양쪽 동일 적용 필요.
+	bBroken = true;
+	bBreakVisualPlayed = true;   // 재연출 방지
+	if (UWorld* World = GetWorld()) { World->GetTimerManager().ClearTimer(BrokenHideTimerHandle); }
+	StopHitShake();
+
+	if (IntactMesh)
+	{
+		IntactMesh->SetVisibility(false, true);
+		IntactMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (FracturedMesh)
+	{
+		FracturedMesh->SetSimulatePhysics(false);
+		FracturedMesh->SetVisibility(false, true);
+		FracturedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+}
+
+void ARetrieveDestructibleResourceActor::ApplyIntactState()
+{
+	// 로드: 미채굴 슬롯 → 온전 상태로 복원(연출 없이).
+	bBroken = false;
+	bBreakVisualPlayed = false;
+	CurrentHitCount = 0;
+	if (UWorld* World = GetWorld()) { World->GetTimerManager().ClearTimer(BrokenHideTimerHandle); }
+	StopHitShake();
+
+	SetActorHiddenInGame(false);
+	SetActorEnableCollision(true);
+
+	if (FracturedMesh)
+	{
+		FracturedMesh->SetSimulatePhysics(false);
+		FracturedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FracturedMesh->SetVisibility(false, true);
+		// 흩어진 조각의 동적 상태 초기화(Rest Collection + Physics State 재생성). 재파괴 연출 정상화.
+		// ResetDynamicCollection()은 protected이므로 public ResetState() 사용(UE 5.7).
+		FracturedMesh->ResetState();
+	}
+	if (IntactMesh)
+	{
+		IntactMesh->SetVisibility(true, true);
+		IntactMesh->SetCollisionEnabled(DefaultIntactCollision);
+		if (bHitBaseTransformCaptured) { IntactMesh->SetRelativeTransform(HitBaseRelativeTransform); }
+	}
+	UpdateCrackProgress(0.0f);
 }
 
 void ARetrieveDestructibleResourceActor::ApplyBrokenVisual(const FVector& ImpactPoint)
@@ -176,7 +315,12 @@ void ARetrieveDestructibleResourceActor::OnRep_Broken()
 {
 	if (bBroken)
 	{
+		// 신선한 파괴 연출(숨김 상태로 복제됐으면 안 보임 → 로드 복원 케이스와 정합).
 		ApplyBrokenVisual(GetActorLocation());
+	}
+	else
+	{
+		ApplyIntactState();   // 복원(intact) 클라 반영
 	}
 }
 

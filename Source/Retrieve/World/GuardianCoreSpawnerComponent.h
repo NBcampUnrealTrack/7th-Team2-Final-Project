@@ -27,6 +27,9 @@ protected:
 
 	void HandleMonsterDied(FGameplayTag Channel, const FMonsterDiedPayload& Message);
 
+	UFUNCTION()
+	void HandleSaveLoaded();
+
 	/** 원소별 코어 BP. 각 BP의 CDO ElementTag를 통해 페이로드 원소와 매칭됩니다 */
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|GuardianCore")
 	TArray<TSubclassOf<AGuardianCoreActor>> GuardianCoreClasses;

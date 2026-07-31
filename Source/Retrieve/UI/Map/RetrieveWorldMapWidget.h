@@ -385,12 +385,6 @@ private:
 
 	bool IsBonfireEntryActivated(const FRetrieveMapIconEntry& Entry) const;
 
-	/**
-	 * 에디터에서 활성으로 배치된 모닥불(bStartActivated)을 세이브 서브시스템에
-	 * 인메모리로 시드한다. WP 스트리밍/액터 로드 여부와 무관하게 빠른이동 Transform을 확보.
-	 */
-	void SeedDefaultActivatedBonfires();
-
 	UFUNCTION()
 	void HandleFastTravelConfirmClicked();
 

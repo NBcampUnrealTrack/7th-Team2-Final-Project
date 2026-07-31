@@ -52,6 +52,9 @@ public:
 
 	/** 호스트 권한. 미설정 시 LastCheckpointBonfireId를 기본 시작 모닥불로 시딩. */
 	void SeedDefaultCheckpointIfUnset();
+
+	/** 호스트 권한. 새 게임: 체크포인트를 기본 시작 모닥불로 강제 초기화(기존 값 무시). */
+	void ResetCheckpointForNewGame();
 	
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Quest")
 	UQuestBranchComponent* GetQuestBranchComponent() const { return QuestBranchComponent; }

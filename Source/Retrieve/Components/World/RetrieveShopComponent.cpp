@@ -65,6 +65,19 @@ void URetrieveShopComponent::BeginPlay()
 						Comp->RollRotatingStock();
 				});
 	}
+	// 로드는 in-place로 적용되므로 세션 캐시된 재고를 로드 완료 후 무효화
+	UGameInstance* GI = UGameplayStatics::GetGameInstance(GetWorld());
+	if (IsValid(GI) == false)
+	{
+		return;
+	}
+	URetrieveSaveSubsystem* Sub = GI->GetSubsystem<URetrieveSaveSubsystem>();
+	if (IsValid(Sub) == false)
+	{
+		return;
+	}
+
+	Sub->OnWorldObjectStatesChanged.AddUniqueDynamic(this, &URetrieveShopComponent::HandleSaveLoaded);
 }
 
 void URetrieveShopComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -73,6 +86,16 @@ void URetrieveShopComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		UGameplayMessageSubsystem::Get(World).UnregisterListener(RestListenerHandle);
 	}
+
+	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(GetWorld()))
+	{
+		if (URetrieveSaveSubsystem* Sub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			Sub->OnWorldObjectStatesChanged.RemoveDynamic(
+				this, &URetrieveShopComponent::HandleSaveLoaded);
+		}
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -159,6 +182,13 @@ const FRetrieveShopItemRow* URetrieveShopComponent::FindDefinitionRow(FName RowN
 		}
 	}
 	return nullptr;
+}
+
+void URetrieveShopComponent::HandleSaveLoaded()
+{
+	// 캐시를 비우면 다음 OpenShop()의 EnsureStockInitialized가 현재 슬롯 기준으로 다시 재고를 읽음
+	bStockInitialized = false;
+	RemainingStockMap.Reset();
 }
 
 void URetrieveShopComponent::EnsureStockInitialized()

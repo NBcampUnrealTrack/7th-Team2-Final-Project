@@ -58,6 +58,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Retrieve|Puzzle")
 	bool bSolved = false;
 
+	/** 세이브 슬롯 저장 키. 비우면 액터 이름으로 폴백. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Puzzle")
+	FName PersistentId;
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Puzzle")
 	FRetrievePuzzleActorSolvedSignature OnPuzzleSolved;
 
@@ -67,6 +71,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -91,6 +96,12 @@ protected:
 	void HandlePuzzleSolved();
 
 private:
+	FName GetSaveId() const;
+	class URetrieveSaveSubsystem* GetSaveSubsystem() const;
+
+	UFUNCTION()
+	void HandleSaveLoaded();
+
 	URetrievePuzzlePanelWidget* OpenPuzzlePanel(AActor* InteractionInstigator);
 	void ApplySolveResults(AActor* InteractionInstigator);
 

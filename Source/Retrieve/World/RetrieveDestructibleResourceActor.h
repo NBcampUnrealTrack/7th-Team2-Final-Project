@@ -56,6 +56,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Broken, VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource")
 	bool bBroken = false;
 
+	/** 세이브 슬롯 저장 키. 비우면 액터 이름으로 폴백. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource")
+	FName PersistentId;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Resource")
 	int32 CurrentHitCount = 0;
 
@@ -135,6 +139,21 @@ protected:
 	void PlayBreakFeedback(FVector ImpactPoint);
 
 private:
+	FName GetSaveId() const;
+	class URetrieveSaveSubsystem* GetSaveSubsystem() const;
+
+	UFUNCTION()
+	void HandleSaveLoaded();
+
+	// Option A: 파괴 시 Destroy 대신 숨김 + 로드 시 양방향 복원.
+	void HideBrokenResource();     // 파괴 연출 종료 후 숨김(채굴됨 상태)
+	void ApplyDepletedInstant();   // 로드: 연출/보상 없이 즉시 고갈 상태
+	void ApplyIntactState();       // 로드: 온전 상태로 복원
+
+	FTimerHandle BrokenHideTimerHandle;
+	/** 원래 IntactMesh 콜리전(복원 시 되돌리기용). BeginPlay에서 캡처. */
+	TEnumAsByte<ECollisionEnabled::Type> DefaultIntactCollision = ECollisionEnabled::QueryAndPhysics;
+
 	void PlayDefaultHitFeedback(const FVector& ImpactPoint, const FVector& ImpactNormal, int32 HitCount, float HitProgress);
 	void StartHitShake(const FVector& ImpactNormal, int32 HitCount, float HitProgress);
 	void UpdateHitShake();

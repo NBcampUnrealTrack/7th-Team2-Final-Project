@@ -71,6 +71,10 @@ private:
 	/** 정의 에셋(메인/순환 테이블)에서 RowName 행을 찾는다. */
 	const struct FRetrieveShopItemRow* FindDefinitionRow(FName RowName) const;
 
+	/** 세이브 로드 완료 시 재고 캐시를 무효화 */
+	UFUNCTION()
+	void HandleSaveLoaded();
+
 	/** RowName → 남은 재고. 유한 재고 행만 담긴다(무한 재고는 미포함). */
 	TMap<FName, int32> RemainingStockMap;
 

@@ -200,6 +200,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Retrieve|Minimap")
 	void EnsureMapConfigLoaded();
 
+	/** MapConfig의 bStartActivated 화톳불들을 SaveSubsystem에 인메모리 재등록.
+	 *  월드맵 위젯 생성 여부와 무관하게 기본 화톳불/빠른이동 지점을 유지/복원한다(새 게임 등). */
+	UFUNCTION(BlueprintCallable, Category="Retrieve|Map")
+	void SeedDefaultActivatedBonfires();
+
 	UFUNCTION(BlueprintCallable, Category="Retrieve|Map")
 	bool InitializeMapConfigRuntime(URetrieveMapConfigDataAsset* OverrideConfig = nullptr);
 	
@@ -300,6 +305,9 @@ public:
 
 	/** 로드용 — 마스크 바이트 배열 복원(크기 일치 시 텍스처 재생성). */
 	void SetRevealMaskData(const TArray<uint8>& InData, int32 InResolution);
+
+	/** 새 게임용 — 탐색 마스크를 전부 미탐색(0)으로 초기화. 마스크가 아직 없으면 no-op. */
+	void ResetRevealMask();
 
 	void RegisterIcon(URetrieveMapIconComponent* Icon);
 	void UnregisterIcon(URetrieveMapIconComponent* Icon);

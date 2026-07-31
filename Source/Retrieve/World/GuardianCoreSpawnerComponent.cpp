@@ -5,7 +5,9 @@
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "World/GuardianCoreActor.h"
+#include "EngineUtils.h"
 
 UGuardianCoreSpawnerComponent::UGuardianCoreSpawnerComponent()
 {
@@ -33,6 +35,16 @@ void UGuardianCoreSpawnerComponent::BeginPlay()
 				Self->HandleMonsterDied(Channel, Message);
 			}
 		});
+
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->OnWorldObjectStatesChanged.AddUniqueDynamic(
+				this, &UGuardianCoreSpawnerComponent::HandleSaveLoaded);
+			HandleSaveLoaded();
+		}
+	}
 }
 
 void UGuardianCoreSpawnerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -44,6 +56,14 @@ void UGuardianCoreSpawnerComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 			UGameplayMessageSubsystem::Get(World).UnregisterListener(MonsterDiedHandle);
 		}
 		MonsterDiedHandle = FGameplayMessageListenerHandle();
+	}
+	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->OnWorldObjectStatesChanged.RemoveDynamic(
+				this, &UGuardianCoreSpawnerComponent::HandleSaveLoaded);
+		}
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -108,11 +128,64 @@ void UGuardianCoreSpawnerComponent::HandleMonsterDied(FGameplayTag Channel, cons
 
 	FVector SpawnLocation = Message.DeathLocation;
 	SpawnLocation.Z += SpawnZOffset;
+	const FTransform CoreTransform(FRotator::ZeroRotator, SpawnLocation);
+
+	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+	{
+		if (URetrieveSaveSubsystem* SaveSub = GI->GetSubsystem<URetrieveSaveSubsystem>())
+		{
+			SaveSub->SetPendingGuardianCore(Element, CoreTransform);
+		}
+	}
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = GetOwner();
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	AGuardianCoreActor* Core = GetWorld()->SpawnActor<AGuardianCoreActor>(
+	GetWorld()->SpawnActor<AGuardianCoreActor>(
 		ChosenClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+}
+
+void UGuardianCoreSpawnerComponent::HandleSaveLoaded()
+{
+	const AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	URetrieveSaveSubsystem* SaveSub =
+		GI ? GI->GetSubsystem<URetrieveSaveSubsystem>() : nullptr;
+	if (!Owner || !Owner->HasAuthority() || !World || !SaveSub) { return; }
+
+	for (const TSubclassOf<AGuardianCoreActor>& CoreClass : GuardianCoreClasses)
+	{
+		if (!CoreClass) { continue; }
+
+		const AGuardianCoreActor* CDO = CoreClass->GetDefaultObject<AGuardianCoreActor>();
+		if (!CDO) { continue; }
+
+		const FGameplayTag Element = CDO->GetElementTag();
+		if (!Element.IsValid()) { continue; }
+
+		for (TActorIterator<AGuardianCoreActor> It(World); It; ++It)
+		{
+			AGuardianCoreActor* ExistingCore = *It;
+			if (IsValid(ExistingCore)
+				&& ExistingCore->GetElementTag().MatchesTagExact(Element))
+			{
+				ExistingCore->Destroy();
+			}
+		}
+
+		FTransform CoreTransform;
+		if (!SaveSub->TryGetPendingGuardianCore(Element, CoreTransform))
+		{
+			continue;
+		}
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = GetOwner();
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		World->SpawnActor<AGuardianCoreActor>(
+			CoreClass, CoreTransform, SpawnParams);
+	}
 }

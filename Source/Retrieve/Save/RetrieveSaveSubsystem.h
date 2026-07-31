@@ -14,6 +14,9 @@ class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveSaveCompleted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveLoadCompleted);
+/** 영속 상태(슬롯 로드/새 게임)가 재적용됨 — 문·레버·퍼즐·파괴물 + 화톳불·원소·루멘·상점이 구독해 재동기화.
+ *  (OnLoadCompleted의 광범위한 BP 구독자를 건드리지 않기 위한 전용 신호) */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRetrieveWorldObjectStatesChanged);
 
 /** 빠른 이동 시작 — UI에서 로딩 오버레이(WBP_LoadingScreen) 표시용 */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFastTravelStarted, FName, BonfireId);
@@ -24,7 +27,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFastTravelCompleted);
  * 화톳불 기반 저장 / 로드 / 빠른 이동 관리자.
  *
  * 슬롯 구조:
- *   RetrieveSave_WorldState — 화톳불 활성화 자동 저장 (월드 공유 상태)
+ *   RetrieveSave_WorldState — 현재 세션 진행 상태 자동 저장
  *   RetrieveSave_Slot0 ~ Slot(MaxSaveSlots-1) — 플레이어 수동 저장 슬롯
  *
  * 싱글플레이: PlayerController 기반 슬롯 구분 없이 인덱스 기반으로 관리.
@@ -108,6 +111,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	URetrieveSaveGame* GetCurrentSaveGame() const { return CurrentSaveGame; }
 
+	/** 슬롯 불러오기의 스트리밍/텔레포트/상태 적용이 끝나기 전까지 true. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	bool IsApplyingSave() const { return bIsApplyingSave; }
+
 	/** CurrentSaveGame을 WorldState 슬롯에 즉시 기록 (PlayerController 없이). 상점 판매 등 인게임 이벤트용 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
 	void FlushWorldState();
@@ -117,6 +124,19 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool HasSaveGameForPlayer(APlayerController* PlayerController) const;
+
+	// ── 월드 기믹 델타 상태 (문/레버/퍼즐/파괴물, 슬롯별) ──────────────────
+	/** 기믹 상태 변경 시 호출. 현재 세션 스냅샷을 갱신하고 슬롯 저장 때 함께 기록한다. */
+	void SetWorldObjectState(FName Id, uint8 State);
+
+	/** 라이브 맵에서 기믹 상태 조회. 없으면 false(액터는 기본값 유지). */
+	bool TryGetWorldObjectState(FName Id, uint8& OutState) const;
+
+	/** 새 게임 시작 시 라이브 기믹 상태 초기화(+ 재적용 신호 브로드캐스트). */
+	void ClearWorldObjectStates();
+
+	/** 새 게임: 인메모리 진행 상태(월드공유 + 기믹) 완전 초기화 + WorldState 파일 정리 후 전 액터 재동기화. */
+	void ResetProgressForNewGame();
 
 	// ── 화톳불 활성화 ─────────────────────────────────────────────────
 
@@ -135,6 +155,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	bool GetBonfireTransform(FName BonfireId, FTransform& OutTransform) const;
 
+	/** 활성화된 화톳불이고 현재 이동 가능한 상태면 도착 Transform을 반환한다. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|FastTravel")
+	bool TryGetFastTravelDestination(FName BonfireId, FTransform& OutTransform) const;
+
 	/**
 	 * 에디터에서 활성으로 배치된 모닥불을 런타임에 등록한다(디스크 저장 X).
 	 * MarkBonfireActivated와 달리 세이브 파일을 건드리지 않으므로 실제 진행 상태를 오염시키지 않는다.
@@ -142,6 +166,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
 	void RegisterDefaultBonfire(FName BonfireId, const FTransform& ArrivalTransform);
+
+	// ── 가디언 미획득 코어 (슬롯별) ──────────────────────────────────
+
+	void SetPendingGuardianCore(FGameplayTag ElementTag, const FTransform& CoreTransform);
+	void RemovePendingGuardianCore(FGameplayTag ElementTag);
+	bool TryGetPendingGuardianCore(FGameplayTag ElementTag, FTransform& OutTransform) const;
+	bool HasPendingGuardianCore(FGameplayTag ElementTag) const;
 
 	// ── 원소 해방 (월드 공유 진행 상태) ───────────────────────────────
 
@@ -251,6 +282,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Save")
 	FOnRetrieveLoadCompleted OnLoadCompleted;
 
+	/** 슬롯 로드/새 게임 시 영속 상태를 재적용하라는 신호. 기믹 + 화톳불·원소·루멘·상점이 구독. */
+	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Save")
+	FOnRetrieveWorldObjectStatesChanged OnWorldObjectStatesChanged;
+
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|FastTravel")
 	FOnFastTravelStarted OnFastTravelStarted;
 
@@ -265,7 +300,7 @@ public:
 	 * @param bCoverAlreadyOpaque  호출부가 이미 로딩 커버가 불투명해질 때까지 기다렸으면 true.
 	 *                             (기본값 false — 내부에서 CoverFadeInSeconds만큼 텔레포트를 지연한다)
 	 */
-	void BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
+	bool BeginStreamedTeleport(APlayerController* PC, const FTransform& ArrivalTransform, FName BonfireIdForRecompute,
 	                           bool bCoverAlreadyOpaque = false);
 
 	/** 로딩 커버가 불투명해지기까지의 시간(초). 로딩 위젯 CDO의 값을 우선 사용한다. */
@@ -273,6 +308,7 @@ public:
 
 private:
 	void FinishFastTravel();
+	void FinalizePendingLoad();
 
 	/**
 	 * 커버가 불투명해진 뒤 보이는 작업(폰 텔레포트, 카메라 컷, 블로킹 스트리밍 플러시, 도착 폴링 시작)을 수행한다.
@@ -298,6 +334,8 @@ private:
 
 	static UInventoryComponent* FindInventoryComponent(AActor* Actor);
 	static bool IsValidSaveSlot(int32 SlotIndex);
+	static void MigrateSaveGame(URetrieveSaveGame* SaveGame);
+	URetrieveSaveGame* GetOrCreateCurrentSaveGame();
 
 	/** 내부 공통 저장 로직. SlotSave 오브젝트를 채우고 지정 슬롯명에 씀 */
 	bool WriteSaveToSlot(URetrieveSaveGame* SlotSave, const FString& SlotName,
@@ -314,6 +352,13 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URetrieveSaveGame> CurrentSaveGame;
+
+	/** 로드 트랜잭션이 완료될 때까지 현재 세션과 분리해 보관하는 슬롯 스냅샷. */
+	UPROPERTY()
+	TObjectPtr<URetrieveSaveGame> PendingLoadGame;
+
+	FString PendingLoadSlotName;
+	bool bIsApplyingSave = false;
 
 	FTimerHandle FastTravelTimerHandle;
 	FTimerHandle FastTravelStreamPollTimerHandle;
@@ -347,7 +392,7 @@ private:
 	TObjectPtr<UUserWidget> ActiveLoadingScreen;
 
 	static constexpr int32 SaveUserIndex = 0;
-	/** 월드 공유 상태 (화톳불 활성화) 전용 슬롯명 */
+	/** 현재 세션 자동 저장 슬롯명 */
 	static constexpr const TCHAR* WorldStateSlotName = TEXT("RetrieveSave_WorldState");
 	/** 레거시 기본 슬롯명 (하위 호환) */
 	static constexpr const TCHAR* DefaultSaveSlotName = TEXT("RetrieveSave_Slot0");

@@ -10,7 +10,9 @@
 #include "Data/Puzzle/RetrievePuzzleTableRow.h"
 #include "Engine/DataTable.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/Pawn.h"
+#include "Save/RetrieveSaveSubsystem.h"
 #include "Player/RetrievePlayerController.h"
 #include "UI/RetrieveGamePanelWidget.h"
 #include "UI/Puzzle/RetrievePuzzlePanelWidget.h"
@@ -65,6 +67,23 @@ void ARetrievePuzzleActor::BeginPlay()
 		InteractionComponent->OnApplied.AddUniqueDynamic(this, &ARetrievePuzzleActor::HandlePuzzleInteracted);
 	}
 	ConfigurePersistentInteractionTarget();
+
+	HandleSaveLoaded();   // 스트림인/최초 로드 시 bSolved 복원(없으면 false)
+
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (!IsValid(SaveSub)) { return; }
+	SaveSub->OnWorldObjectStatesChanged.AddUniqueDynamic(this, &ARetrievePuzzleActor::HandleSaveLoaded);
+}
+
+void ARetrievePuzzleActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// EndPlay는 Super를 항상 호출해야 하므로 early return 대신 단일 if만 사용.
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (IsValid(SaveSub))
+	{
+		SaveSub->OnWorldObjectStatesChanged.RemoveDynamic(this, &ARetrievePuzzleActor::HandleSaveLoaded);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void ARetrievePuzzleActor::OpenPuzzleFor(AActor* InteractionInstigator)
@@ -142,9 +161,36 @@ void ARetrievePuzzleActor::HandlePuzzleSolved()
 	}
 	bSolved = true;
 
+	// 세이브에 기록(로드 후 보상 재지급 방지 상태 지속).
+	if (URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem())
+	{
+		SaveSub->SetWorldObjectState(GetSaveId(), 1);
+	}
+
 	AActor* InteractionInstigator = PendingInstigator.Get();
 	ApplySolveResults(InteractionInstigator);
 	OnPuzzleSolved.Broadcast(InteractionInstigator);
+}
+
+FName ARetrievePuzzleActor::GetSaveId() const
+{
+	return PersistentId.IsNone() ? GetFName() : PersistentId;
+}
+
+URetrieveSaveSubsystem* ARetrievePuzzleActor::GetSaveSubsystem() const
+{
+	UGameInstance* GI = GetGameInstance();
+	if (!IsValid(GI)) { return nullptr; }
+	return GI->GetSubsystem<URetrieveSaveSubsystem>();
+}
+
+void ARetrievePuzzleActor::HandleSaveLoaded()
+{
+	URetrieveSaveSubsystem* SaveSub = GetSaveSubsystem();
+	if (!IsValid(SaveSub)) { return; }
+
+	uint8 State = 0;
+	bSolved = SaveSub->TryGetWorldObjectState(GetSaveId(), State) && (State != 0);
 }
 
 void ARetrievePuzzleActor::ApplySolveResults(AActor* InteractionInstigator)

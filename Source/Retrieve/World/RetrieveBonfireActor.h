@@ -31,6 +31,7 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Stable identifier used by saving and fast travel. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Bonfire")
@@ -107,6 +108,10 @@ private:
 
 	UFUNCTION()
 	void HandleInteractionApplied(AActor* InteractionInstigator);
+
+	/** 세이브 로드 완료 시 슬롯 기준으로 활성 상태를 재적용(켜기/끄기)한다. */
+	UFUNCTION()
+	void HandleSaveLoaded();
 
 	void OpenPendingBonfireMenu();
 	float GetBonfireMenuOpenDelay() const;
