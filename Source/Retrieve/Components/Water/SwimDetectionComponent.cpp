@@ -33,10 +33,13 @@ void USwimDetectionComponent::TickComponent(float DeltaTime, ELevelTick LevelTic
 	UCharacterMovementComponent* CMC = OwnerCharacter->GetCharacterMovement();
 	if (!CMC) { return; }
 
-	// 수면 깊이 = 수면Z - 액터Z(캡슐 중심). Provider가 평면 상수 / 강 스플라인 계산.
 	const FVector Loc = OwnerCharacter->GetActorLocation();
+	const UCapsuleComponent* Capsule = OwnerCharacter->GetCapsuleComponent();
+	const float HalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 90.f;
+	// 물기둥 존재 여부는 캡슐 바닥에서 검사하고, 실제 잠김 비율은 아래에서 캡슐 중심 기준으로 계산한다.
+	const FVector WaterQueryLocation = Loc - FVector::UpVector * HalfHeight;
 	float SurfaceZ = 0.f;
-	const bool bInColumn = ResolveCurrentWater(Loc, SurfaceZ);
+	const bool bInColumn = ResolveCurrentWater(WaterQueryLocation, SurfaceZ);
 	URetrieveCharacterMovementComponent* RetrieveCMC = Cast<URetrieveCharacterMovementComponent>(CMC);
 	if (!bInColumn)
 	{
@@ -53,8 +56,6 @@ void USwimDetectionComponent::TickComponent(float DeltaTime, ELevelTick LevelTic
 	const float DepthDiff = bInColumn ? (SurfaceZ - Loc.Z) : -UE_BIG_NUMBER;
 
 	// 캡슐 기준 잠수 판정. 완전잠수 = 캡슐 상단 < 수면. 잠수비율 = 발끝(0) ~ 머리(1).
-	const UCapsuleComponent* Capsule = OwnerCharacter->GetCapsuleComponent();
-	const float HalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 90.f;
 	const bool bFullySubmerged = bInColumn && (Loc.Z + HalfHeight < SurfaceZ);
 	const float Submersion = bInColumn
 		? FMath::Clamp((DepthDiff + HalfHeight) / (2.f * HalfHeight), 0.f, 1.f)

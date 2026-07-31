@@ -126,6 +126,11 @@ void URetrieveMusicSubsystem::ExitMusicZone()
 	UpdateMusic();
 }
 
+FOnLocalCombatContextChanged& URetrieveMusicSubsystem::OnLocalCombatContextChanged()
+{
+	return LocalCombatContextChanged;
+}
+
 void URetrieveMusicSubsystem::HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
 {
 	// 진입은 오직 "나를 포착한" 신호일 때만. 포착한 몬스터를 교전 집합에 넣는다
@@ -143,11 +148,7 @@ void URetrieveMusicSubsystem::HandlePlayerSpotted(FGameplayTag Channel, const FE
 
 	EngagedEnemies.Add(Enemy);
 
-	if (!bCombatMusicActive)
-	{
-		bCombatMusicActive = true;
-		UpdateMusic();
-	}
+	SetLocalPlayerEngaged(true);
 
 	// 교전이 시작되면 폴링으로 "추적 중단/사망" 몬스터를 걷어내며 집합이 빌 때를 감지한다.
 	if (UWorld* World = GetWorld())
@@ -168,11 +169,7 @@ void URetrieveMusicSubsystem::HandlePlayerDied(FGameplayTag Channel, const FPlay
 	{
 		World->GetTimerManager().ClearTimer(EngagementPollTimer);
 	}
-	if (bCombatMusicActive)
-	{
-		bCombatMusicActive = false;
-		UpdateMusic();
-	}
+	SetLocalPlayerEngaged(false);
 }
 
 void URetrieveMusicSubsystem::HandleSessionStateChanged(FGameplayTag Channel, const FRetrieveSessionStatePayload& Payload)
@@ -278,11 +275,7 @@ void URetrieveMusicSubsystem::PollEngagement()
 		{
 			World->GetTimerManager().ClearTimer(EngagementPollTimer);
 		}
-		if (bCombatMusicActive)
-		{
-			bCombatMusicActive = false;
-			UpdateMusic();
-		}
+		SetLocalPlayerEngaged(false);
 	}
 }
 
@@ -315,13 +308,13 @@ void URetrieveMusicSubsystem::UpdateMusic()
 	if (ZoneDepth > 0)
 	{
 		// 존 안: 이 존이 전투곡을 쓰고, 전투 중이며, 전투 트랙이 지정돼 있으면 전투곡. 아니면 평상시 존곡.
-		const bool bUseZoneCombat = bZoneUsesCombat && bCombatMusicActive && !ZoneCombatTrack.Sound.IsNull();
+		const bool bUseZoneCombat = bZoneUsesCombat && bLocalPlayerEngaged && !ZoneCombatTrack.Sound.IsNull();
 		CrossfadeTo(bUseZoneCombat ? ZoneCombatTrack : ZoneTrack);
 		return;
 	}
 
 	// 존 밖: 전역 전투/기본 트랙.
-	CrossfadeTo(bCombatMusicActive ? Settings->CombatBGM : Settings->DefaultBGM);
+	CrossfadeTo(bLocalPlayerEngaged ? Settings->CombatBGM : Settings->DefaultBGM);
 }
 
 UAudioComponent* URetrieveMusicSubsystem::CreateMusicSlot()
@@ -349,6 +342,19 @@ UAudioComponent* URetrieveMusicSubsystem::CreateMusicSlot()
 
 	Slot->RegisterComponentWithWorld(World);
 	return Slot;
+}
+
+void URetrieveMusicSubsystem::SetLocalPlayerEngaged(bool bEngaged)
+{
+	if (bLocalPlayerEngaged == bEngaged)
+	{
+		return;
+	}
+	
+	bLocalPlayerEngaged = bEngaged;
+	
+	LocalCombatContextChanged.Broadcast(bLocalPlayerEngaged);;
+	UpdateMusic();
 }
 
 void URetrieveMusicSubsystem::CrossfadeTo(const FRetrieveMusicTrack& Track)

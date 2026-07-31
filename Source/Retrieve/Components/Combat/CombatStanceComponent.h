@@ -60,10 +60,6 @@ private:
 	void HandleSheatheTimer();
 	void HandleAbilityActivated(UGameplayAbility* Ability);
 
-	// 적이 나를 포착(Channel.Enemy.PlayerSpotted)하면 전투 태세 진입. AI는 이미 이 메시지를 쏘므로 무수정.
-	// 현재 1티어(포착→진입). Lost 신호가 생기면 위협집합 기반 정밀 해제 + 의심/교전 2티어로 확장(시드).
-	void HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
-
 	// 무기 메시 스폰 직후 호출 — 새로 스폰된 무기를 현재 스탠스(손/등)에 맞춘다.
 	// (런타임 인벤토리 장착이 스탠스 init보다 늦어도 소켓이 어긋나지 않게 보장)
 	void HandleWeaponVisualsSpawned();
@@ -73,6 +69,9 @@ private:
 	UFUNCTION()
 	void HandleWeaponEquipped(FName WeaponItemId);
 
+	// 전투 시작 시 Combat 태그 처리
+	void HandleLocalCombatContextChanged(bool bEngaged);
+	
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilitySystemComponent> OwnerASC;
 
@@ -82,5 +81,5 @@ private:
 	FTimerHandle SheatheTimerHandle;
 	FDelegateHandle AbilityActivateHandle;
 	FDelegateHandle WeaponVisualsSpawnedHandle;
-	FGameplayMessageListenerHandle SpottedListenerHandle;
+	FDelegateHandle CombatContextChangedHandle;
 };

@@ -31,6 +31,8 @@ struct FRetrieveCinematicStatePayload;
  *  - bUseCombatMusic=false: 전투 여부와 무관하게 ZoneBGM만 (성 지역 등).
  *  - bUseCombatMusic=true : 전투 중이면 ZoneCombatBGM, 아니면 ZoneBGM.
  */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnLocalCombatContextChanged, bool /*bEngaged*/);
+
 UCLASS()
 class RETRIEVE_API URetrieveMusicSubsystem : public UWorldSubsystem
 {
@@ -54,8 +56,10 @@ public:
 	void RegisterZone(ARetrieveMusicZoneVolume* Zone);
 	void UnregisterZone(ARetrieveMusicZoneVolume* Zone);
 
-	bool IsCombatActive() const { return bCombatMusicActive; }
+	bool IsCombatActive() const { return bLocalPlayerEngaged; }
 
+	FOnLocalCombatContextChanged& OnLocalCombatContextChanged();
+	
 private:
 	void HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload);
 	/** 플레이어 사망 시 교전 집합을 비우고 전투 BGM을 강제 해제 */
@@ -82,6 +86,8 @@ private:
 	void CrossfadeTo(const FRetrieveMusicTrack& Track);
 	UAudioComponent* CreateMusicSlot();
 
+	void SetLocalPlayerEngaged(bool bEngaged);
+	
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> SlotA;
 
@@ -118,7 +124,7 @@ private:
 	// 나를 포착해 교전 중인 몬스터 집합. 비어있지 않으면 전투 BGM.
 	TSet<TWeakObjectPtr<AActor>> EngagedEnemies;
 	FTimerHandle EngagementPollTimer;
-	bool bCombatMusicActive = false;
+	bool bLocalPlayerEngaged = false;
 
 	// 현재 활성 존의 트랙 세트. 존이 하나뿐이라는 가정(RetrieveWaterSuppressVolume와 동일 관례).
 	// 서로 다른 설정의 존 볼륨이 겹치는 경우는 대응하지 않는다(마지막 진입이 우선).
@@ -126,4 +132,6 @@ private:
 	FRetrieveMusicTrack ZoneCombatTrack;
 	bool bZoneUsesCombat = false;
 	int32 ZoneDepth = 0;
+	
+	FOnLocalCombatContextChanged LocalCombatContextChanged;
 };

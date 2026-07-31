@@ -4,10 +4,9 @@
 #include "Abilities/GameplayAbility.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Engine/World.h"
-#include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
-#include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "TimerManager.h"
+#include "Audio/RetrieveMusicSubsystem.h"
 
 UCombatStanceComponent::UCombatStanceComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -17,7 +16,7 @@ UCombatStanceComponent::UCombatStanceComponent(const FObjectInitializer& ObjectI
 
 void UCombatStanceComponent::NotifyCombatActivity(bool bFromAttack)
 {
-	SetStance(ERetrieveCombatStance::DrawnCombat, /*bInstant=*/bFromAttack); // 전투 태세 승격(적 포착 전용 진입점)
+SetStance(ERetrieveCombatStance::DrawnCombat, /*bInstant=*/bFromAttack); // 전투 태세 승격(적 포착 전용 진입점)
 
 	if (UWorld* World = GetWorld())
 	{
@@ -69,12 +68,18 @@ void UCombatStanceComponent::InitializeWithAbilitySystem(UAbilitySystemComponent
 	// 공격 발동을 '중앙에서' 감지 - 어빌리티 마다 코드 x
 	AbilityActivateHandle = OwnerASC->AbilityActivatedCallbacks.AddUObject(this, &UCombatStanceComponent::HandleAbilityActivated);
 
-	// 적 포착 신호 구독. 적 AI가 이미 Channel.Enemy.PlayerSpotted를 쏘므로 AI 무수정.
-	if (UWorld* World = GetWorld())
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (OwnerPawn && OwnerPawn->IsLocallyControlled())
 	{
-		SpottedListenerHandle = UGameplayMessageSubsystem::Get(World).RegisterListener(
-			RetrieveGameplayTags::Channel_Enemy_PlayerSpotted,
-			this, &UCombatStanceComponent::HandlePlayerSpotted);
+		if (UWorld* World = GetWorld())
+		{
+			if (URetrieveMusicSubsystem* Music = World->GetSubsystem<URetrieveMusicSubsystem>())
+			{
+				CombatContextChangedHandle = Music->OnLocalCombatContextChanged().AddUObject(this, &ThisClass::HandleLocalCombatContextChanged);
+				
+				// 이미 교전 중인 상태에서 늦게 초기화 되는 경우를 위한 보정
+				HandleLocalCombatContextChanged(Music->IsCombatActive());			}
+		}
 	}
 
 	// 시작 = 납검. 스폰 시엔 몽타주 없이 '태그만' 초기화한다.
@@ -115,11 +120,18 @@ void UCombatStanceComponent::UninitializeFromAbilitySystem()
 		WeaponVisualsSpawnedHandle.Reset();
 	}
 
-	if (SpottedListenerHandle.IsValid())
+	if (CombatContextChangedHandle.IsValid())
 	{
-		SpottedListenerHandle.Unregister();
+		if (UWorld* World = GetWorld())
+		{
+			if (URetrieveMusicSubsystem* Music = World->GetSubsystem<URetrieveMusicSubsystem>())
+			{
+				Music->OnLocalCombatContextChanged().Remove(CombatContextChangedHandle);
+			}
+		}
+		
+		CombatContextChangedHandle.Reset();
 	}
-
 	OwnerASC = nullptr;
 }
 
@@ -259,16 +271,6 @@ void UCombatStanceComponent::HandleAbilityActivated(UGameplayAbility* Ability)
 	NotifyDrawnActivity(/*bInstant=*/true);
 }
 
-void UCombatStanceComponent::HandlePlayerSpotted(FGameplayTag Channel, const FEnemyPlayerSpottedPayload& Payload)
-{
-	// 적이 나를 포착 → 전투 태세 진입. 해제는 현재 자기 디케이(타이머)에 맡긴다.
-	// (Lost 신호가 생기면 위협집합으로 정밀 해제 + 의심/교전 2티어로 확장 — 그때 분기)
-	if (Payload.SpottedActor.Get() == GetOwner())
-	{
-		NotifyCombatActivity(/*bFromAttack=*/false);
-	}
-}
-
 void UCombatStanceComponent::HandleWeaponVisualsSpawned()
 {
 	// Equip 전환 중이면 소켓 배치/표시를 그 몽타주 노티에 위임한다(검→방패 순차 등장).
@@ -291,4 +293,34 @@ void UCombatStanceComponent::HandleWeaponEquipped(FName /*WeaponItemId*/)
 	// 장착 = 발검 활동(Relaxed). 연출은 Equip 몽타주가 담당하므로 상태/타이머만 올린다.
 	// bInstant=true → 발검(Draw) 몽타주는 스킵(Equip 몽타주와 이중 재생 방지).
 	NotifyDrawnActivity(/*bInstant=*/true);
+}
+
+void UCombatStanceComponent::HandleLocalCombatContextChanged(bool bEngaged)
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+	
+	if (bEngaged)
+	{
+		// 재교전 시 진행 중이던 Relax/Sheathe 취소
+		World->GetTimerManager().ClearTimer(RelaxTimerHandle);
+		World->GetTimerManager().ClearTimer(SheatheTimerHandle);
+		
+		SetStance(ERetrieveCombatStance::DrawnCombat, /*bInstant=*/ false);
+		
+		return;
+	}
+	
+	if (CurrentStance == ERetrieveCombatStance::DrawnCombat)
+	{
+		World->GetTimerManager().SetTimer(
+			RelaxTimerHandle,
+			this,
+			&ThisClass::HandleRelaxTimer,
+			FMath::Max(0.01f, RelaxDelay),
+			/*bLoop*/false);
+	}
 }
