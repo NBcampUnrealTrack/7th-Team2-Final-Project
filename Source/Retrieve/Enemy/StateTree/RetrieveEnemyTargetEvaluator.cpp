@@ -330,15 +330,15 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 							InstanceData.StrafeOffRange * 0.9f); // 대기자는 Strafe 범위 내에 머무름
 
 						const float JumpSq = FVector::DistSquared(InstanceData.ChaseLocation, RawTargetLocation);
-						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation || JumpSq > FMath::Square(120.f))
+						if (InstanceData.ChaseLocation.IsNearlyZero() || bHadToken != bHasTokenForLocation || JumpSq > FMath::Square(300.f))
 						{
 							InstanceData.ChaseLocation = RawTargetLocation;
 						}
-						else
-						{
-							InstanceData.ChaseLocation = FMath::VInterpTo(
-								InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
-						}
+						// else
+						// {
+							// InstanceData.ChaseLocation = FMath::VInterpTo(
+							// 	InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
+						// }
 
 						// 슬롯 전환 보간이 직선으로 링 중심(플레이어)을 가로지르지 않도록,
 						// 보간된 위치가 플레이어에게 너무 가까워지면 각도는 유지한 채 반경만 밀어낸다.
@@ -721,8 +721,10 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				&& CharacterMovement->MovementMode == MOVE_Flying;
 			const bool bUsePatternRangeForNormalAttack = EnemyCharacter
 				&& EnemyCharacter->ShouldUsePatternRangeForNormalAttack();
+			FName CandidateRowName;
 			const bool bAttackPatternAvailable =
-				InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
+				InstanceData.CachedCombatComponent->FindBestPattern(InstanceData.TargetPlayer, RetrieveGameplayTags::Ability_Enemy_Attack, &CandidateRowName,false, true) != nullptr;
+			InstanceData.SelectedAttackPatternRowName = bAttackPatternAvailable ? CandidateRowName : NAME_None;
 			const bool bNormalAttackable = bCanRequestToken
 				&& !bPatternActive
 				&& !bShouldSuppressNormalAttackWhileFlying

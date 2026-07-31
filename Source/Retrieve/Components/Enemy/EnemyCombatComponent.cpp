@@ -75,107 +75,62 @@ bool UEnemyCombatComponent::RequestPatternByPriority(AActor* Target, FGameplayTa
 		return false;
 	}
 	
-	/** SpecialGolbalCooldown은 SpecialAttack 시도 시에만 */
-	if (bIsSpecialAttack)
-	{
-		StartSpecialAttackRetryCooldown();
-	}
-	/** 일반 공격은 HitBox가 기반이기에 체크 필요*/
-	else if (BestPattern->HitboxBoneName.IsNone())
-	{
-		UE_LOG(LogRetrieveCombat, Warning,
-			TEXT("[%s] Attack pattern has no HitboxBoneName. Row=%s"),
-			*GetOwner()->GetName(),
-			*BestPatternRowName.ToString());
-		return false;
-	}
-	
-	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC)
+	return ActivatePattern(*BestPattern, BestPatternRowName, Target, RequiredPatternType, bIsSpecialAttack, DefaultEventTag);
+
+}
+
+bool UEnemyCombatComponent::RequestSpecificPattern(AActor* Target, FName PatternRowName,
+	FGameplayTag RequiredPatternType)
+{
+	if (!IsValid(Target) || PatternRowName.IsNone() || !PatternTable)
 	{
 		return false;
 	}
 
-	ActivePatternRowName = BestPatternRowName;
-	SetFocusTarget(Target);
-	
-	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+	FGameplayTag DefaultEventTag;
+	bool bIsSpecialAttack = false;
+	if (RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_Attack))
 	{
-		PatternCounter->SetActivePatternRow(ActivePatternRowName, PatternTable.Get());
+		DefaultEventTag = RetrieveGameplayTags::GameplayEvent_Enemy_Attack;
 	}
-
-	if (!bIsSpecialAttack && BestPattern->AttackMontage.IsNull())
+	else if (RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_SpecialAttack))
 	{
-		if (!TryStartSequencePattern(*BestPattern, BestPatternRowName, Target))
-		{
-			ActivePatternRowName = NAME_None;
-			if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
-			{
-				PatternCounter->CloseCounterWindow();
-			}
-			return false;
-		}
-
-		StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
-		return true;
+		DefaultEventTag = RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack;
+		bIsSpecialAttack = true;
 	}
-
-	UObject* EventAnimation = BestPattern->AttackMontage.LoadSynchronous();
-	if (!EventAnimation)
+	else
 	{
-		EventAnimation = BestPattern->AttackSequence.LoadSynchronous();
-	}
-
-	FGameplayEventData EventData;
-	EventData.OptionalObject = EventAnimation;
-	
-	const FGameplayTag AbilityEventTag = BestPattern->AbilityEventTag.IsValid()
-	? BestPattern->AbilityEventTag : DefaultEventTag;
-	EventData.EventTag = AbilityEventTag;
-	EventData.Target = Target;
-	EventData.Instigator = GetOwner();
-	FaceTarget(Target);
-	
-	int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
-	if (TriggeredCount <= 0 && bIsSpecialAttack && AbilityEventTag != DefaultEventTag)
-	{
-		UE_LOG(LogRetrieveCombat, Warning,
-			TEXT("[%s] SpecialAttack event did not trigger ability with row tag. Row=%s Event=%s. Trying default event %s."),
-			*GetOwner()->GetName(),
-			*BestPatternRowName.ToString(),
-			*AbilityEventTag.ToString(),
-			*DefaultEventTag.ToString());
-		EventData.EventTag = DefaultEventTag;
-		TriggeredCount = ASC->HandleGameplayEvent(DefaultEventTag, &EventData);
-	}
-	
-	if (TriggeredCount <= 0)
-	{
-		UE_LOG(LogRetrieveCombat, Warning,
-		TEXT("[%s] %s event did not trigger ability. Row=%s Event=%s OptionalObject=%s PatternType=%s"),
-		*GetOwner()->GetName(),
-		bIsSpecialAttack ? TEXT("SpecialAttack") : TEXT("Attack"),
-		*BestPatternRowName.ToString(),
-		*EventData.EventTag.ToString(),
-		*GetNameSafe(EventAnimation),
-		*BestPattern->PatternType.ToString());
-		ActivePatternRowName = NAME_None;
-		ClearFocusTarget();
-		if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
-		{
-			PatternCounter->CloseCounterWindow();
-		}
 		return false;
 	}
-	
-	StartCooldown(ActivePatternRowName, BestPattern->Cooldown);
-	
-	if (bIsSpecialAttack)
+
+	const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(
+		PatternRowName, TEXT("UEnemyCombatComponent::RequestSpecificPattern"));
+	if (!Row)
 	{
-		LockSpecialAttackEvaluation(SpecialAttackEvaluationLockDuration);
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] RequestSpecificPattern: row not found. Row=%s"),
+			*GetOwner()->GetName(), *PatternRowName.ToString());
+		return false;
 	}
-	
-	return true;
+
+	if (!Row->PatternType.MatchesTagExact(RequiredPatternType))
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] RequestSpecificPattern: row type mismatch. Row=%s RowType=%s Required=%s"),
+			*GetOwner()->GetName(), *PatternRowName.ToString(),
+			*Row->PatternType.ToString(), *RequiredPatternType.ToString());
+		return false;
+	}
+
+	if (!IsCooldownReady(PatternRowName))
+	{
+		UE_LOG(LogRetrieveCombat, Verbose,
+			TEXT("[%s] RequestSpecificPattern: on cooldown. Row=%s"),
+			*GetOwner()->GetName(), *PatternRowName.ToString());
+		return false;
+	}
+
+	return ActivatePattern(*Row, PatternRowName, Target, RequiredPatternType, bIsSpecialAttack, DefaultEventTag);
 }
 
 bool UEnemyCombatComponent::HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const
@@ -281,6 +236,15 @@ bool UEnemyCombatComponent::IsAttackable(AActor* Target) const
 	}
 
 	return FindBestPattern(Target, RetrieveGameplayTags::Ability_Enemy_Attack) != nullptr;
+}
+
+bool UEnemyCombatComponent::HasReadyAttackPatternIgnoringRange(AActor* Target, FGameplayTag PatternType) const
+{
+	if (!IsValid(Target))
+	{
+		return false;
+	}
+	return FindBestPattern(Target, PatternType, nullptr, false, true) != nullptr;
 }
 
 bool UEnemyCombatComponent::IsSpecialAttackEvaluationLocked() const
@@ -790,6 +754,112 @@ void UEnemyCombatComponent::DeactivateWeaponHitbox()
 	PreviousWeaponTracePoints.Reset();
 }
 
+bool UEnemyCombatComponent::ActivatePattern(const FMonsterPatternRow& Pattern, FName PatternRowName, AActor* Target,
+	FGameplayTag RequiredPatternType, bool bIsSpecialAttack, FGameplayTag DefaultEventTag)
+{
+		/** SpecialGolbalCooldown은 SpecialAttack 시도 시에만 */
+	if (bIsSpecialAttack)
+	{
+		StartSpecialAttackRetryCooldown();
+	}
+	/** 일반 공격은 HitBox가 기반이기에 체크 필요*/
+	else if (Pattern.HitboxBoneName.IsNone())
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] Attack pattern has no HitboxBoneName. Row=%s"),
+			*GetOwner()->GetName(),
+			*PatternRowName.ToString());
+		return false;
+	}
+	
+	URetrieveAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		return false;
+	}
+
+	ActivePatternRowName = PatternRowName;
+	SetFocusTarget(Target);
+	
+	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+	{
+		PatternCounter->SetActivePatternRow(ActivePatternRowName, PatternTable.Get());
+	}
+
+	if (!bIsSpecialAttack && Pattern.AttackMontage.IsNull())
+	{
+		if (!TryStartSequencePattern(Pattern, PatternRowName, Target))
+		{
+			ActivePatternRowName = NAME_None;
+			if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+			{
+				PatternCounter->CloseCounterWindow();
+			}
+			return false;
+		}
+
+		StartCooldown(ActivePatternRowName, Pattern.Cooldown);
+		return true;
+	}
+
+	UObject* EventAnimation = Pattern.AttackMontage.LoadSynchronous();
+	if (!EventAnimation)
+	{
+		EventAnimation = Pattern.AttackSequence.LoadSynchronous();
+	}
+
+	FGameplayEventData EventData;
+	EventData.OptionalObject = EventAnimation;
+	
+	const FGameplayTag AbilityEventTag = Pattern.AbilityEventTag.IsValid()
+	? Pattern.AbilityEventTag : DefaultEventTag;
+	EventData.EventTag = AbilityEventTag;
+	EventData.Target = Target;
+	EventData.Instigator = GetOwner();
+	FaceTarget(Target);
+	
+	int32 TriggeredCount = ASC->HandleGameplayEvent(AbilityEventTag, &EventData);
+	if (TriggeredCount <= 0 && bIsSpecialAttack && AbilityEventTag != DefaultEventTag)
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+			TEXT("[%s] SpecialAttack event did not trigger ability with row tag. Row=%s Event=%s. Trying default event %s."),
+			*GetOwner()->GetName(),
+			*PatternRowName.ToString(),
+			*AbilityEventTag.ToString(),
+			*DefaultEventTag.ToString());
+		EventData.EventTag = DefaultEventTag;
+		TriggeredCount = ASC->HandleGameplayEvent(DefaultEventTag, &EventData);
+	}
+	
+	if (TriggeredCount <= 0)
+	{
+		UE_LOG(LogRetrieveCombat, Warning,
+		TEXT("[%s] %s event did not trigger ability. Row=%s Event=%s OptionalObject=%s PatternType=%s"),
+		*GetOwner()->GetName(),
+		bIsSpecialAttack ? TEXT("SpecialAttack") : TEXT("Attack"),
+		*PatternRowName.ToString(),
+		*EventData.EventTag.ToString(),
+		*GetNameSafe(EventAnimation),
+		*Pattern.PatternType.ToString());
+		ActivePatternRowName = NAME_None;
+		ClearFocusTarget();
+		if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
+		{
+			PatternCounter->CloseCounterWindow();
+		}
+		return false;
+	}
+	
+	StartCooldown(ActivePatternRowName, Pattern.Cooldown);
+	
+	if (bIsSpecialAttack)
+	{
+		LockSpecialAttackEvaluation(SpecialAttackEvaluationLockDuration);
+	}
+	
+	return true;
+}
+
 void UEnemyCombatComponent::OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
                                             UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
@@ -905,7 +975,7 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 	return Spec.IsValid();
 }
 
-const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName, bool bIgnoreCooldown) const
+const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType, FName* OutRowName, bool bIgnoreCooldown, bool bIgnoreRange) const
 {
 	AActor* OwnerActor = GetOwner();
 	if (!PatternTable || PatternSlots.IsEmpty() || !IsValid(OwnerActor) || !IsValid(Target))
@@ -964,47 +1034,49 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 			continue;
 		}
 		
-		// 에픽 전용: MaxActivationRange == 0 → 사거리 제한 없음으로 해석.
-		// 일반/보스는 원본 strict 동작 유지(MaxActivationRange 값을 그대로 사거리로 적용).
-		const bool bEnforceMaxRange =
-			!OwnerEnemy
-			|| !OwnerEnemy->ShouldTreatZeroPatternMaxRangeAsUnlimited()
-			|| Row->MaxActivationRange > 0.f;
-		if (bEnforceMaxRange && DistanceSq > FMath::Square(Row->MaxActivationRange))
+		if (!bIgnoreRange)
 		{
-			if (bLogPatternSelection)
+			// 에픽 전용: MaxActivationRange == 0 → 사거리 제한 없음으로 해석.
+			// 일반/보스는 원본 strict 동작 유지(MaxActivationRange 값을 그대로 사거리로 적용).
+			const bool bEnforceMaxRange =
+				!OwnerEnemy
+				|| !OwnerEnemy->ShouldTreatZeroPatternMaxRangeAsUnlimited()
+				|| Row->MaxActivationRange > 0.f;
+			if (bEnforceMaxRange && DistanceSq > FMath::Square(Row->MaxActivationRange))
 			{
-				UE_LOG(LogRetrieveCombat, Warning,
-					TEXT("[FindBestPattern] Skip max range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Max=%.1f Flying=%d"),
-					*GetNameSafe(OwnerActor),
-					*RowName.ToString(),
-					*RequiredPatternType.ToString(),
-					Distance3D,
-					Distance2D,
-					Row->MaxActivationRange,
-					bOwnerFlying ? 1 : 0);
+				if (bLogPatternSelection)
+				{
+					UE_LOG(LogRetrieveCombat, Warning,
+						TEXT("[FindBestPattern] Skip max range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Max=%.1f Flying=%d"),
+						*GetNameSafe(OwnerActor),
+						*RowName.ToString(),
+						*RequiredPatternType.ToString(),
+						Distance3D,
+						Distance2D,
+						Row->MaxActivationRange,
+						bOwnerFlying ? 1 : 0);
+				}
+				continue;
 			}
-			continue;
-		}
 		
-		if (Row->MinActivationRange > 0.f &&
-			DistanceSq < FMath::Square(Row->MinActivationRange))
-		{
-			if (bLogPatternSelection)
+			if (Row->MinActivationRange > 0.f &&
+				DistanceSq < FMath::Square(Row->MinActivationRange))
 			{
-				UE_LOG(LogRetrieveCombat, Warning,
-					TEXT("[FindBestPattern] Skip min range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Min=%.1f Flying=%d"),
-					*GetNameSafe(OwnerActor),
-					*RowName.ToString(),
-					*RequiredPatternType.ToString(),
-					Distance3D,
-					Distance2D,
-					Row->MinActivationRange,
-					bOwnerFlying ? 1 : 0);
+				if (bLogPatternSelection)
+				{
+					UE_LOG(LogRetrieveCombat, Warning,
+						TEXT("[FindBestPattern] Skip min range. Owner=%s Row=%s Required=%s Dist3D=%.1f Dist2D=%.1f Min=%.1f Flying=%d"),
+						*GetNameSafe(OwnerActor),
+						*RowName.ToString(),
+						*RequiredPatternType.ToString(),
+						Distance3D,
+						Distance2D,
+						Row->MinActivationRange,
+						bOwnerFlying ? 1 : 0);
+				}
+				continue;
 			}
-			continue;
 		}
-		
 		if (!bIgnoreCooldown && !IsCooldownReady(RowName))
 		{
 			if (bLogPatternSelection)

@@ -28,6 +28,9 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.0"))
 	float MoveAcceptableRadius = 30.f;
 	
+	UPROPERTY(EditAnywhere, Category="Input", meta=(Optional))
+	FName SelectedPatternRowName = NAME_None;
+	
 	// 공격 요청 후 이 시간(초)을 초과하면 GA 완료 여부와 무관하게 Failed 반환
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = "0.5"))
 	float MaxAttackDuration = 5.f;
@@ -60,6 +63,7 @@ struct FStateTreeTask_EnemyAttackInstanceData
 	bool bStartAttack = false;
 	bool bObservedPatternActive = false;
 	bool bAttackTokenAcquired = false;
+	bool bInAttackWindow = false;
 	
 	FVector LastMoveRequestLocation = FVector::ZeroVector;
 	

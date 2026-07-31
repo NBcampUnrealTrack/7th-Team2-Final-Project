@@ -101,6 +101,9 @@ struct FRetrieveEnemyTargetEvalInstanceData
 	UPROPERTY(EditAnywhere, Category = "Output")
 	bool bSuspicionGaugeFull = false;
 
+	UPROPERTY(EditAnywhere, Category="Output")
+	FName SelectedAttackPatternRowName = NAME_None;
+	
 	bool bWasSuspicionGaugeFull = false;
 
 	float SuspicionIncreaseRate = 0.f;
@@ -115,6 +118,8 @@ struct FRetrieveEnemyTargetEvalInstanceData
 
 	UPROPERTY()
 	TWeakObjectPtr<UEnemySuspicionIndicatorComponent> CachedSuspicionIndicator = nullptr;
+	
+	
 };
 
 USTRUCT(BlueprintType, meta = (DisplayName = "Enemy Target Evaluator", Category = "Retrieve|AI"))

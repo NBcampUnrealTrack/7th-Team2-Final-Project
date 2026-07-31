@@ -210,7 +210,7 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 	else
 	{
 		// 공격자: 결단을 내린 소수가 실제로 플레이어에게 도달하도록 실시간으로 추적
-		Center = Target->GetActorLocation();
+		Center = (Ring && Ring->bAnchorValid) ? Ring->Anchor : Target->GetActorLocation();//Target->GetActorLocation();
 		TargetRadius = BaseInner;
 	}
 

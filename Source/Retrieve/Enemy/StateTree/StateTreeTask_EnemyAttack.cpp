@@ -171,7 +171,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 	{
 		InstanceData.TimeSinceAttackRequested += DeltaTime;
 	}
-	
+
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{
@@ -184,6 +184,11 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 		return EStateTreeRunStatus::Failed;
 	}
 
+	if (!InstanceData.CachedCombatComponent.IsValid())
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+
 	if (!InstanceData.bStartAttack)
 	{
 		InstanceData.ApproachElapsedTime += DeltaTime;
@@ -193,27 +198,49 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			return EStateTreeRunStatus::Failed;
 		}
 
-		const float AttackStartRange = InstanceData.AttackRange + InstanceData.AttackStartRangeTolerance;
-		ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn);
-		const bool bCanUseCurrentPatternRange =
-			EnemyCharacter
-			&& EnemyCharacter->ShouldUsePatternRangeForNormalAttack()
-			&& InstanceData.CachedCombatComponent.IsValid()
-			&& InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer);
+		if (InstanceData.SelectedPatternRowName.IsNone())
+		{
+			return EStateTreeRunStatus::Failed;
+		}
 
-		// Evaluator의 DistanceToTarget/ChaseLocation은 0.2초 간격 값이라
-		// 접근/스윙 판정에는 매 프레임 최신 플레이어 위치·거리를 다시 계산해서 쓴다.
+		const UDataTable* PatternTable = InstanceData.CachedCombatComponent->GetPatternTable();
+		const FMonsterPatternRow* CandidateRow = PatternTable
+			                                         ? PatternTable->FindRow<FMonsterPatternRow>(
+				                                         InstanceData.SelectedPatternRowName,
+				                                         TEXT("StateTreeTask_EnemyAttack"))
+			                                         : nullptr;
+
+		if (!CandidateRow)
+		{
+			return EStateTreeRunStatus::Failed;
+		}
+
+		const float MaxRange = CandidateRow->MaxActivationRange;
+		const float MinRange = CandidateRow->MinActivationRange;
+		const float AttackStartRange = MaxRange + InstanceData.AttackStartRangeTolerance;
+
+		constexpr float RangeHysteresis = 150.f;
+
+		const float FarThreshold = InstanceData.bInAttackWindow
+			                           ? AttackStartRange + RangeHysteresis
+			                           : AttackStartRange;
+
+		const float NearThreshold = InstanceData.bInAttackWindow
+			                            ? FMath::Max(0.f, MinRange - RangeHysteresis)
+			                            : MinRange;
+
 		const FVector AttackMoveTarget = InstanceData.TargetPlayer->GetActorLocation();
 		const float CurrentDistanceToTarget = FVector::Dist2D(Pawn->GetActorLocation(), AttackMoveTarget);
 
-		if (CurrentDistanceToTarget > AttackStartRange && !bCanUseCurrentPatternRange)
+		// 먼 경우
+		if (CurrentDistanceToTarget > FarThreshold)
 		{
+			InstanceData.bInAttackWindow = false;
 			InstanceData.TimeInSoftAttackRange = 0.f;
 
 			if (AAIController* AIC = Pawn->GetController<AAIController>())
 			{
-				const bool bCanMove = InstanceData.CachedCombatComponent.IsValid()
-					&& !InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
+				const bool bCanMove = !InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
 
 				if (bCanMove)
 				{
@@ -222,28 +249,18 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 					if (!ShouldUseForwardLocomotion(Pawn))
 					{
 						FaceTargetForAttack(
-							Pawn,
-							InstanceData.TargetPlayer,
-							DeltaTime,
-							InstanceData.FacingAcceptanceAngle,
-							InstanceData.FacingInterpSpeed);
+							Pawn, InstanceData.TargetPlayer, DeltaTime,
+							InstanceData.FacingAcceptanceAngle, InstanceData.FacingInterpSpeed);
 					}
 
 					const float MoveDeltaSq = FVector::DistSquared2D(
-						InstanceData.LastMoveRequestLocation,
-						AttackMoveTarget);
+						InstanceData.LastMoveRequestLocation, AttackMoveTarget);
 
 					if (InstanceData.LastMoveRequestLocation.IsNearlyZero()
 						|| MoveDeltaSq > FMath::Square(50.f))
 					{
-						AIC->MoveToLocation(
-							AttackMoveTarget,
-							InstanceData.MoveAcceptableRadius,
-							true,
-							true,
-							true,
-							false);
-
+						AIC->MoveToLocation(AttackMoveTarget, InstanceData.MoveAcceptableRadius, true, true, true,
+						                    false);
 						InstanceData.LastMoveRequestLocation = AttackMoveTarget;
 					}
 				}
@@ -256,86 +273,112 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			return EStateTreeRunStatus::Running;
 		}
 
-		SetChaseAnimationTag(Pawn, false);
-
-		if (CurrentDistanceToTarget > InstanceData.AttackRange && !bCanUseCurrentPatternRange)
+		// 가까운 경우
+		if (NearThreshold > 0.f && CurrentDistanceToTarget < NearThreshold)
 		{
-			InstanceData.TimeInSoftAttackRange += DeltaTime;
-			if (InstanceData.TimeInSoftAttackRange < InstanceData.AttackStartDelay)
-			{
-				return EStateTreeRunStatus::Running;
-			}
-		}
+			InstanceData.bInAttackWindow = false;
+			InstanceData.TimeInSoftAttackRange = 0.f;
 
-		{
-			if (!InstanceData.CachedCombatComponent.IsValid())
-			{
-				return EStateTreeRunStatus::Failed;
-			}
-
-			if (!InstanceData.CachedCombatComponent->IsAttackable(InstanceData.TargetPlayer))
-			{
-				return EStateTreeRunStatus::Failed;
-			}
-
-			InstanceData.bStartAttack = true;
-			InstanceData.bObservedPatternActive = false;
-			InstanceData.TimeSinceAttackRequested = 0.f;
-			SetChaseAnimationTag(Pawn, false);
-			
 			if (AAIController* AIC = Pawn->GetController<AAIController>())
 			{
-				AIC->StopMovement();
-			
-				if (UPathFollowingComponent* PathFollowing = AIC->GetPathFollowingComponent())
-				{
-					PathFollowing->AbortMove(*AIC, FPathFollowingResultFlags::ForcedScript);
-				}
-			}
-			
-			if (ACharacter* Character = Cast<ACharacter>(Pawn))
-			{
-				if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
-				{
-					MoveComp->StopMovementImmediately();
-				}
-			}
+				const bool bCanMove = !InstanceData.CachedCombatComponent->IsMovementLockedByAttack();
 
-			const bool bRequireFacingGate = !bCanUseCurrentPatternRange;
-			if (bRequireFacingGate && !FaceTargetForAttack(
-					Pawn,
-					InstanceData.TargetPlayer,
-					DeltaTime,
-					InstanceData.FacingAcceptanceAngle,
-					InstanceData.FacingInterpSpeed))
-			{
-				InstanceData.bStartAttack = false;
-				return EStateTreeRunStatus::Running;
-			}
-			if (!bRequireFacingGate)
-			{
-				if (EnemyCharacter)
+				if (bCanMove)
 				{
-					EnemyCharacter->StopGroundTurnAnimation();
+					SetChaseAnimationTag(Pawn, true);
+
+					FVector RetreatDir = Pawn->GetActorLocation() - AttackMoveTarget;
+					RetreatDir.Z = 0.f;
+					if (RetreatDir.IsNearlyZero())
+					{
+						RetreatDir = -Pawn->GetActorForwardVector();
+					}
+					RetreatDir.Normalize();
+
+					const FVector RetreatTarget = AttackMoveTarget
+						+ RetreatDir * (MinRange + InstanceData.AttackStartRangeTolerance + RangeHysteresis * 1.f);
+
+					if (!ShouldUseForwardLocomotion(Pawn))
+					{
+						FaceTargetForAttack(
+							Pawn, InstanceData.TargetPlayer, DeltaTime,
+							InstanceData.FacingAcceptanceAngle, InstanceData.FacingInterpSpeed);
+					}
+
+					const float MoveDeltaSq = FVector::DistSquared2D(
+						InstanceData.LastMoveRequestLocation, RetreatTarget);
+
+					if (InstanceData.LastMoveRequestLocation.IsNearlyZero()
+						|| MoveDeltaSq > FMath::Square(50.f))
+					{
+						AIC->MoveToLocation(RetreatTarget, InstanceData.MoveAcceptableRadius, true, true, true, false);
+						InstanceData.LastMoveRequestLocation = RetreatTarget;
+					}
 				}
-			}
-			
-			if (!InstanceData.CachedCombatComponent->RequestPatternByPriority(InstanceData.TargetPlayer
-				, RetrieveGameplayTags::Ability_Enemy_Attack))
-			{
-				return EStateTreeRunStatus::Failed;
+				else
+				{
+					SetChaseAnimationTag(Pawn, false);
+				}
 			}
 
 			return EStateTreeRunStatus::Running;
 		}
-	}
-	else if (InstanceData.bStartAttack)
-	{
-		if (!InstanceData.CachedCombatComponent.IsValid())
+
+
+		// 사용
+		SetChaseAnimationTag(Pawn, false);
+
+		InstanceData.TimeInSoftAttackRange += DeltaTime;
+		if (InstanceData.TimeInSoftAttackRange < InstanceData.AttackStartDelay)
+		{
+			return EStateTreeRunStatus::Running;
+		}
+
+		InstanceData.bStartAttack = true;
+		InstanceData.bObservedPatternActive = false;
+		InstanceData.TimeSinceAttackRequested = 0.f;
+
+		if (AAIController* AIC = Pawn->GetController<AAIController>())
+		{
+			AIC->StopMovement();
+
+			if (UPathFollowingComponent* PathFollowing = AIC->GetPathFollowingComponent())
+			{
+				PathFollowing->AbortMove(*AIC, FPathFollowingResultFlags::ForcedScript);
+			}
+		}
+
+		if (ACharacter* Character = Cast<ACharacter>(Pawn))
+		{
+			if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+			{
+				MoveComp->StopMovementImmediately();
+			}
+		}
+
+		if (!FaceTargetForAttack(
+			Pawn, InstanceData.TargetPlayer, DeltaTime,
+			InstanceData.FacingAcceptanceAngle, InstanceData.FacingInterpSpeed))
+		{
+			InstanceData.bStartAttack = false;
+			return EStateTreeRunStatus::Running;
+		}
+
+		if (ARetrieveEnemyCharacter* EnemyCharacter = Cast<ARetrieveEnemyCharacter>(Pawn))
+		{
+			EnemyCharacter->StopGroundTurnAnimation();
+		}
+
+		if (!InstanceData.CachedCombatComponent->RequestSpecificPattern(
+			InstanceData.TargetPlayer, InstanceData.SelectedPatternRowName, RetrieveGameplayTags::Ability_Enemy_Attack))
 		{
 			return EStateTreeRunStatus::Failed;
 		}
 
+		return EStateTreeRunStatus::Running;
+	}
+	else if (InstanceData.bStartAttack)
+	{
 		const bool bPatternActive = InstanceData.CachedCombatComponent->IsPatternActive();
 		if (bPatternActive)
 		{
@@ -375,9 +418,9 @@ void FStateTreeTask_EnemyAttack::ExitState(
 	InstanceData.bStartAttack = false;
 	InstanceData.bObservedPatternActive = false;
 	InstanceData.bAttackTokenAcquired = false;
-	
+
 	InstanceData.LastMoveRequestLocation = FVector::ZeroVector;
-	
+
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (!Pawn)
 	{

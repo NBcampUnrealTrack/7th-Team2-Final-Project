@@ -31,6 +31,7 @@ public:
 	void Initialize(UDataTable* InPatternTable, const TArray<FName>& InPatternSlots);
 	
 	bool RequestPatternByPriority(AActor* Target, FGameplayTag RequiredPatternType);
+	bool RequestSpecificPattern(AActor* Target, FName PatternRowName, FGameplayTag RequiredPatternType);
 	
 	bool HasAvailablePatternByType(AActor* Target, FGameplayTag PatternType) const;
 
@@ -41,7 +42,8 @@ public:
 	bool IsPatternActive() const;
 	
 	bool IsAttackable(AActor* Target) const;
-
+	bool HasReadyAttackPatternIgnoringRange(AActor* Target, FGameplayTag PatternType) const;
+	
 	bool IsSpecialAttackEvaluationLocked() const;
 	bool IsSpecialAttackRetryCooldownReady() const;
 	void StartSpecialAttackRetryCooldown();
@@ -85,16 +87,19 @@ public:
 	void ActivateWeaponHitbox();
 	void TickWeaponHitbox();
 	void DeactivateWeaponHitbox();
-	
+	const FMonsterPatternRow* FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType
+	, FName* OutRowName = nullptr, bool bIgnoreCooldown = false, bool bIgnoreRange = false) const;
 private:
+	bool ActivatePattern(const FMonsterPatternRow& Pattern, FName PatternRowName, AActor* Target,
+		FGameplayTag RequiredPatternType, bool bIsSpecialAttack, FGameplayTag DefaultEventTag);
+	
 	UFUNCTION()
 	void OnHitboxOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 						 UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
 						 bool bFromSweep, const FHitResult& SweepResult);
 	bool ApplyHitToActor(AActor* OtherActor, const FHitResult& SweepResult);
 	
-	const FMonsterPatternRow* FindBestPattern(AActor* Target, FGameplayTag RequiredPatternType
-		, FName* OutRowName = nullptr, bool bIgnoreCooldown = false) const;
+
 	bool IsCooldownReady(FName RowName) const;
 	void StartCooldown(FName RowName, float Duration);
 	void LockSpecialAttackEvaluation(float Duration);
