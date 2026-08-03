@@ -119,9 +119,16 @@ void URetrieveLoadGameWidget::RefreshSlotEntries()
 		{
 			ApplyThumbnailToEntry(Entry, ChildIndex);
 			BindEntryInteractions(Entry, ChildIndex);
+			
+			if (UTextBlock* SlotLabel = Cast<UTextBlock>(Entry->GetWidgetFromName(TEXT("Text_SlotLabel"))))
+			{
+				SlotLabel->SetText(FText::Format(
+					NSLOCTEXT("RetrieveLoadGame", "SlotLabel", "슬롯 {0}"),
+					FText::AsNumber(ChildIndex + 1)));
+			}
 		}
 	}
-
+	
 	UpdatePreview(0);
 }
 
@@ -147,21 +154,6 @@ void URetrieveLoadGameWidget::ApplyThumbnailToEntry(UUserWidget* EntryWidget, in
 			Content->RemoveChild(InfoColumn);
 		}
 
-		USizeBox* ThumbnailBox = EntryWidget->WidgetTree->ConstructWidget<USizeBox>(
-			USizeBox::StaticClass(), TEXT("SizeBox_LoadThumbnail"));
-		ThumbnailBox->SetWidthOverride(160.0f);
-		ThumbnailBox->SetHeightOverride(90.0f);
-		ThumbnailImage = EntryWidget->WidgetTree->ConstructWidget<UImage>(
-			UImage::StaticClass(), TEXT("Image_SaveThumbnail"));
-		ThumbnailImage->SetColorAndOpacity(FLinearColor(0.82f, 0.92f, 1.0f, 1.0f));
-		ThumbnailImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		ThumbnailBox->AddChild(ThumbnailImage);
-
-		if (UHorizontalBoxSlot* ThumbSlot = Content->AddChildToHorizontalBox(ThumbnailBox))
-		{
-			ThumbSlot->SetPadding(FMargin(8.0f, 6.0f, 18.0f, 6.0f));
-			ThumbSlot->SetVerticalAlignment(VAlign_Center);
-		}
 		if (InfoColumn)
 		{
 			if (UHorizontalBoxSlot* InfoSlot = Content->AddChildToHorizontalBox(InfoColumn))
@@ -220,17 +212,6 @@ void URetrieveLoadGameWidget::ApplyThumbnailToEntry(UUserWidget* EntryWidget, in
 		QuestNameText->SetText(FText::FromString(QuestLine));
 		QuestNameText->SetVisibility(QuestLine.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	}
-
-	if (UTexture2D* Texture = SaveGame ? DecodeThumbnail(SaveGame->ScreenshotPng) : nullptr)
-	{
-		SlotThumbnailTextures.Add(Texture);
-		ThumbnailImage->SetBrushFromTexture(Texture, true);
-		ThumbnailImage->SetColorAndOpacity(FLinearColor::White);
-		return;
-	}
-
-	ThumbnailImage->SetBrushFromTexture(nullptr);
-	ThumbnailImage->SetColorAndOpacity(FLinearColor(0.025f, 0.08f, 0.12f, 0.92f));
 }
 
 void URetrieveLoadGameWidget::BindEntryInteractions(UUserWidget* EntryWidget, int32 SlotIndex)
@@ -295,7 +276,7 @@ void URetrieveLoadGameWidget::UpdatePreview(int32 SlotIndex)
 		Text_PreviewQuestName->SetText(FText::FromString(QuestLine));
 		Text_PreviewQuestName->SetVisibility(QuestLine.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	}
-
+	
 	PreviewThumbnailTexture = SaveGame ? DecodeThumbnail(SaveGame->ScreenshotPng) : nullptr;
 	if (Image_PreviewThumbnail)
 	{
