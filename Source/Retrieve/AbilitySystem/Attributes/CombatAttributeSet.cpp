@@ -343,7 +343,8 @@ float UCombatAttributeSet::HandleIncomingDamage_Defense(const FGameplayEffectMod
 		return RawDamage;
 	}
 
-	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Boss_PhaseTransition))
+	if (TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Boss_PhaseTransition)
+		|| TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Boss_Intro))
 	{
 		return 0.f;
 	}

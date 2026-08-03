@@ -33,6 +33,8 @@ ARetrieveBossCharacter::ARetrieveBossCharacter(const FObjectInitializer& ObjectI
 	{
 		MapIconComponent->IconType = ERetrieveMapIconType::Boss;
 	}
+	
+	SetIntroState(true);
 }
 
 void ARetrieveBossCharacter::InitializeComponents()
@@ -171,4 +173,9 @@ const FBossStatsRow* ARetrieveBossCharacter::GetBossStatsRow() const
 	if (!BossStatsTable || BossStatsRowName.IsNone()) { return nullptr; }
 	return BossStatsTable->FindRow<FBossStatsRow>(
 		BossStatsRowName, TEXT("ARetrieveBossCharacter::GetBossStatsRow"));
+}
+
+void ARetrieveBossCharacter::SetIntroState(bool bEnabled)
+{
+	OwnedASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Boss_Intro, bEnabled ? 1 : 0);
 }

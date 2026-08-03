@@ -11,6 +11,7 @@
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "TimerManager.h"
+#include "Character/RetrieveBossCharacter.h"
 
 ARetrieveArenaBlockActor::ARetrieveArenaBlockActor()
 {
@@ -171,6 +172,10 @@ void ARetrieveArenaBlockActor::OnPlayerDied(FGameplayTag Channel, const FPlayerD
 	bWaitingForPlayerEntry = false;
 	PendingSpottedPlayer = nullptr;
 	UnlockArena();
+	if(ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(CachedBoss.Get()))
+	{
+		Boss->SetIntroState(true);
+	}
 }
 
 bool ARetrieveArenaBlockActor::IsArenaBoss(const AActor* Actor, const FVector& Location) const
@@ -222,6 +227,10 @@ void ARetrieveArenaBlockActor::LockArena()
 
 	OnArenaActivated();
 	SetBossHPBarVisible(true);
+	if(ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(CachedBoss.Get()))
+	{
+		Boss->SetIntroState(false);
+	}
 }
 
 void ARetrieveArenaBlockActor::UnlockArena()

@@ -46,6 +46,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Boss")
 	FGameplayTag GetUnlockElementTag() const; 
 
+	void SetIntroState(bool bEnabled);
+	
 protected:
 	virtual void InitializeComponents() override;
 	virtual void HandleDeathStarted(AActor* OwningActor) override;
@@ -54,7 +56,7 @@ protected:
 	virtual void ResetRespawnState() override;
 
 	const FBossStatsRow* GetBossStatsRow() const;
-
+	
 protected:
 	/** HP 임계값 감시 및 페이즈 전환 처리 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Retrieve|Boss")
