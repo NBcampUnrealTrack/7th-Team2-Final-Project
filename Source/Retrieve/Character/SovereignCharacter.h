@@ -4,6 +4,7 @@
 #include "Character/RetrieveAlsCombatCharacter.h"
 #include "GenericTeamAgentInterface.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Perception/AISightTargetInterface.h"
 #include "SovereignCharacter.generated.h"
 
 class USwimDetectionComponent;
@@ -30,7 +31,7 @@ class UCounterTimeDilationComponent;
 class UNavigationInvokerComponent;
 
 UCLASS()
-class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface
+class RETRIEVE_API ASovereignCharacter : public ARetrieveAlsCombatCharacter, public IGenericTeamAgentInterface, public IAISightTargetInterface
 {
 	GENERATED_BODY()
 
@@ -41,7 +42,15 @@ public:
 	{
 		return FGenericTeamId(static_cast<uint8>(Team));
 	}
-
+	virtual UAISense_Sight::EVisibilityResult CanBeSeenFrom(
+		const FCanBeSeenFromContext& Context,
+		FVector& OutSeenLocation,
+		int32& OutNumberOfLoSChecksPerformed,
+		int32& OutNumberOfAsyncLosCheckRequested,
+		float& OutSightStrength,
+		int32* UserData,
+		const FOnPendingVisibilityQueryProcessedDelegate* Delegate) override;
+	
 	// Blink 종료 시 통짜 leader가 propagate=true로 되살아나므로, Cosmetic 규칙대로 가시성을 재보장한다.
 	virtual void EndBlink() override;
 
@@ -128,4 +137,11 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
 	ERetrieveTeam Team = ERetrieveTeam::Player;
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|AI|Sight")
+	TMap<FName, float> SightCheckWeights;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|AI|Sight", meta = (ClampMin = "0.0"))
+	float RequiredSightWeight = 1.f;
 };

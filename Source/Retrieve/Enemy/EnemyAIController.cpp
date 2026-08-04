@@ -196,9 +196,8 @@ float AEnemyAIController::GetEffectivePeripheralVisionAngleDegrees() const
 {
 	const ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(GetPawn());
 	const float OverrideAngle = Enemy ? Enemy->GetPeripheralVisionAngleOverrideForAI() : -1.f;
-	return OverrideAngle > 0.f
-		? FMath::Max(PeripheralVisionAngleDegrees, OverrideAngle)
-		: PeripheralVisionAngleDegrees;
+	
+	return OverrideAngle > 0.f ? FMath::Max(PeripheralVisionAngleDegrees, OverrideAngle) : PeripheralVisionAngleDegrees;
 }
 
 void AEnemyAIController::InitDamageConfig()

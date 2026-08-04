@@ -115,6 +115,19 @@ ASovereignCharacter::ASovereignCharacter(const FObjectInitializer& ObjectInitial
 
 	CameraWaterProbe = CreateDefaultSubobject<URetrieveCameraWaterProbeComponent>(TEXT("CameraWaterProbe"));
 	CameraWaterProbe->SetupAttachment(ThirdPersonCamera);
+	
+	// 시야 감지 체크용 소켓별 가중치
+	SightCheckWeights = {
+		{TEXT("head"), 1.0f},
+		{TEXT("spine_03"), 0.7f},
+		{TEXT("pelvis"), 0.6f},
+		{TEXT("upperarm_l"), 0.4f},
+		{TEXT("upperarm_r"), 0.4f},
+		{TEXT("calf_l"), 0.3f},
+		{TEXT("calf_r"), 0.3f},
+		{TEXT("foot_l"), 0.2f},
+		{TEXT("foot_r"), 0.2f}
+	};
 }
 
 void ASovereignCharacter::InitializeAbilitySystem()
@@ -209,6 +222,85 @@ void ASovereignCharacter::InitializeAbilitySystem()
     {
         ArmorComponent->RefreshEquippedArmorGameplay();
     }
+}
+
+UAISense_Sight::EVisibilityResult ASovereignCharacter::CanBeSeenFrom(const FCanBeSeenFromContext& Context,
+	FVector& OutSeenLocation, int32& OutNumberOfLoSChecksPerformed, int32& OutNumberOfAsyncLosCheckRequested,
+	float& OutSightStrength, int32* UserData, const FOnPendingVisibilityQueryProcessedDelegate* Delegate)
+{
+
+	OutNumberOfLoSChecksPerformed = 0;
+	OutNumberOfAsyncLosCheckRequested = 0;
+	OutSightStrength = 0.f;
+	OutSeenLocation = GetActorLocation();
+	
+	if (SightCheckWeights.IsEmpty())
+	{
+		return UAISense_Sight::EVisibilityResult::NotVisible;
+	}
+	
+	const UWorld* World = GetWorld();
+	const USkeletalMeshComponent* SightMesh =
+		IsValid(VisualMesh.Get()) && VisualMesh->GetSkeletalMeshAsset()
+			? VisualMesh.Get()
+			: GetMesh();
+	
+	if (!World || !SightMesh)
+	{
+		return UAISense_Sight::EVisibilityResult::NotVisible;
+	}
+
+	const float RequiredWeight = FMath::Max(RequiredSightWeight, KINDA_SMALL_NUMBER);
+	
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(SovereignAISight),
+		false);
+
+	QueryParams.AddIgnoredActor(this);
+
+	if (Context.IgnoreActor)
+	{
+		QueryParams.AddIgnoredActor(Context.IgnoreActor);
+	}
+
+	float VisibleWeight = 0.f;
+
+	for (const TPair<FName, float>& SightPoint : SightCheckWeights)
+	{
+		if (SightPoint.Value <= 0.f || !SightMesh->DoesSocketExist(SightPoint.Key))
+		{
+			continue;
+		}
+
+		const FVector SocketLocation =
+			SightMesh->GetSocketLocation(SightPoint.Key);
+
+		++OutNumberOfLoSChecksPerformed;
+
+		const bool bBlocked = World->LineTraceTestByChannel(
+			Context.ObserverLocation,
+			SocketLocation,
+			ECC_Visibility,
+			QueryParams);
+
+		if (!bBlocked)
+		{
+			if (VisibleWeight <= 0.f)
+			{
+				OutSeenLocation = SocketLocation;
+			}
+
+			VisibleWeight += SightPoint.Value;
+
+			if (VisibleWeight >= RequiredWeight)
+			{
+				OutSightStrength = 1.f;
+				return UAISense_Sight::EVisibilityResult::Visible;
+			}
+		}
+	}
+
+	return UAISense_Sight::EVisibilityResult::NotVisible;
 }
 
 void ASovereignCharacter::EndBlink()

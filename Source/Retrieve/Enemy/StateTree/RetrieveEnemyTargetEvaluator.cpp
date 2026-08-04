@@ -7,6 +7,7 @@
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISense.h"
 #include "Perception/AISense_Damage.h"
+#include "Perception/AISense_Sight.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
@@ -20,7 +21,6 @@
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Components/Enemy/EnemySuspicionIndicatorComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
-#include "Kismet/GameplayStatics.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "DrawDebugHelpers.h"
 #include "HAL/IConsoleManager.h"
@@ -435,45 +435,16 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 	InstanceData.bOutOfChaseRange = bNewOutOfChaseRange;
 
 	TArray<AActor*> PerceivedActors;
-	PerceptionComp->GetKnownPerceivedActors(nullptr, PerceivedActors);
+	PerceptionComp->GetCurrentlyPerceivedActors(nullptr, PerceivedActors);
+
+	TArray<AActor*> SightPerceivedActors;
+	PerceptionComp->GetCurrentlyPerceivedActors(UAISense_Sight::StaticClass(), SightPerceivedActors);
 
 	const FVector PawnLocation = Pawn->GetActorLocation();
 
 	// 경계(Suspicious) 단계를 쓰는 몬스터는 최초 발견에 정면 시야각을 요구하지 않는다 —
 	// 거리 내에 들어오면 우선 눈치채고, Suspicious 상태에서 서서히 돌아보게 한다.
 	const bool bUsesSuspiciousFlow = InstanceData.SuspicionIncreaseRate > 0.f;
-
-	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(Pawn, 0))
-	{
-		const float PlayerDistSq = FVector::DistSquared(PawnLocation, PlayerPawn->GetActorLocation());
-		const AEnemyAIController* EnemyAIController = Cast<AEnemyAIController>(AIController);
-		float InitialAcquireRange;
-		if (InstanceData.TargetPlayer == nullptr)
-		{
-			// Idle → 최초 발견: AIPerception Sight 설정(SightRadius)을 그대로 따른다.
-			InitialAcquireRange = EnemyAIController
-				? EnemyAIController->GetEffectiveSightRadius()
-				: InstanceData.ChaseRange;
-		}
-		else if (bUsesSuspiciousFlow && !InstanceData.bSuspicionGaugeFull)
-		{
-			// Suspicious 유지: LoseSightRadius 밖으로 나가면 재획득하지 않고 게이지 감소에 위임.
-			InitialAcquireRange = EnemyAIController
-				? EnemyAIController->GetEffectiveLoseSightRadius()
-				: InstanceData.ChaseRange;
-		}
-		else
-		{
-			// Combat 유지: ChaseRange까지 끈질기게 붙는다(추격 중 시야 이탈 방지).
-			InitialAcquireRange = InstanceData.ChaseRange > 0.f ? InstanceData.ChaseRange : 1500.f;
-		}
-		if (PlayerDistSq <= FMath::Square(InitialAcquireRange)
-			&& AIController->LineOfSightTo(PlayerPawn)
-			&& !ContainsActor(PerceivedActors, PlayerPawn))
-		{
-			PerceivedActors.Add(PlayerPawn);
-		}
-	}
 
 	AActor* BestTarget = nullptr;
 	float BestScore = MAX_FLT;
@@ -627,8 +598,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (bUsesSuspiciousFlow)
 	{
-		// 게이지 판정은 known 목록/ChosenTarget과 무관하게 실제 거리로 확정한다.
-		// AISense_Sight의 known은 MaxAge(5s) 만큼 잔존하므로 그것만으로는 시야 이탈을 판정할 수 없다.
+		// 게이지 판정은 Sight Stimulus의 현재 성공 여부와 실제 거리로 확정한다.
+		// AISense_Sight의 known은 MaxAge(5s) 동안 잔존하므로 현재 감지 목록을 사용한다.
 		// bTargetLost는 아래 게이지 0 도달 시점에서만 세팅해 StateTree 전이 세맨틱을 보존한다.
 		const AEnemyAIController* EnemyAICtrlForGauge = Cast<AEnemyAIController>(AIController);
 		const float LoseRangeForGauge = EnemyAICtrlForGauge
@@ -639,11 +610,9 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				FVector2D(Pawn->GetActorLocation()),
 				FVector2D(InstanceData.TargetPlayer->GetActorLocation()))
 			: MAX_FLT;
-		// LOS도 함께 검사 — AIPerception known은 MaxAge(5s) 동안 잔존하므로 거리만으로는
-		// 벽 뒤로 이동한 플레이어가 계속 감지된 것으로 오판돼 게이지가 증가할 수 있다.
 		const bool bTargetInSight = IsValid(InstanceData.TargetPlayer)
 			&& DistToTargetForGauge <= LoseRangeForGauge
-			&& AIController->LineOfSightTo(InstanceData.TargetPlayer);
+			&& ContainsActor(SightPerceivedActors, InstanceData.TargetPlayer);
 		if (bTargetInSight)
 		{
 			// DistanceToTarget은 타겟을 처음 인식한 이번 틱엔 아직 갱신 전(이전 틱 값=0)이라
