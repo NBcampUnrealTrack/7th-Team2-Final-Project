@@ -306,6 +306,9 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
 	TArray<float> ProjectileFireDelays;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="1"))
+	int32 ShotCount = 1;
+	
 	/** 투사체 속도 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile", meta=(ClampMin="0.0"))
 	float ProjectileSpeed = 1200.f;

@@ -41,7 +41,8 @@ protected:
 	virtual bool ShouldScheduleProjectilesOnActivate() const { return true; }
 	virtual USkeletalMeshComponent* ResolveProjectileSpawnMesh(AActor* AvatarActor) const;
 	virtual FVector ResolveAimedProjectileDirection(const FVector& SpawnLocation, AActor* TargetActor) const;
-
+	bool ResolveAndCacheActivePattern();
+	
 	// 다중 투사체 패턴에서 몽타주가 모든 투사체 발사 전에 끝나도 능력을 살려두는 보정 로직.
 	// 기본값 false → 일반/보스는 원본 동작 그대로 유지. 에픽만 override하여 활성화한다.
 	virtual bool UsesProjectileCompletionGuard() const { return false; }

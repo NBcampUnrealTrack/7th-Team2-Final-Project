@@ -11,6 +11,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Logging/RetrieveLogChannels.h"
 #include "TimerManager.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 
 UGA_EpicShootProjectiles::UGA_EpicShootProjectiles(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -23,6 +25,9 @@ UGA_EpicShootProjectiles::UGA_EpicShootProjectiles(const FObjectInitializer& Obj
 
 const UAnimMontage* UGA_EpicShootProjectiles::ResolveMontage(const FGameplayEventData* TriggerEventData) const
 {
+	const UAnimMontage* Resolved = Super::ResolveMontage(TriggerEventData);
+	CachedFireMontage = const_cast<UAnimMontage*>(Resolved);
+	
 	if (bAerialModeApplied)
 	{
 		if (UAnimMontage* TakeOffMontage = CreateAerialAnimationMontage(AerialTakeOffAnimation, 1))
@@ -31,32 +36,14 @@ const UAnimMontage* UGA_EpicShootProjectiles::ResolveMontage(const FGameplayEven
 		}
 	}
 
-	return Super::ResolveMontage(TriggerEventData);
+	return Resolved;
 }
 
 UAnimMontage* UGA_EpicShootProjectiles::ResolveFallbackSequenceMontage() const
 {
-	UAnimSequenceBase* AttackSequence = FallbackMontageSequence.LoadSynchronous();
-	if (!AttackSequence)
-	{
-		return nullptr;
-	}
-
-	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	USkeletalMeshComponent* Mesh = AvatarActor ? AvatarActor->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
-	UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
-	if (!AnimInstance)
-	{
-		return nullptr;
-	}
-
-	return UAnimMontage::CreateSlotAnimationAsDynamicMontage(
-		AttackSequence,
-		TEXT("DefaultSlot"),
-		0.1f,
-		0.15f,
-		1.f,
-		1);
+	UAnimMontage* Fallback = Super::ResolveFallbackSequenceMontage();
+	CachedFireMontage = Fallback;
+	return Fallback;
 }
 
 void UGA_EpicShootProjectiles::OnSpecialAttackActivated()
@@ -65,9 +52,34 @@ void UGA_EpicShootProjectiles::OnSpecialAttackActivated()
 	bFinishingAfterAerialHold = false;
 	bAerialModeApplied = false;
 	bAerialHoverAnimationPlaying = false;
+	CompletedFireShotCount = 0;
+	CachedFireMontage = nullptr;
 	AerialModeStartTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-	FaceCachedTarget();
+	
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			FaceTargetTimerHandle, this, &UGA_EpicShootProjectiles::TickFaceTarget, 0.016f, true);
+	}
 
+	ProjectileFireEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileFire, nullptr, false, false);
+	if (ProjectileFireEventTask)
+	{
+		ProjectileFireEventTask->EventReceived.AddDynamic(this, &UGA_EpicShootProjectiles::HandleProjectileFireEvent);
+		ProjectileFireEventTask->ReadyForActivation();
+	}
+	
+	ResolveAndCacheActivePattern();
+
+	ProjectileFireEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileFire, nullptr, false, false);
+	if (ProjectileFireEventTask)
+	{
+		ProjectileFireEventTask->EventReceived.AddDynamic(this, &UGA_EpicShootProjectiles::HandleProjectileFireEvent);
+		ProjectileFireEventTask->ReadyForActivation();
+	}
+	
 	ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(CachedAvatarCharacter);
 	if (!ShouldApplyAerialMode(Enemy))
 	{
@@ -86,6 +98,24 @@ void UGA_EpicShootProjectiles::OnSpecialAttackEnded()
 {
 	if (UWorld* World = GetWorld())
 	{
+		World->GetTimerManager().ClearTimer(FaceTargetTimerHandle);
+	}
+
+	if (ProjectileFireEventTask)
+	{
+		ProjectileFireEventTask->EndTask();
+		ProjectileFireEventTask = nullptr;
+	}
+	if (FireMontageTask)
+	{
+		FireMontageTask->EndTask();
+		FireMontageTask = nullptr;
+	}
+	ActiveFireMontage = nullptr;
+	CachedFireMontage = nullptr;
+	
+	if (UWorld* World = GetWorld())
+	{
 		World->GetTimerManager().ClearTimer(AerialLiftTimerHandle);
 		World->GetTimerManager().ClearTimer(AerialFinishTimerHandle);
 	}
@@ -102,7 +132,6 @@ void UGA_EpicShootProjectiles::OnSpecialAttackEnded()
 
 void UGA_EpicShootProjectiles::OnBeforeProjectileSpawn()
 {
-	FaceCachedTarget();
 }
 
 void UGA_EpicShootProjectiles::OnProjectileSpawned(AEnemyProjectile* Projectile, AActor* AvatarActor)
@@ -121,6 +150,66 @@ void UGA_EpicShootProjectiles::OnProjectileSpawned(AEnemyProjectile* Projectile,
 float UGA_EpicShootProjectiles::AdjustProjectileFireDelay(float FireDelay, int32 ProjectileIndex) const
 {
 	return FireDelay;
+}
+
+void UGA_EpicShootProjectiles::PlayNextFireShot()
+{
+	ActiveFireMontage = CachedFireMontage;
+	
+	if (!ActiveFireMontage)
+	{
+		FinishAbility();
+		return;
+	}
+
+	FireMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+		this, NAME_None, ActiveFireMontage, GetAttackMontagePlayRate(), NAME_None, true);
+
+	if (!FireMontageTask)
+	{
+		FinishAbility();
+		return;
+	}
+
+	FireMontageTask->OnCompleted.AddDynamic(this, &UGA_EpicShootProjectiles::HandleFireMontageCompleted);
+	FireMontageTask->OnBlendOut.AddDynamic(this, &UGA_EpicShootProjectiles::HandleFireMontageCompleted);
+	FireMontageTask->OnInterrupted.AddDynamic(this, &UGA_EpicShootProjectiles::HandleFireMontageInterrupted);
+	FireMontageTask->OnCancelled.AddDynamic(this, &UGA_EpicShootProjectiles::HandleFireMontageInterrupted);
+	FireMontageTask->ReadyForActivation();
+}
+
+void UGA_EpicShootProjectiles::HandleFireMontageCompleted()
+{
+	if (FireMontageTask)
+	{
+		FireMontageTask->EndTask();
+		FireMontageTask = nullptr;
+	}
+
+	if (CompletedFireShotCount < FMath::Max(1, AerialShotCount))
+	{
+		PlayNextFireShot();
+		return;
+	}
+
+	Super::OnMontageCompleted();
+}
+
+void UGA_EpicShootProjectiles::HandleFireMontageInterrupted()
+{
+	if (FireMontageTask)
+	{
+		FireMontageTask->EndTask();
+		FireMontageTask = nullptr;
+	}
+
+	Super::OnMontageInterrupted();
+}
+
+void UGA_EpicShootProjectiles::HandleProjectileFireEvent(FGameplayEventData Payload)
+{
+	SpawnProjectile();
+	++CompletedFireShotCount;
 }
 
 void UGA_EpicShootProjectiles::FaceCachedTarget() const
@@ -169,9 +258,10 @@ void UGA_EpicShootProjectiles::FinishAbility()
 
 void UGA_EpicShootProjectiles::OnMontageCompleted()
 {
-	if (bAerialModeApplied && !bAerialHoverAnimationPlaying)
+	if (CompletedFireShotCount < FMath::Max(1, AerialShotCount))
 	{
-		PlayAerialHoverAnimation();
+		PlayNextFireShot();
+		return;
 	}
 
 	Super::OnMontageCompleted();
@@ -179,11 +269,6 @@ void UGA_EpicShootProjectiles::OnMontageCompleted()
 
 void UGA_EpicShootProjectiles::OnMontageInterrupted()
 {
-	if (bAerialModeApplied && !bAerialHoverAnimationPlaying)
-	{
-		PlayAerialHoverAnimation();
-	}
-
 	Super::OnMontageInterrupted();
 }
 
@@ -325,6 +410,28 @@ float UGA_EpicShootProjectiles::GetAerialModeElapsedTime() const
 	return FMath::Max(0.f, World->GetTimeSeconds() - AerialModeStartTime);
 }
 
+void UGA_EpicShootProjectiles::TickFaceTarget()
+{
+	AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	AActor* TargetActor = GetCachedTargetActor();
+	if (!AvatarActor || !TargetActor)
+	{
+		return;
+	}
+
+	FVector Direction = TargetActor->GetActorLocation() - AvatarActor->GetActorLocation();
+	Direction.Z = 0.f;
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator CurrentRotation = AvatarActor->GetActorRotation();
+	const FRotator TargetRotation = Direction.Rotation();
+	const FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, 0.016f, FaceTargetInterpSpeed);
+	AvatarActor->SetActorRotation(NewRotation);
+}
+
 void UGA_EpicShootProjectiles::ForceAerialLandingIfStillFlying()
 {
 	ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(CachedAvatarCharacter);
@@ -347,3 +454,5 @@ void UGA_EpicShootProjectiles::ForceAerialLandingIfStillFlying()
 
 	CachedAvatarCharacter = nullptr;
 }
+
+

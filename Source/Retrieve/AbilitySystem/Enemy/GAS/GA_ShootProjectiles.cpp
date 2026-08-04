@@ -170,35 +170,12 @@ void UGA_ShootProjectiles::ScheduleProjectiles(bool bHasMontage)
 		return;
 	}
 
-	ActiveProjectileConfig = FMonsterProjectilePatternConfig();
-	ActiveProjectileConfig.ProjectileSpeed = FallbackProjectileSpeed ;
-	ActiveHitReactType = ERetrieveHitReactType::Flinch;
-	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
-	ActiveEffectTag = FGameplayTag();
-	ActiveStatusEffectClass = nullptr;
-	ActiveProjectileClass = nullptr;
-	ActivePatternRowName = NAME_None;
+	ResolveAndCacheActivePattern();
 
 	const UEnemyCombatComponent* Combat = GetEnemyCombatComponent();
 	if (Combat)
 	{
 		ActivePatternRowName = Combat->GetActivePatternRowName();
-	}
-
-	const bool bResolvedPattern = ResolveProjectilePattern(
-		ActiveProjectileConfig,
-		&ActiveHitReactType,
-		&ActiveLaunchKnockbackConfig,
-		&ActiveEffectTag,
-		&ActiveStatusEffectClass,
-		&ActiveProjectileClass,
-		&ActiveDamageMultiplier);
-	if (!bResolvedPattern)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[GA_ShootProjectiles] Failed to resolve active projectile pattern. Owner=%s Row=%s"),
-			*GetNameSafe(GetAvatarActorFromActorInfo()),
-			*ActivePatternRowName.ToString());
 	}
 
 	TArray<float> FireDelays = ActiveProjectileConfig.ProjectileFireDelays;
@@ -458,6 +435,37 @@ FVector UGA_ShootProjectiles::ResolveAimedProjectileDirection(
 	}
 
 	return (AimLocation - SpawnLocation).GetSafeNormal();
+}
+
+bool UGA_ShootProjectiles::ResolveAndCacheActivePattern()
+{
+	ActiveProjectileConfig = FMonsterProjectilePatternConfig();
+	ActiveProjectileConfig.ProjectileSpeed = FallbackProjectileSpeed;
+	ActiveHitReactType = ERetrieveHitReactType::Flinch;
+	ActiveLaunchKnockbackConfig = FMonsterLaunchKnockbackConfig();
+	ActiveEffectTag = FGameplayTag();
+	ActiveStatusEffectClass = nullptr;
+	ActiveProjectileClass = nullptr;
+	ActivePatternRowName = NAME_None;
+
+	const UEnemyCombatComponent* Combat = GetEnemyCombatComponent();
+	if (Combat)
+	{
+		ActivePatternRowName = Combat->GetActivePatternRowName();
+	}
+
+	const bool bResolved = ResolveProjectilePattern(
+		ActiveProjectileConfig, &ActiveHitReactType, &ActiveLaunchKnockbackConfig,
+		&ActiveEffectTag, &ActiveStatusEffectClass, &ActiveProjectileClass, &ActiveDamageMultiplier);
+
+	if (!bResolved)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA_ShootProjectiles] Failed to resolve active projectile pattern. Owner=%s Row=%s"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()), *ActivePatternRowName.ToString());
+	}
+
+	return bResolved;
 }
 
 TSubclassOf<AEnemyProjectile> UGA_ShootProjectiles::ResolveProjectileClass() const

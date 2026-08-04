@@ -28,7 +28,8 @@ protected:
 	virtual void FinishAbility() override;
 	virtual void OnMontageCompleted() override;
 	virtual void OnMontageInterrupted() override;
-
+	virtual bool ShouldScheduleProjectilesOnActivate() const override { return false; }
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Epic|ShootProjectiles")
 	TSoftObjectPtr<UAnimSequenceBase> FallbackMontageSequence;
 
@@ -61,8 +62,28 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Epic|Aerial|Animation", meta=(ClampMin="0.1"))
 	float AerialAnimationPlayRate = 1.f;
-
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Epic|Aerial|Projectile", meta=(ClampMin="1"))
+	int32 AerialShotCount = 1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Epic|Aerial", meta=(ClampMin="0.0"))
+	float FaceTargetInterpSpeed = 8.f;
 private:
+	
+	void PlayNextFireShot();
+
+	UFUNCTION() void HandleFireMontageCompleted();
+	UFUNCTION() void HandleFireMontageInterrupted();
+	UFUNCTION() void HandleProjectileFireEvent(FGameplayEventData Payload);
+
+	UPROPERTY(Transient) mutable TObjectPtr<UAnimMontage> CachedFireMontage;
+	UPROPERTY(Transient) TObjectPtr<UAnimMontage> ActiveFireMontage;
+	UPROPERTY(Transient) TObjectPtr<UAbilityTask_PlayMontageAndWait> FireMontageTask;
+	UPROPERTY(Transient) TObjectPtr<UAbilityTask_WaitGameplayEvent> ProjectileFireEventTask;
+
+	int32 CompletedFireShotCount = 0;
+	
+	
 	void FaceCachedTarget() const;
 	bool ShouldApplyAerialMode(const ARetrieveEnemyCharacter* Enemy) const;
 	void StartAerialLift();
@@ -73,6 +94,10 @@ private:
 	void ForceAerialLandingIfStillFlying();
 	float GetAerialModeElapsedTime() const;
 
+	void TickFaceTarget();
+
+	FTimerHandle FaceTargetTimerHandle;
+	
 	UPROPERTY(Transient)
 	TObjectPtr<ACharacter> CachedAvatarCharacter;
 
