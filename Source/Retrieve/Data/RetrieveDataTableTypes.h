@@ -620,6 +620,10 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	/** 무기 콜리전 패딩*/
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(EditCondition="bUseWeaponSweepTrace"))
 	float WeaponTraceLengthPadding = 0.0f;
+	
+	/** 사거리 밖에서도 선택 가능 여부*/
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
+	bool bAllowApproachFromOutOfRange = true;
 };
 
 USTRUCT(BlueprintType)

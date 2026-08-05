@@ -39,7 +39,7 @@ public:
 	/** 에픽은 비행 진입용으로 공중에 배치/스폰될 수 있으므로, 스폰 시 네비메시(지면)로 스냅한다. */
 	virtual bool ShouldGroundSnapOnSpawn() const override { return true; }
 	virtual bool ShouldUseStateTreeAerialPhase() const override { return false; }
-	virtual bool ShouldUseDirectChaseToTarget() const override { return true; }
+	virtual bool ShouldUseDirectChaseToTarget() const override { return false; }
 	virtual bool ShouldFaceTargetDuringShiftOrbit() const override { return true; }
 	virtual bool ShouldSuppressNormalAttackWhileFlying() const override { return true; }
 	virtual bool ShouldUsePatternRangeForNormalAttack() const override { return true; }

@@ -1034,7 +1034,7 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 			continue;
 		}
 		
-		if (!bIgnoreRange)
+		if (!(bIgnoreRange && Row->bAllowApproachFromOutOfRange))
 		{
 			// 에픽 전용: MaxActivationRange == 0 → 사거리 제한 없음으로 해석.
 			// 일반/보스는 원본 strict 동작 유지(MaxActivationRange 값을 그대로 사거리로 적용).
