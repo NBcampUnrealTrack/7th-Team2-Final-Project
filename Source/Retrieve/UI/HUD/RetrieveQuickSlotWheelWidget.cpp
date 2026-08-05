@@ -155,23 +155,9 @@ void URetrieveQuickSlotWheelWidget::OpenForAssign(FName InPendingItemId, FGamepl
 	PendingAssignItemId = InPendingItemId;
 	PendingAssignCategoryTag = InPendingCategoryTag;
 
-	// 인벤토리에서 열릴 때는 약 1/3 크기로 축소해서 표시
-	constexpr float AssignModeScale = 0.34f;
-	SetRenderScale(FVector2D(AssignModeScale, AssignModeScale));
-
-	// 인벤토리 패널(우측)과 겹치지 않도록 휠을 화면 좌측으로 이동시킨다.
-	float OffsetX = 520.f;
-	if (APlayerController* PC = GetOwningPlayer())
-	{
-		int32 ViewportX = 0;
-		int32 ViewportY = 0;
-		PC->GetViewportSize(ViewportX, ViewportY);
-		if (ViewportX > 0)
-		{
-			OffsetX = ViewportX * 0.27f;
-		}
-	}
-	SetRenderTranslation(FVector2D(-OffsetX, 0.f));
+	// 위치/크기는 인스펙터에서 조정 가능한 값으로 적용한다. 기본값은 화면 중앙 —
+	// 인벤토리 패널을 어느 쪽에 두든 겹치지 않도록, 패널 쪽에서 딤 처리로 구분한다.
+	ApplyWheelPlacement(AssignModeScale, AssignModeViewportOffset);
 
 	// Assign(인벤토리 등록) 모드에서만 닫기 버튼을 보여준다.
 	if (Button_CloseWheel)
@@ -194,11 +180,8 @@ void URetrieveQuickSlotWheelWidget::OpenForUse()
 	PendingAssignCategoryTag = FGameplayTag();
 	HighlightedSlotKey = INDEX_NONE;
 
-	// 인게임 사용 모드도 화면에 비해 너무 크므로 축소해서 표시
-	constexpr float UseModeScale = 0.45f;
-	SetRenderScale(FVector2D(UseModeScale, UseModeScale));
-	// 인게임 사용 모드는 화면 중앙에 표시한다.
-	SetRenderTranslation(FVector2D::ZeroVector);
+	// 인게임 사용 모드도 화면에 비해 너무 크므로 축소해서 화면 중앙에 표시
+	ApplyWheelPlacement(UseModeScale, UseModeViewportOffset);
 
 	// 인게임 사용 모드에서는 닫기 버튼을 숨긴다.
 	if (Button_CloseWheel)
@@ -212,9 +195,41 @@ void URetrieveQuickSlotWheelWidget::OpenForUse()
 	RefreshFromQuickSlots();
 }
 
+void URetrieveQuickSlotWheelWidget::ApplyWheelPlacement(float Scale, const FVector2D& ViewportOffset)
+{
+	SetRenderScale(FVector2D(Scale, Scale));
+
+	FVector2D Translation = FVector2D::ZeroVector;
+
+	if (!ViewportOffset.IsNearlyZero())
+	{
+		// 정규화 오프셋 → 픽셀. 뷰포트를 못 얻으면 이동 없이 중앙에 둔다.
+		int32 ViewportX = 0;
+		int32 ViewportY = 0;
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			PC->GetViewportSize(ViewportX, ViewportY);
+		}
+
+		Translation = FVector2D(
+			ViewportOffset.X * ViewportX,
+			ViewportOffset.Y * ViewportY);
+	}
+
+	SetRenderTranslation(Translation);
+}
+
 void URetrieveQuickSlotWheelWidget::CloseWheel()
 {
+	const bool bWasOpen = (GetVisibility() != ESlateVisibility::Collapsed);
+
 	SetVisibility(ESlateVisibility::Collapsed);
+
+	// 이미 닫혀 있었다면 중복 통지하지 않는다.
+	if (bWasOpen)
+	{
+		OnWheelClosed.Broadcast();
+	}
 }
 
 FReply URetrieveQuickSlotWheelWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -329,7 +344,7 @@ void URetrieveQuickSlotWheelWidget::HandleWheelSlotClicked(int32 SlotKey)
 		{
 			InventoryComponent->ActivateQuickSlotItem(SlotKey);
 		}
-		SetVisibility(ESlateVisibility::Collapsed);
+		CloseWheel();
 		return;
 	}
 

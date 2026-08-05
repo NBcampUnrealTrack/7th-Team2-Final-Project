@@ -146,6 +146,21 @@ void UInventoryPanelWidget::NativeConstruct()
 
 void UInventoryPanelWidget::NativeDestruct()
 {
+	// 패널이 닫힐 때 뷰포트에 남은 휠을 함께 정리한다. 휠은 패널의 자식이 아니라
+	// 별도 뷰포트 위젯이라 여기서 치우지 않으면 게임 화면 위에 그대로 남는다.
+	if (QuickSlotWheelInstance)
+	{
+		QuickSlotWheelInstance->OnWheelSlotClicked.RemoveDynamic(
+			this, &ThisClass::HandleQuickSlotWheelSlotClicked);
+		QuickSlotWheelInstance->OnWheelClosed.RemoveDynamic(
+			this, &ThisClass::HandleQuickSlotWheelClosed);
+		QuickSlotWheelInstance->RemoveFromParent();
+		QuickSlotWheelInstance = nullptr;
+	}
+	bQuickSlotWheelLowered = false;
+	bInventoryContentHiddenForWheel = false;
+	ApplyInventoryContentHidden(false, nullptr);
+
 	UnbindEquipLockTagEvents();
 	Super::NativeDestruct();
 }
@@ -1791,13 +1806,73 @@ void UInventoryPanelWidget::OpenQuickSlotWheelForAssign()
 				this, &ThisClass::HandleQuickSlotWheelSlotClicked);
 			QuickSlotWheelInstance->OnWheelSlotClicked.AddDynamic(
 				this, &ThisClass::HandleQuickSlotWheelSlotClicked);
+
+			// ESC·닫기 버튼 등 패널을 거치지 않는 경로로 닫혀도 딤을 복원하기 위해 구독한다.
+			QuickSlotWheelInstance->OnWheelClosed.RemoveDynamic(
+				this, &ThisClass::HandleQuickSlotWheelClosed);
+			QuickSlotWheelInstance->OnWheelClosed.AddDynamic(
+				this, &ThisClass::HandleQuickSlotWheelClosed);
 		}
 	}
 
 	if (QuickSlotWheelInstance)
 	{
 		QuickSlotWheelInstance->OpenForAssign(SelectedItemId, SelectedItemCategoryTag);
+
+		// 휠이 화면 중앙에 뜨므로 인벤토리 내용은 통째로 숨긴다.
+		bInventoryContentHiddenForWheel = true;
+		ApplyInventoryContentHidden(true, nullptr);
 	}
+}
+
+void UInventoryPanelWidget::HandleQuickSlotWheelClosed()
+{
+	bInventoryContentHiddenForWheel = false;
+	ApplyInventoryContentHidden(false, nullptr);
+
+	// 내용을 되돌린 뒤에 포커스를 준다 (접힌 상태에서는 포커스가 제대로 안 잡힐 수 있다).
+	RestoreKeyboardFocusTo(this);
+}
+
+void UInventoryPanelWidget::RestoreKeyboardFocusTo(UUserWidget* TargetWidget)
+{
+	// 휠은 OpenForAssign()에서 SetKeyboardFocus()로 포커스를 가져가고, 교체 확인 창의 버튼도
+	// 클릭하면 포커스를 가져간다. 패널은 FInputModeUIOnly + 자기 자신이 포커스 위젯인 상태로
+	// 열리므로(ARetrievePlayerController::OpenPanel), 포커스를 되돌리지 않으면 ESC·토글 키가
+	// URetrieveGamePanelWidget::NativeOnKeyDown에 도달하지 않아 인벤토리가 닫히지 않는다.
+	if (!TargetWidget)
+	{
+		return;
+	}
+
+	TargetWidget->SetKeyboardFocus();
+
+	// 직전까지 포커스를 쥐고 있던 위젯(휠 / 교체 확인 버튼)이 같은 프레임에 Collapsed 되므로,
+	// Slate가 포커스 경로를 정리하면서 위 호출을 무를 수 있다. 다음 틱에 한 번 더 확정한다.
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<UUserWidget> WeakTarget(TargetWidget);
+	World->GetTimerManager().SetTimerForNextTick([WeakTarget]()
+	{
+		UUserWidget* Target = WeakTarget.Get();
+		if (!Target || !Target->GetCachedWidget().IsValid())
+		{
+			return;
+		}
+
+		// 다음 틱 사이에 대상이 닫혔으면(예: 휠이 사라짐) 포커스를 주지 않는다.
+		const ESlateVisibility Vis = Target->GetVisibility();
+		if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden)
+		{
+			return;
+		}
+
+		Target->SetKeyboardFocus();
+	});
 }
 
 void UInventoryPanelWidget::HandleQuickSlotWheelSlotClicked(int32 SlotKey)
@@ -1816,7 +1891,8 @@ void UInventoryPanelWidget::HandleQuickSlotWheelSlotClicked(int32 SlotKey)
 
 		if (QuickSlotWheelInstance)
 		{
-			QuickSlotWheelInstance->SetVisibility(ESlateVisibility::Collapsed);
+			// CloseWheel()이 OnWheelClosed를 쏘고, 그 핸들러가 패널 딤을 복원한다.
+			QuickSlotWheelInstance->CloseWheel();
 		}
 		return;
 	}
@@ -1836,6 +1912,8 @@ void UInventoryPanelWidget::HandleQuickSlotWheelSlotClicked(int32 SlotKey)
 		bQuickSlotWheelLowered = true;
 	}
 
+	// 인벤토리 내용은 이미 숨겨진 상태다. ShowQuickSlotReplaceConfirm()이 확인 창의
+	// 조상 경로만 되살려, 휠(아래) + 확인 창(위)만 보이는 화면을 만든다.
 	ShowQuickSlotReplaceConfirm(true);
 }
 
@@ -1911,6 +1989,7 @@ void UInventoryPanelWidget::ConfirmQuickSlotReplace()
 	if (!InventoryComponent || PendingReplaceSlotKey == INDEX_NONE)
 	{
 		ShowQuickSlotReplaceConfirm(false);
+		RestoreKeyboardFocusTo(this);
 		return;
 	}
 
@@ -1929,7 +2008,7 @@ void UInventoryPanelWidget::ConfirmQuickSlotReplace()
 		if (QuickSlotWheelInstance)
 		{
 			QuickSlotWheelInstance->RefreshFromQuickSlots();
-			QuickSlotWheelInstance->SetVisibility(ESlateVisibility::Collapsed);
+			QuickSlotWheelInstance->CloseWheel();
 		}
 	}
 
@@ -1939,8 +2018,15 @@ void UInventoryPanelWidget::ConfirmQuickSlotReplace()
 
 	ShowQuickSlotReplaceConfirm(false);
 
-	// 확정 후 휠은 닫히지만(위 SetVisibility(Collapsed)), 다음 사용을 위해 z-order는 원래대로 복원한다.
+	// 확정 후 휠은 닫히지만(위 CloseWheel), 다음 사용을 위해 z-order는 원래대로 복원한다.
 	RestoreQuickSlotWheelZOrder();
+
+	if (!bAssigned)
+	{
+		// 등록에 실패해 휠이 닫히지 않은 경우 OnWheelClosed가 오지 않는다.
+		// 포커스가 사라진 확인 버튼에 남지 않도록 패널이 직접 되찾는다.
+		RestoreKeyboardFocusTo(this);
+	}
 }
 
 void UInventoryPanelWidget::CancelQuickSlotReplace()
@@ -1957,6 +2043,15 @@ void UInventoryPanelWidget::CancelQuickSlotReplace()
 	if (bWasLowered && QuickSlotWheelInstance)
 	{
 		QuickSlotWheelInstance->SetVisibility(ESlateVisibility::Visible);
+		// 인벤토리 내용은 위 ShowQuickSlotReplaceConfirm(false)가 휠 상태(전체 숨김)로 되돌린다.
+		// 포커스는 휠로 넘긴다 — 방금 누른 취소 버튼에 남아 있으면 ESC가 휠이 아니라 패널을 닫는다.
+		RestoreKeyboardFocusTo(QuickSlotWheelInstance);
+	}
+	else
+	{
+		// 휠을 내리지 않은 채 확인 창만 떴던 경우(BP에서 AssignSelectedItemToQuickSlot을
+		// bForceReplace=false로 호출) — 포커스는 패널이 되찾는다.
+		RestoreKeyboardFocusTo(this);
 	}
 }
 
@@ -1984,6 +2079,14 @@ void UInventoryPanelWidget::ShowQuickSlotReplaceConfirm(bool bShow)
 			bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 
+	// 확인 창이 뜨고 지는 것과 짝을 맞춰 인벤토리 내용을 숨기고/되돌린다.
+	// (여기 한 곳에서만 처리해야 호출 경로가 여럿이어도 숨김/복원이 어긋나지 않는다)
+	// 확인 창이 닫힐 때는 "완전 복원"이 아니라 휠 상태로 돌아가야 한다 — 휠이 아직 떠 있으면
+	// 내용은 계속 숨긴 채로 둔다.
+	ApplyInventoryContentHidden(
+		bShow || bInventoryContentHiddenForWheel,
+		bShow ? Border_QuickSlotReplaceConfirm : nullptr);
+
 	if (Text_QuickSlotReplaceMessage && bShow)
 	{
 		Text_QuickSlotReplaceMessage->SetText(
@@ -1993,6 +2096,99 @@ void UInventoryPanelWidget::ShowQuickSlotReplaceConfirm(bool bShow)
 	if (bShow)
 	{
 		PositionConfirmDialogNearCursor(Border_QuickSlotReplaceConfirm);
+	}
+}
+
+void UInventoryPanelWidget::ApplyInventoryContentHidden(bool bHidden, UWidget* KeepVisibleWidget)
+{
+	// 항상 이전 숨김 상태를 먼저 되돌린 뒤 새로 적용한다. "휠만 열림"(전체 숨김)과
+	// "교체 확인 창까지 열림"(확인 창만 남김)을 오갈 때 접힌 위젯이 어긋나지 않게 하기 위함.
+	for (int32 Index = 0; Index < ConfirmHiddenWidgets.Num(); ++Index)
+	{
+		if (UWidget* HiddenWidget = ConfirmHiddenWidgets[Index].Get())
+		{
+			HiddenWidget->SetVisibility(ConfirmHiddenVisibilities[Index]);
+		}
+	}
+	ConfirmHiddenWidgets.Reset();
+	ConfirmHiddenVisibilities.Reset();
+
+	for (int32 Index = 0; Index < ConfirmClearedBorders.Num(); ++Index)
+	{
+		if (UBorder* ClearedBorder = ConfirmClearedBorders[Index].Get())
+		{
+			ClearedBorder->SetBrushColor(ConfirmClearedBorderColors[Index]);
+		}
+	}
+	ConfirmClearedBorders.Reset();
+	ConfirmClearedBorderColors.Reset();
+
+	if (!bHidden)
+	{
+		return;
+	}
+
+	// 남길 위젯이 있으면 거기서, 없으면 루트에서 시작한다.
+	// 루트에서 시작하면 첫 바퀴에 루트의 모든 자식이 접히므로 내용 전체가 사라진다.
+	UWidget* const RootWidget = WidgetTree ? WidgetTree->RootWidget : nullptr;
+	UWidget* Node = KeepVisibleWidget ? KeepVisibleWidget : RootWidget;
+	if (!Node)
+	{
+		return;
+	}
+
+	// Node에서 루트까지 거슬러 올라가며 각 단계의 "형제"를 접는다.
+	// KeepVisibleWidget의 조상 경로만 남으므로 패널이 사실상 투명해지고,
+	// 아래(z49)로 내려둔 퀵슬롯 휠이 그대로 비쳐 보인다.
+	while (Node)
+	{
+		UPanelWidget* Parent = Node->GetParent();
+
+		// 루트에 도달했으면 루트 자신의 자식들을 접는다 (전체 숨김 경로).
+		UPanelWidget* PanelToScan = Parent;
+		UWidget* KeepChild = Node;
+		if (!Parent)
+		{
+			PanelToScan = Cast<UPanelWidget>(Node);
+			KeepChild = nullptr;
+			if (!PanelToScan || KeepVisibleWidget)
+			{
+				// 남길 위젯이 있는 경우엔 루트 자식을 통째로 접으면 안 된다 (조상 경로가 끊긴다).
+				break;
+			}
+		}
+
+		const int32 ChildCount = PanelToScan->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			UWidget* Child = PanelToScan->GetChildAt(ChildIndex);
+
+			// 원래 접혀 있던 위젯은 목록에 넣지 않는다. 복원할 때 잘못 켜면
+			// 숨어 있어야 할 다이얼로그(무기 교체 확인 등)가 튀어나온다.
+			if (!Child || Child == KeepChild || Child->GetVisibility() == ESlateVisibility::Collapsed)
+			{
+				continue;
+			}
+
+			ConfirmHiddenWidgets.Add(Child);
+			ConfirmHiddenVisibilities.Add(Child->GetVisibility());
+			Child->SetVisibility(ESlateVisibility::Collapsed);
+		}
+
+		// 조상 자신이 배경을 그리는 Border면 형제를 접는 것만으로는 안 지워진다.
+		// 브러시 알파를 0으로 만들어 배경만 감춘다(자식 렌더링에는 영향 없음).
+		if (UBorder* AncestorBorder = Cast<UBorder>(PanelToScan))
+		{
+			const FLinearColor OriginalColor = AncestorBorder->GetBrushColor();
+			ConfirmClearedBorders.Add(AncestorBorder);
+			ConfirmClearedBorderColors.Add(OriginalColor);
+
+			FLinearColor TransparentColor = OriginalColor;
+			TransparentColor.A = 0.0f;
+			AncestorBorder->SetBrushColor(TransparentColor);
+		}
+
+		Node = Parent;
 	}
 }
 

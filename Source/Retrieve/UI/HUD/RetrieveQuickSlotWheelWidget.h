@@ -22,6 +22,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	int32, SlotKey
 );
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FQuickSlotWheelClosedSignature);
+
 UCLASS()
 class RETRIEVE_API URetrieveQuickSlotWheelWidget : public UUserWidget
 {
@@ -30,6 +32,11 @@ class RETRIEVE_API URetrieveQuickSlotWheelWidget : public UUserWidget
 public:
 	UPROPERTY(BlueprintAssignable, Category = "QuickSlotWheel")
 	FQuickSlotWheelSlotClickedSignature OnWheelSlotClicked;
+
+	// 어떤 경로(슬롯 선택 / ESC / 닫기 버튼)로 닫히든 한 번 브로드캐스트된다.
+	// 인벤토리 패널이 딤 처리를 되돌리는 데 사용한다.
+	UPROPERTY(BlueprintAssignable, Category = "QuickSlotWheel")
+	FQuickSlotWheelClosedSignature OnWheelClosed;
 
 	UFUNCTION(BlueprintCallable, Category = "QuickSlotWheel")
 	void InitializeQuickSlotWheel(UInventoryComponent* InInventoryComponent, UDataTable* InItemIconTable);
@@ -82,6 +89,28 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "QuickSlotWheel")
 	TObjectPtr<UDataTable> ItemIconTable;
 
+	// --- 표시 위치/크기 (WBP_QuickSlotWheel 클래스 기본값에서 조정) ---
+	// 오프셋은 화면 중앙을 원점으로 한 "뷰포트 크기 대비 비율"이다. 해상도가 바뀌어도
+	// 상대 위치가 유지된다. 예) (-0.27, 0) → 화면 폭의 27%만큼 왼쪽.
+
+	/** 인벤토리 등록(Assign) 모드 크기 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "QuickSlotWheel|Layout",
+		meta = (ClampMin = "0.05", ClampMax = "2.0"))
+	float AssignModeScale = 0.45f;
+
+	/** 인벤토리 등록 모드 위치. 패널을 딤 처리하고 휠을 중앙에 띄우므로 기본값은 중앙(0,0) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "QuickSlotWheel|Layout")
+	FVector2D AssignModeViewportOffset = FVector2D::ZeroVector;
+
+	/** 인게임 사용(Use) 모드 크기 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "QuickSlotWheel|Layout",
+		meta = (ClampMin = "0.05", ClampMax = "2.0"))
+	float UseModeScale = 0.45f;
+
+	/** 인게임 사용 모드 위치. 화면 중앙 고정 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "QuickSlotWheel|Layout")
+	FVector2D UseModeViewportOffset = FVector2D::ZeroVector;
+
 	UPROPERTY(BlueprintReadOnly, Category = "QuickSlotWheel")
 	EQuickSlotWheelMode WheelMode = EQuickSlotWheelMode::Use;
 
@@ -122,6 +151,9 @@ protected:
 private:
 	void HandleWheelSlotClicked(int32 SlotKey);
 	UUserWidget* GetSlotWidget(int32 SlotKey) const;
+
+	// 크기 배율과 정규화 오프셋을 RenderTransform으로 적용한다.
+	void ApplyWheelPlacement(float Scale, const FVector2D& ViewportOffset);
 
 	// 각 슬롯 위젯 내부의 "BUTTON"을 찾아 클릭 핸들러에 바인딩
 	void BindSlotButtons();

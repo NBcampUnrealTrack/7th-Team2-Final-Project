@@ -291,6 +291,7 @@ public:
 	UPROPERTY()
 	TObjectPtr<URetrieveQuickSlotWheelWidget> QuickSlotWheelInstance;
 
+
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Inventory|QuickSlot")
 	FText GetQuickSlotDisplayText(int32 SlotKey) const;
 
@@ -402,6 +403,9 @@ protected:
 
 	UFUNCTION()
 	void HandleQuickSlotWheelSlotClicked(int32 SlotKey);
+
+	UFUNCTION()
+	void HandleQuickSlotWheelClosed();
 
 	UFUNCTION()
 	void ConfirmQuickSlotReplace();
@@ -650,6 +654,17 @@ protected:
 	// 교체 확인 창을 앞에 보이게 하려고 휠을 패널 아래로 내렸는지 여부 (복원용)
 	bool bQuickSlotWheelLowered = false;
 
+	// 퀵슬롯 휠이 떠 있어 인벤토리 내용을 숨긴 상태인지. 교체 확인 창이 닫힐 때
+	// "완전 복원"이 아니라 "휠 상태(내용 숨김)"로 돌아가야 하므로 따로 들고 있는다.
+	bool bInventoryContentHiddenForWheel = false;
+
+	// 내용을 숨기며 접어둔 위젯과 그 원래 가시성 (복원용)
+	TArray<TWeakObjectPtr<UWidget>> ConfirmHiddenWidgets;
+	TArray<ESlateVisibility> ConfirmHiddenVisibilities;
+	// 같은 목적으로 투명하게 만든 조상 Border의 원래 배경색 (복원용)
+	TArray<TWeakObjectPtr<UBorder>> ConfirmClearedBorders;
+	TArray<FLinearColor> ConfirmClearedBorderColors;
+
 	// 무기 교체 확인 팝업을 우회할 때만 true. TGuardValue로 사용
 	bool bBypassWeaponSwapConfirm = false;
 	bool bBypassSelectedItemActivationGuard = false;
@@ -693,10 +708,24 @@ protected:
 	void RefreshInventoryGridLayout();
 	void OpenQuickSlotWheelForAssign();
 	void ShowQuickSlotReplaceConfirm(bool bShow);
+	/**
+	 * 인벤토리 내용을 접어서(Collapsed) 숨긴다.
+	 *
+	 * RenderOpacity를 쓰지 않는 이유: 머티리얼 브러시는 상속된 렌더 불투명도를 무시하는 경우가
+	 * 많아, 선택 하이라이트·탭 표시 같은 요소가 투명도 0에서도 그대로 남는다. Collapsed는
+	 * 렌더링 자체를 빼므로 확실하다.
+	 *
+	 * @param KeepVisibleWidget  이것만 남기고 숨긴다(조상 경로는 유지). nullptr이면 내용 전체를 숨긴다.
+	 *                           교체 확인 창은 패널의 자식이라 패널을 통째로 접을 수 없어서 필요하다.
+	 */
+	void ApplyInventoryContentHidden(bool bHidden, UWidget* KeepVisibleWidget);
 	// 교체 확인 다이얼로그를 마우스 커서 옆으로 이동
 	void PositionConfirmDialogNearCursor(UWidget* DialogWidget) const;
 	// 교체 확인용으로 패널 아래로 내렸던 퀵슬롯 휠을 원래 z-order/조작 가능 상태로 복원
 	void RestoreQuickSlotWheelZOrder();
+	// 휠/교체 확인 창에 넘어갔던 키보드 포커스를 지정 위젯으로 되돌린다 (ESC·토글 키 복구).
+	// 대상은 "지금 화면 맨 앞에서 ESC를 처리해야 할 위젯" — 휠이 떠 있으면 휠, 아니면 패널.
+	void RestoreKeyboardFocusTo(UUserWidget* TargetWidget);
 	void MarkInventoryTooltipsDirty();
 	void ApplyInventorySlotTooltips();
 	void ClearWidgetTooltipRecursive(UWidget* Widget) const;
