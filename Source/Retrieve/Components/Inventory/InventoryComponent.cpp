@@ -509,6 +509,102 @@ bool UInventoryComponent::RequestEquipArmor(FGameplayTag EquipmentSlotTag, FName
 	return true;
 }
 
+bool UInventoryComponent::ReplaceEquippedArmor(
+	FGameplayTag EquipmentSlotTag, FName OldItemId, FName NewItemId, FGameplayTag ItemCategoryTag)
+{
+	if (!HasAuthorityToModify() || !EquipmentSlotTag.IsValid() || NewItemId.IsNone())
+	{
+		return false;
+	}
+
+	UArmorComponent* ArmorComp = GetArmorComponent();
+	if (!ArmorComp)
+	{
+		return false;
+	}
+
+	AddItem(NewItemId, ItemCategoryTag, 1);
+
+	if (!ArmorComp->EquipArmor(EquipmentSlotTag, NewItemId))
+	{
+		// 장착이 실패했으면 방금 지급한 새 아이템을 회수해 인벤토리를 원상 복구한다.
+		RemoveItem(NewItemId, ItemCategoryTag, 1);
+		UE_LOG(LogTemp, Warning, TEXT("[ReplaceEquippedArmor] EquipArmor 실패 — Slot=%s New=%s"),
+			*EquipmentSlotTag.ToString(), *NewItemId.ToString());
+		return false;
+	}
+
+	// ★ 핵심: 옛 아이템을 제거하기 '전에' 장착 기록을 새 아이템으로 옮긴다.
+	//   기록이 옛 아이템을 가리킨 채로 RemoveItem을 부르면 그 슬롯이 통째로 벗겨진다.
+	int32 NewSlotInstanceId = INDEX_NONE;
+	if (const FRetrieveItemStack* NewStack = FindStack(NewItemId))
+	{
+		NewSlotInstanceId = NewStack->SlotInstanceId;
+	}
+
+	if (FRetrieveEquippedArmorEntry* ExistingSlot = FindMutableEquippedArmorSlot(EquipmentSlotTag))
+	{
+		ExistingSlot->ArmorItemId = NewItemId;
+		ExistingSlot->SlotInstanceId = NewSlotInstanceId;
+	}
+	else
+	{
+		FRetrieveEquippedArmorEntry& NewSlot = EquippedArmorSlots.AddDefaulted_GetRef();
+		NewSlot.EquipmentSlotTag = EquipmentSlotTag;
+		NewSlot.ArmorItemId = NewItemId;
+		NewSlot.SlotInstanceId = NewSlotInstanceId;
+	}
+
+	if (!OldItemId.IsNone() && OldItemId != NewItemId)
+	{
+		RemoveItem(OldItemId, ItemCategoryTag, 1);
+	}
+
+	OnEquippedArmorChanged.Broadcast(EquipmentSlotTag, NewItemId);
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::ReplaceEquippedWeapon(FName OldItemId, FName NewItemId, FGameplayTag ItemCategoryTag)
+{
+	if (!HasAuthorityToModify() || NewItemId.IsNone())
+	{
+		return false;
+	}
+
+	UWeaponComponent* WeaponComp = GetWeaponComponent();
+	if (!WeaponComp)
+	{
+		return false;
+	}
+
+	AddItem(NewItemId, ItemCategoryTag, 1);
+
+	if (!WeaponComp->EquipWeapon(NewItemId))
+	{
+		RemoveItem(NewItemId, ItemCategoryTag, 1);
+		UE_LOG(LogTemp, Warning, TEXT("[ReplaceEquippedWeapon] EquipWeapon 실패 — New=%s"), *NewItemId.ToString());
+		return false;
+	}
+
+	// 장착 기록을 먼저 새 무기로 옮긴 뒤에 옛 무기를 제거한다(방어구와 동일한 이유).
+	EquippedWeaponId = NewItemId;
+	EquippedWeaponSlotInstanceId = INDEX_NONE;
+	if (const FRetrieveItemStack* NewStack = FindStack(NewItemId))
+	{
+		EquippedWeaponSlotInstanceId = NewStack->SlotInstanceId;
+	}
+
+	if (!OldItemId.IsNone() && OldItemId != NewItemId)
+	{
+		RemoveItem(OldItemId, ItemCategoryTag, 1);
+	}
+
+	OnEquippedWeaponChanged.Broadcast(EquippedWeaponId);
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
 bool UInventoryComponent::RequestUnequipArmor(FGameplayTag EquipmentSlotTag)
 {
 	if (!HasAuthorityToModify())

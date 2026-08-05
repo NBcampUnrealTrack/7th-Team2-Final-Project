@@ -797,6 +797,39 @@ void URetrieveSaveSubsystem::SetHeroEvolutionCharge(int32 NewCharge)
 	UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
 }
 
+int32 URetrieveSaveSubsystem::GetHeroEvolutionChargeForItem(FName ForgottenItemId) const
+{
+	if (!CurrentSaveGame || ForgottenItemId.IsNone())
+	{
+		return 0;
+	}
+	const int32* Found = CurrentSaveGame->HeroEvolutionCharges.Find(ForgottenItemId);
+	return Found ? *Found : 0;
+}
+
+void URetrieveSaveSubsystem::SetHeroEvolutionChargeForItem(FName ForgottenItemId, int32 NewCharge)
+{
+	if (bIsApplyingSave || ForgottenItemId.IsNone()) { return; }
+	if (!GetOrCreateCurrentSaveGame()) { return; }
+
+	const int32 Clamped = FMath::Max(0, NewCharge);
+	int32& Stored = CurrentSaveGame->HeroEvolutionCharges.FindOrAdd(ForgottenItemId);
+	if (Stored == Clamped)
+	{
+		return;
+	}
+
+	Stored = Clamped;
+
+	// WorldState 슬롯에 자동 저장
+	UGameplayStatics::SaveGameToSlot(CurrentSaveGame, WorldStateSlotName, SaveUserIndex);
+}
+
+bool URetrieveSaveSubsystem::HasAnyHeroEvolutionChargeEntry() const
+{
+	return CurrentSaveGame && CurrentSaveGame->HeroEvolutionCharges.Num() > 0;
+}
+
 bool URetrieveSaveSubsystem::IsHeroEquipmentEvolved() const
 {
 	return CurrentSaveGame && CurrentSaveGame->bHeroEquipmentEvolved;

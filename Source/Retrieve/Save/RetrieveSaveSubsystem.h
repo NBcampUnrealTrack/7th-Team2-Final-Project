@@ -208,13 +208,25 @@ public:
 
 	// ── 잊혀진→전설 영웅 장비 진화 진행 상태 (월드 공유) ─────────────────
 
-	/** 진화 충전량 조회(세트 착용 중 흡수/버스트 누적). 세이브 없으면 0. */
+	/** [레거시] 전역 진화 충전량 조회. 부위별 충전으로 대체됨 — 마이그레이션 용도로만 남아 있다. */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
 	int32 GetHeroEvolutionCharge() const;
 
-	/** 진화 충전량 설정 후 WorldState 슬롯에 즉시 저장. */
+	/** [레거시] 전역 진화 충전량 설정. 부위별 충전으로 대체됨. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
 	void SetHeroEvolutionCharge(int32 NewCharge);
+
+	/** 특정 잊혀진 아이템의 진화 충전량 조회. 기록이 없으면 0. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	int32 GetHeroEvolutionChargeForItem(FName ForgottenItemId) const;
+
+	/** 특정 잊혀진 아이템의 진화 충전량 설정 후 WorldState 슬롯에 즉시 저장. */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Save")
+	void SetHeroEvolutionChargeForItem(FName ForgottenItemId, int32 NewCharge);
+
+	/** 부위별 충전 기록이 하나라도 있는지. 레거시 마이그레이션 판정에 사용. */
+	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")
+	bool HasAnyHeroEvolutionChargeEntry() const;
 
 	/** 진화 완료 여부 조회. */
 	UFUNCTION(BlueprintPure, Category = "Retrieve|Save")

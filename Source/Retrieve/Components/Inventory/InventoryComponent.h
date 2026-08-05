@@ -112,6 +112,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool RequestUnequipArmor(FGameplayTag EquipmentSlotTag);
 
+	// ── 시스템 주도 장비 교체(장비 진화 등) ────────────────────────────────
+	/**
+	 * 장착 중인 아이템을 다른 아이템으로 '원자적으로' 교체한다.
+	 *
+	 * RequestEquip*(UI 경로)와 다른 점:
+	 *  - CanChangeEquipment() 전투 게이트를 요구하지 않는다. 교체는 플레이어 조작이 아니라
+	 *    이미 확정된 결과이므로 전투 중이라고 미룰 대상이 아니다.
+	 *  - 장착 기록(EquippedArmorSlots/EquippedWeaponId)을 옛 아이템 제거 '전에' 갱신한다.
+	 *    RemoveItem은 장착 기록이 그 아이템을 가리키고 있으면 해당 슬롯을 벗기므로,
+	 *    순서를 지키지 않으면 방금 장착한 새 아이템까지 같이 벗겨진다.
+	 *
+	 * 컴포넌트를 직접 호출해 장착하고 인벤토리 기록을 갱신하지 않으면 같은 사고가 난다.
+	 * 시스템이 장비를 바꿔 끼울 때는 반드시 이 함수를 쓸 것.
+	 *
+	 * @return 새 아이템 장착에 성공했으면 true. 실패 시 추가된 새 아이템을 회수하고 원상 복구한다.
+	 */
+	bool ReplaceEquippedArmor(FGameplayTag EquipmentSlotTag, FName OldItemId, FName NewItemId, FGameplayTag ItemCategoryTag);
+
+	/** ReplaceEquippedArmor의 무기 버전. */
+	bool ReplaceEquippedWeapon(FName OldItemId, FName NewItemId, FGameplayTag ItemCategoryTag);
+
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Inventory")
 	bool UseConsumableItem(FName ConsumableItemId);
 

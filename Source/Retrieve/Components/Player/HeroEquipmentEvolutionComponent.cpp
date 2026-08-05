@@ -128,8 +128,28 @@ void UHeroEquipmentEvolutionComponent::UninitializeFromAbilitySystem()
 
 int32 UHeroEquipmentEvolutionComponent::GetCharge() const
 {
+	// 진행바는 숫자 하나만 받으므로 착용 중인 잊혀진 부위 중 최대값을 대표로 쓴다.
 	const URetrieveSaveSubsystem* Save = GetSaveSubsystem();
-	return Save ? Save->GetHeroEvolutionCharge() : 0;
+	if (!Save)
+	{
+		return 0;
+	}
+
+	TArray<FName> Equipped;
+	CollectEquippedForgottenItems(Equipped);
+
+	int32 Best = 0;
+	for (const FName ItemId : Equipped)
+	{
+		Best = FMath::Max(Best, Save->GetHeroEvolutionChargeForItem(ItemId));
+	}
+	return Best;
+}
+
+int32 UHeroEquipmentEvolutionComponent::GetChargeForItem(FName ForgottenItemId) const
+{
+	const URetrieveSaveSubsystem* Save = GetSaveSubsystem();
+	return Save ? Save->GetHeroEvolutionChargeForItem(ForgottenItemId) : 0;
 }
 
 int32 UHeroEquipmentEvolutionComponent::GetChargeThreshold() const
@@ -159,7 +179,7 @@ void UHeroEquipmentEvolutionComponent::HandleAbilityActivated(UGameplayAbility* 
 	{
 		return;
 	}
-	if (IsEvolved() || !bSetComplete)
+	if (!bSetComplete)
 	{
 		return;
 	}
@@ -169,55 +189,148 @@ void UHeroEquipmentEvolutionComponent::HandleAbilityActivated(UGameplayAbility* 
 		return;
 	}
 
-	AddCharge(1);
+	AddChargeToEquippedItems(1);
 }
 
 void UHeroEquipmentEvolutionComponent::RecomputeSetComplete()
 {
-	const bool bNow = Config && !IsEvolved() && IsForgottenSetComplete();
+	MigrateLegacyChargeIfNeeded();
+
+	TArray<FName> Equipped;
+	CollectEquippedForgottenItems(Equipped);
+
+	const int32 Threshold = GetChargeThreshold();
+
+	// 아직 임계치를 못 채운 착용 부위가 하나라도 있으면 충전 중 상태(= 진행바 표시).
+	bool bAnyCharging = false;
+	FString ChargeList;
+	for (const FName ItemId : Equipped)
+	{
+		const int32 ItemCharge = GetChargeForItem(ItemId);
+		bAnyCharging |= (ItemCharge < Threshold);
+		ChargeList += FString::Printf(TEXT("%s(%d/%d) "), *ItemId.ToString(), ItemCharge, Threshold);
+	}
+
+	const bool bNow = Config && bAnyCharging;
+
+	// 진단: 부위별 충전 상태를 한 줄로 확인한다. 장착이 바뀔 때만 찍히므로 스팸이 아니다.
+	UE_LOG(LogRetrieveCombat, Verbose,
+		TEXT("[HeroEvolution] SetCheck config=%d forgottenPieces=%d charging=%d charges=[%s]"),
+		Config ? 1 : 0, Equipped.Num(), bNow ? 1 : 0, *ChargeList);
+
 	if (bNow != bSetComplete)
 	{
 		bSetComplete = bNow;
 		BroadcastProgress();
 	}
 
+	// 이미 임계치를 채운 부위를 착용했다면(다시 끼웠거나 같은 아이템을 또 주웠거나) 즉시 진화시킨다.
+	ScheduleEvolutionIfReady();
+
 	// 전설 세트(진화 후) 착용 여부에 따라 2배 보너스 GE를 적용/회수한다.
 	RefreshLegendaryBonus();
 }
 
-bool UHeroEquipmentEvolutionComponent::IsForgottenSetComplete() const
+void UHeroEquipmentEvolutionComponent::CollectEquippedForgottenItems(TArray<FName>& OutItemIds) const
 {
+	OutItemIds.Reset();
+
 	AActor* Owner = GetOwner();
 	if (!Owner || !Config)
 	{
-		return false;
+		return;
 	}
 
-	const UWeaponComponent* Weapon = Owner->FindComponentByClass<UWeaponComponent>();
-	const UArmorComponent* Armor = Owner->FindComponentByClass<UArmorComponent>();
-	if (!Weapon || !Armor)
+	// 잊혀진 장비 = ItemEvolutionMap의 '키'.
+	// ArmorSetTag/WeaponSetTag는 데이터 저장 이슈로 비어 있을 수 있어 진화 매핑으로 판정한다.
+	if (const UWeaponComponent* Weapon = Owner->FindComponentByClass<UWeaponComponent>())
 	{
-		return false;
-	}
-
-	// 무기: 잊혀진 무기(=ItemEvolutionMap의 '키') 장착 중이어야 한다.
-	//  ArmorSetTag/WeaponSetTag는 데이터 저장 이슈로 비어 있을 수 있어, 진화 매핑으로 판정한다.
-	if (!Weapon->IsEquipped() || !Config->ItemEvolutionMap.Contains(Weapon->GetCurrentWeaponDataRow()))
-	{
-		return false;
-	}
-
-	// 방어구: ItemEvolutionMap의 '키'인 착용 부위 수 집계.
-	int32 MatchingPieces = 0;
-	for (const FRetrieveEquippedArmorEntry& Entry : Armor->GetEquippedArmorEntries())
-	{
-		if (!Entry.ArmorItemId.IsNone() && Config->ItemEvolutionMap.Contains(Entry.ArmorItemId))
+		const FName WeaponId = Weapon->GetCurrentWeaponDataRow();
+		if (Weapon->IsEquipped() && Config->ItemEvolutionMap.Contains(WeaponId))
 		{
-			++MatchingPieces;
+			OutItemIds.AddUnique(WeaponId);
 		}
 	}
 
-	return MatchingPieces >= Config->RequiredArmorPieceCount;
+	if (const UArmorComponent* Armor = Owner->FindComponentByClass<UArmorComponent>())
+	{
+		for (const FRetrieveEquippedArmorEntry& Entry : Armor->GetEquippedArmorEntries())
+		{
+			if (!Entry.ArmorItemId.IsNone() && Config->ItemEvolutionMap.Contains(Entry.ArmorItemId))
+			{
+				OutItemIds.AddUnique(Entry.ArmorItemId);
+			}
+		}
+	}
+}
+
+void UHeroEquipmentEvolutionComponent::MigrateLegacyChargeIfNeeded()
+{
+	URetrieveSaveSubsystem* Save = GetSaveSubsystem();
+	if (!Save || !Config || Save->HasAnyHeroEvolutionChargeEntry())
+	{
+		return;
+	}
+
+	const int32 LegacyCharge = Save->GetHeroEvolutionCharge();
+	if (LegacyCharge <= 0)
+	{
+		return;
+	}
+
+	// 옛 세이브는 전역 충전 1개만 갖고 있었다. 그 진행도는 '그때 착용 중이던 부위'가 쌓은 것이므로
+	// 착용 중인 잊혀진 부위에만 이관한다.
+	// 잊혀진 장비는 유니크(각 1개)라, 아직 못 찾은 부위에까지 넣으면 나중에 주웠을 때
+	// 충전 없이 즉시 진화해 버린다.
+	TArray<FName> Equipped;
+	CollectEquippedForgottenItems(Equipped);
+	if (Equipped.IsEmpty())
+	{
+		// 세이브 로드 직후라 장비 복원이 아직 안 끝났을 수 있다.
+		// 아무것도 기록하지 않고 다음 장착 변경 때 다시 시도한다.
+		return;
+	}
+
+	for (const FName ItemId : Equipped)
+	{
+		Save->SetHeroEvolutionChargeForItem(ItemId, LegacyCharge);
+	}
+
+	UE_LOG(LogRetrieveCombat, Log,
+		TEXT("[HeroEvolution] 레거시 전역 충전 %d을 착용 중인 %d개 부위로 이관"),
+		LegacyCharge, Equipped.Num());
+}
+
+void UHeroEquipmentEvolutionComponent::ScheduleEvolutionIfReady()
+{
+	if (bEvolving || bEvolutionScheduled || !Config)
+	{
+		return;
+	}
+
+	TArray<FName> Equipped;
+	CollectEquippedForgottenItems(Equipped);
+
+	const int32 Threshold = GetChargeThreshold();
+	const bool bAnyReady = Equipped.ContainsByPredicate(
+		[this, Threshold](FName ItemId) { return GetChargeForItem(ItemId) >= Threshold; });
+
+	if (!bAnyReady)
+	{
+		return;
+	}
+
+	// 진화는 어빌리티 활성화 콜백 '도중'에 트리거될 수 있다. 그 자리에서 장비를 교체하면
+	// 재진입 문제가 생기므로 다음 틱으로 미룬다.
+	if (UWorld* World = GetWorld())
+	{
+		bEvolutionScheduled = true;
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			bEvolutionScheduled = false;
+			PerformEvolution();
+		}));
+	}
 }
 
 bool UHeroEquipmentEvolutionComponent::IsLegendarySetComplete() const
@@ -293,7 +406,7 @@ void UHeroEquipmentEvolutionComponent::RefreshLegendaryBonus()
 	}
 }
 
-void UHeroEquipmentEvolutionComponent::AddCharge(int32 Delta)
+void UHeroEquipmentEvolutionComponent::AddChargeToEquippedItems(int32 Delta)
 {
 	URetrieveSaveSubsystem* Save = GetSaveSubsystem();
 	if (!Save || !Config)
@@ -301,31 +414,32 @@ void UHeroEquipmentEvolutionComponent::AddCharge(int32 Delta)
 		return;
 	}
 
-	const int32 NewCharge = FMath::Clamp(Save->GetHeroEvolutionCharge() + Delta, 0, Config->ChargeThreshold);
-	Save->SetHeroEvolutionCharge(NewCharge);
-	BroadcastProgress();
-
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[HeroEvolution] Charge %d/%d"), NewCharge, Config->ChargeThreshold);
-
-	if (NewCharge >= Config->ChargeThreshold && !bEvolving && !bEvolutionScheduled && !IsEvolved())
+	TArray<FName> Equipped;
+	CollectEquippedForgottenItems(Equipped);
+	if (Equipped.IsEmpty())
 	{
-		// 진화는 흡수/버스트 어빌리티 활성화 콜백 '도중'에 트리거된다. 이 자리에서 장비를 교체하면
-		// 재진입(활성 어빌리티 중 ASC 조작)과 전투 상태 게이트 문제가 생기므로 다음 틱으로 미룬다.
-		if (UWorld* World = GetWorld())
-		{
-			bEvolutionScheduled = true;
-			World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
-			{
-				bEvolutionScheduled = false;
-				PerformEvolution();
-			}));
-		}
+		return;
 	}
+
+	// 착용 중인 잊혀진 부위 '각각'이 자기 충전을 쌓는다.
+	// 세트로 끼고 다니면 같은 속도로 오르고, 늦게 주운 부위만 뒤처진다.
+	for (const FName ItemId : Equipped)
+	{
+		const int32 NewCharge = FMath::Clamp(
+			Save->GetHeroEvolutionChargeForItem(ItemId) + Delta, 0, Config->ChargeThreshold);
+		Save->SetHeroEvolutionChargeForItem(ItemId, NewCharge);
+
+		UE_LOG(LogRetrieveCombat, Verbose, TEXT("[HeroEvolution] Charge %s %d/%d"),
+			*ItemId.ToString(), NewCharge, Config->ChargeThreshold);
+	}
+
+	BroadcastProgress();
+	ScheduleEvolutionIfReady();
 }
 
 void UHeroEquipmentEvolutionComponent::PerformEvolution()
 {
-	if (bEvolving || IsEvolved() || !Config || !HasAuthorityToModify())
+	if (bEvolving || !Config || !HasAuthorityToModify())
 	{
 		return;
 	}
@@ -340,30 +454,40 @@ void UHeroEquipmentEvolutionComponent::PerformEvolution()
 	}
 
 	bEvolving = true;
+	int32 EvolvedCount = 0;
 
-	// 장착은 반드시 컴포넌트(WeaponComponent/ArmorComponent)로 '직접' 한다.
-	// InventoryComponent::RequestEquip*는 CanChangeEquipment() 게이트(전투 스탠스 State.Player.Combat 등)에
-	// 막혀 전투 중엔 장착이 거부된다. 그러면 잊혀진 아이템만 제거돼 알몸이 되는 버그가 난다.
-	// 직접 장착은 게이트를 우회하며, 장착 성공을 확인한 뒤에만 잊혀진 아이템을 회수한다.
+	// 교체는 InventoryComponent::ReplaceEquipped*로만 한다.
+	// 컴포넌트(WeaponComponent/ArmorComponent)를 직접 호출해 장착하면 인벤토리의 장착 기록이
+	// 여전히 '잊혀진' 아이템을 가리키고, 그 상태로 잊혀진 아이템을 RemoveItem하면
+	// 인벤토리가 그 슬롯을 통째로 벗겨버려 방금 장착한 전설 장비까지 같이 벗겨진다.
+	// Replace 계열은 기록 갱신을 제거보다 먼저 하고, 전투 게이트도 요구하지 않는다.
 
-	// 1) 무기 스왑
+	const int32 Threshold = Config->ChargeThreshold;
+
+	// 1) 무기 스왑 — 잊혀진 무기를 착용 중이고, 그 무기의 충전이 다 찼을 때만.
 	const FName ForgottenWeaponId = Weapon->GetCurrentWeaponDataRow();
-	const FName LegendaryWeaponId = Config->GetEvolvedItemId(ForgottenWeaponId);
-	if (!LegendaryWeaponId.IsNone())
+	if (Weapon->IsEquipped() && GetChargeForItem(ForgottenWeaponId) >= Threshold)
 	{
-		Inv->AddItem(LegendaryWeaponId, Config->WeaponCategoryTag, 1);
-		if (Weapon->EquipWeapon(LegendaryWeaponId))
+		const FName LegendaryWeaponId = Config->GetEvolvedItemId(ForgottenWeaponId);
+		if (!LegendaryWeaponId.IsNone() &&
+			Inv->ReplaceEquippedWeapon(ForgottenWeaponId, LegendaryWeaponId, Config->WeaponCategoryTag))
 		{
-			Inv->RemoveItem(ForgottenWeaponId, Config->WeaponCategoryTag, 1);
+			++EvolvedCount;
+			UE_LOG(LogRetrieveCombat, Log, TEXT("[HeroEvolution] 진화 — %s → %s"),
+				*ForgottenWeaponId.ToString(), *LegendaryWeaponId.ToString());
 		}
 	}
 
 	// 2) 방어구 스왑: 반복 중 장착 배열이 바뀌므로 스냅샷을 떠서 순회한다.
-	//    잊혀진 방어구 = ItemEvolutionMap의 '키'. (ArmorSetTag 비의존)
+	//    충전이 다 찬 부위만 교체한다 — 덜 찬 부위는 그대로 두고 계속 쌓는다.
 	const TArray<FRetrieveEquippedArmorEntry> Entries = Armor->GetEquippedArmorEntries();
 	for (const FRetrieveEquippedArmorEntry& Entry : Entries)
 	{
 		if (Entry.ArmorItemId.IsNone() || !Config->ItemEvolutionMap.Contains(Entry.ArmorItemId))
+		{
+			continue;
+		}
+		if (GetChargeForItem(Entry.ArmorItemId) < Threshold)
 		{
 			continue;
 		}
@@ -372,30 +496,36 @@ void UHeroEquipmentEvolutionComponent::PerformEvolution()
 		{
 			continue;
 		}
-		Inv->AddItem(LegendaryArmorId, Config->ArmorCategoryTag, 1);
 		// 전설 아이템의 슬롯은 잊혀진 아이템과 동일하므로 Entry.EquipmentSlotTag로 장착된다.
-		if (Armor->EquipArmor(Entry.EquipmentSlotTag, LegendaryArmorId))
+		if (Inv->ReplaceEquippedArmor(Entry.EquipmentSlotTag, Entry.ArmorItemId, LegendaryArmorId, Config->ArmorCategoryTag))
 		{
-			Inv->RemoveItem(Entry.ArmorItemId, Config->ArmorCategoryTag, 1);
+			++EvolvedCount;
+			UE_LOG(LogRetrieveCombat, Log, TEXT("[HeroEvolution] 진화 — %s → %s"),
+				*Entry.ArmorItemId.ToString(), *LegendaryArmorId.ToString());
 		}
 	}
 
-	// 3) 영속: 진화 완료 플래그 + 충전량 상한 고정.
-	if (URetrieveSaveSubsystem* Save = GetSaveSubsystem())
+	// 3) 영속: 한 부위라도 진화했으면 기록을 남긴다(연출/기록용, 진화를 막는 게이트는 아니다).
+	if (EvolvedCount > 0)
 	{
-		Save->SetHeroEquipmentEvolved(true);
-		Save->SetHeroEvolutionCharge(Config->ChargeThreshold);
+		if (URetrieveSaveSubsystem* Save = GetSaveSubsystem())
+		{
+			Save->SetHeroEquipmentEvolved(true);
+		}
 	}
 
-	UE_LOG(LogRetrieveCombat, Log, TEXT("[HeroEvolution] 진화 완료 — 전설 영웅 장비로 스왑"));
+	// 말미 재판정이 다시 예약을 걸지 않도록 bEvolving을 유지한 채 호출한다
+	// (교체가 실패한 부위가 남아 있으면 매 틱 재시도하는 루프가 된다).
+	RecomputeSetComplete();
+	BroadcastProgress();
 
 	bEvolving = false;
 
-	OnEvolutionCompleted.Broadcast();
-
-	// 이제 전설 세트 착용 상태 → 잊혀진 세트 미완성 → 카운트 정지.
-	RecomputeSetComplete();
-	BroadcastProgress();
+	// 실제로 바뀐 게 있을 때만 연출을 띄운다.
+	if (EvolvedCount > 0)
+	{
+		OnEvolutionCompleted.Broadcast();
+	}
 }
 
 void UHeroEquipmentEvolutionComponent::BroadcastProgress()

@@ -108,9 +108,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	bool bLumenEngraved = false;
 
-	/** 잊혀진 영웅 장비 진화 충전량(0~임계치). 세트 착용 중 흡수/버스트 시 누적. 월드 공유 진행 상태. */
+	/**
+	 * [레거시] 전역 진화 충전량. 부위별 충전(HeroEvolutionCharges)으로 대체됐다.
+	 * 옛 세이브를 불러올 때 부위별 맵으로 옮기는 용도로만 남아 있다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
 	int32 HeroEvolutionCharge = 0;
+
+	/**
+	 * 잊혀진 영웅 장비의 부위별 진화 충전량. 키 = 잊혀진 아이템 ItemId, 값 = 0~임계치.
+	 * 착용 중인 잊혀진 부위마다 흡수/버스트 시 각각 +1 누적되며, 임계치에 도달한 부위만 진화한다.
+	 * 월드 공유 진행 상태.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
+	TMap<FName, int32> HeroEvolutionCharges;
 
 	/** 잊혀진 영웅 장비가 전설 영웅 장비로 진화 완료됐는지 여부. 월드 공유 진행 상태. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|Save")
