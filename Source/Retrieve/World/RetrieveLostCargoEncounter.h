@@ -39,6 +39,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Lost Cargo", meta = (ClampMin = "0"))
     int32 GoldReward = 500;
 
+    /** 목표 마커에 표시할 퀘스트 제목. 비우면 "잃어버린 화물". */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Lost Cargo")
+    FText QuestTitle;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Lost Cargo|Dialogue")
     TArray<FText> RequestDialogueLines;
 
@@ -70,6 +74,9 @@ protected:
     void HandleSaveLoaded();
 
 private:
+    /** 현재 상태에 맞춰 의뢰/수행/보상 마커를 갱신한다. */
+    void RefreshObjectiveMarkers();
+
     void RestoreSavedState();
     void PersistState();
     void ApplyState();

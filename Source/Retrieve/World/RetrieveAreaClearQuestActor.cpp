@@ -1,7 +1,9 @@
 #include "World/RetrieveAreaClearQuestActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Components/World/RetrieveObjectiveAnchorComponent.h"
 #include "Core/RetrieveGameState.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Quest/QuestBranchComponent.h"
@@ -21,6 +23,27 @@ void ARetrieveAreaClearQuestActor::BeginPlay()
 	ClearedHandle = UGameplayMessageSubsystem::Get(this).RegisterListener<FSpawnGroupClearedPayload>(
 		RetrieveGameplayTags::Channel_Enemy_SpawnGroupCleared,
 		this, &ARetrieveAreaClearQuestActor::OnSpawnGroupCleared);
+
+	// 이 액터가 완료시키는 메인 스텝("늑대 무리 처치" 등)의 위치를 마커에 알린다.
+	// 스토리 볼륨과 같은 방식으로, 앵커를 따로 배치하지 않아도 목표 지점이 생긴다.
+	if (CompleteStepTag.IsValid() && bCreateObjectiveAnchor)
+	{
+		if (URetrieveObjectiveAnchorComponent* Anchor =
+			NewObject<URetrieveObjectiveAnchorComponent>(this, TEXT("ObjectiveAnchor")))
+		{
+			Anchor->ObjectiveStepTag = CompleteStepTag;
+			Anchor->RegisterComponent();
+
+			if (UWorld* World = GetWorld())
+			{
+				if (URetrieveObjectiveMarkerSubsystem* MarkerSub =
+					World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>())
+				{
+					MarkerSub->RegisterAnchor(Anchor);
+				}
+			}
+		}
+	}
 }
 
 void ARetrieveAreaClearQuestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)

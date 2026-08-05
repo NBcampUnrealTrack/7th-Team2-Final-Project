@@ -4,6 +4,7 @@
 #include "UObject/Object.h"
 #include "GameplayTagContainer.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
+#include "Data/RetrieveObjectiveMarkerTypes.h"
 #include "RetrieveQuestObjectives.generated.h"
 
 class ARetrieveQuestEncounter;
@@ -55,6 +56,30 @@ public:
 	/** 트래커에 표시할 진행 텍스트(예: "늑대 2/5"). 기본은 Description. */
 	virtual FText GetProgressText() const;
 
+	/**
+	 * 마커 위치가 "지역"에서 "정확한 지점"으로 바뀌는 거리(cm).
+	 * 이 거리 밖에서는 인카운터 중심(대략적인 지역)을, 안에서는 실제 대상 위치를 가리킨다.
+	 * 목표를 향해 다가가는 동안 탐색의 여지를 남기면서도 길을 잃지 않게 하는 값.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective|Marker", meta = (ClampMin = "0.0"))
+	float MarkerRevealDistance = 3000.f;
+
+	/**
+	 * 화면/나침반 마커로 표시할 위치·문구를 채운다.
+	 * false를 반환하면 이 목표는 마커를 만들지 않는다(완료됐거나 대상 미확정).
+	 * 기본 구현은 인카운터 위치를 가리킨다.
+	 */
+	virtual bool GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const;
+
+protected:
+	/** 인카운터 자신의 위치(+높이 오프셋). 대상 액터를 못 찾았을 때의 폴백. */
+	bool GetOwnerMarkerLocation(FVector& OutLocation) const;
+
+	/** 플레이어가 Location에서 MarkerRevealDistance 안에 있는지. */
+	bool IsPlayerNear(const FVector& Location) const;
+
+public:
+
 	/** 보상 수령(턴인) 가능한지. 기본 true. AcquireItem 등은 보유량을 재검사. */
 	virtual bool CanTurnIn(AActor* Player) const { return true; }
 
@@ -97,6 +122,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective")
 	FGameplayTag SpawnGroupId;
 
+	/** 멀면 스포너 중심(전투 지역), 가까우면 가장 가까운 생존 몬스터를 가리킨다. */
+	virtual bool GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const override;
+
 protected:
 	virtual void OnActivate() override;
 	virtual void OnDeactivate() override;
@@ -121,6 +149,9 @@ public:
 	/** 인카운터 LinkedActors에서 회수 대상 액터를 찾을 Role 키. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective")
 	FName ItemActorRole = TEXT("QuestItem");
+
+	/** 멀면 인카운터 중심(탐색 지역), 가까우면 실제 물건 위치를 가리킨다. */
+	virtual bool GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const override;
 
 protected:
 	virtual void OnActivate() override;
@@ -151,6 +182,9 @@ public:
 	/** 도달로 간주할 반경(cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective", meta = (ClampMin = "50.0"))
 	float AcceptanceRadius = 350.f;
+
+	/** 목적지는 처음부터 확정이므로 항상 정확한 위치를 가리킨다. */
+	virtual bool GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const override;
 
 protected:
 	virtual void OnActivate() override;
@@ -187,6 +221,22 @@ public:
 	/** true면 턴인 시 획득한 퀘스트 아이템을 인벤토리에서 소모. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective")
 	bool bConsumeOnTurnIn = true;
+
+	/**
+	 * 화면 마커를 만들지 여부.
+	 * 드랍/수집형은 "여기로 가라"가 성립하지 않지만, 마커가 아예 없으면
+	 * 플레이어가 의뢰를 받았다는 사실 자체를 잊는다는 피드백이 있어 기본 true로 둔다.
+	 * (의뢰 지역을 대략적으로 가리키며, 정확한 지점처럼 보이지 않도록 흐리게 표시된다)
+	 * 순수 수집 목표에서 마커를 없애고 싶으면 false.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Quest|Objective|Marker")
+	bool bShowScreenMarker = true;
+
+	/**
+	 * 드랍처가 한 지점으로 정해지지 않으므로 화면 마커를 만들지 않는다.
+	 * (bAllowScreenMarker=false → 나침반/맵과 트래커 카운터로만 안내)
+	 */
+	virtual bool GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const override;
 
 protected:
 	virtual void OnActivate() override;

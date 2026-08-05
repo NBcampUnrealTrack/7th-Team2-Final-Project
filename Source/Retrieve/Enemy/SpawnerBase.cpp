@@ -2,6 +2,7 @@
 
 #include "Character/RetrievePawnData.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -473,6 +474,77 @@ bool ASpawnerBase::HasAnyLiveSpawn() const
 		}
 	}
 	return false;
+}
+
+int32 ASpawnerBase::GetLiveSpawnCount() const
+{
+	// HasAnyLiveSpawn과 같은 이유로 SpawnedPawns가 아니라 EntryPawns를 센다.
+	int32 Count = 0;
+	for (const TWeakObjectPtr<APawn>& WeakPawn : EntryPawns)
+	{
+		const APawn* Pawn = WeakPawn.Get();
+		if (!Pawn)
+		{
+			continue;
+		}
+
+		const URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
+		if (!HealthComp || !HealthComp->IsDeadOrDying())
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+bool ASpawnerBase::GetNearestLiveSpawnLocation(const FVector& From, FVector& OutLocation) const
+{
+	float BestDistSq = TNumericLimits<float>::Max();
+	bool bFound = false;
+
+	for (const TWeakObjectPtr<APawn>& WeakPawn : EntryPawns)
+	{
+		const APawn* Pawn = WeakPawn.Get();
+		if (!Pawn)
+		{
+			continue;
+		}
+
+		const URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
+		if (HealthComp && HealthComp->IsDeadOrDying())
+		{
+			continue;
+		}
+
+		const FVector PawnLocation = Pawn->GetActorLocation();
+		const float DistSq = FVector::DistSquared(From, PawnLocation);
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			OutLocation = PawnLocation;
+			bFound = true;
+		}
+	}
+
+	return bFound;
+}
+
+ASpawnerBase* ASpawnerBase::FindSpawnerByGroupId(const UWorld* World, FGameplayTag InSpawnGroupId)
+{
+	if (!World || !InSpawnGroupId.IsValid())
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<ASpawnerBase> It(World); It; ++It)
+	{
+		ASpawnerBase* Spawner = *It;
+		if (Spawner && Spawner->SpawnGroupId.MatchesTagExact(InSpawnGroupId))
+		{
+			return Spawner;
+		}
+	}
+	return nullptr;
 }
 
 bool ASpawnerBase::IsPlayerInSpawnRange() const

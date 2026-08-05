@@ -86,6 +86,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint", meta=(ClampMin="4.0"))
 	float WaypointMarkerSize = 14.0f;
 
+	// ── 퀘스트 목표 마커 ────────────────────────────────────────────────────
+	// 화면 마커/나침반/월드맵과 색 규약을 맞춘다. 메인=금색, 인스턴스=빨강, 보상 수령=초록.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	FLinearColor ObjectiveMarkerColorMain = FLinearColor(1.0f, 0.82f, 0.25f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	FLinearColor ObjectiveMarkerColorSide = FLinearColor(1.0f, 0.28f, 0.24f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	FLinearColor ObjectiveMarkerColorTurnIn = FLinearColor(0.42f, 0.92f, 0.45f, 1.0f);
+
+	/** 아직 수락하지 않은 의뢰(주황). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	FLinearColor ObjectiveMarkerColorOffer = FLinearColor(1.0f, 0.62f, 0.18f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective", meta=(ClampMin="4.0"))
+	float ObjectiveMarkerSize = 18.0f;
+
+	/**
+	 * 미니맵 아래에 현재 목표를 한 줄 상시 표시한다.
+	 * 트래커를 못 보고 지나치는 플레이어를 위한 두 번째 접점.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	bool bShowObjectiveLine = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective", meta=(ClampMin="8"))
+	int32 ObjectiveLineFontSize = 11;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Objective")
+	FLinearColor ObjectiveLineColor = FLinearColor(0.95f, 0.9f, 0.75f, 0.95f);
+
 	// 웨이포인트 마커 텍스처 (null이면 단색 사각형)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Minimap|Waypoint")
 	TObjectPtr<UTexture2D> WaypointMarkerTexture;

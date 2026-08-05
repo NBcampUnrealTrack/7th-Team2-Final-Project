@@ -51,7 +51,9 @@ protected:
 
 	void Input_Move(const FInputActionValue& InputActionValue);
 	void Input_Look(const FInputActionValue& InputActionValue);
-	void Input_Zoom(const FInputActionValue& InputActionValue); 
+	void Input_Zoom(const FInputActionValue& InputActionValue);
+	/** 목표 재확인: 트래커 강조 + 목표 마커 재등장. */
+	void Input_ObjectiveReminder(const FInputActionValue& InputActionValue);
 	void Input_UseConsumableSlot(int32 SlotKey);
 
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);

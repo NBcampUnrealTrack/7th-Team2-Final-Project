@@ -22,6 +22,7 @@
 #include "Quest/RetrieveQuestObjectives.h"
 #include "Save/RetrieveSaveGame.h"
 #include "Save/RetrieveSaveSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 
 ARetrieveQuestEncounter::ARetrieveQuestEncounter()
 {
@@ -93,6 +94,7 @@ void ARetrieveQuestEncounter::BeginPlay()
 void ARetrieveQuestEncounter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ActivateObjectives(false);
+	ClearObjectiveMarkers();
 
 	if (AActor* NPC = GetDialogueNPC())
 	{
@@ -658,9 +660,150 @@ void ARetrieveQuestEncounter::ApplyPhase()
 	UpdateDialogueLines();
 	ApplyActorVisibility();
 	ApplyNPCIdleMontage();
+	RefreshObjectiveMarkers();
 
 	OnPhaseChanged.Broadcast(Phase);
 	ReceiveQuestPhaseChanged(Phase);
+}
+
+FString ARetrieveQuestEncounter::GetMarkerIdPrefix() const
+{
+	// EncounterId가 비어 있어도(구 배치) 액터 이름으로 고유성을 유지한다.
+	const FString Base = EncounterId.IsNone() ? GetName() : EncounterId.ToString();
+	return Base + TEXT("_");
+}
+
+void ARetrieveQuestEncounter::ClearObjectiveMarkers()
+{
+	UWorld* World = GetWorld();
+	URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		World ? World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr;
+	if (MarkerSub)
+	{
+		MarkerSub->RemoveMarkersWithPrefix(GetMarkerIdPrefix());
+	}
+}
+
+void ARetrieveQuestEncounter::RefreshObjectiveMarkers()
+{
+	UWorld* World = GetWorld();
+	URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		World ? World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr;
+	if (!MarkerSub)
+	{
+		return;
+	}
+
+	ClearObjectiveMarkers();
+
+	const FString Prefix = GetMarkerIdPrefix();
+
+	if (Phase == ERetrieveQuestPhase::Offered)
+	{
+		// 수락 전에도 "여기 의뢰가 있다"를 알린다.
+		// 이게 없으면 의뢰형 퀘스트는 NPC에게 말을 걸기 전까지 존재 자체가 보이지 않는다.
+		// NPC를 아직 못 찾았으면(스폰 타이밍/미배치) 인카운터 자신을 가리켜 최소한 위치는 알린다.
+		AActor* MarkerTarget = GetDialogueNPC();
+		if (!MarkerTarget)
+		{
+			MarkerTarget = this;
+		}
+
+		FRetrieveObjectiveMarker Marker;
+		Marker.MarkerId = FName(*(Prefix + TEXT("Offer")));
+		Marker.Kind = ERetrieveObjectiveMarkerKind::Offer;
+		Marker.Label = QuestTitle;
+		// 높이 110: 캐릭터 머리 바로 위. 더 높이면 가까이 갔을 때 화면 위로 치솟는다.
+		Marker.State.WorldLocation = MarkerTarget->GetActorLocation() + FVector(0.0f, 0.0f, 110.0f);
+		Marker.State.ProgressText = NSLOCTEXT("RetrieveQuest", "OfferMarker", "말을 걸어 보세요");
+
+		// NPC가 나중에 스폰되면 그때부터 NPC를 따라가도록 매 갱신마다 다시 해석한다.
+		Marker.RefreshDelegate.BindWeakLambda(this,
+			[WeakEncounter = TWeakObjectPtr<ARetrieveQuestEncounter>(this)](FRetrieveObjectiveMarkerState& State)
+			{
+				ARetrieveQuestEncounter* Encounter = WeakEncounter.Get();
+				if (!Encounter || Encounter->Phase != ERetrieveQuestPhase::Offered)
+				{
+					return false;
+				}
+
+				const AActor* Target = Encounter->GetDialogueNPC();
+				const AActor* Source = Target ? Target : Encounter;
+				State.WorldLocation = Source->GetActorLocation() + FVector(0.0f, 0.0f, 110.0f);
+				return true;
+			});
+
+		MarkerSub->RegisterMarker(MoveTemp(Marker));
+		return;
+	}
+
+	if (Phase == ERetrieveQuestPhase::InProgress)
+	{
+		for (int32 Index = 0; Index < Objectives.Num(); ++Index)
+		{
+			URetrieveQuestObjective* Objective = Objectives[Index];
+			if (!Objective || Objective->IsComplete())
+			{
+				continue;
+			}
+
+			FRetrieveObjectiveMarkerState InitialState;
+			if (!Objective->GetMarkerState(InitialState))
+			{
+				continue; // 대상이 아직 없는 목표는 다음 단계 전환/갱신 때 다시 시도된다.
+			}
+
+			FRetrieveObjectiveMarker Marker;
+			Marker.MarkerId = FName(*FString::Printf(TEXT("%sObj%d"), *Prefix, Index));
+			Marker.Kind = ERetrieveObjectiveMarkerKind::Side;
+			Marker.Label = QuestTitle;
+			Marker.State = InitialState;
+
+			// 목표가 스스로 위치를 다시 계산한다(도망치는 몬스터, 지역→정밀 스냅 등).
+			Marker.RefreshDelegate.BindWeakLambda(Objective,
+				[WeakObjective = TWeakObjectPtr<URetrieveQuestObjective>(Objective)]
+				(FRetrieveObjectiveMarkerState& State)
+				{
+					const URetrieveQuestObjective* Obj = WeakObjective.Get();
+					return Obj != nullptr && Obj->GetMarkerState(State);
+				});
+
+			MarkerSub->RegisterMarker(MoveTemp(Marker));
+		}
+		return;
+	}
+
+	if (Phase == ERetrieveQuestPhase::ReadyToTurnIn)
+	{
+		// 모든 목표를 끝냈는데 보상 NPC로 돌아가야 한다는 안내가 없으면 여기서 막힌다.
+		AActor* NPC = GetDialogueNPC();
+		if (!NPC)
+		{
+			return;
+		}
+
+		FRetrieveObjectiveMarker Marker;
+		Marker.MarkerId = FName(*(Prefix + TEXT("TurnIn")));
+		Marker.Kind = ERetrieveObjectiveMarkerKind::TurnIn;
+		Marker.Label = QuestTitle;
+		Marker.SortPriority = 50; // 진행 중 목표보다 위
+		Marker.State.WorldLocation = NPC->GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+		Marker.State.ProgressText = NSLOCTEXT("RetrieveQuest", "TurnInMarker", "보상 받기");
+
+		Marker.RefreshDelegate.BindWeakLambda(NPC,
+			[WeakNPC = TWeakObjectPtr<AActor>(NPC)](FRetrieveObjectiveMarkerState& State)
+			{
+				const AActor* Target = WeakNPC.Get();
+				if (!Target)
+				{
+					return false;
+				}
+				State.WorldLocation = Target->GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+				return true;
+			});
+
+		MarkerSub->RegisterMarker(MoveTemp(Marker));
+	}
 }
 
 void ARetrieveQuestEncounter::ApplyNPCIdleMontage()

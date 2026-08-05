@@ -226,6 +226,19 @@ private:
 	AActor* GetDialogueNPC() const;
 
 	void HandleObjectiveChanged();
+
+	/**
+	 * 현재 단계에 맞춰 목표 마커를 등록/해제한다.
+	 *   InProgress    → 미완료 목표마다 마커 1개(위치는 목표가 계산)
+	 *   ReadyToTurnIn → 보상을 받을 NPC 마커 1개
+	 *   그 외          → 전부 해제
+	 */
+	void RefreshObjectiveMarkers();
+	void ClearObjectiveMarkers();
+
+	/** 이 인카운터가 발급하는 마커 ID의 접두사("<EncounterId>_"). */
+	FString GetMarkerIdPrefix() const;
+
 	bool AreAllObjectivesComplete() const;
 	bool CanTurnInAll(AActor* Player) const;
 

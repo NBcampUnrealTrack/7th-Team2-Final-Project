@@ -22,6 +22,7 @@
 #include "Input/RetrieveInputConfig.h"
 #include "Player/RetrievePlayerController.h"
 #include "Settings/RetrieveGameUserSettings.h"
+#include "Subsystems/RetrieveGuidanceSubsystem.h"
 
 
 const FName URetrieveHeroComponent::NAME_ActorFeatureName("Hero");
@@ -191,6 +192,8 @@ void URetrieveHeroComponent::BindPlayerInputs()
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Look, ETriggerEvent::Triggered, this, &ThisClass::Input_Look, false);
 	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_Zoom, ETriggerEvent::Triggered, this, &ThisClass::Input_Zoom, false);
+	// 목표 재확인. InputConfig에 행이 없으면(아직 IA 미제작) 조용히 건너뛴다.
+	RetrieveIC->BindNativeAction(InputConfig, RetrieveGameplayTags::Input_ObjectiveReminder, ETriggerEvent::Started, this, &ThisClass::Input_ObjectiveReminder, false);
 	if (QuickSlot1Action)
 	{
 		RetrieveIC->BindAction(
@@ -308,6 +311,16 @@ void URetrieveHeroComponent::Input_Look(const FInputActionValue& InputActionValu
 	if (Value.Y != 0.0f)
 	{
 		Pawn->AddControllerPitchInput(Value.Y * SensitivityY * PitchSign);
+	}
+}
+
+void URetrieveHeroComponent::Input_ObjectiveReminder(const FInputActionValue& /*InputActionValue*/)
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	if (URetrieveGuidanceSubsystem* Guidance = GI ? GI->GetSubsystem<URetrieveGuidanceSubsystem>() : nullptr)
+	{
+		Guidance->RequestObjectiveReminder();
 	}
 }
 

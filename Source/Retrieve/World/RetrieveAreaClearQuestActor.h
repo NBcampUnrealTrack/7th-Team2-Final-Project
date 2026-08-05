@@ -45,6 +45,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story")
 	bool bOnce = true;
 
+	/**
+	 * true(기본)면 이 액터 위치가 CompleteStepTag의 목표 마커 지점이 된다.
+	 * 즉 "이 구역의 적을 처치하라"는 메인 스텝이 추적 중일 때 여기로 안내한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story|Marker")
+	bool bCreateObjectiveAnchor = true;
+
+public:
+	/** 목표 지점 베이크(URetrieveObjectiveAnchorDataAsset)가 읽어가는 접근자. */
+	FGameplayTag GetObjectiveStepTag() const { return bCreateObjectiveAnchor ? CompleteStepTag : FGameplayTag(); }
+
+protected:
+
 	UPROPERTY(VisibleAnywhere, Category = "Retrieve|Story")
 	TObjectPtr<USceneComponent> Root;
 

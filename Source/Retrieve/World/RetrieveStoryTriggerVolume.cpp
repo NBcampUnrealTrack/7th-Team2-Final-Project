@@ -3,8 +3,10 @@
 #include "Bark/BarkSubsystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/World/RetrieveDialogueComponent.h"
+#include "Components/World/RetrieveObjectiveAnchorComponent.h"
 #include "Core/RetrieveGameState.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "Subsystems/SystemMessageSubsystem.h"
 
 ARetrieveStoryTriggerVolume::ARetrieveStoryTriggerVolume()
@@ -15,6 +17,40 @@ ARetrieveStoryTriggerVolume::ARetrieveStoryTriggerVolume()
 	Box->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	Box->SetGenerateOverlapEvents(true);
 	Box->OnComponentBeginOverlap.AddDynamic(this, &ARetrieveStoryTriggerVolume::HandleBeginOverlap);
+}
+
+void ARetrieveStoryTriggerVolume::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// "동굴 빠져나가기", "마을에 진입하기"처럼 이 볼륨이 완료시키는 스텝은 곧 목표 지점이다.
+	// 앵커를 레벨에 따로 배치하지 않아도 이 볼륨이 그대로 메인 퀘스트 마커가 되게 한다.
+	// (마커는 추적 중인 스텝과 태그가 일치할 때만 표시되므로 항상 떠 있지는 않는다)
+	if (!CompleteStepTag.IsValid() || !bCreateObjectiveAnchor)
+	{
+		return;
+	}
+
+	URetrieveObjectiveAnchorComponent* Anchor =
+		NewObject<URetrieveObjectiveAnchorComponent>(this, TEXT("ObjectiveAnchor"));
+	if (!Anchor)
+	{
+		return;
+	}
+
+	Anchor->ObjectiveStepTag = CompleteStepTag;
+	Anchor->MarkerOffset = ObjectiveAnchorOffset;
+	Anchor->RegisterComponent();
+
+	// RegisterComponent가 컴포넌트 BeginPlay까지 돌려주는지는 등록 시점(액터 BeginPlay 도중)에
+	// 따라 달라진다. 서브시스템 등록은 중복 호출이 안전(AddUnique)하므로 여기서 한 번 더 보장한다.
+	if (UWorld* World = GetWorld())
+	{
+		if (URetrieveObjectiveMarkerSubsystem* MarkerSub = World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>())
+		{
+			MarkerSub->RegisterAnchor(Anchor);
+		}
+	}
 }
 
 void ARetrieveStoryTriggerVolume::HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,

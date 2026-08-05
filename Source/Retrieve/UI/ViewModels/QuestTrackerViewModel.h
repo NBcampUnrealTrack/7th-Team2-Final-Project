@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MVVMViewModelBase.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "Components/SlateWrapperTypes.h"
 
@@ -78,6 +79,13 @@ private:
 	void HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Message);
 	void HandleCinematicChanged(FGameplayTag Channel, const FRetrieveCinematicStatePayload& Message);
 	void Recompute();
+
+	/**
+	 * 추적 중인 미완료 목표들(필수 1 + 선택 전부)을 마커 서브시스템에 알린다.
+	 * 같은 태그의 URetrieveObjectiveAnchorComponent가 로드돼 있으면 화면 마커가 생긴다.
+	 */
+	void UpdateObjectiveMarker(const TArray<URetrieveObjectiveMarkerSubsystem::FTrackedStep>& Steps);
+
 	void BroadcastAllFields();
 
 	static constexpr int32 MaxTrackedObjectives = 3;

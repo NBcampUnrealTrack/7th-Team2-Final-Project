@@ -30,7 +30,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Retrieve|UI")
 	float GetCoverFadeInSeconds() const { return CoverFadeInSeconds; }
 
+	// ── 목표 브리핑 ───────────────────────────────────────────────────────────
+	// 로딩 화면은 플레이어가 어차피 보고 있는 유일한 정적 화면이다.
+	// 여기에 "지금 목표"와 조작 팁을 얹어 "뭘 해야 할지 모르겠다"를 가장 싸게 줄인다.
+
+	/** WBP에 같은 이름의 TextBlock을 두면 현재 목표가 자동으로 채워진다. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> Text_Objective;
+
+	/** 로딩마다 무작위로 한 줄 보여줄 팁. 비우면 팁 영역은 숨겨진다. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> Text_Tip;
+
+	/** 표시할 팁 문구들. 디자이너가 자유롭게 추가한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Retrieve|UI|Briefing", meta = (MultiLine = true))
+	TArray<FText> Tips;
+
 protected:
+	virtual void NativeConstruct() override;
 	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
 	TObjectPtr<UWidgetAnimation> FadeOutAnim;
 

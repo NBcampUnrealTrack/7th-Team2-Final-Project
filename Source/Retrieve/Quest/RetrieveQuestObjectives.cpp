@@ -4,6 +4,7 @@
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Engine/World.h"
+#include "Enemy/SpawnerBase.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
 #include "Kismet/GameplayStatics.h"
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
@@ -74,6 +75,47 @@ void URetrieveQuestObjective::SetComplete(bool bNewComplete)
 	BroadcastChanged();
 }
 
+bool URetrieveQuestObjective::GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const
+{
+	if (bComplete)
+	{
+		return false;
+	}
+
+	FVector Location;
+	if (!GetOwnerMarkerLocation(Location))
+	{
+		return false;
+	}
+
+	OutState.WorldLocation = Location;
+	OutState.ProgressText = GetProgressText();
+	OutState.bApproximate = true; // 대상 없이 인카운터 위치만 아는 상태
+	return true;
+}
+
+bool URetrieveQuestObjective::GetOwnerMarkerLocation(FVector& OutLocation) const
+{
+	if (!Owner.IsValid())
+	{
+		return false;
+	}
+	// 지면에 딱 붙으면 지형에 묻히므로 살짝 띄운다.
+	OutLocation = Owner->GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+	return true;
+}
+
+bool URetrieveQuestObjective::IsPlayerNear(const FVector& Location) const
+{
+	const AActor* Player = GetPlayerPawnSafe();
+	if (!Player || MarkerRevealDistance <= 0.0f)
+	{
+		return Player != nullptr; // 거리 0이면 항상 정밀 표시
+	}
+	return FVector::DistSquared(Player->GetActorLocation(), Location)
+		<= FMath::Square(MarkerRevealDistance);
+}
+
 UWorld* URetrieveQuestObjective::GetOwnerWorld() const
 {
 	return Owner.IsValid() ? Owner->GetWorld() : nullptr;
@@ -133,6 +175,45 @@ void UQuestObjective_ClearSpawnGroup::HandleSpawnGroupCleared(
 FText UQuestObjective_ClearSpawnGroup::GetProgressText() const
 {
 	return Description;
+}
+
+bool UQuestObjective_ClearSpawnGroup::GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const
+{
+	if (bComplete)
+	{
+		return false;
+	}
+
+	const UWorld* World = GetOwnerWorld();
+	ASpawnerBase* Spawner = ASpawnerBase::FindSpawnerByGroupId(World, SpawnGroupId);
+
+	if (!Spawner)
+	{
+		// 스포너가 아직 스트리밍되지 않았다 → 인카운터 위치를 전투 지역으로 안내.
+		return Super::GetMarkerState(OutState);
+	}
+
+	const FVector SpawnerLocation = Spawner->GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+	OutState.WorldLocation = SpawnerLocation;
+	OutState.bApproximate = true;
+
+	// 전투 지역에 들어왔으면 마커를 실제 적으로 옮긴다 — "어디를 쳐야 하는지"가 바로 보인다.
+	const AActor* Player = GetPlayerPawnSafe();
+	FVector NearestEnemy;
+	if (Player && IsPlayerNear(SpawnerLocation)
+		&& Spawner->GetNearestLiveSpawnLocation(Player->GetActorLocation(), NearestEnemy))
+	{
+		OutState.WorldLocation = NearestEnemy + FVector(0.0f, 0.0f, 120.0f);
+		OutState.bApproximate = false;
+	}
+
+	const int32 LiveCount = Spawner->GetLiveSpawnCount();
+	OutState.ProgressText = LiveCount > 0
+		? FText::Format(NSLOCTEXT("RetrieveQuest", "ClearSpawnGroupRemaining", "남은 적 {0}"),
+			FText::AsNumber(LiveCount))
+		: Description;
+
+	return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -211,6 +292,38 @@ FText UQuestObjective_CollectWorldItem::GetProgressText() const
 	return Description;
 }
 
+bool UQuestObjective_CollectWorldItem::GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const
+{
+	if (bComplete)
+	{
+		return false;
+	}
+
+	const AActor* Target = ResolveLinkedActor(ItemActorRole);
+	if (!Target)
+	{
+		return Super::GetMarkerState(OutState); // 물건 미스폰 → 지역만 안내
+	}
+
+	const FVector TargetLocation = Target->GetActorLocation() + FVector(0.0f, 0.0f, 100.0f);
+
+	// 멀리서는 "이 근처 어딘가"(인카운터 중심)만 알려주고, 가까워지면 실제 물건을 가리킨다.
+	FVector AreaLocation;
+	if (!IsPlayerNear(TargetLocation) && GetOwnerMarkerLocation(AreaLocation))
+	{
+		OutState.WorldLocation = AreaLocation;
+		OutState.bApproximate = true;
+	}
+	else
+	{
+		OutState.WorldLocation = TargetLocation;
+		OutState.bApproximate = false;
+	}
+
+	OutState.ProgressText = Description;
+	return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UQuestObjective_ReachLocation
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,6 +378,25 @@ void UQuestObjective_ReachLocation::PollDistance()
 		}
 		SetComplete(true);
 	}
+}
+
+bool UQuestObjective_ReachLocation::GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const
+{
+	if (bComplete)
+	{
+		return false;
+	}
+
+	// 목적지는 처음부터 알려주는 목표이므로 거리와 무관하게 정확한 위치를 표시한다.
+	if (const AActor* Destination = ResolveLinkedActor(DestinationRole))
+	{
+		OutState.WorldLocation = Destination->GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+		OutState.ProgressText = Description;
+		OutState.bApproximate = false;
+		return true;
+	}
+
+	return Super::GetMarkerState(OutState);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,6 +459,25 @@ FText UQuestObjective_AcquireItem::GetProgressText() const
 	return FText::Format(
 		NSLOCTEXT("RetrieveQuest", "AcquireItemProgress", "{0} ({1}/{2})"),
 		Description, FText::AsNumber(CurrentCount), FText::AsNumber(RequiredCount));
+}
+
+bool UQuestObjective_AcquireItem::GetMarkerState(FRetrieveObjectiveMarkerState& OutState) const
+{
+	if (bComplete)
+	{
+		return false;
+	}
+
+	if (!Super::GetMarkerState(OutState))
+	{
+		return false;
+	}
+
+	// 드랍/수집형은 정확한 지점이 없으므로 의뢰 지역을 대략적으로 가리킨다.
+	OutState.bAllowScreenMarker = bShowScreenMarker;
+	OutState.bApproximate = true;
+	OutState.ProgressText = GetProgressText();
+	return true;
 }
 
 bool UQuestObjective_AcquireItem::CanTurnIn(AActor* Player) const

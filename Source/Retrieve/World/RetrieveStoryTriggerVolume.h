@@ -22,7 +22,25 @@ class RETRIEVE_API ARetrieveStoryTriggerVolume : public AActor
 public:
 	ARetrieveStoryTriggerVolume();
 
+	/**
+	 * true(기본)면 CompleteStepTag가 설정된 볼륨이 자동으로 목표 마커 앵커가 된다.
+	 * 즉 이 볼륨 위치가 "다음에 가야 할 곳"으로 화면/나침반/맵에 표시된다.
+	 * 마커를 띄우고 싶지 않은 연출용 볼륨은 false로 끈다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story|Marker")
+	bool bCreateObjectiveAnchor = true;
+
+	/** 마커를 볼륨 중심 기준으로 얼마나 띄울지. 큰 볼륨은 값을 키운다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Story|Marker")
+	FVector ObjectiveAnchorOffset = FVector(0.0f, 0.0f, 150.0f);
+
+	/** 목표 지점 베이크(URetrieveObjectiveAnchorDataAsset)가 읽어가는 접근자. */
+	FGameplayTag GetObjectiveStepTag() const { return bCreateObjectiveAnchor ? CompleteStepTag : FGameplayTag(); }
+	FVector GetObjectiveAnchorOffset() const { return ObjectiveAnchorOffset; }
+
 protected:
+	virtual void BeginPlay() override;
+
 	UFUNCTION()
 	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	                        int32 OtherBodyIndex, bool bFromSweep, const FHitResult& Sweep);

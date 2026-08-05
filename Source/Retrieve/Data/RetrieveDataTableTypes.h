@@ -2233,7 +2233,24 @@ struct RETRIEVE_API FQuestObjective
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
 	FGameplayTag CompletionTag;
 
-	// TODO: bool bOptional; int32 RequiredCount;  // "몬스터 n마리 처치" 카운터
+	/**
+	 * 안 해도 퀘스트가 진행되는 선택 목표인지.
+	 * true면 화면/맵의 목표 마커가 이 목표를 가리키지 않는다 — 선택 목표에 마커가 붙으면
+	 * 플레이어가 필수인 줄 알고 무조건 하게 된다. 트래커 목록에는 그대로 표시된다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Quest")
+	bool bOptional = false;
+
+	/**
+	 * bOptional을 아직 채우지 않은 기존 행을 위한 안전망.
+	 * 목표 문구가 "(선택)"으로 시작하면 선택 목표로 간주한다.
+	 */
+	bool IsOptional() const
+	{
+		return bOptional || ObjectiveText.ToString().TrimStart().StartsWith(TEXT("(선택)"));
+	}
+
+	// TODO: int32 RequiredCount;  // "몬스터 n마리 처치" 카운터
 };
 
 USTRUCT(BlueprintType)

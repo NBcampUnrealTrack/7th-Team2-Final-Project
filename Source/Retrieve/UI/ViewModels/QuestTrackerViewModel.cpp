@@ -2,6 +2,9 @@
 
 #include "Core/RetrieveGameState.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Engine/GameInstance.h"
+#include "Subsystems/RetrieveGuidanceSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "UI/Quest/RetrieveQuestStatus.h"
 
 #define LOCTEXT_NAMESPACE "Retrieve.QuestTracker"
@@ -143,6 +146,12 @@ void UQuestTrackerViewModel::Recompute()
 		Tracked = Explicit ? Explicit : (DefaultMain ? DefaultMain : DefaultAny);
 	}
 
+	// 화면 마커가 가리킬 목표들.
+	// 필수 목표 1개(진행에 필요) + 미완료 선택 목표 전부를 함께 넘겨,
+	// "저쪽은 선택, 저쪽은 진행"을 플레이어가 구분할 수 있게 한다.
+	TArray<URetrieveObjectiveMarkerSubsystem::FTrackedStep> MarkerSteps;
+	bool bFoundRequired = false;
+
 	if (Tracked && Branch)
 	{
 		QuestName = Tracked->DisplayName;
@@ -153,6 +162,23 @@ void UQuestTrackerViewModel::Recompute()
 		{
 			if (!Branch->IsStepCompleted(Obj.CompletionTag)) // 미완료 목표만
 			{
+				if (Obj.CompletionTag.IsValid())
+				{
+					const bool bOptional = Obj.IsOptional();
+					// 필수는 첫 하나만(그다음 필수는 아직 순서가 아니다), 선택은 전부 표시.
+					if (bOptional || !bFoundRequired)
+					{
+						URetrieveObjectiveMarkerSubsystem::FTrackedStep Step;
+						Step.StepTag = Obj.CompletionTag;
+						Step.Label = Obj.ObjectiveText;
+						Step.Kind = bOptional
+							? ERetrieveObjectiveMarkerKind::MainOptional
+							: ERetrieveObjectiveMarkerKind::Main;
+						MarkerSteps.Add(MoveTemp(Step));
+
+						bFoundRequired |= !bOptional;
+					}
+				}
 				Objectives.Add(Obj.ObjectiveText);
 				if (Objectives.Num() >= MaxTrackedObjectives)
 				{
@@ -170,7 +196,72 @@ void UQuestTrackerViewModel::Recompute()
 		bVisible = false;
 	}
 
+	UpdateObjectiveMarker(MarkerSteps);
+
+	// 길잡이(로딩 브리핑·힌트·재확인)는 "지금 해야 할 하나"만 필요하다 → 필수 목표를 우선 고른다.
+	FGameplayTag GuidanceTag;
+	FText GuidanceLabel;
+	for (const URetrieveObjectiveMarkerSubsystem::FTrackedStep& Step : MarkerSteps)
+	{
+		if (Step.Kind == ERetrieveObjectiveMarkerKind::Main)
+		{
+			GuidanceTag = Step.StepTag;
+			GuidanceLabel = Step.Label;
+			break;
+		}
+	}
+	if (!GuidanceTag.IsValid() && MarkerSteps.Num() > 0)
+	{
+		GuidanceTag = MarkerSteps[0].StepTag;
+		GuidanceLabel = MarkerSteps[0].Label;
+	}
+
+	// 로딩 화면·힌트·재확인이 전부 이 값을 읽는다(월드가 사라져도 남아야 하므로 GameInstance에 캐시).
+	if (UWorld* GuidanceWorld = WorldPtr.Get())
+	{
+		if (const UGameInstance* GI = GuidanceWorld->GetGameInstance())
+		{
+			if (URetrieveGuidanceSubsystem* Guidance = GI->GetSubsystem<URetrieveGuidanceSubsystem>())
+			{
+				Guidance->UpdateTrackedObjective(QuestName, GuidanceLabel, GuidanceTag);
+			}
+		}
+	}
+
 	BroadcastAllFields();
+}
+
+void UQuestTrackerViewModel::UpdateObjectiveMarker(
+	const TArray<URetrieveObjectiveMarkerSubsystem::FTrackedStep>& Steps)
+{
+	UWorld* World = WorldPtr.Get();
+	URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		World ? World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr;
+	if (!MarkerSub)
+	{
+		return;
+	}
+
+	// 추적할 목표가 없거나 시네마틱 중이면 마커를 내린다.
+	if (Steps.Num() == 0 || !bVisible)
+	{
+		MarkerSub->ClearTrackedQuestStep();
+		return;
+	}
+
+	// 사이드 퀘스트(DT_Quest의 Side 타입)는 메인 색을 쓰지 않는다.
+	if (QuestType != EQuestType::Main)
+	{
+		TArray<URetrieveObjectiveMarkerSubsystem::FTrackedStep> SideSteps = Steps;
+		for (URetrieveObjectiveMarkerSubsystem::FTrackedStep& Step : SideSteps)
+		{
+			Step.Kind = ERetrieveObjectiveMarkerKind::Side;
+		}
+		MarkerSub->SetTrackedQuestSteps(SideSteps);
+		return;
+	}
+
+	MarkerSub->SetTrackedQuestSteps(Steps);
 }
 
 FText UQuestTrackerViewModel::GetObjectivesText() const

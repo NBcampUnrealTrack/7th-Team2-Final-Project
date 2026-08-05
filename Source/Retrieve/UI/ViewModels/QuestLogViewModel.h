@@ -73,6 +73,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Quest")
 	void SelectQuest(FGameplayTag QuestId);
 
+	/**
+	 * 의뢰(인카운터) 행 클릭. DT_Quest 행이 없으므로 마커 정보로 우측 패널을 채운다.
+	 * 엔트리 위젯은 GetEncounterMarkerId()가 비어 있지 않으면 이쪽을 호출하면 된다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Retrieve|Quest")
+	void SelectEncounterQuest(FName MarkerId);
+
 	/** Track 버튼 → 기존 트래커 VM 재추적 + 추적 중을 나타내는 로컬 아이콘 ◇ 갱신. */
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|Quest")
 	void TrackSelectedQuest();
@@ -83,6 +90,10 @@ protected:
 private:
 	void HandleStepChanged(FGameplayTag Channel, const FRetrieveQuestStepPayload& Message);
 	void Recompute();
+
+	/** 수락한 인카운터 퀘스트를 진행 중 목록 뒤에 덧붙인다(가까운 순). */
+	void AppendEncounterQuests();
+
 	void RebuildRightPane(const UQuestBranchComponent& Branch, const UDataTable& Table);
 	FGameplayTag ResolveTrackedQuestId(const TArray<FQuestDefinition*>& SortedRows, const UQuestBranchComponent& Branch) const;
 	const FQuestDefinition* FindQuestRow(const UDataTable& Table, FGameplayTag QuestId) const;
@@ -95,6 +106,9 @@ private:
 	/** 로컬에서 선택한 퀘스트 추적. (기본값: DisplayOrder 순 첫 Active 메인 퀘스트) — 트래커와 동일한 규칙. */
 	FGameplayTag TrackedQuestId;
 	FGameplayTag SelectedQuestId;
+
+	/** 의뢰 행을 선택한 경우의 마커 ID(일반 퀘스트 선택 시 NAME_None). */
+	FName SelectedEncounterMarkerId;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UQuestEntryViewModel>> ActiveQuests;

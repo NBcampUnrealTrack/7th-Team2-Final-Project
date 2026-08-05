@@ -1,5 +1,6 @@
 #include "UI/Map/RetrieveCompassWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "UI/RetrieveUISettingsLibrary.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
@@ -867,6 +868,90 @@ int32 URetrieveCompassWidget::NativePaint(
 					DistStr,
 					FVector2D(MarkerX, BandCenterY + HalfSz + 10.0f),
 					WpFont,
+					MarkerCol
+				);
+			}
+		}
+	}
+
+	// ── 퀘스트 목표 마커 ─────────────────────────────────────────────────────
+	// 화면 마커가 거리/개수 제한으로 내려간 목표도 방향만은 여기서 계속 알려준다.
+	// (AcquireItem처럼 화면 마커를 만들지 않는 목표는 나침반이 유일한 방향 단서)
+	if (const URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		GetWorld() ? GetWorld()->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr)
+	{
+		const FSlateFontInfo ObjFont = FCoreStyle::GetDefaultFontStyle(
+			"Bold", FMath::RoundToInt(9 * URetrieveUISettingsLibrary::GetUIScale()));
+
+		const float ObjectiveDiscoveryRadius = MarkerSub->GetDiscoveryRadius();
+
+		for (const FRetrieveObjectiveMarker& Marker : MarkerSub->GetMarkers())
+		{
+			if (!Marker.State.bVisible)
+			{
+				continue;
+			}
+			// 화면 마커와 같은 발견 반경(메인은 예외).
+			if (!URetrieveObjectiveMarkerSubsystem::PassesDiscoveryRadius(
+					Marker, PlayerLoc, ObjectiveDiscoveryRadius))
+			{
+				continue;
+			}
+
+			const FVector Delta = Marker.State.WorldLocation - PlayerLoc;
+			const float DistXY = FVector2D(Delta.X, Delta.Y).Size();
+			const float BearingDeg = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+
+			const float MarkerX = BearingToX(BearingDeg, CameraYaw, Width);
+			if (MarkerX < 0.0f)
+			{
+				continue;
+			}
+
+			FLinearColor MarkerCol = ObjectiveMarkerColorSide;
+			if (Marker.Kind == ERetrieveObjectiveMarkerKind::Main)
+			{
+				MarkerCol = ObjectiveMarkerColorMain;
+			}
+			else if (Marker.Kind == ERetrieveObjectiveMarkerKind::TurnIn)
+			{
+				MarkerCol = ObjectiveMarkerColorTurnIn;
+			}
+			else if (Marker.Kind == ERetrieveObjectiveMarkerKind::Offer)
+			{
+				MarkerCol = ObjectiveMarkerColorOffer;
+			}
+
+			const float HalfSz = ObjectiveMarkerSize * 0.5f;
+
+			FSlateBrush ObjBrush;
+			if (WaypointMarkerTexture)
+			{
+				ObjBrush.SetResourceObject(WaypointMarkerTexture);
+				ObjBrush.ImageSize = FVector2D(ObjectiveMarkerSize, ObjectiveMarkerSize);
+			}
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(ObjectiveMarkerSize, ObjectiveMarkerSize),
+					FSlateLayoutTransform(FVector2f(MarkerX - HalfSz, BandCenterY - HalfSz))
+				),
+				WaypointMarkerTexture ? &ObjBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				MarkerCol
+			);
+
+			if (DistXY > 0.1f)
+			{
+				DrawCompassText(
+					OutDrawElements,
+					CurrentLayer,
+					AllottedGeometry,
+					FString::Printf(TEXT("%.0fm"), DistXY / 100.0f),
+					FVector2D(MarkerX, BandCenterY + HalfSz + 10.0f),
+					ObjFont,
 					MarkerCol
 				);
 			}

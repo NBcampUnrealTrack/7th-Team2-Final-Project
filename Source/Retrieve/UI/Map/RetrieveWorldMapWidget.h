@@ -172,6 +172,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap", meta=(ClampMin="0.1"))
 	float ZoomStep = 0.5f;
 
+	/**
+	 * 월드맵을 열었을 때의 기본 줌 = MinZoom × 이 값.
+	 * 1이면 맵 전체(과거 동작), 2면 두 배 확대된 상태로 열린다.
+	 * 뷰는 항상 플레이어 위치를 중심으로 맞춰진다(CenterOnPlayer).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap", meta=(ClampMin="1.0"))
+	float DefaultZoomMultiplier = 2.0f;
+
 	// ── 빠른 이동 델리게이트 ─────────────────────────────────────────────────
 	/** 활성화된 화톳불 아이콘 더블클릭 시 발생. BP에서 WBP_FastTravelDialog 오픈에 사용 */
 	UPROPERTY(BlueprintAssignable, Category="Retrieve|WorldMap|FastTravel")
@@ -265,6 +273,24 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Waypoint")
 	FLinearColor WaypointMarkerColor = FLinearColor(1.0f, 0.25f, 0.25f, 1.0f);
+
+	// ── 퀘스트 목표 마커 ────────────────────────────────────────────────────
+	// 화면 마커/나침반과 색 규약을 맞춘다. 메인=금색, 인스턴스=빨강, 보상 수령=초록.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Objective")
+	FLinearColor ObjectiveMarkerColorMain = FLinearColor(1.0f, 0.82f, 0.25f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Objective")
+	FLinearColor ObjectiveMarkerColorSide = FLinearColor(1.0f, 0.28f, 0.24f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Objective")
+	FLinearColor ObjectiveMarkerColorTurnIn = FLinearColor(0.42f, 0.92f, 0.45f, 1.0f);
+
+	/** 아직 수락하지 않은 의뢰(주황). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Objective")
+	FLinearColor ObjectiveMarkerColorOffer = FLinearColor(1.0f, 0.62f, 0.18f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Objective", meta=(ClampMin="8.0"))
+	float ObjectiveMarkerSize = 24.0f;
 
 	// ── 레이블 텍스트 설정 ──────────────────────────────────────────────────
 	// 플레이어 마커 위에 표시할 텍스트

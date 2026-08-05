@@ -16,6 +16,7 @@
 #include "Messaging/GameplayMessages/RetrieveGameplayMessageTypes.h"
 #include "Save/RetrieveSaveGame.h"
 #include "Save/RetrieveSaveSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "World/RetrieveBonfireActor.h"
 
 ARetrieveRescueEncounter::ARetrieveRescueEncounter()
@@ -81,6 +82,9 @@ void ARetrieveRescueEncounter::BeginPlay()
 
 void ARetrieveRescueEncounter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	URetrieveObjectiveMarkerSubsystem::RemoveMarkersByPrefix(
+		GetWorld(), (EncounterId.IsNone() ? GetName() : EncounterId.ToString()) + TEXT("_"));
+
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (URetrieveSaveSubsystem* SaveSubsystem = GI->GetSubsystem<URetrieveSaveSubsystem>())
@@ -110,6 +114,14 @@ void ARetrieveRescueEncounter::HandleSpawnGroupCleared(
 {
 	if (!HasAuthority() || State != ERetrieveRescueEncounterState::EnemiesAlive
 		|| !SpawnGroupId.IsValid() || Payload.SpawnGroupId != SpawnGroupId)
+	{
+		return;
+	}
+
+	// 같은 그룹 태그를 여러 스포너가 공유할 수 있다(예: 튜토리얼 늑대와 포로 구출의 적이
+	// 둘 다 TutorialWolves). 태그만 보면 남의 스포너가 비워졌을 때도 구출이 완료돼 버린다.
+	// 내 스포너를 지정해 뒀다면 그 스포너에서 온 신호인지까지 확인한다.
+	if (EnemySpawner && Payload.Spawner != EnemySpawner)
 	{
 		return;
 	}
@@ -259,8 +271,61 @@ void ARetrieveRescueEncounter::ApplyState()
 		}
 	}
 
+	RefreshObjectiveMarkers();
+
 	OnStateChanged.Broadcast(State);
 	ReceiveRescueStateChanged(State);
+}
+
+void ARetrieveRescueEncounter::RefreshObjectiveMarkers()
+{
+	// 구출형은 수락 대화가 없으므로 "적을 처치해 구출" 자체가 수행 단계다.
+	// 발견 반경 안에 들어와야 표시되므로 처음부터 화면에 떠 있지 않는다.
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FString Prefix = (EncounterId.IsNone() ? GetName() : EncounterId.ToString()) + TEXT("_");
+	URetrieveObjectiveMarkerSubsystem::RemoveMarkersByPrefix(World, Prefix);
+
+	const FText Title = QuestTitle.IsEmptyOrWhitespace()
+		? NSLOCTEXT("RetrieveQuest", "RescueTitle", "포로 구출")
+		: QuestTitle;
+
+	switch (State)
+	{
+	case ERetrieveRescueEncounterState::EnemiesAlive:
+	{
+		// 적이 남아 있으면 적 무리를, 스포너가 없으면 포로 위치를 가리킨다.
+		AActor* Target = EnemySpawner ? static_cast<AActor*>(EnemySpawner.Get())
+		                              : static_cast<AActor*>(RescueNPC.Get());
+		FText Progress = NSLOCTEXT("RetrieveQuest", "RescueFight", "적 처치");
+		if (EnemySpawner)
+		{
+			const int32 Live = EnemySpawner->GetLiveSpawnCount();
+			if (Live > 0)
+			{
+				Progress = FText::Format(
+					NSLOCTEXT("RetrieveQuest", "RescueRemaining", "남은 적 {0}"), FText::AsNumber(Live));
+			}
+		}
+		URetrieveObjectiveMarkerSubsystem::RegisterActorMarker(
+			World, FName(*(Prefix + TEXT("Obj"))), ERetrieveObjectiveMarkerKind::Side,
+			Title, Target, Progress);
+		break;
+	}
+
+	case ERetrieveRescueEncounterState::AwaitingRescueDialogue:
+		URetrieveObjectiveMarkerSubsystem::RegisterActorMarker(
+			World, FName(*(Prefix + TEXT("TurnIn"))), ERetrieveObjectiveMarkerKind::TurnIn,
+			Title, RescueNPC, NSLOCTEXT("RetrieveQuest", "RescueTalk", "말을 걸어 보세요"), 150.0f, 50);
+		break;
+
+	default:
+		break; // 보상 수령 이후 — 마커 없음
+	}
 }
 
 void ARetrieveRescueEncounter::SetActorAvailable(AActor* Actor, bool bAvailable) const

@@ -1,5 +1,6 @@
 ﻿#include "UI/Map/RetrieveWorldMapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "UI/RetrieveUISettingsLibrary.h"
 #include "InputCoreTypes.h"
 #include "Components/World/RetrieveMapIconComponent.h"
@@ -124,7 +125,9 @@ void URetrieveWorldMapWidget::NativeConstruct()
 	// Fit the complete source texture inside the viewport instead of stretching it.
 	bStretchMapToViewport = false;
 	MapViewportPadding = MapOffsets;
-	ZoomLevel    = MinZoom;
+	// 맵 전체가 아니라 플레이어 주변이 기본으로 보이게 확대 상태로 연다.
+	// (중심 이동은 아래 bPendingCenterOnPlayer → NativeTick의 CenterOnPlayer가 담당)
+	ZoomLevel    = FMath::Clamp(MinZoom * FMath::Max(DefaultZoomMultiplier, 1.0f), MinZoom, MaxZoom);
 	ViewCenterUV = FVector2D(0.5f, 0.5f);
 	bPendingCenterOnPlayer = true;
 	bWasLeftMouseButtonDown = false;
@@ -675,6 +678,84 @@ int32 URetrieveWorldMapWidget::NativePaint(
 				          WP.Label.ToString(),
 				          FVector2D(WpScreen.X, WpScreen.Y - HalfSz.Y - 3.0f),
 				          WpFont, WP.Color);
+			}
+		}
+	}
+
+	// ── 퀘스트 목표 마커 ─────────────────────────────────────────────────────
+	// 수락한 퀘스트가 맵 어디로 향하는지 한눈에 보이도록, 안개와 무관하게 항상 그린다
+	// (목표 지점은 이미 플레이어가 "알고 있는" 정보이므로 안개로 가리지 않는다).
+	if (MapSub && MapSub->HasValidBounds())
+	{
+		if (const URetrieveObjectiveMarkerSubsystem* MarkerSub =
+			GetWorld() ? GetWorld()->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr)
+		{
+			const FSlateFontInfo ObjFont = FCoreStyle::GetDefaultFontStyle(
+				"Bold", FMath::RoundToInt(10 * URetrieveUISettingsLibrary::GetUIScale()));
+
+			// 지도는 "가본 곳을 기록하는 물건"이다.
+			// 한 번 발견한 의뢰는 멀어져도 계속 남고, 메인 목표는 미방문이어도 표시한다.
+			for (const FRetrieveObjectiveMarker& Marker : MarkerSub->GetMarkers())
+			{
+				if (!Marker.State.bVisible)
+				{
+					continue;
+				}
+				if (!MarkerSub->PassesMapVisibility(Marker))
+				{
+					continue;
+				}
+
+				const FVector2D ObjScreen =
+					UVToScreen(MapSub->WorldToUV(Marker.State.WorldLocation), Center, ScaledW, ScaledH);
+				if (!MapViewRect.ContainsPoint(FVector2D(ObjScreen)))
+				{
+					continue;
+				}
+
+				FLinearColor MarkerCol = ObjectiveMarkerColorSide;
+				if (Marker.Kind == ERetrieveObjectiveMarkerKind::Main)
+				{
+					MarkerCol = ObjectiveMarkerColorMain;
+				}
+				else if (Marker.Kind == ERetrieveObjectiveMarkerKind::TurnIn)
+				{
+					MarkerCol = ObjectiveMarkerColorTurnIn;
+				}
+				else if (Marker.Kind == ERetrieveObjectiveMarkerKind::Offer)
+				{
+					MarkerCol = ObjectiveMarkerColorOffer;
+				}
+
+				const float Sz = ObjectiveMarkerSize;
+				const FVector2D HalfSz(Sz * 0.5f, Sz * 0.5f);
+
+				FSlateBrush ObjBrush;
+				if (WaypointMarkerTexture)
+				{
+					ObjBrush.SetResourceObject(WaypointMarkerTexture);
+				}
+				ObjBrush.ImageSize = FVector2D(Sz, Sz);
+
+				FSlateDrawElement::MakeBox(
+					OutDrawElements,
+					++CurrentLayer,
+					AllottedGeometry.ToPaintGeometry(
+						FVector2f(Sz, Sz),
+						FSlateLayoutTransform(FVector2f(ObjScreen - HalfSz))
+					),
+					WaypointMarkerTexture ? &ObjBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+					ESlateDrawEffect::None,
+					MarkerCol
+				);
+
+				if (!Marker.Label.IsEmptyOrWhitespace())
+				{
+					DrawLabel(OutDrawElements, CurrentLayer, AllottedGeometry,
+						Marker.Label.ToString(),
+						FVector2D(ObjScreen.X, ObjScreen.Y - HalfSz.Y - 3.0f),
+						ObjFont, MarkerCol);
+				}
 			}
 		}
 	}

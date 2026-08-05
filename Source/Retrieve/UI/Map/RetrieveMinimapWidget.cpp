@@ -1,5 +1,10 @@
 ﻿#include "UI/Map/RetrieveMinimapWidget.h"
 #include "Subsystems/RetrieveMapSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
+#include "Subsystems/RetrieveGuidanceSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Fonts/FontMeasure.h"
+#include "UI/RetrieveUISettingsLibrary.h"
 #include "Components/World/RetrieveMapIconComponent.h"
 #include "Data/RetrieveMapIconRegistry.h"
 #include "World/RetrieveBonfireActor.h"
@@ -586,6 +591,71 @@ int32 URetrieveMinimapWidget::NativePaint(
 		}
 	}
 
+	// ── 퀘스트 목표 마커 ─────────────────────────────────────────────────────
+	// 나침반이 방위만 알려주는 것과 달리, 미니맵은 "어느 쪽으로 돌아가야 하는지"까지 보여준다.
+	if (const URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		GetWorld() ? GetWorld()->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr)
+	{
+		for (const FRetrieveObjectiveMarker& Marker : MarkerSub->GetMarkers())
+		{
+			if (!Marker.State.bVisible)
+			{
+				continue;
+			}
+			// 월드맵과 같은 규칙: 한 번 발견한 의뢰는 계속, 메인은 항상.
+			if (!MarkerSub->PassesMapVisibility(Marker))
+			{
+				continue;
+			}
+
+			const FVector2D ObjPos = WorldToLocal(
+				Marker.State.WorldLocation, PlayerLoc, Center, WidgetSize, CameraYaw,
+				PaintContext.ViewWorldRadius
+			);
+
+			if (FVector2D::Distance(ObjPos, Center) > MiniMapRadius)
+			{
+				continue; // 미니맵 반경 밖 — 방향은 나침반이 맡는다.
+			}
+
+			FLinearColor MarkerCol = ObjectiveMarkerColorSide;
+			if (Marker.Kind == ERetrieveObjectiveMarkerKind::Main)
+			{
+				MarkerCol = ObjectiveMarkerColorMain;
+			}
+			else if (Marker.Kind == ERetrieveObjectiveMarkerKind::TurnIn)
+			{
+				MarkerCol = ObjectiveMarkerColorTurnIn;
+			}
+			else if (Marker.Kind == ERetrieveObjectiveMarkerKind::Offer)
+			{
+				MarkerCol = ObjectiveMarkerColorOffer;
+			}
+
+			const FVector2D ObjSz(ObjectiveMarkerSize, ObjectiveMarkerSize);
+			const FVector2D ObjDrawPos = ObjPos - ObjSz * 0.5f;
+
+			FSlateBrush ObjBrush;
+			if (WaypointMarkerTexture)
+			{
+				ObjBrush.SetResourceObject(WaypointMarkerTexture);
+				ObjBrush.ImageSize = ObjSz;
+			}
+
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(ObjSz),
+					FSlateLayoutTransform(FVector2f(ObjDrawPos))
+				),
+				WaypointMarkerTexture ? &ObjBrush : FCoreStyle::Get().GetBrush("WhiteBrush"),
+				ESlateDrawEffect::None,
+				MarkerCol
+			);
+		}
+	}
+
 	// 플레이어 마커 (항상 중앙, NorthUp 모드에서 카메라 방향으로 회전).
 	if (PaintContext.bShowPlayerMarker)
 	{
@@ -643,6 +713,42 @@ int32 URetrieveMinimapWidget::NativePaint(
 	OutDrawElements.PopClip();
 
 	DrawMinimapDecorations(OutDrawElements, CurrentLayer, AllottedGeometry);
+
+	// ── 현재 목표 한 줄 ───────────────────────────────────────────────────────
+	// 트래커를 못 보고 지나치는 플레이어를 위해 미니맵 바로 아래에도 목표를 붙인다.
+	if (bShowObjectiveLine)
+	{
+		const UGameInstance* GI = GetGameInstance();
+		const URetrieveGuidanceSubsystem* Guidance =
+			GI ? GI->GetSubsystem<URetrieveGuidanceSubsystem>() : nullptr;
+
+		if (Guidance && Guidance->HasObjective())
+		{
+			const FString Line = Guidance->GetObjectiveText().ToString();
+			const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(
+				"Bold", FMath::RoundToInt(ObjectiveLineFontSize * URetrieveUISettingsLibrary::GetUIScale()));
+
+			const TSharedRef<FSlateFontMeasure> FontMeasure =
+				FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const FVector2D TextSize = FontMeasure->Measure(Line, Font);
+			const FVector2D DrawPos(
+				(WidgetSize.X - TextSize.X) * 0.5f,
+				WidgetSize.Y - TextSize.Y - 2.0f);
+
+			FSlateDrawElement::MakeText(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(TextSize), FSlateLayoutTransform(FVector2f(DrawPos + FVector2D(1.0f)))),
+				Line, Font, ESlateDrawEffect::None, FLinearColor(0.0f, 0.0f, 0.0f, 0.85f));
+
+			FSlateDrawElement::MakeText(
+				OutDrawElements,
+				++CurrentLayer,
+				AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(FVector2f(DrawPos))),
+				Line, Font, ESlateDrawEffect::None, ObjectiveLineColor);
+		}
+	}
 
 	return CurrentLayer;
 }

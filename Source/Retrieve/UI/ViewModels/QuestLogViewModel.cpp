@@ -6,7 +6,10 @@
 #include "Components/SlateWrapperTypes.h"
 #include "Core/RetrieveGameState.h"
 #include "Data/RetrieveDataTableTypes.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Quest/QuestBranchComponent.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 #include "UI/Quest/RetrieveQuestStatus.h"
 
 TArray<UQuestEntryViewModel*> UQuestLogViewModel::GetActiveQuests() const
@@ -171,6 +174,10 @@ void UQuestLogViewModel::Recompute()
 			}
 		}
 
+		// 수락한 의뢰(인카운터 퀘스트)도 진행 중 목록에 얹는다.
+		// DT_Quest에 없는 런타임 퀘스트라 마커 서브시스템이 유일한 출처다.
+		AppendEncounterQuests();
+
 		// 선택 자동 시드: 아직 선택이 없으면 추적 중인 퀘스트를 기본 선택.
 		if (!SelectedQuestId.IsValid() && ResolvedTracked.IsValid())
 		{
@@ -245,8 +252,65 @@ const FQuestDefinition* UQuestLogViewModel::FindQuestRow(const UDataTable& Table
 	return nullptr;
 }
 
+void UQuestLogViewModel::AppendEncounterQuests()
+{
+	UWorld* World = WorldPtr.Get();
+	const URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		World ? World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr;
+	if (!MarkerSub)
+	{
+		return;
+	}
+
+	const APawn* Pawn = UGameplayStatics::GetPlayerPawn(World, 0);
+	const FVector PlayerLocation = Pawn ? Pawn->GetActorLocation() : FVector::ZeroVector;
+
+	TArray<const FRetrieveObjectiveMarker*> Accepted;
+	MarkerSub->GetAcceptedQuestMarkers(PlayerLocation, Accepted);
+
+	for (const FRetrieveObjectiveMarker* Marker : Accepted)
+	{
+		UQuestEntryViewModel* Entry = NewObject<UQuestEntryViewModel>(this);
+		Entry->SetEncounterData(
+			Marker->MarkerId,
+			Marker->Label,
+			Marker->Kind == ERetrieveObjectiveMarkerKind::TurnIn);
+		ActiveQuests.Add(Entry);
+	}
+}
+
+void UQuestLogViewModel::SelectEncounterQuest(FName MarkerId)
+{
+	UWorld* World = WorldPtr.Get();
+	const URetrieveObjectiveMarkerSubsystem* MarkerSub =
+		World ? World->GetSubsystem<URetrieveObjectiveMarkerSubsystem>() : nullptr;
+	const FRetrieveObjectiveMarker* Marker = MarkerSub ? MarkerSub->FindMarkerById(MarkerId) : nullptr;
+	if (!Marker)
+	{
+		return;
+	}
+
+	// 의뢰는 DT_Quest 행이 없으므로 우측 패널을 마커 정보로 직접 채운다.
+	SelectedQuestId = FGameplayTag();
+	SelectedEncounterMarkerId = MarkerId;
+	SelectedDisplayName = Marker->Label;
+	SelectedDescription = Marker->State.ProgressText;
+	SelectedQuestType = EQuestType::Side;
+	bHasSelection = true;
+	bCanTrackSelected = false; // 의뢰는 항상 마커로 안내되므로 별도 추적 버튼이 필요 없다.
+	SelectedObjectives.Reset();
+
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSelectedDisplayName);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSelectedDescription);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSelectedQuestType);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetSelectedObjectives);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetHasSelection);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetCanTrackSelected);
+}
+
 void UQuestLogViewModel::SelectQuest(FGameplayTag QuestId)
 {
+	SelectedEncounterMarkerId = NAME_None;
 	SelectedQuestId = QuestId;
 
 	UWorld* World = WorldPtr.Get();

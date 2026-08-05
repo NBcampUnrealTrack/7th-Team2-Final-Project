@@ -60,6 +60,25 @@ public:
 		meta=(ClampMin="4.0"))
 	float WaypointMarkerSize = 12.0f;
 
+	// ── 퀘스트 목표 마커(URetrieveObjectiveMarkerSubsystem) ────────────────────
+	// 화면 마커와 색 규약을 맞춘다. 메인=금색, 인스턴스=빨강, 보상 수령=초록.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Objective")
+	FLinearColor ObjectiveMarkerColorMain = FLinearColor(1.0f, 0.82f, 0.25f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Objective")
+	FLinearColor ObjectiveMarkerColorSide = FLinearColor(1.0f, 0.28f, 0.24f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Objective")
+	FLinearColor ObjectiveMarkerColorTurnIn = FLinearColor(0.42f, 0.92f, 0.45f, 1.0f);
+
+	/** 아직 수락하지 않은 의뢰(주황). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Objective")
+	FLinearColor ObjectiveMarkerColorOffer = FLinearColor(1.0f, 0.62f, 0.18f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass|Objective",
+		meta=(ClampMin="4.0"))
+	float ObjectiveMarkerSize = 16.0f;
+
 	// 배경 색상 (CompassBandTexture 없을 때)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|Compass")
 	FLinearColor BackgroundColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.55f);

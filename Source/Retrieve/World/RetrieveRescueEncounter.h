@@ -64,6 +64,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Retrieve|Rescue")
 	FRetrieveRescueStateChangedSignature OnStateChanged;
 
+	/** 목표 마커에 표시할 퀘스트 제목. 비우면 "포로 구출". */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Retrieve|Rescue")
+	FText QuestTitle;
+
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "Retrieve|Rescue")
 	void FindNearestLoadedBonfire();
 
@@ -88,6 +92,8 @@ private:
 	void RestoreSavedState();
 	void PersistState();
 	void ApplyState();
+	/** 현재 상태에 맞춰 수행/보상 마커를 갱신한다. */
+	void RefreshObjectiveMarkers();
 	void SetActorAvailable(AActor* Actor, bool bAvailable) const;
 	void SetState(ERetrieveRescueEncounterState NewState, bool bPersist);
 

@@ -106,6 +106,20 @@ public:
 	UPROPERTY(EditAnywhere, Category="Spawner")
 	FGameplayTag SpawnGroupId;
 
+	// ── 퀘스트 마커 연동용 조회 API ─────────────────────────────────────────────
+	/** 아직 살아있는 스폰 개체 수. 목표 마커의 "남은 적 N" 표시에 사용. */
+	UFUNCTION(BlueprintPure, Category="Spawner")
+	int32 GetLiveSpawnCount() const;
+
+	/**
+	 * From에서 가장 가까운 생존 개체의 위치를 반환. 생존 개체가 없으면 false.
+	 * 플레이어가 전투 지역에 진입했을 때 마커를 스포너 중심에서 실제 적으로 옮기는 데 쓴다.
+	 */
+	bool GetNearestLiveSpawnLocation(const FVector& From, FVector& OutLocation) const;
+
+	/** 지정 그룹 태그를 가진 (로드된) 스포너를 찾는다. 없으면 nullptr. */
+	static ASpawnerBase* FindSpawnerByGroupId(const UWorld* World, FGameplayTag InSpawnGroupId);
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Spawner")
 	TObjectPtr<USceneComponent> RootComp;

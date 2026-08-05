@@ -9,6 +9,7 @@
 #include "Components/World/RetrieveInteractionResponseComponent.h"
 #include "Save/RetrieveSaveGame.h"
 #include "Save/RetrieveSaveSubsystem.h"
+#include "Subsystems/RetrieveObjectiveMarkerSubsystem.h"
 
 ARetrieveLostCargoEncounter::ARetrieveLostCargoEncounter()
 {
@@ -66,6 +67,9 @@ void ARetrieveLostCargoEncounter::BeginPlay()
 
 void ARetrieveLostCargoEncounter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    URetrieveObjectiveMarkerSubsystem::RemoveMarkersByPrefix(
+        GetWorld(), (EncounterId.IsNone() ? GetName() : EncounterId.ToString()) + TEXT("_"));
+
     if (QuestNPC)
     {
         if (URetrieveDialogueComponent* Dialogue = QuestNPC->FindComponentByClass<URetrieveDialogueComponent>())
@@ -227,7 +231,53 @@ void ARetrieveLostCargoEncounter::ApplyState()
         LostCargoActor->SetActorTickEnabled(!bCargoCollected);
     }
 
+    RefreshObjectiveMarkers();
+
     OnStateChanged.Broadcast(State);
+}
+
+void ARetrieveLostCargoEncounter::RefreshObjectiveMarkers()
+{
+    // 제너릭 인카운터와 같은 3단계 리듬을 이 레거시 퀘스트에도 적용한다.
+    //   의뢰 있음 → 수행 → 보상 수령
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    const FString Prefix = (EncounterId.IsNone() ? GetName() : EncounterId.ToString()) + TEXT("_");
+    URetrieveObjectiveMarkerSubsystem::RemoveMarkersByPrefix(World, Prefix);
+
+    const FText Title = QuestTitle.IsEmptyOrWhitespace()
+        ? NSLOCTEXT("RetrieveQuest", "LostCargoTitle", "잃어버린 화물")
+        : QuestTitle;
+
+    switch (State)
+    {
+    case ERetrieveLostCargoState::AwaitingRequest:
+        // 높이 110: 캐릭터 머리 바로 위. 더 높이면 가까이 갔을 때 화면 위로 치솟는다.
+        URetrieveObjectiveMarkerSubsystem::RegisterActorMarker(
+            World, FName(*(Prefix + TEXT("Offer"))), ERetrieveObjectiveMarkerKind::Offer,
+            Title, QuestNPC, NSLOCTEXT("RetrieveQuest", "OfferMarker", "말을 걸어 보세요"), 110.0f);
+        break;
+
+    case ERetrieveLostCargoState::FindCargo:
+        URetrieveObjectiveMarkerSubsystem::RegisterActorMarker(
+            World, FName(*(Prefix + TEXT("Obj"))), ERetrieveObjectiveMarkerKind::Side,
+            Title, LostCargoActor, NSLOCTEXT("RetrieveQuest", "FindCargoMarker", "화물 찾기"), 100.0f);
+        break;
+
+    case ERetrieveLostCargoState::ReturnCargo:
+        URetrieveObjectiveMarkerSubsystem::RegisterActorMarker(
+            World, FName(*(Prefix + TEXT("TurnIn"))), ERetrieveObjectiveMarkerKind::TurnIn,
+            Title, QuestNPC, NSLOCTEXT("RetrieveQuest", "TurnInMarker", "보상 받기"), 150.0f, 50);
+        break;
+
+    case ERetrieveLostCargoState::Completed:
+    default:
+        break; // 완료 — 마커 없음
+    }
 }
 
 void ARetrieveLostCargoEncounter::SetState(ERetrieveLostCargoState NewState, bool bPersist)
