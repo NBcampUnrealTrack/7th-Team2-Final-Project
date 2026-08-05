@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Delegates/Delegate.h"
 #include "CounterTimeDilationComponent.generated.h"
 
 class APlayerController;
@@ -50,7 +51,7 @@ public:
 	// 카운터 카메라 구도: 현재 시점을 저장하고 FramingRot(타겟 뒤)로 부드럽게 블렌드 + 룩 입력 잠금.
 	void BeginCounterCamera(APlayerController* PC, const FRotator& FramingRot, float BlendSpeed);
 	// 카운터 종료: 저장해 둔 원래 시점으로 다시 블렌드하고, 다 돌아오면 룩 입력을 푼다.
-	void EndCounterCamera();
+	void EndCounterCamera(FSimpleDelegate OnFinished = FSimpleDelegate());
 
 	// 히트스톱: 대상(적)의 CustomTimeDilation만 낮춰 순간 정지(플레이어/글로벌 딜레이션과 충돌 없음). Standalone 전용.
 	void DoHitStop(AActor* Target, float RealDuration, float TimeScale);
@@ -74,6 +75,8 @@ private:
 	// 글로벌/플레이어 딜레이션 적용 헬퍼.
 	void ApplyGlobalDilation(float Dilation);
 	void ApplyPlayerDilation(float Dilation);
+	void TickCounterCamera(float RealDelta);
+	void NotifyCounterCameraFinished();
 
 private:
 	// 월드 슬로우 배율. 플레이어 역보정 목표 = 1/SlowFactor.
@@ -114,5 +117,6 @@ private:
 	FRotator CounterCamTargetRot = FRotator::ZeroRotator; // 현재 블렌드 목표
 	float CounterCamBlendSpeed = 8.f;                     // RInterpTo 속도
 	bool bCounterCamActive = false;
+	FSimpleDelegate CounterCamFinishedCallback;
 	bool bCounterCamReturning = false;                    // true면 원래 시점으로 복귀 중(완료 시 룩 잠금 해제)
 };

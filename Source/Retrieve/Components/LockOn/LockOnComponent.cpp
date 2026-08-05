@@ -96,6 +96,32 @@ bool ULockOnComponent::StartLockOn()
 	return true;
 }
 
+bool ULockOnComponent::RestoreLockOnTarget(AActor* Target)
+{
+	if (ShouldSuppressLockOn()
+		|| !IsValid(Config)
+		|| !IsValid(Target)
+		|| IsTargetDead(Target))
+	{
+		return false;
+	}
+
+	if (!CachePlayerRefs())
+	{
+		return false;
+	}
+
+	SetCurrentTarget(Target);
+
+	if (IsTargetDead(Target) || ShouldBreakLockOn())
+	{
+		StopLockOn();
+		return false;
+	}
+
+	return IsLockedOn();
+}
+
 void ULockOnComponent::StopLockOn()
 {
 	SetCurrentTarget(nullptr);

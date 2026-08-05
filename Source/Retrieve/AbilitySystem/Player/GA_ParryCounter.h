@@ -30,6 +30,7 @@ protected:
 
 private:
 	void StopRuntimeTasks();
+	void CleanupCounterCamera();
 
 	AActor* ResolveCounterTarget() const;
 	void RegisterCounterWarpTarget();
@@ -64,6 +65,9 @@ private:
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> CachedCounterTarget;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AActor> CachedLockOnTarget;
 
 	// 카운터 콤보 내 임팩트 히트 수(0=첫 히트).
 	UPROPERTY(Transient)

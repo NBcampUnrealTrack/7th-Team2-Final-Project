@@ -87,6 +87,7 @@ bool UGA_ParryCounter::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	CachedLockOnTarget.Reset();
 
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
@@ -138,12 +139,11 @@ void UGA_ParryCounter::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 	AActor* Avatar = GetAvatarActorFromActorInfo();
 
 	// 카운터 전용 카메라 구도와 충돌하지 않게 락온을 푼다.
-	if (ULockOnComponent* LockOn = Avatar ? Avatar->FindComponentByClass<ULockOnComponent>() : nullptr)
+	ULockOnComponent* LockOn = Avatar ? Avatar->FindComponentByClass<ULockOnComponent>() : nullptr;
+	if (IsValid(LockOn) && LockOn->IsLockedOn())
 	{
-		if (LockOn->IsLockedOn())
-		{
-			LockOn->StopLockOn();
-		}
+		CachedLockOnTarget = LockOn->GetCurrentTarget();
+		LockOn->StopLockOn();
 	}
 
 	// 타겟 뒤 구도로 블렌드 + 룩 잠금. EndAbility에서 원래 시점으로 복귀.
@@ -416,6 +416,62 @@ void UGA_ParryCounter::StopRuntimeTasks()
 	if (ImpactEventTask) { ImpactEventTask->EndTask(); ImpactEventTask = nullptr; }
 }
 
+void UGA_ParryCounter::CleanupCounterCamera()
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+
+	ULockOnComponent* LockOn = Avatar
+		? Avatar->FindComponentByClass<ULockOnComponent>()
+		: nullptr;
+
+	const TWeakObjectPtr<ULockOnComponent> WeakLockOn = LockOn;
+	const TWeakObjectPtr<AActor> WeakTarget = CachedLockOnTarget;
+
+	FSimpleDelegate RestoreLockOn = FSimpleDelegate::CreateLambda(
+		[WeakLockOn, WeakTarget]()
+		{
+			ULockOnComponent* LockOnComp = WeakLockOn.Get();
+			if (!IsValid(LockOnComp))
+			{
+				return;
+			}
+
+			AActor* Target = WeakTarget.Get();
+			if (!IsValid(Target))
+			{
+				return;
+			}
+
+			LockOnComp->RestoreLockOnTarget(Target);
+		});
+
+	UCounterTimeDilationComponent* CameraComp = Avatar
+		? Avatar->FindComponentByClass<UCounterTimeDilationComponent>()
+		: nullptr;
+
+	if (IsValid(CameraComp))
+	{
+		CameraComp->EndCounterCamera(MoveTemp(RestoreLockOn));
+	}
+	else
+	{
+		RestoreLockOn.ExecuteIfBound();
+	}
+
+	CachedLockOnTarget.Reset();
+
+	URetrieveCameraBoom* Boom = Avatar
+		? Avatar->FindComponentByClass<URetrieveCameraBoom>()
+		: nullptr;
+
+	if (!IsValid(Boom))
+	{
+		return;
+	}
+
+	Boom->ClearCameraBoomProfileOverride(FName(TEXT("ParryCounter")));
+}
+
 void UGA_ParryCounter::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopRuntimeTasks();
@@ -428,27 +484,13 @@ void UGA_ParryCounter::EndAbility(const FGameplayAbilitySpecHandle Handle, const
 	}
 
 	// 카운터 카메라 원복(복귀 완료 시 컴포넌트가 룩 잠금 해제).
-	if (AActor* Avatar = GetAvatarActorFromActorInfo())
-	{
-		if (UCounterTimeDilationComponent* CameraComp = Avatar->FindComponentByClass<UCounterTimeDilationComponent>())
-		{
-			CameraComp->EndCounterCamera();
-		}
-	}
+	CleanupCounterCamera();
 
 	CachedWeaponComponent = nullptr;
 	CachedCounterTarget.Reset();
 	CounterHitIndex = 0;
 
 	// 줌 복귀 안전장치: 원복 노티가 없거나 카운터가 중단돼도 유저 카메라 거리로 돌아오게 한다(프로파일 해제).
-	if (AActor* Avatar = GetAvatarActorFromActorInfo())
-	{
-		if (URetrieveCameraBoom* Boom = Avatar->FindComponentByClass<URetrieveCameraBoom>())
-		{
-			Boom->ClearCameraBoomProfileOverride(FName(TEXT("ParryCounter")));
-		}
-	}
-
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 

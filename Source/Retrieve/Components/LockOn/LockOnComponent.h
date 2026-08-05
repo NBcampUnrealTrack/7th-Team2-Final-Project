@@ -35,6 +35,7 @@ public:
 	// 베스트 후보가 있다면 락온 시작
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|LockOn")
 	bool StartLockOn();
+	bool RestoreLockOnTarget(AActor* Target);
 	// 현재 락온 해제 (태그 제거 + 델리게이트 nullptr 브로드캐스트)
 	UFUNCTION(BlueprintCallable, Category = "Retrieve|LockOn")
 	void StopLockOn();

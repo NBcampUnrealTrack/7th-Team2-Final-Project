@@ -171,25 +171,7 @@ void UCounterTimeDilationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	}
 
 	// 카운터 카메라 회전 블렌드(control rotation). 진입 후엔 타겟뒤 구도 유지, EndCounterCamera 후엔 원래 시점 복귀.
-	if (bCounterCamActive)
-	{
-		if (APlayerController* PC = CounterCamPC.Get())
-		{
-			const FRotator NewRot = FMath::RInterpTo(PC->GetControlRotation(), CounterCamTargetRot, RealDelta, CounterCamBlendSpeed);
-			PC->SetControlRotation(NewRot);
-			if (bCounterCamReturning && NewRot.Equals(CounterCamTargetRot, 0.5f))
-			{
-				PC->SetIgnoreLookInput(false);
-				bCounterCamActive = false;
-				bCounterCamReturning = false;
-			}
-		}
-		else
-		{
-			bCounterCamActive = false;
-			bCounterCamReturning = false;
-		}
-	}
+	TickCounterCamera(RealDelta);
 
 	UpdateTickEnabled();
 }
@@ -214,6 +196,8 @@ void UCounterTimeDilationComponent::DoHitStop(AActor* Target, float RealDuration
 
 void UCounterTimeDilationComponent::BeginCounterCamera(APlayerController* PC, const FRotator& FramingRot, float BlendSpeed)
 {
+	CounterCamFinishedCallback.Unbind();
+
 	if (!IsValid(PC))
 	{
 		return;
@@ -228,15 +212,61 @@ void UCounterTimeDilationComponent::BeginCounterCamera(APlayerController* PC, co
 	UpdateTickEnabled();
 }
 
-void UCounterTimeDilationComponent::EndCounterCamera()
+void UCounterTimeDilationComponent::EndCounterCamera(FSimpleDelegate OnFinished)
+{
+	if (!bCounterCamActive)
+	{
+		CounterCamFinishedCallback.Unbind();
+		OnFinished.ExecuteIfBound();
+		return;
+	}
+
+	CounterCamFinishedCallback = MoveTemp(OnFinished);
+	CounterCamTargetRot = CounterCamSavedRot;
+	bCounterCamReturning = true;
+	UpdateTickEnabled();
+}
+
+void UCounterTimeDilationComponent::TickCounterCamera(float RealDelta)
 {
 	if (!bCounterCamActive)
 	{
 		return;
 	}
-	CounterCamTargetRot = CounterCamSavedRot;
-	bCounterCamReturning = true;
-	UpdateTickEnabled();
+
+	APlayerController* PC = CounterCamPC.Get();
+	if (!IsValid(PC))
+	{
+		bCounterCamActive = false;
+		bCounterCamReturning = false;
+		NotifyCounterCameraFinished();
+		return;
+	}
+
+	const FRotator NewRot = FMath::RInterpTo(
+		PC->GetControlRotation(),
+		CounterCamTargetRot,
+		RealDelta,
+		CounterCamBlendSpeed);
+
+	PC->SetControlRotation(NewRot);
+
+	if (!bCounterCamReturning || !NewRot.Equals(CounterCamTargetRot, 0.5f))
+	{
+		return;
+	}
+
+	PC->SetIgnoreLookInput(false);
+	bCounterCamActive = false;
+	bCounterCamReturning = false;
+
+	NotifyCounterCameraFinished();
+}
+
+void UCounterTimeDilationComponent::NotifyCounterCameraFinished()
+{
+	FSimpleDelegate Callback = MoveTemp(CounterCamFinishedCallback);
+	Callback.ExecuteIfBound();
 }
 
 void UCounterTimeDilationComponent::UpdateTickEnabled()
