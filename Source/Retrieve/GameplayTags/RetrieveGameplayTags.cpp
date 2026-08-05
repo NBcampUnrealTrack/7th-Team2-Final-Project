@@ -15,6 +15,7 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_Crouch, "Input.Crouch");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Dash, "Input.Dash");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Zoom, "Input.Zoom");
+	UE_DEFINE_GAMEPLAY_TAG(Input_ObjectiveReminder, "Input.ObjectiveReminder");
 
 	// ---- Player abilities
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Player, "Ability.Player");
@@ -473,6 +474,16 @@ namespace RetrieveGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_QuestNotification, "Channel.UI.QuestNotification");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_RevealGate, "Channel.UI.RevealGate");
 	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_PickupToast, "Channel.UI.PickupToast");
+
+	// ---- 길잡이(Guidance)
+	UE_DEFINE_GAMEPLAY_TAG(Channel_UI_ObjectiveReminder, "Channel.UI.ObjectiveReminder");
+	// DT_SystemMessage에 이미 작성돼 있는 튜토리얼 배치를 그대로 가리킨다.
+	// (새 문구를 중복 작성하지 않고, 발동 "시점"만 앞당기는 것이 이 시스템의 역할)
+	UE_DEFINE_GAMEPLAY_TAG(UI_Guidance_Intro, "SystemMessage.Tutorial.Intro");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Guidance_FirstCombat, "SystemMessage.Tutorial.Combat.Basic");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Guidance_FirstPickup, "SystemMessage.Tutorial.Inventory");
+	UE_DEFINE_GAMEPLAY_TAG(UI_Guidance_FirstBonfire, "SystemMessage.Tutorial.Bonfire");
+	UE_DEFINE_GAMEPLAY_TAG(Bark_Hint_Generic, "Bark.Hint.Generic");
 	
 	// ---- Data
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Mul, "Data.Damage.Mul");

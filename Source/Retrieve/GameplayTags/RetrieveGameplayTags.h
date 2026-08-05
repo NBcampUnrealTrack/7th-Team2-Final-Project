@@ -17,6 +17,8 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Crouch);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Dash);
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Zoom);
+	/** 목표 재확인 핫키. 누르면 트래커가 강조되고 목표 마커가 다시 튀어오른다. */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_ObjectiveReminder);
 
 	// ---- Player abilities
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Player);
@@ -488,6 +490,19 @@ namespace RetrieveGameplayTags
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_RevealGate);
 	// 인벤토리 미경유 획득(퀘스트 물건 등)의 아이템 획득 토스트 트리거.
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_PickupToast);
+
+	// ---- 길잡이(Guidance): "지금 뭘 해야 하는지"를 다시 알려주는 신호들
+	/** 목표 재확인 요청. 트래커가 강조되고 목표 마커가 다시 튀어오른다(핫키/리스폰 등). */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_UI_ObjectiveReminder);
+
+	/** 게임 시작 브리핑(당신은 누구/무슨 일이/무엇을 해야 하는가) 시스템 메시지 배치 키. */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Guidance_Intro);
+	/** 최초 경험 코치마크 키(전투/채집/모닥불/제작). DT_SystemMessage에 같은 KeyTag 행을 만든다. */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Guidance_FirstCombat);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Guidance_FirstPickup);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Guidance_FirstBonfire);
+	/** 목표 진전이 오래 없을 때 루멘이 던지는 힌트 대사 키(DT_Bark Manual 행). */
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bark_Hint_Generic);
 
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Channel_Bow_Charge);	
 

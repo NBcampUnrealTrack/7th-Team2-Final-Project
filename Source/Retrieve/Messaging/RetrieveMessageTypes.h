@@ -22,6 +22,27 @@ struct FRetrieveSessionStatePayload
 	ERetrieveSessionState NewState = ERetrieveSessionState::Loading;
 };
 
+// ---- 길잡이 -------------------------------------------------------
+
+/**
+ * 목표 재확인 신호(Channel.UI.ObjectiveReminder).
+ * 트래커는 강조 애니메이션을, 목표 마커 레이어는 등장 연출을 다시 재생한다.
+ */
+USTRUCT(BlueprintType)
+struct FRetrieveObjectiveReminderPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Guidance")
+	FText QuestName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Guidance")
+	FText ObjectiveText;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Retrieve|Guidance")
+	FGameplayTag StepTag;
+};
+
 // ---- 전투 ---------------------------------------------------------
 
 USTRUCT(BlueprintType)
