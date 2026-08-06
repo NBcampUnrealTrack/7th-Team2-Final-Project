@@ -134,6 +134,15 @@ struct RETRIEVE_API FMonsterSFXRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Sound", meta=(ClampMin="0.5", ClampMax="2.0"))
 	float PitchMultiplier = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Playback", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float PlayChance = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Pitch", meta=(ClampMin="0.5", ClampMax="2.0"))
+	float PitchRandomMultiplierMin = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Pitch", meta=(ClampMin="0.5", ClampMax="2.0"))
+	float PitchRandomMultiplierMax = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pattern SFX|Attach")
 	FName SocketName = NAME_None;
 

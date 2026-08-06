@@ -28,6 +28,23 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 		return;
 	}
 
+	const float PlayChance = FMath::Clamp(ResolvedConfig.PlayChance, 0.f, 1.f);
+	if (PlayChance <= 0.f || (PlayChance < 1.f && FMath::FRand() >= PlayChance))
+	{
+		return;
+	}
+
+	const float PitchRandomMultiplierMin = FMath::Min(
+		ResolvedConfig.PitchRandomMultiplierMin,
+		ResolvedConfig.PitchRandomMultiplierMax);
+	const float PitchRandomMultiplierMax = FMath::Max(
+		ResolvedConfig.PitchRandomMultiplierMin,
+		ResolvedConfig.PitchRandomMultiplierMax);
+	const float PitchRandomMultiplier = FMath::IsNearlyEqual(PitchRandomMultiplierMin, PitchRandomMultiplierMax)
+		? PitchRandomMultiplierMin
+		: FMath::FRandRange(PitchRandomMultiplierMin, PitchRandomMultiplierMax);
+	const float RandomizedPitchMultiplier = ResolvedConfig.PitchMultiplier * PitchRandomMultiplier;
+
 	// bFollow=false는 스폰 시점 위치에 고정하는 용도이므로, KeepWorldPosition에 넘길
 	// 월드 좌표를 현재 소켓/메시 위치로 계산한다. (기존엔 항상 FVector::ZeroVector라 월드 원점 재생됨)
 	FVector SpawnLocation = FVector::ZeroVector;
@@ -52,7 +69,7 @@ void UAnimNotifyState_PlayMonsterSFX::NotifyBegin(
 		ResolvedConfig.bFollow ? EAttachLocation::KeepRelativeOffset : EAttachLocation::KeepWorldPosition,
 		false,
 		ResolvedConfig.VolumeMultiplier,
-		ResolvedConfig.PitchMultiplier,
+		RandomizedPitchMultiplier,
 		0.f,
 		nullptr,
 		nullptr,
