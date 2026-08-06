@@ -1712,7 +1712,7 @@ FString UInventoryPanelWidget::GetWeaponPassiveSummary(const FGameplayTag& Weapo
 void UInventoryPanelWidget::UpdateEquipActionButtons()
 {
 	// 표시 여부: 장비 변경 잠금과 무관하게 '대상이 있는지'로만 결정한다.
-	// (장착 시 발검으로 잠시 전투상태가 되어 CanChangeEquipment가 false가 되더라도 버튼은 보여야 한다)
+	// (회피/가드 등으로 CanChangeEquipment가 false가 되더라도 버튼은 보여야 한다)
 	const bool bShowEquip   = ShouldShowEquipButton();
 	const bool bShowUnequip = ShouldShowUnequipButton();
 	// 활성화(클릭 가능) 여부: 실제로 지금 변경 가능한지 (CanChangeEquipment 잠금 포함)
@@ -3619,7 +3619,6 @@ namespace
 	static const FGameplayTag* GetEquipLockTags(int32& OutNum)
 	{
 		static const FGameplayTag LockTags[] = {
-			RetrieveGameplayTags::State_Player_Combat,
 			RetrieveGameplayTags::State_Player_Dodging,
 			RetrieveGameplayTags::State_Player_Guarding,
 			RetrieveGameplayTags::State_Player_Parrying,

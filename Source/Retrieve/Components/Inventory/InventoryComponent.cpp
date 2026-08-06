@@ -364,8 +364,7 @@ bool UInventoryComponent::CanChangeEquipment() const
 	{
 		return true;
 	}
-	return !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Combat)
-		&& !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Dodging)
+	return !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Dodging)
 		&& !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Guarding)
 		&& !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Parrying)
 		&& !ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Player_Bursting)

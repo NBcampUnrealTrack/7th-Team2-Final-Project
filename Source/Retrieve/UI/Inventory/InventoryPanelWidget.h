@@ -692,7 +692,7 @@ protected:
 	// 잠금은 버튼 활성화(SetIsEnabled)로만 반영한다.
 	bool ShouldShowEquipButton() const;
 	bool ShouldShowUnequipButton() const;
-	// 전투/회피 등 장비 변경 잠금 태그가 바뀌면 버튼 활성 상태를 재평가하기 위한 ASC 태그 이벤트 구독
+	// 회피/가드 등 장비 변경 잠금 태그가 바뀌면 버튼 활성 상태를 재평가하기 위한 ASC 태그 이벤트 구독
 	void BindEquipLockTagEvents();
 	void UnbindEquipLockTagEvents();
 	void HandleEquipLockTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
