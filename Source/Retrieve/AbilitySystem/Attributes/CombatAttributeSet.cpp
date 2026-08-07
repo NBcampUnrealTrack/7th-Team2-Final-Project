@@ -661,8 +661,11 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		}
 	}
 
-	// DoT는 피격 반응(Flinch) 생략 — 틱마다 반복 방지.
-	if (TargetActor != AttackerActor && !bIsDamageOverTime)
+	// DoT와 HitReaction 쿨다운 중의 일반 피격 반응은 생략한다. 데미지와 Heavy 반응은 그대로 처리된다.
+	const bool bSkipNormalHitReaction =
+		TargetEventTag == RetrieveGameplayTags::GameplayEvent_Hit_Normal &&
+		Data.Target.HasMatchingGameplayTag(RetrieveGameplayTags::Cooldown_Enemy_HitReaction);
+	if (TargetActor != AttackerActor && !bIsDamageOverTime && !bSkipNormalHitReaction)
 	{
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);

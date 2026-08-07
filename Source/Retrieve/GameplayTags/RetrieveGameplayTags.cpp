@@ -96,6 +96,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Cooldown
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Player_Parry, "Cooldown.Player.Parry");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Enemy_HitReaction, "Cooldown.Enemy.HitReaction");
 
 	// ---- Action state
 	UE_DEFINE_GAMEPLAY_TAG(State_Action_HighMobility, "State.Action.HighMobility");

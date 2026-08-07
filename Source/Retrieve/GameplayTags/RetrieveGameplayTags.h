@@ -99,6 +99,7 @@ namespace RetrieveGameplayTags
 
 	// ---- Cooldown
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Player_Parry);
+	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Enemy_HitReaction);
 
 	// ---- Action state
 	RETRIEVE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_HighMobility);
