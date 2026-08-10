@@ -661,11 +661,8 @@ void UCombatAttributeSet::BroadcastHitEvent(const struct FGameplayEffectModCallb
 		}
 	}
 
-	// DoT와 HitReaction 쿨다운 중의 일반 피격 반응은 생략한다. 데미지와 Heavy 반응은 그대로 처리된다.
-	const bool bSkipNormalHitReaction =
-		TargetEventTag == RetrieveGameplayTags::GameplayEvent_Hit_Normal &&
-		Data.Target.HasMatchingGameplayTag(RetrieveGameplayTags::Cooldown_Enemy_HitReaction);
-	if (TargetActor != AttackerActor && !bIsDamageOverTime && !bSkipNormalHitReaction)
+	// DoT 중의 일반 피격 반응은 생략한다. 데미지와 Heavy 반응은 그대로 처리된다.
+	if (TargetActor != AttackerActor && !bIsDamageOverTime)
 	{
 		EventData.EventTag = TargetEventTag;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetActor, TargetEventTag, EventData);

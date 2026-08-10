@@ -212,7 +212,6 @@ void UPatternCounterComponent::ApplyCounterResult(AActor* Instigator)
 			GroggyEvent.EventMagnitude = GroggyDur;
 			ASC->HandleGameplayEvent(RetrieveGameplayTags::GameplayEvent_GroggyTrigger, &GroggyEvent);
 
-			// TODO (B6-a): DT_MonsterData.GroggyCooldown을 읽어서 쿨다운 설정
 			GroggyCooldownExpiry = Now + GroggyDur + GroggyCooldown;
 		}
 	}
