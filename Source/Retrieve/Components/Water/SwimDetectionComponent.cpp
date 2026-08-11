@@ -119,6 +119,53 @@ void USwimDetectionComponent::ChangeWaterSuppress(int32 Delta)
 	WaterSuppressCount = FMath::Max(0, WaterSuppressCount + Delta);
 }
 
+bool USwimDetectionComponent::ResetWaterStateForTeleport()
+{
+	const bool bWasSwimming = bSwimming;
+	const bool bHadActiveWater = CurrentWater.GetObject() != nullptr;
+
+	if (bSwimming)
+	{
+		SetSwimming(false);
+	}
+	else if (OwnerCharacter)
+	{
+		// 상태 불일치가 있더라도 수영 태그가 순간이동 후 남지 않게 방어적으로 정리한다.
+		if (UAbilitySystemComponent* ASC =
+			UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OwnerCharacter))
+		{
+			ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Swimming, 0);
+			ASC->SetLooseGameplayTagCount(RetrieveGameplayTags::State_Player_Swimming_UnderWater, 0);
+		}
+	}
+
+	if (OwnerCharacter)
+	{
+		if (URetrieveCharacterMovementComponent* RetrieveCMC =
+			Cast<URetrieveCharacterMovementComponent>(OwnerCharacter->GetCharacterMovement()))
+		{
+			RetrieveCMC->ClearWaterState();
+		}
+	}
+
+	bSwimming = false;
+	bSwimEntryFromFall = false;
+	VerticalInput = 0.f;
+	WaterSuppressCount = 0;
+
+	CandidateWaters.Reset();
+	CurrentWater = TScriptInterface<IRetrieveWaterProvider>();
+
+	if (bHadActiveWater)
+	{
+		OnSwimWaterRegionChanged.Broadcast(false);
+	}
+
+	SetComponentTickEnabled(false);
+
+	return bWasSwimming;
+}
+
 void USwimDetectionComponent::NotifyEnterWaterRegion(const TScriptInterface<IRetrieveWaterProvider>& InWater)
 {
 	if (!InWater.GetObject())

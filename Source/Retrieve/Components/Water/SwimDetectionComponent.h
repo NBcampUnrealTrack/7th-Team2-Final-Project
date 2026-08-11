@@ -33,6 +33,9 @@ public:
 	/** suppress 볼륨 진입(+1)/이탈(-1). >0이면 수영 진입 차단 + 유지 중이면 이탈. */
 	void ChangeWaterSuppress(int32 Delta);
 
+	/** 오버랩 종료가 보장되지 않는 순간이동 전에 물 관련 런타임 상태를 초기화한다. 수영 중이었으면 true. */
+	bool ResetWaterStateForTeleport();
+
 	/** 현재 진입한 물 영역 Provider(없으면 무효). FX 등 외부가 활성 수역 질의. */
 	const TScriptInterface<IRetrieveWaterProvider>& GetCurrentWater() const { return CurrentWater; }
 	/** 마지막 수영 진입 직전 MovementMode가 Falling이었는지 반환. */

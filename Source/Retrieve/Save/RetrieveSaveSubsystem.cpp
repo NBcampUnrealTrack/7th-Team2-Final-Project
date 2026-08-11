@@ -2,6 +2,7 @@
 #include "Save/RetrieveSaveGame.h"
 #include "Components/Inventory/InventoryComponent.h"
 #include "Components/Combat/RetrieveHealthComponent.h"
+#include "Components/Water/SwimDetectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
@@ -931,6 +932,11 @@ bool URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 	// "캐릭터가 화면에서 이동하다 모닥불 위로 떨어지는" 현상이 사라진다.
 	ACharacter* Character = Cast<ACharacter>(Pawn);
 	UCharacterMovementComponent* CharMove = Character ? Character->GetCharacterMovement() : nullptr;
+	bool bWasSwimming = false;
+	if (USwimDetectionComponent* SwimDetection = Pawn->FindComponentByClass<USwimDetectionComponent>())
+	{
+		bWasSwimming = SwimDetection->ResetWaterStateForTeleport();
+	}
 
 	// 도착 시 복원할 상태를 멤버에 저장 (폴링 콜백에서 사용).
 	PendingFastTravelBonfireId        = BonfireIdForRecompute;
@@ -943,8 +949,17 @@ bool URetrieveSaveSubsystem::BeginStreamedTeleport(APlayerController* PC, const 
 
 	if (CharMove)
 	{
-		PendingFastTravelPrevMovementMode = CharMove->MovementMode;
-		PendingFastTravelPrevCustomMode   = CharMove->CustomMovementMode;
+		if (bWasSwimming)
+		{
+			// 수영에서 사용하던 MOVE_Flying은 지상 모닥불 도착 후 복원하면 안 된다.
+			PendingFastTravelPrevMovementMode = MOVE_Walking;
+			PendingFastTravelPrevCustomMode = 0;
+		}
+		else
+		{
+			PendingFastTravelPrevMovementMode = CharMove->MovementMode;
+			PendingFastTravelPrevCustomMode = CharMove->CustomMovementMode;
+		}
 		CharMove->StopMovementImmediately();
 		// MOVE_None 상태에서는 중력이 적용되지 않으므로 지면이 없어도 떨어지지 않는다.
 		CharMove->DisableMovement();
