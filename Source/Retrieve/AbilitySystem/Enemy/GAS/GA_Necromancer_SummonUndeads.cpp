@@ -302,49 +302,87 @@ APawn* UGA_Necromancer_SummonUndeads::SpawnMinion(TSubclassOf<APawn> MinionClass
 	const FVector Right = Avatar->GetActorRightVector().GetSafeNormal2D();
 	FVector SpawnLocation =	Avatar->GetActorLocation() + Forward * SpawnForwardDistance	+ Right * SideOffset;
 
-	if (bProjectSpawnToNavigation)
+	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
+
+	if (bProjectSpawnToNavigation && IsValid(NavSystem))
 	{
-		if (UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World))
+		FNavLocation ProjectedLocation;
+		if (NavSystem->ProjectPointToNavigation(
+			SpawnLocation,
+			ProjectedLocation,
+			NavProjectionExtent))
 		{
-			FNavLocation ProjectedLocation;
-			if (NavSystem->ProjectPointToNavigation(
-				SpawnLocation,
-				ProjectedLocation,
-				NavProjectionExtent))
-			{
-				SpawnLocation = ProjectedLocation.Location;
-			}
+			SpawnLocation = ProjectedLocation.Location;
 		}
 	}
 
 	const FRotator SpawnRotation = Avatar->GetActorRotation();
+
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = Avatar;
 	SpawnParams.Instigator = Cast<APawn>(Avatar);
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	APawn* SpawnedPawn = World->SpawnActor<APawn>(
-		MinionClass,
-		SpawnLocation,
-		SpawnRotation,
-		SpawnParams);
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+
+	constexpr int32 FallbackAttemptCount = 6;
+	constexpr float FallbackSearchRadius = 500.f;
+	APawn* SpawnedPawn = nullptr;
+
+	for (int32 Attempt = 0; Attempt <= FallbackAttemptCount; ++Attempt)
+	{
+		FVector CandidateLocation = SpawnLocation;
+
+		if (Attempt > 0)
+		{
+			if (bProjectSpawnToNavigation == false || IsValid(NavSystem) == false)
+			{
+				break;
+			}
+
+			FNavLocation RandomLocation;
+
+			if (NavSystem->GetRandomReachablePointInRadius(
+				SpawnLocation,
+				FallbackSearchRadius,
+				RandomLocation) == false)
+			{
+				continue;
+			}
+
+			CandidateLocation = RandomLocation;
+		}
+
+		SpawnedPawn = World->SpawnActor<APawn>(
+			MinionClass,
+			CandidateLocation,
+			SpawnRotation,
+			SpawnParams);
+
+		if (IsValid(SpawnedPawn))
+		{
+			break;
+		}
+	}
 
 	if (IsValid(SpawnedPawn) == false)
 	{
-		UE_LOG(LogRetrieveCombat, Warning,
-			TEXT("[NecromancerSummon] Spawn failed. Owner=%s Class=%s"),
-			*GetNameSafe(Avatar),
-			*GetNameSafe(MinionClass));
+		UE_LOG(
+		LogRetrieveCombat,
+		Warning,
+		TEXT("[NecromancerSummon] No valid spawn location. Owner=%s Class=%s"),
+		*GetNameSafe(Avatar),
+		*GetNameSafe(MinionClass));
 
 		return nullptr;
 	}
+	
 
 	if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(SpawnedPawn))
 	{
 		Enemy->SetRespawnable(false);
 	}
 
-	if (!SpawnedPawn->GetController())
+	if (SpawnedPawn->GetController() == nullptr)
 	{
 		SpawnedPawn->SpawnDefaultController();
 	}
