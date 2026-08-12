@@ -1006,10 +1006,14 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 		(OwnerEnemy && OwnerEnemy->ShouldUsePatternRangeForNormalAttack())
 		|| RequiredPatternType.MatchesTagExact(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
 
-	const FMonsterPatternRow* BestRow = nullptr;
-	FName BestRowName = NAME_None;
-	int32 BestPriority = MIN_int32;
-
+	struct FPatternCandidate
+	{
+		const FMonsterPatternRow* Row;
+		FName RowName;
+		float Weight;
+	};
+	TArray<FPatternCandidate> Candidates;
+	
 	for (const FName& RowName : PatternSlots)
 	{
 		const FMonsterPatternRow* Row = PatternTable->FindRow<FMonsterPatternRow>(RowName, TEXT("UEnemyCombatComponent"), false);
@@ -1095,20 +1099,34 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 			continue;
 		}
 		
-		if (Row->Priority > BestPriority)
-		{
-			BestPriority = Row->Priority;
-			BestRow = Row;
-			BestRowName = RowName;
-		}
+		const float Weight = FMath::Max(1.f, static_cast<float>(Row->Priority));
+		Candidates.Add({ Row, RowName, Weight });
+		
 	}
 	
-	if (OutRowName)
+	if (Candidates.IsEmpty())
 	{
-		*OutRowName = BestRowName;
+		if (OutRowName) *OutRowName = NAME_None;
+		return nullptr;
 	}
 
-	return BestRow;
+	float TotalWeight = 0.f;
+	for (const FPatternCandidate& C : Candidates) TotalWeight += C.Weight;
+
+	float RandomPoint = FMath::FRandRange(0.f, TotalWeight);
+	for (const FPatternCandidate& C : Candidates)
+	{
+		RandomPoint -= C.Weight;
+		if (RandomPoint <= 0.f)
+		{
+			if (OutRowName) *OutRowName = C.RowName;
+			return C.Row;
+		}
+	}
+
+	const FPatternCandidate& Fallback = Candidates.Last();
+	if (OutRowName) *OutRowName = Fallback.RowName;
+	return Fallback.Row;
 }
 
 bool UEnemyCombatComponent::IsCooldownReady(FName RowName) const
