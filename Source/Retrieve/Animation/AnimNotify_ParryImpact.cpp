@@ -78,15 +78,6 @@ void UAnimNotify_ParryImpact::Notify(USkeletalMeshComponent* MeshComp, UAnimSequ
 		}
 	}
 
-	// 스태거: 카운터 창을 여는 상태(몹/보스 구분).
-	const TSubclassOf<UGameplayEffect> StaggerGE =
-		TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss) ? Parry.BossStaggerEffect : Parry.StaggerEffect;
-	if (StaggerGE)
-	{
-		FGameplayEffectSpecHandle StaggerSpec = SourceASC->MakeOutgoingSpec(StaggerGE, 1.f, Context);
-		if (StaggerSpec.IsValid() && StaggerSpec.Data.IsValid())
-		{
-			SourceASC->ApplyGameplayEffectSpecToTarget(*StaggerSpec.Data.Get(), TargetASC);
-		}
-	}
+	// 스태거는 UGA_ParryBase::ApplyParryStagger로 이관. 이 노티는 몽타주 중간이라 카운터 수용창(패리 성립)과
+	// 어긋나고, 빠른 카운터가 몽타주를 블렌드아웃시키면 노티가 사라져 스태거가 유실됐다.
 }

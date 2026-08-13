@@ -42,6 +42,9 @@ protected:
 	bool WeaponCanParry() const;
 	void PlayParrySuccessMontage() const;
 
+	// 패리 성립 시점에 공격자에게 스태거 GE를 건다(카운터 수용창과 시점 정합, 몽타주 중단에도 유실 없음).
+	void ApplyParryStagger();
+
 	UFUNCTION()
 	void HandleParrySuccess(FGameplayEventData Payload);
 

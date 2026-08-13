@@ -31,6 +31,11 @@ public:
     // 공용 진입점: 임의의 공격 실행 spec으로 실행 시작(강공 등도 사용)
     void BeginAttackExecution(const FAttackExecutionSpec& Spec);
 
+    // 현재 spec에 하강(다이브) 대시 페이즈가 있는가(HitSequence에 DashUpwardSpeed<0 오버라이드 히트).
+    bool WantsDiveLanding() const { return bHasDivePhase; }
+    // 그 하강 발사가 이미 나갔는가(중간 착지 vs 진짜 다이브 착지 구분용).
+    bool HasDiveLaunched() const { return bDiveLaunched; }
+
     // 공중 버스트 착지 슬램: 중심 반경 내 적에게 AoE 데미지 + (보스 제외 옵션) 방사 넉백. GA_Burst가 착지 시 호출
     void ApplyLandingImpact(const FVector& Center, float Radius, float DamageMultiplier, bool bUseKnockback, const FRetrieveKnockbackParams& Knockback, bool bExcludeBoss);
 
@@ -107,6 +112,14 @@ private:
 
     // Dash 중복 발사 방지 (HitIndex별 1회 발사)
     TArray<bool>    PerHitDashLaunched;
+
+    // 대시 페이즈가 GravityScale을 덮어썼을 때, 버스트 종료 시 복원할 원래 값과 여부.
+    float SavedDashGravityScale = 1.f;
+    bool  bDashGravityModified = false;
+
+    // 다이브 착지 판별용(WantsDiveLanding/HasDiveLaunched로 노출).
+    bool bHasDivePhase = false;
+    bool bDiveLaunched = false;
 
     // AreaContinuous 전용: HitIndex별 (대상 → 마지막 데미지 시각). 적별 재적용 간격 판정용.
     TArray<TMap<TWeakObjectPtr<AActor>, double>> PerHitLastHitTime;

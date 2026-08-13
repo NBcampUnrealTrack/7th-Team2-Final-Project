@@ -5,16 +5,21 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
 #include "Character/RetrieveAlsCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/Element/ElementGaugeComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Components/Player/PlayerBurstComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "GameFramework/GameplayMessageSubsystem.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
+#include "Engine/World.h"
 #include "Messaging/RetrieveMessageTypes.h"
+#include "TimerManager.h"
 #include "UI/HUD/RetrieveBuffUIBroadcastComponent.h"
 
 UGA_Burst::UGA_Burst()
@@ -139,15 +144,18 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 	CachedBurstComp = BurstComp;
 	BurstComp->BeginBurstSkill(MatchedRow);
 
-	// 착지 슬램 준비(낙법/래그돌 억제 + 섹션점프 + AoE/넉백)
+	// 착지 처리 바인딩 조건: 슬램(AoE/넉백)은 bDoLandingImpact가, 착지 정지는 다이브 페이즈가 요구.
+	// 슬램 파트는 캐시값(Section/Radius)으로 자체 게이팅되어, 다이브만인 WindBurst는 정지만·슬램 no-op.
 	bLandingHandled = false;
-	bLandingImpactEnabled = MatchedRow->bDoLandingImpact;
+	bLandingImpactEnabled = MatchedRow->bDoLandingImpact || BurstComp->WantsDiveLanding();
 	CachedLandingSection = MatchedRow->LandingSectionName;
 	CachedLandingRadius = MatchedRow->LandingAoeRadius;
 	CachedLandingDamageMul = MatchedRow->LandingDamageMultiplier;
 	bCachedUseLandingKnockback = MatchedRow->bUseLandingKnockback;
 	bCachedExcludeBoss = MatchedRow->bExcludeBossFromKnockback;
 	CachedLandingKnockback = MatchedRow->LandingKnockback;
+	CachedLandingVFX = MatchedRow->LandingVFX;
+	CachedLandingVFXScale = MatchedRow->LandingVFXScale;
 	if (bLandingImpactEnabled)
 	{
 		if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(Avatar))
@@ -158,6 +166,19 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		{
 			LandChar->LandedDelegate.AddDynamic(this, &ThisClass::HandleLanded);
 			BoundLandedCharacter = LandChar;
+		}
+
+		// 안전 타임아웃: 끝내 착지 못 하면(낭떠러지 + 루프 몽타주는 완료 이벤트도 없음) 무한 대기 방지.
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				LandingWaitTimeoutHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this]()
+				{
+					bWaitingForLanding = false;
+					EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+				}),
+				LandingSafetyTimeout, false);
 		}
 	}
 
@@ -192,11 +213,33 @@ void UGA_Burst::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 
 void UGA_Burst::HandleMontageCompleted()
 {
-	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+	FinishOrWaitForLanding();
 }
 
 void UGA_Burst::HandleMontageBlendOut()
 {
+	FinishOrWaitForLanding();
+}
+
+bool UGA_Burst::ShouldWaitForDiveLanding() const
+{
+	// 다이브가 이미 발사됐는데 아직 착지 처리가 안 됐다 = 몽타주가 물리 착지보다 먼저 끝난 상황.
+	return bLandingImpactEnabled
+		&& !bLandingHandled
+		&& IsValid(CachedBurstComp)
+		&& CachedBurstComp->WantsDiveLanding()
+		&& CachedBurstComp->HasDiveLaunched();
+}
+
+void UGA_Burst::FinishOrWaitForLanding()
+{
+	// 몽타주가 물리 착지보다 먼저 끝났으면, 실제 착지(HandleLanded)까지 EndAbility를 미룬다.
+	if (ShouldWaitForDiveLanding())
+	{
+		bWaitingForLanding = true;
+		return;
+	}
+
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
@@ -214,6 +257,12 @@ void UGA_Burst::CleanupBurst()
 {
 	UnbindLanded();
 	SetAvatarPawnCollisionIgnored(false);
+
+	bWaitingForLanding = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LandingWaitTimeoutHandle);
+	}
 	
 	if (bLandingImpactEnabled && !bLandingHandled)
 	{
@@ -245,19 +294,35 @@ void UGA_Burst::HandleLanded(const FHitResult& Hit)
 	{
 		return;
 	}
-	bLandingHandled = true;
-	UnbindLanded();
 
-	// 잔여 다이브 속도 제거 → 그 자리에 정지
+	// 잔여 속도 제거(중간/진짜 착지 매번). StopMovementImmediately는 Velocity만 0으로 만들어,
+	// 엔진 ProcessLanded가 같은 프레임에 굴리는 StartNewPhysics가 잔존 Acceleration으로 재가속 → 미끄러짐.
+	// StopActiveMovement로 Acceleration까지 비운다.
 	if (ACharacter* LandedChar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
 		if (UCharacterMovementComponent* MoveComp = LandedChar->GetCharacterMovement())
 		{
-			MoveComp->StopMovementImmediately();
+			MoveComp->StopActiveMovement();      // Acceleration / RequestedVelocity 제거
+			MoveComp->StopMovementImmediately(); // Velocity 제거
 		}
 	}
 
-	// 착지 섹션으로 점프(설정 시)
+	// 다이브가 예정됐는데 아직 안 나갔으면 상승 아크의 '중간 착지'다. 여기서 확정하면 진짜 다이브 착지가
+	// 무시되므로(섹션점프·AoE 조기 발동) 미룬다. 속도 정리는 위에서 이미 했다.
+	if (IsValid(CachedBurstComp) && CachedBurstComp->WantsDiveLanding() && !CachedBurstComp->HasDiveLaunched())
+	{
+		return;
+	}
+
+	bLandingHandled = true;
+	UnbindLanded();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LandingWaitTimeoutHandle);
+	}
+
+	// 착지 섹션으로 점프(설정 시). 다이브 낙하 섹션을 착지까지 루프시켜 두면 지형 높이와 무관하게 여기서 전환.
 	if (!CachedLandingSection.IsNone())
 	{
 		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
@@ -265,6 +330,9 @@ void UGA_Burst::HandleLanded(const FHitResult& Hit)
 			ASC->CurrentMontageJumpToSection(CachedLandingSection);
 		}
 	}
+
+	// 착지 VFX는 몽타주 노티(고정 타임라인 → 공중 재생) 대신 실제 착지에 스폰.
+	SpawnLandingVFX();
 
 	// 착지 AoE + 방사 넉백(보스 제외)
 	if (CachedLandingRadius > 0.f && IsValid(CachedBurstComp))
@@ -274,6 +342,41 @@ void UGA_Burst::HandleLanded(const FHitResult& Hit)
 		CachedBurstComp->ApplyLandingImpact(Center, CachedLandingRadius, CachedLandingDamageMul,
 			bCachedUseLandingKnockback, CachedLandingKnockback, bCachedExcludeBoss);
 	}
+
+	// 몽타주가 먼저 끝나 대기 중이었다면, 착지를 처리했으니 이제 종료.
+	if (bWaitingForLanding)
+	{
+		bWaitingForLanding = false;
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+	}
+}
+
+void UGA_Burst::SpawnLandingVFX()
+{
+	UNiagaraSystem* VFX = CachedLandingVFX.LoadSynchronous();
+	if (!VFX)
+	{
+		return;
+	}
+
+	const ACharacter* Char = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UWorld* World = Char ? Char->GetWorld() : nullptr;
+	if (!IsValid(Char) || !IsValid(World))
+	{
+		return;
+	}
+
+	// 발밑(캡슐 하단) 기준으로 스폰 → 지면에 밀착.
+	FVector FeetLocation = Char->GetActorLocation();
+	if (const UCapsuleComponent* Capsule = Char->GetCapsuleComponent())
+	{
+		FeetLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World, VFX, FeetLocation, FRotator::ZeroRotator,
+		FVector(CachedLandingVFXScale), /*bAutoDestroy=*/true, /*bAutoActivate=*/true,
+		ENCPoolMethod::AutoRelease);
 }
 
 void UGA_Burst::UnbindLanded()

@@ -202,13 +202,21 @@ void UCounterTimeDilationComponent::BeginCounterCamera(APlayerController* PC, co
 	{
 		return;
 	}
+
+	// 복귀 블렌드 중 다음 카운터가 들어와도 룩 잠금을 다시 push하지 않는다.
+	// SetIgnoreLookInput은 스택 카운터라 +2 후 -1만 나오면 카메라 입력이 영구히 잠긴다.
+	const bool bAlreadyHoldsLookLock = bCounterCamActive && CounterCamPC.Get() == PC;
+
 	CounterCamPC = PC;
 	CounterCamSavedRot = PC->GetControlRotation();
 	CounterCamTargetRot = FramingRot;
 	CounterCamBlendSpeed = FMath::Max(BlendSpeed, 0.1f);
 	bCounterCamActive = true;
 	bCounterCamReturning = false;
-	PC->SetIgnoreLookInput(true);
+	if (!bAlreadyHoldsLookLock)
+	{
+		PC->SetIgnoreLookInput(true);
+	}
 	UpdateTickEnabled();
 }
 

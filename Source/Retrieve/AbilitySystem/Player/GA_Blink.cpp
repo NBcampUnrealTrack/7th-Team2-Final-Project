@@ -9,6 +9,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "GameplayTags/RetrieveGameplayTags.h"
+#include "Utility/AlsGameplayTags.h"
 
 UGA_Blink::UGA_Blink()
 {
@@ -39,6 +40,17 @@ bool UGA_Blink::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	}
 
 	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+
+	// 낙법(ALS Rolling) 중 차단. Rolling은 ASC 태그로 미러링 안 돼 ActivationBlockedTags로는 못 막는다.
+	// 안 막으면 낙법 루트모션이 블링크 이동을 덮어써 이동 없이 스태미너만 소모된다.
+	if (const ARetrieveAlsCharacter* AlsChar = Cast<const ARetrieveAlsCharacter>(AvatarActor))
+	{
+		if (AlsChar->GetLocomotionAction() == AlsLocomotionActionTags::Rolling)
+		{
+			return false;
+		}
+	}
+
 	const UWeaponComponent* WeaponComp = AvatarActor ? AvatarActor->FindComponentByClass<UWeaponComponent>() : nullptr;
 	return WeaponComp &&
 		WeaponComp->GetWeaponDataRef().WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff;

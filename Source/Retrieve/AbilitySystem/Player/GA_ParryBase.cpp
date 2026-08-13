@@ -107,6 +107,8 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 
 	PlayParrySuccessMontage();
 
+	ApplyParryStagger();
+
 	// 카운터 대상 저장 + 수용 시간(무기 데이터). 만료 시 ASC가 대상 소멸. 카운터는 좌클릭 입력으로만 발동.
 	if (URetrieveAbilitySystemComponent* RetrieveASC = Cast<URetrieveAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 	{
@@ -149,8 +151,42 @@ void UGA_ParryBase::HandleParrySuccess(FGameplayEventData Payload)
 		}
 	}
 
-	// 타격+스태거는 즉시가 아니라 성공 몽타주의 AnimNotify_ParryImpact(방패 미는 프레임)가
-	// PendingCounterTarget에게 적용한다. 여기선 대상만 확정(SetPendingCounterTarget)해 둔다.
+	// 타격은 성공 몽타주의 AnimNotify_ParryImpact가 PendingCounterTarget에 적용(스태거는 위에서 즉시).
+}
+
+void UGA_ParryBase::ApplyParryStagger()
+{
+	if (!HasAuthority(&GetCurrentActivationInfoRef()))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(LastParriedAttacker.Get());
+	if (!IsValid(SourceASC) || !IsValid(TargetASC))
+	{
+		return;
+	}
+
+	const FWeaponParryData* ParryData = ResolveParryData();
+	if (!ParryData)
+	{
+		return;
+	}
+
+	const TSubclassOf<UGameplayEffect> StaggerGE = TargetASC->HasMatchingGameplayTag(RetrieveGameplayTags::Monster_Type_Boss)
+		? ParryData->BossStaggerEffect
+		: ParryData->StaggerEffect;
+	if (!StaggerGE)
+	{
+		return;
+	}
+
+	const FGameplayEffectSpecHandle Spec = MakeSourcedSpec(StaggerGE, GetAbilityLevel());
+	if (Spec.IsValid() && Spec.Data.IsValid())
+	{
+		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+	}
 }
 
 void UGA_ParryBase::ExecuteParrySuccessCue() const

@@ -945,6 +945,11 @@ struct RETRIEVE_API FBurstHitInstance
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash", meta = (EditCondition = "bOverrideDashMotion", ClampMin = "0.01"))
 	float DashLaunchDuration = 0.2f;
 
+	/** 이 대시 페이즈 동안 적용할 GravityScale. 0=변경 안 함. 상승 낮게(예 0.7)=정점 체공,
+	 *  다이브 높게(예 3.0)=급강하. 버스트 종료 시 원복. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit|Dash", meta = (EditCondition = "bOverrideDashMotion", ClampMin = "0.0"))
+	float DashGravityScale = 0.f;
+
 	/** 이 타격에서 재생할 적중 VFX. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hit")
 	TSoftObjectPtr<UNiagaraSystem> HitVFX;
@@ -1071,13 +1076,22 @@ struct RETRIEVE_API FSkillCombination : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|FX")
 	FGameplayTag BurstUITag;
 
-	// ---- Landing Impact (공중 버스트 착지 슬램; WindBurst 등) ----
-	/** 착지 시 슬램 처리(낙법/래그돌 억제 + 착지섹션 점프 + AoE 데미지/넉백)를 켠다. */
+	// ---- Landing (공중 버스트 착지 처리; WindBurst 등) ----
+	// 착지 정지·낙법 억제·섹션 점프·착지 VFX는 다이브 버스트면 자동. bDoLandingImpact는 '슬램'(AoE/넉백)만.
+
+	/** 착지 슬램(AoE 데미지/넉백)을 켠다. 착지 정지/섹션점프/VFX와는 무관(다이브면 자동). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing")
 	bool bDoLandingImpact = false;
-	/** 착지 순간 점프할 몽타주 섹션(비우면 섹션 점프 없음). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact"))
+	/** 착지 순간 점프할 몽타주 섹션(비우면 섹션 점프 없음). 다이브 낙하 섹션을 착지까지 루프시키고
+	 *  여기에 착지 섹션명을 넣으면, 지형 높이와 무관하게 실제 착지에서 착지 애님으로 전환된다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing")
 	FName LandingSectionName = NAME_None;
+	/** 실제 착지 순간 발밑에 스폰할 Niagara(몽타주 노티 대신 물리 착지에 맞춰 재생 → 공중 재생 방지). 비우면 없음. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing")
+	TSoftObjectPtr<UNiagaraSystem> LandingVFX;
+	/** 착지 VFX 스케일. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (ClampMin = "0.01"))
+	float LandingVFXScale = 1.f;
 	/** 착지 AoE 반경(cm). 0이면 데미지 없음. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Skill|Landing", meta = (EditCondition = "bDoLandingImpact", ClampMin = "0.0"))
 	float LandingAoeRadius = 0.f;
@@ -1583,7 +1597,8 @@ struct RETRIEVE_API FWeaponParryData
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
 	TSubclassOf<UGameplayEffect> SuccessDamageEffect;
 
-	// 카운터 창을 여는 스태거 GE(몹/보스 구분). 지속시간은 CounterWindowDuration과 맞춘다.
+	// 카운터 창을 여는 스태거 GE(몹/보스 구분). 패리 성립 시점에 ApplyParryStagger가 건다.
+	// 지속시간은 CounterWindowDuration과 맞춘다(같은 시점 시작 → 값만 같으면 창 일치).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Parry|Success")
 	TSubclassOf<UGameplayEffect> StaggerEffect;
 

@@ -5,8 +5,10 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/RetrieveWeaponSockets.h"
+#include "Character/RetrieveAlsCharacter.h"
 #include "Combat/RetrieveKnockbackLibrary.h"
 #include "Components/MeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Components/Player/WeaponComponent.h"
 #include "Data/RetrieveDataTableTypes.h"
 #include "DrawDebugHelpers.h"
@@ -66,6 +68,19 @@ void UPlayerBurstComponent::EndBurstSkill()
 		TEXT("[PlayerBurstComponent] EndBurstSkill. Owner=%s"),
 		*GetNameSafe(GetOwner()));
 
+	// 페이즈 중력을 덮어썼다면 원복(이후 점프/낙하에 잔류 방지).
+	if (bDashGravityModified)
+	{
+		if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+		{
+			if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+			{
+				MoveComp->GravityScale = SavedDashGravityScale;
+			}
+		}
+		bDashGravityModified = false;
+	}
+
 	bHasActiveSpec = false;
 	ActiveSpec = FAttackExecutionSpec();
 	SpawnedWorldActor.Reset();
@@ -82,6 +97,18 @@ void UPlayerBurstComponent::BeginAttackExecution(const FAttackExecutionSpec& Spe
 	ActiveSpec = Spec;
 	bHasActiveSpec = true;
 	SpawnedWorldActor.Reset();
+
+	// 하강(다이브) 페이즈 유무 선판정. 진짜 다이브 착지 vs 상승 아크 중간 착지 구분에 쓴다.
+	bHasDivePhase = false;
+	bDiveLaunched = false;
+	for (const FBurstHitInstance& Hit : ActiveSpec.HitSequence)
+	{
+		if (Hit.bOverrideDashMotion && Hit.DashUpwardSpeed < 0.f)
+		{
+			bHasDivePhase = true;
+			break;
+		}
+	}
 
 	const int32 HitCount = ActiveSpec.HitSequence.Num();
 	PerHitHitActors.SetNum(HitCount);
@@ -635,16 +662,47 @@ void UPlayerBurstComponent::DoDashHit(const FBurstHitInstance& Hit, int32 HitInd
 
 			if (!LaunchVelocity.IsNearlyZero())
 			{
+				// 페이즈별 중력: 상승엔 낮게(정점 체공), 다이브엔 높게(급강하). 발사 직전에 적용해야
+				// 이 페이즈의 포물선 전체가 해당 중력을 따른다. 원복은 EndBurstSkill.
+				const float PhaseGravity = bPerHitDash ? Hit.DashGravityScale : 0.f;
+				if (PhaseGravity > 0.f)
+				{
+					if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+					{
+						if (!bDashGravityModified)
+						{
+							SavedDashGravityScale = MoveComp->GravityScale;
+							bDashGravityModified = true;
+						}
+						MoveComp->GravityScale = PhaseGravity;
+					}
+				}
+
 				URetrieveKnockbackLibrary::LaunchSelf(Character, LaunchVelocity.GetSafeNormal(), LaunchVelocity.Size(), /*bOverrideXY=*/true, /*bOverrideZ=*/bHasUpward);
 
+				// 하강(다이브) 발사 = 의도된 착지가 곧 옴. 중간 접촉이 낙법 억제를 소비했어도 다시 켜고,
+				// bDiveLaunched로 GA_Burst가 이후 착지를 '진짜 다이브 착지'로 인식하게 한다.
+				if (LaunchVelocity.Z < -KINDA_SMALL_NUMBER)
+				{
+					bDiveLaunched = true;
+					if (ARetrieveAlsCharacter* AlsChar = Cast<ARetrieveAlsCharacter>(Character))
+					{
+						AlsChar->SetSuppressLandingRoll(true);
+					}
+				}
+
 				UE_LOG(LogRetrieveCombat, Log,
-					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, Dash=%.1f, Up=%.1f, Speed=%.1f"),
-					HitIndex, DashDistance, DashUpwardSpeed, LaunchVelocity.Size());
+					TEXT("[PlayerBurstComponent] DoDashHit. HitIndex=%d, Dash=%.1f, Up=%.1f, Speed=%.1f, Grav=%.2f"),
+					HitIndex, DashDistance, DashUpwardSpeed, LaunchVelocity.Size(), PhaseGravity);
 			}
 		}
 	}
 
-	SweepAndApply(Hit, ResolveSourceLocation(Hit), DashRadius, HitIndex);
+	// DamageMultiplier<=0인 대시 히트는 '순수 이동' 페이즈(예: 단순 상승) → 판정 스윕을 건너뛴다.
+	if (Hit.DamageMultiplier > 0.f)
+	{
+		SweepAndApply(Hit, ResolveSourceLocation(Hit), DashRadius, HitIndex);
+	}
 }
 
 void UPlayerBurstComponent::DoAoEHit(const FBurstHitInstance& Hit, int32 HitIndex)
