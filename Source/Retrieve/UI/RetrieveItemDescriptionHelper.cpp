@@ -3,6 +3,17 @@
 #include "Data/RetrieveDataTableTypes.h"
 #include "Engine/DataTable.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveItemDescription"
+
+namespace
+{
+	/** %.Nf 출력을 그대로 보존하기 위한 숫자 포맷 헬퍼. */
+	FText DescNum(const float Value, const int32 FractionalDigits)
+	{
+		return FText::FromString(FString::Printf(TEXT("%.*f"), FractionalDigits, Value));
+	}
+}
+
 FText URetrieveItemDescriptionHelper::BuildItemDescription(
 	FName ItemId,
 	FGameplayTag CategoryTag,
@@ -61,19 +72,22 @@ FText URetrieveItemDescriptionHelper::FormatWeapon(const FRetrieveWeaponDataRow&
 	}
 
 	TArray<FString> Stats;
-	Stats.Add(FString::Printf(TEXT("공격력: %.0f"), Row.AttackPower));
+	Stats.Add(FText::Format(LOCTEXT("Desc_Attack", "공격력: {0}"), DescNum(Row.AttackPower, 0)).ToString());
 	if (Row.WeaponTypeTag.IsValid())
 	{
-		Stats.Add(FString::Printf(TEXT("타입: %s"), *GetTagLeaf(Row.WeaponTypeTag)));
+		Stats.Add(FText::Format(LOCTEXT("Desc_Type", "타입: {0}"),
+			FText::FromString(GetTagLeaf(Row.WeaponTypeTag))).ToString());
 	}
 	if (Row.WeaponGradeTag.IsValid())
 	{
-		Stats.Add(FString::Printf(TEXT("등급: %s"), *GetTagLeaf(Row.WeaponGradeTag)));
+		Stats.Add(FText::Format(LOCTEXT("Desc_Grade", "등급: {0}"),
+			FText::FromString(GetTagLeaf(Row.WeaponGradeTag))).ToString());
 	}
 	const FString Affinity = Row.WeaponAffinityTag.IsValid() ? GetTagLeaf(Row.WeaponAffinityTag) : FString();
 	if (!Affinity.IsEmpty() && Affinity != TEXT("None"))
 	{
-		Stats.Add(FString::Printf(TEXT("친화도: %s"), *Affinity));
+		Stats.Add(FText::Format(LOCTEXT("Desc_Affinity", "친화도: {0}"),
+			FText::FromString(Affinity)).ToString());
 	}
 	Lines.Add(FString::Join(Stats, TEXT("  |  ")));
 
@@ -116,15 +130,17 @@ FText URetrieveItemDescriptionHelper::FormatConsumable(const FRetrieveConsumable
 	TArray<FString> Stats;
 	if (Row.HealAmount > 0.0f)
 	{
-		Stats.Add(FString::Printf(TEXT("회복량: %.0f"), Row.HealAmount));
+		Stats.Add(FText::Format(LOCTEXT("Desc_Heal", "회복량: {0}"), DescNum(Row.HealAmount, 0)).ToString());
 	}
 	if (Row.BuffDuration > 0.0f)
 	{
 		if (Row.ElementBuffMultiplier > 1.0f)
 		{
-			Stats.Add(FString::Printf(TEXT("원소 버프: x%.2f"), Row.ElementBuffMultiplier));
+			Stats.Add(FText::Format(LOCTEXT("Desc_ElementBuff", "원소 버프: x{0}"),
+				DescNum(Row.ElementBuffMultiplier, 2)).ToString());
 		}
-		Stats.Add(FString::Printf(TEXT("지속시간: %.1fs"), Row.BuffDuration));
+		Stats.Add(FText::Format(LOCTEXT("Desc_Duration", "지속시간: {0}s"),
+			DescNum(Row.BuffDuration, 1)).ToString());
 	}
 	if (!Stats.IsEmpty())
 	{
@@ -154,3 +170,5 @@ FString URetrieveItemDescriptionHelper::GetTagLeaf(FGameplayTag Tag)
 	int32 DotIndex = INDEX_NONE;
 	return TagStr.FindLastChar(TEXT('.'), DotIndex) ? TagStr.RightChop(DotIndex + 1) : TagStr;
 }
+
+#undef LOCTEXT_NAMESPACE

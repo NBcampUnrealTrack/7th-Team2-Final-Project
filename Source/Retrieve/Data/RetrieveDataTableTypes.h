@@ -2257,10 +2257,16 @@ struct RETRIEVE_API FQuestObjective
 	/**
 	 * bOptional을 아직 채우지 않은 기존 행을 위한 안전망.
 	 * 목표 문구가 "(선택)"으로 시작하면 선택 목표로 간주한다.
+	 *
+	 * 반드시 원문(source string)으로 비교한다. ObjectiveText는 로컬라이즈 대상이라
+	 * ToString()은 현재 언어의 번역문을 돌려주고, 영어로 번역되는 순간 이 검사가
+	 * 조용히 실패해 선택 목표가 필수로 잘못 분류된다.
+	 * (근본 해결은 DT_QuestDefs의 해당 행에 bOptional=true를 채우고 이 폴백을 없애는 것)
 	 */
 	bool IsOptional() const
 	{
-		return bOptional || ObjectiveText.ToString().TrimStart().StartsWith(TEXT("(선택)"));
+		const FString* SourceText = FTextInspector::GetSourceString(ObjectiveText);
+		return bOptional || (SourceText && SourceText->TrimStart().StartsWith(TEXT("(선택)")));
 	}
 
 	// TODO: int32 RequiredCount;  // "몬스터 n마리 처치" 카운터

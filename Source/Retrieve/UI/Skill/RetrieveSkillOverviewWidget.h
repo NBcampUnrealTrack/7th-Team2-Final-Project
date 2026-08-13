@@ -86,7 +86,7 @@ private:
 	static FGameplayTag ExtractResonanceBuffTag(const TSoftClassPtr<UGameplayEffect>& EffectClass);
 
 	FGameplayTag GetCurrentElementTag() const;
-	static FString ElementTagToKorean(const FGameplayTag& ElementTag);
+	static FText ElementTagToDisplayText(const FGameplayTag& ElementTag);
 
 	UWeaponComponent* GetWeaponComponent() const;
 	UArmorComponent* GetArmorComponent() const;

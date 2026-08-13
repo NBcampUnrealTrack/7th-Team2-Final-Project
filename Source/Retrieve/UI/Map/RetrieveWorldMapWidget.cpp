@@ -132,8 +132,11 @@ void URetrieveWorldMapWidget::NativeConstruct()
 	bPendingCenterOnPlayer = true;
 	bWasLeftMouseButtonDown = false;
 
-	const FString LocationString = CurrentLocationText.ToString();
-	if (LocationString.IsEmpty() || LocationString.Contains(TEXT("?")))
+	// 레벨/위젯에 깨진 문자로 직렬화된 값("???")을 기본 문구로 되돌린다.
+	// 반드시 원문(source string)으로 검사한다. ToString()은 현재 언어의 번역문이라,
+	// 물음표가 들어간 번역이 들어오면 멀쩡한 번역을 통째로 덮어써 버린다.
+	const FString* LocationSource = FTextInspector::GetSourceString(CurrentLocationText);
+	if (!LocationSource || LocationSource->IsEmpty() || LocationSource->Contains(TEXT("?")))
 	{
 		CurrentLocationText = NSLOCTEXT("RetrieveWorldMap", "CurrentLocation", "현재 위치");
 	}

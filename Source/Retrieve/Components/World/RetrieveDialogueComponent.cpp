@@ -18,6 +18,8 @@
 #include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveDialogue"
+
 namespace
 {
 	// ── NPC 상호작용 프롬프트 시선 게이트 ─────────────────────────────────────
@@ -205,7 +207,7 @@ namespace
 URetrieveDialogueComponent::URetrieveDialogueComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	InteractionPromptText = FText::FromString(TEXT("대화하기"));
+	InteractionPromptText = LOCTEXT("Dialogue_Prompt", "대화하기");
 }
 
 void URetrieveDialogueComponent::BeginPlay()
@@ -559,13 +561,21 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 	// 내기 대사의 화자명 보장(대화 중이면 이미 설정돼 있지만 안전하게 재설정).
 	GS->SetActiveSpeaker(SpeakerDisplayName);
 
-	static const TCHAR* PickNames[] = { TEXT("가위"), TEXT("바위"), TEXT("보") };
-	const auto MakeChoiceTopics = []()
+	const auto PickName = [](const int32 Index) -> FText
+	{
+		switch (Index)
+		{
+		case 0:  return LOCTEXT("Rps_Scissors", "가위");
+		case 1:  return LOCTEXT("Rps_Rock", "바위");
+		default: return LOCTEXT("Rps_Paper", "보");
+		}
+	};
+	const auto MakeChoiceTopics = [&PickName]()
 	{
 		TArray<FRetrieveDialogueTopic> Choices;
-		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Scissors, FText::FromString(TEXT("가위")), true, ETopicKind::Story });
-		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Rock,     FText::FromString(TEXT("바위")), true, ETopicKind::Story });
-		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Paper,    FText::FromString(TEXT("보")),   true, ETopicKind::Story });
+		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Scissors, PickName(0), true, ETopicKind::Story });
+		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Rock,     PickName(1), true, ETopicKind::Story });
+		Choices.Add(FRetrieveDialogueTopic{ Dialogue_Bet_Paper,    PickName(2), true, ETopicKind::Story });
 		return Choices;
 	};
 
@@ -574,10 +584,10 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 		RpsWinStreak = 0;
 		if (!CanOfferRpsBet())
 		{
-			GS->RequestDialogue({ FText::FromString(TEXT("미안하지만 자네에게 줄 수 있는 건 이미 다 줬다네. 내기는 그만하지.")) }, {}, true);
+			GS->RequestDialogue({ LOCTEXT("Rps_NoMoreRewards", "미안하지만 자네에게 줄 수 있는 건 이미 다 줬다네. 내기는 그만하지.") }, {}, true);
 			return true;
 		}
-		GS->RequestDialogue({ FText::FromString(TEXT("좋지! 가위바위보 세 판을 연속으로 이기면 좋은 걸 주겠네. 자, 무엇을 내겠나?")) },
+		GS->RequestDialogue({ LOCTEXT("Rps_Start", "좋지! 가위바위보 세 판을 연속으로 이기면 좋은 걸 주겠네. 자, 무엇을 내겠나?") },
 			MakeChoiceTopics(), true);
 		return true;
 	}
@@ -588,8 +598,9 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 
 	if (Outcome == 0) // 무승부 — 연승 유지, 다시
 	{
-		GS->RequestDialogue({ FText::FromString(FString::Printf(
-			TEXT("나도 %s! 비겼으니 다시 가세. (현재 %d연승)"), PickNames[NpcPick], RpsWinStreak)) },
+		GS->RequestDialogue({ FText::Format(
+			LOCTEXT("Rps_Draw", "나도 {0}! 비겼으니 다시 가세. (현재 {1}연승)"),
+			PickName(NpcPick), FText::AsNumber(RpsWinStreak)) },
 			MakeChoiceTopics(), true);
 		return true;
 	}
@@ -597,8 +608,9 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 	if (Outcome == 2) // 패배 — 연승 리셋, 재도전 가능
 	{
 		RpsWinStreak = 0;
-		GS->RequestDialogue({ FText::FromString(FString::Printf(
-			TEXT("나는 %s! 이번엔 내가 이겼군. 연승이 끊겼으니 처음부터일세!"), PickNames[NpcPick])) },
+		GS->RequestDialogue({ FText::Format(
+			LOCTEXT("Rps_PlayerLose", "나는 {0}! 이번엔 내가 이겼군. 연승이 끊겼으니 처음부터일세!"),
+			PickName(NpcPick)) },
 			MakeChoiceTopics(), true);
 		return true;
 	}
@@ -607,8 +619,9 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 	++RpsWinStreak;
 	if (RpsWinStreak < 3)
 	{
-		GS->RequestDialogue({ FText::FromString(FString::Printf(
-			TEXT("나는 %s… 자네가 이겼군! (%d연승) 계속 가 보게."), PickNames[NpcPick], RpsWinStreak)) },
+		GS->RequestDialogue({ FText::Format(
+			LOCTEXT("Rps_PlayerWin", "나는 {0}… 자네가 이겼군! ({1}연승) 계속 가 보게."),
+			PickName(NpcPick), FText::AsNumber(RpsWinStreak)) },
 			MakeChoiceTopics(), true);
 		return true;
 	}
@@ -619,10 +632,10 @@ bool URetrieveDialogueComponent::HandleRpsBetTopic(FGameplayTag TopicId, APawn* 
 	GrantWeightedReward(RpsRewardPool, PlayerPawn);
 	const bool bCanBetAgain = CanOfferRpsBet();
 	GS->RequestDialogue({
-			FText::FromString(FString::Printf(TEXT("나는 %s… 세상에, 3연승이라니!"), PickNames[NpcPick])),
-			FText::FromString(bCanBetAgain
-				? TEXT("약속대로 보상을 받게. 실력이 좋으니 한 번 더 도전해도 좋네!")
-				: TEXT("약속대로 보상을 받게. 이걸로 내가 줄 수 있는 건 마지막일세!"))
+			FText::Format(LOCTEXT("Rps_ThreeWins", "나는 {0}… 세상에, 3연승이라니!"), PickName(NpcPick)),
+			bCanBetAgain
+				? LOCTEXT("Rps_RewardCanRetry", "약속대로 보상을 받게. 실력이 좋으니 한 번 더 도전해도 좋네!")
+				: LOCTEXT("Rps_RewardFinal", "약속대로 보상을 받게. 이걸로 내가 줄 수 있는 건 마지막일세!")
 		},
 		bCanBetAgain ? MakeChoiceTopics() : TArray<FRetrieveDialogueTopic>(), true);
 	return true;
@@ -667,3 +680,5 @@ void URetrieveDialogueComponent::OpenConversationFor(AActor* Instigator)
 		PC->Client_OpenConversation(GetOwner());
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

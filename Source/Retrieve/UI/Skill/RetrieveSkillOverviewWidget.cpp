@@ -15,6 +15,17 @@
 #include "UI/RetrieveElementUILibrary.h"
 #include "UI/Skill/RetrieveResonanceEntryWidget.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveSkillOverview"
+
+namespace
+{
+	/** %.Nf 출력을 그대로 보존하기 위한 숫자 포맷 헬퍼(FText::AsNumber는 천 단위 구분자가 붙는다). */
+	FText FmtNum(const float Value, const int32 FractionalDigits)
+	{
+		return FText::FromString(FString::Printf(TEXT("%.*f"), FractionalDigits, Value));
+	}
+}
+
 void URetrieveSkillOverviewWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -102,50 +113,52 @@ FText URetrieveSkillOverviewWidget::BuildWeaponSection() const
 	const UWeaponComponent* Weapon = GetWeaponComponent();
 	if (!Weapon)
 	{
-		return FText::FromString(TEXT("무기 미장착"));
+		return LOCTEXT("Weapon_NotEquipped", "무기 미장착");
 	}
 
 	const FRetrieveWeaponDataRow& Data = Weapon->GetWeaponDataRef();
 	TArray<FString> Lines;
 	Lines.Add(Data.DisplayName.ToString());
-	Lines.Add(FString::Printf(TEXT("공격력 %.0f · 원소 충전 ×%.2f"), Data.AttackPower, Data.ElementChargeMultiplier));
+	Lines.Add(FText::Format(LOCTEXT("Weapon_StatLine", "공격력 {0} · 원소 충전 ×{1}"),
+		FmtNum(Data.AttackPower, 0), FmtNum(Data.ElementChargeMultiplier, 2)).ToString());
 	if (!Data.ShortDescription.IsEmpty())
 	{
-		Lines.Add(FString::Printf(TEXT("장비 효과: %s"), *Data.ShortDescription.ToString()));
+		Lines.Add(FText::Format(LOCTEXT("Weapon_EquipEffect", "장비 효과: {0}"),
+			Data.ShortDescription).ToString());
 	}
 	return FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
 
 FText URetrieveSkillOverviewWidget::BuildSkillSection(const FGameplayTag& ElementTag) const
 {
-	const FString ElementName = ElementTagToKorean(ElementTag);
+	const FText ElementName = ElementTagToDisplayText(ElementTag);
 	const UWeaponComponent* Weapon = GetWeaponComponent();
 
 	TArray<FString> Lines;
 	if (ElementTag == GetCurrentElementTag())
 	{
-		Lines.Add(TEXT("● 현재 선택 원소"));
+		Lines.Add(LOCTEXT("Skill_CurrentElement", "● 현재 선택 원소").ToString());
 	}
-	Lines.Add(TEXT("[흡수] 충전 게이지 1칸 소비"));
+	Lines.Add(LOCTEXT("Skill_AbsorbHeader", "[흡수] 충전 게이지 1칸 소비").ToString());
 	if (ElementTag == RetrieveGameplayTags::Element_Fire)
 	{
-		Lines.Add(TEXT("  · 10초간 공격력 ×1.25 · 최대 3중첩"));
+		Lines.Add(LOCTEXT("Skill_AbsorbFire", "  · 10초간 공격력 ×1.25 · 최대 3중첩").ToString());
 	}
 	else if (ElementTag == RetrieveGameplayTags::Element_Water)
 	{
-		Lines.Add(TEXT("  · 10초간 받는 피해 ×0.80 · 최대 3중첩"));
+		Lines.Add(LOCTEXT("Skill_AbsorbWater", "  · 10초간 받는 피해 ×0.80 · 최대 3중첩").ToString());
 	}
 	else if (ElementTag == RetrieveGameplayTags::Element_Wind)
 	{
-		Lines.Add(TEXT("  · 10초간 이동속도 ×1.20 · 최대 3중첩"));
+		Lines.Add(LOCTEXT("Skill_AbsorbWind", "  · 10초간 이동속도 ×1.20 · 최대 3중첩").ToString());
 	}
 	else
 	{
-		Lines.Add(TEXT("  · 원소를 선택하면 흡수 효과가 표시됩니다."));
+		Lines.Add(LOCTEXT("Skill_AbsorbNone", "  · 원소를 선택하면 흡수 효과가 표시됩니다.").ToString());
 	}
-	Lines.Add(FString::Printf(TEXT("  · %s 원소 스택 +1 (60초)"), *ElementName));
+	Lines.Add(FText::Format(LOCTEXT("Skill_ElementStackGain", "  · {0} 원소 스택 +1 (60초)"), ElementName).ToString());
 	Lines.Add(TEXT(""));
-	Lines.Add(TEXT("[버스트] 게이지 3칸 만충 시 발동"));
+	Lines.Add(LOCTEXT("Skill_BurstHeader", "[버스트] 게이지 3칸 만충 시 발동").ToString());
 
 	const UDataTable* CombinationTable = Cast<UDataTable>(FSoftObjectPath(
 		TEXT("/Game/Retrieve/Data/Skill/DT_SkillCombination.DT_SkillCombination")).TryLoad());
@@ -154,7 +167,7 @@ FText URetrieveSkillOverviewWidget::BuildSkillSection(const FGameplayTag& Elemen
 		CombinationTable, Weapon->GetWeaponDataRef().WeaponTypeTag, ElementTag, Combination);
 	if (!bFound)
 	{
-		Lines.Add(TEXT("  · 현재 무기/원소 조합에 등록된 버스트가 없습니다."));
+		Lines.Add(LOCTEXT("Skill_NoBurst", "  · 현재 무기/원소 조합에 등록된 버스트가 없습니다.").ToString());
 		return FText::FromString(FString::Join(Lines, TEXT("\n")));
 	}
 
@@ -164,30 +177,33 @@ FText URetrieveSkillOverviewWidget::BuildSkillSection(const FGameplayTag& Elemen
 		TotalMultiplier += Hit.DamageMultiplier;
 	}
 	const float BaseDamage = Weapon->GetWeaponDataRef().AttackPower * TotalMultiplier;
-	Lines.Add(FString::Printf(TEXT("  · %s"), *Combination.DisplayName.ToString()));
-	Lines.Add(FString::Printf(TEXT("  · 공격력 합계 배율 ×%.2f · 기본 %.0f 피해"),
-		TotalMultiplier, BaseDamage));
+	Lines.Add(FText::Format(LOCTEXT("Skill_BurstName", "  · {0}"), Combination.DisplayName).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Skill_BurstDamage", "  · 공격력 합계 배율 ×{0} · 기본 {1} 피해"),
+		FmtNum(TotalMultiplier, 2), FmtNum(BaseDamage, 0)).ToString());
 
 	switch (Combination.AttackType)
 	{
 	case EAttackExecutionType::AreaOfEffect:
-		Lines.Add(FString::Printf(TEXT("  · 범위 공격 · 반경 %.0fcm"), Combination.AoeRadius));
+		Lines.Add(FText::Format(LOCTEXT("Skill_TypeAoe", "  · 범위 공격 · 반경 {0}cm"),
+			FmtNum(Combination.AoeRadius, 0)).ToString());
 		break;
 	case EAttackExecutionType::AreaContinuous:
-		Lines.Add(FString::Printf(TEXT("  · 지속 범위 · 반경 %.0fcm · %.2f초마다 피해"),
-			Combination.AoeRadius, Combination.ContinuousDamageInterval));
+		Lines.Add(FText::Format(LOCTEXT("Skill_TypeAoeContinuous", "  · 지속 범위 · 반경 {0}cm · {1}초마다 피해"),
+			FmtNum(Combination.AoeRadius, 0), FmtNum(Combination.ContinuousDamageInterval, 2)).ToString());
 		break;
 	case EAttackExecutionType::Projectile:
-		Lines.Add(FString::Printf(TEXT("  · 투사체 %d회 발사"), Combination.HitSequence.Num()));
+		Lines.Add(FText::Format(LOCTEXT("Skill_TypeProjectile", "  · 투사체 {0}회 발사"),
+			FText::AsNumber(Combination.HitSequence.Num())).ToString());
 		break;
 	case EAttackExecutionType::WorldActor:
-		Lines.Add(FString::Printf(TEXT("  · 전방 %.0fcm 지점에 범위 효과 생성"), Combination.WorldSpawnDistance));
+		Lines.Add(FText::Format(LOCTEXT("Skill_TypeWorldActor", "  · 전방 {0}cm 지점에 범위 효과 생성"),
+			FmtNum(Combination.WorldSpawnDistance, 0)).ToString());
 		break;
 	case EAttackExecutionType::Dash:
-		Lines.Add(TEXT("  · 돌진/강하 연계 공격"));
+		Lines.Add(LOCTEXT("Skill_TypeDash", "  · 돌진/강하 연계 공격").ToString());
 		break;
 	default:
-		Lines.Add(TEXT("  · 근접 범위 공격"));
+		Lines.Add(LOCTEXT("Skill_TypeMelee", "  · 근접 범위 공격").ToString());
 		break;
 	}
 
@@ -198,9 +214,10 @@ FText URetrieveSkillOverviewWidget::BuildSkillSection(const FGameplayTag& Elemen
 	}
 	if (bHasStatusEffect)
 	{
-		Lines.Add(FString::Printf(TEXT("  · 적중 시 %s 원소 상태이상 부여"), *ElementName));
+		Lines.Add(FText::Format(LOCTEXT("Skill_StatusOnHit", "  · 적중 시 {0} 원소 상태이상 부여"),
+			ElementName).ToString());
 	}
-	Lines.Add(TEXT("  ※ 표시 피해는 무기 공격력 기준이며 공명·버프·치명타에 따라 변합니다."));
+	Lines.Add(LOCTEXT("Skill_DamageNote", "  ※ 표시 피해는 무기 공격력 기준이며 공명·버프·치명타에 따라 변합니다.").ToString());
 	return FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
 
@@ -212,7 +229,7 @@ FText URetrieveSkillOverviewWidget::BuildSetSection() const
 		TEXT("/Game/Retrieve/Data/Items/DT_ArmorSetBonus.DT_ArmorSetBonus")).TryLoad());
 	if (!Armor || !ArmorTable || !SetBonusTable)
 	{
-		return FText::FromString(TEXT("착용 중인 세트 없음"));
+		return LOCTEXT("Set_None", "착용 중인 세트 없음");
 	}
 
 	TMap<FGameplayTag, int32> PieceCounts;
@@ -228,7 +245,7 @@ FText URetrieveSkillOverviewWidget::BuildSetSection() const
 
 	if (PieceCounts.IsEmpty())
 	{
-		return FText::FromString(TEXT("착용 중인 세트 없음\n(같은 세트 2부위부터 보너스 발동)"));
+		return LOCTEXT("Set_NoneHint", "착용 중인 세트 없음\n(같은 세트 2부위부터 보너스 발동)");
 	}
 
 	TArray<FString> Lines;
@@ -248,19 +265,24 @@ FText URetrieveSkillOverviewWidget::BuildSetSection() const
 		if (!BonusRow) continue;
 
 		if (!Lines.IsEmpty()) Lines.Add(TEXT(""));
-		Lines.Add(FString::Printf(TEXT("[%s] %d부위"), *BonusRow->DisplayName.ToString(), Pair.Value));
+		Lines.Add(FText::Format(LOCTEXT("Set_Header", "[{0}] {1}부위"),
+			BonusRow->DisplayName, FText::AsNumber(Pair.Value)).ToString());
 		if (!BonusRow->Bonus2Desc.IsEmpty())
 		{
-			Lines.Add(FString::Printf(TEXT("  %s 2세트: %s"),
-				Pair.Value >= 2 ? TEXT("●") : TEXT("○"), *BonusRow->Bonus2Desc.ToString()));
+			Lines.Add(FText::Format(LOCTEXT("Set_Bonus2", "  {0} 2세트: {1}"),
+				FText::FromString(Pair.Value >= 2 ? TEXT("●") : TEXT("○")),
+				BonusRow->Bonus2Desc).ToString());
 		}
 		if (!BonusRow->Bonus4Desc.IsEmpty())
 		{
-			Lines.Add(FString::Printf(TEXT("  %s 4세트: %s"),
-				Pair.Value >= 4 ? TEXT("●") : TEXT("○"), *BonusRow->Bonus4Desc.ToString()));
+			Lines.Add(FText::Format(LOCTEXT("Set_Bonus4", "  {0} 4세트: {1}"),
+				FText::FromString(Pair.Value >= 4 ? TEXT("●") : TEXT("○")),
+				BonusRow->Bonus4Desc).ToString());
 		}
 	}
-	return FText::FromString(Lines.IsEmpty() ? TEXT("착용 중인 세트 없음") : FString::Join(Lines, TEXT("\n")));
+	return Lines.IsEmpty()
+		? LOCTEXT("Set_None", "착용 중인 세트 없음")
+		: FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
 
 FText URetrieveSkillOverviewWidget::BuildResonanceSection() const
@@ -273,15 +295,13 @@ FText URetrieveSkillOverviewWidget::BuildResonanceSection() const
 	const int32 Fire = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Fire);
 	const int32 Water = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Water);
 	const int32 Wind = Resonance->GetElementStackCount(RetrieveGameplayTags::Element_Attune_Wind);
-	return FText::FromString(
-		FString::Printf(TEXT("현재 스택 · 불 %d · 물 %d · 바람 %d"), Fire, Water, Wind));
+	return FText::Format(LOCTEXT("Resonance_Stacks", "현재 스택 · 불 {0} · 물 {1} · 바람 {2}"),
+		FText::AsNumber(Fire), FText::AsNumber(Water), FText::AsNumber(Wind));
 }
 
 FText URetrieveSkillOverviewWidget::BuildAdvantageSection() const
 {
-	return FText::FromString(TEXT(
-		"패링 성공 · 3초간 전 데미지 +15% · 원소 게이지 충전\n"
-		"회피 성공 · 2초간 공격속도 +10% · 이동속도 +10%"));
+	return LOCTEXT("Advantage_Summary", "패링 성공 · 3초간 전 데미지 +15% · 원소 게이지 충전\n회피 성공 · 2초간 공격속도 +10% · 이동속도 +10%");
 }
 
 FGameplayTag URetrieveSkillOverviewWidget::GetCurrentElementTag() const
@@ -291,12 +311,12 @@ FGameplayTag URetrieveSkillOverviewWidget::GetCurrentElementTag() const
 	return PS ? PS->GetCurrentElementTag() : FGameplayTag();
 }
 
-FString URetrieveSkillOverviewWidget::ElementTagToKorean(const FGameplayTag& ElementTag)
+FText URetrieveSkillOverviewWidget::ElementTagToDisplayText(const FGameplayTag& ElementTag)
 {
-	if (ElementTag == RetrieveGameplayTags::Element_Fire) return TEXT("불");
-	if (ElementTag == RetrieveGameplayTags::Element_Water) return TEXT("물");
-	if (ElementTag == RetrieveGameplayTags::Element_Wind) return TEXT("바람");
-	return TEXT("없음");
+	if (ElementTag == RetrieveGameplayTags::Element_Fire) return LOCTEXT("Element_Fire", "불");
+	if (ElementTag == RetrieveGameplayTags::Element_Water) return LOCTEXT("Element_Water", "물");
+	if (ElementTag == RetrieveGameplayTags::Element_Wind) return LOCTEXT("Element_Wind", "바람");
+	return LOCTEXT("Element_None", "없음");
 }
 
 UWeaponComponent* URetrieveSkillOverviewWidget::GetWeaponComponent() const
@@ -377,9 +397,9 @@ void URetrieveSkillOverviewWidget::RebuildResonanceList()
 
 		// 필요 스택 (DT_ElementResonance)
 		TArray<FString> Conditions;
-		if (Row->RequiredFire > 0) Conditions.Add(FString::Printf(TEXT("불%d"), Row->RequiredFire));
-		if (Row->RequiredWater > 0) Conditions.Add(FString::Printf(TEXT("물%d"), Row->RequiredWater));
-		if (Row->RequiredWind > 0) Conditions.Add(FString::Printf(TEXT("바람%d"), Row->RequiredWind));
+		if (Row->RequiredFire > 0) Conditions.Add(FText::Format(LOCTEXT("Cond_Fire", "불{0}"), FText::AsNumber(Row->RequiredFire)).ToString());
+		if (Row->RequiredWater > 0) Conditions.Add(FText::Format(LOCTEXT("Cond_Water", "물{0}"), FText::AsNumber(Row->RequiredWater)).ToString());
+		if (Row->RequiredWind > 0) Conditions.Add(FText::Format(LOCTEXT("Cond_Wind", "바람{0}"), FText::AsNumber(Row->RequiredWind)).ToString());
 		View.StacksText = FText::FromString(FString::Join(Conditions, TEXT(" + ")));
 
 		// 이름/아이콘/효과 (DT_BuffDefinitions): 공명 GE의 AssetTag(UI.Buff.Resonance.*)로 조회.
@@ -435,6 +455,8 @@ FGameplayTag URetrieveSkillOverviewWidget::ExtractResonanceBuffTag(
 	}
 	return FGameplayTag();
 }
+
+#undef LOCTEXT_NAMESPACE
 
 
 

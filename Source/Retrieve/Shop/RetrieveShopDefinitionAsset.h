@@ -15,7 +15,7 @@ class RETRIEVE_API URetrieveShopDefinitionAsset : public UPrimaryDataAsset
 public:
 	/** 상점 표시 이름 / NPC 이름 (UI 타이틀 및 하단 대화창) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop")
-	FText ShopName = INVTEXT("상점");
+	FText ShopName = NSLOCTEXT("RetrieveShop", "ShopDef_DefaultName", "상점");
 
 	/** 상점 종류 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop")
@@ -31,7 +31,7 @@ public:
 
 	/** 상점 NPC 인사말 — WBP_ShopPanel 하단 대화창 출력용 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop")
-	FText GreetingText = INVTEXT("어서오세요. 무엇을 찾으시나요?");
+	FText GreetingText = NSLOCTEXT("RetrieveShop", "ShopDef_DefaultGreeting", "어서오세요. 무엇을 찾으시나요?");
 
 	/** 이 상점의 구매가 배율 (지역 물가 보정). 기본 1.0
 	 *  예) 사막 상점 1.5 → 모든 아이템 50% 추가 가격 */

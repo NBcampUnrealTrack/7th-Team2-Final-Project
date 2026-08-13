@@ -37,6 +37,8 @@
 #include "Engine/Texture2D.h"
 #include "Styling/SlateBrush.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveShop"
+
 static const FRetrieveShopItemRow* FindShopRow(const URetrieveShopDefinitionAsset* Def,
                                                const URetrieveShopComponent* Comp,
                                                FName RowName, const TCHAR* Context)
@@ -85,7 +87,7 @@ void UShopPanelWidget::InitializeShopPanel(UInventoryComponent* InInventoryComp,
 
 	// 3열 레이아웃: 중앙 상세 패널 항상 표시 (품목 선택 전엔 빈 상태)
 	if (Panel_BuyDetail) Panel_BuyDetail->SetVisibility(ESlateVisibility::Visible);
-	if (Text_ItemName)   Text_ItemName->SetText(FText::FromString(TEXT("← 상품을 선택하세요")));
+	if (Text_ItemName)   Text_ItemName->SetText(LOCTEXT("Buy_SelectPrompt", "← 상품을 선택하세요"));
 
 	LoadRepurchaseHistoryFromSave();
 	RefreshCurrencyText();
@@ -145,14 +147,14 @@ bool UShopPanelWidget::ExecuteBuy()
 {
 	if (!InventoryComponent || SelectedBuyRowName.IsNone())
 	{
-		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, INVTEXT("지금은 판매할 수 없는 물건이야."));
+		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, LOCTEXT("DlgFallback_BuyUnavailable", "지금은 판매할 수 없는 물건이야."));
 		return false;
 	}
 
 	const int32 TotalCost = SelectedBuyPrice * BuyQuantity;
 	if (!InventoryComponent->HasEnoughCurrency(TotalCost))
 	{
-		ShowShopDialogue(DialogueRow_BuyFail_NotEnoughMoney, INVTEXT("돈이 부족한 것 같아."));
+		ShowShopDialogue(DialogueRow_BuyFail_NotEnoughMoney, LOCTEXT("DlgFallback_NotEnoughMoney", "돈이 부족한 것 같아."));
 		return false;
 	}
 
@@ -162,7 +164,7 @@ bool UShopPanelWidget::ExecuteBuy()
 
 	if (!Row)
 	{
-		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, INVTEXT("미안해, 그 물건은 지금 재고가 없어."));
+		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, LOCTEXT("DlgFallback_OutOfStock", "미안해, 그 물건은 지금 재고가 없어."));
 		return false;
 	}
 
@@ -172,7 +174,7 @@ bool UShopPanelWidget::ExecuteBuy()
 		: -1;
 	if (Remaining >= 0 && Remaining < BuyQuantity)
 	{
-		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, INVTEXT("미안해, 그 물건은 지금 재고가 없어."));
+		ShowShopDialogue(DialogueRow_BuyFail_OutOfStock, LOCTEXT("DlgFallback_OutOfStock", "미안해, 그 물건은 지금 재고가 없어."));
 		return false;
 	}
 
@@ -180,7 +182,7 @@ bool UShopPanelWidget::ExecuteBuy()
 	// 취급하지 않으므로, 양수 가격일 때만 실제 차감을 시도한다.
 	if (TotalCost > 0 && !InventoryComponent->SpendCurrency(TotalCost))
 	{
-		ShowShopDialogue(DialogueRow_BuyFail_NotEnoughMoney, INVTEXT("돈이 부족한 것 같아."));
+		ShowShopDialogue(DialogueRow_BuyFail_NotEnoughMoney, LOCTEXT("DlgFallback_NotEnoughMoney", "돈이 부족한 것 같아."));
 		return false;
 	}
 
@@ -193,7 +195,7 @@ bool UShopPanelWidget::ExecuteBuy()
 	InventoryComponent->AddItem(Row->ItemId, Row->ItemCategoryTag, BuyQuantity);
 	OnItemPurchased.Broadcast(Row->ItemId, BuyQuantity);
 
-	ShowShopDialogue(DialogueRow_BuySuccess, INVTEXT("좋은 선택이야. 잘 써."));
+	ShowShopDialogue(DialogueRow_BuySuccess, LOCTEXT("DlgFallback_BuySuccess", "좋은 선택이야. 잘 써."));
 	RefreshCurrencyText();
 	RefreshBuyList();   // 남은 재고 텍스트 갱신
 	RefreshBuyDetail();
@@ -446,22 +448,22 @@ void UShopPanelWidget::UpdateSellToolbar()
 	if (Text_SelectedCount)
 	{
 		Text_SelectedCount->SetText(SelectedCount > 0
-			? FText::Format(INVTEXT("{0}종 선택"), FText::AsNumber(SelectedCount))
-			: INVTEXT("선택 없음"));
+			? FText::Format(LOCTEXT("Sell_SelectedKinds", "{0}종 선택"), FText::AsNumber(SelectedCount))
+			: LOCTEXT("Sell_NoSelection", "선택 없음"));
 	}
 
 	if (Text_SelectedCurrency)
 	{
-		Text_SelectedCurrency->SetText(SelectedCount > 0
-			? FText::Format(INVTEXT("{0} G"), FText::AsNumber(TotalPrice))
-			: INVTEXT("0 G"));
+		Text_SelectedCurrency->SetText(FText::Format(
+			LOCTEXT("Shop_GoldAmount", "{0} G"),
+			FText::AsNumber(SelectedCount > 0 ? TotalPrice : 0)));
 	}
 
 	if (Text_SellSelectionSummary)
 	{
 		if (SelectedCount <= 0)
 		{
-			Text_SellSelectionSummary->SetText(INVTEXT("판매할 품목을 선택하세요"));
+			Text_SellSelectionSummary->SetText(LOCTEXT("Sell_PickPrompt", "판매할 품목을 선택하세요"));
 		}
 		else
 		{
@@ -483,21 +485,26 @@ void UShopPanelWidget::UpdateSellToolbar()
 				if (DisplayedCount < 3)
 				{
 					if (!ItemSummary.IsEmpty()) ItemSummary += TEXT("  ·  ");
-					ItemSummary += FString::Printf(TEXT("%s %d/%d개"),
-						*GetItemDisplayName(SellSlot.ItemId, SellSlot.CategoryTag).ToString(),
-						SellQuantity, SellSlot.Quantity);
+					ItemSummary += FText::Format(LOCTEXT("Sell_SummaryItem", "{0} {1}/{2}개"),
+						GetItemDisplayName(SellSlot.ItemId, SellSlot.CategoryTag),
+						FText::AsNumber(SellQuantity),
+						FText::AsNumber(SellSlot.Quantity)).ToString();
 					++DisplayedCount;
 				}
 			}
 
 			if (SelectedCount > DisplayedCount)
 			{
-				ItemSummary += FString::Printf(TEXT("  ·  외 %d종"), SelectedCount - DisplayedCount);
+				ItemSummary += FText::Format(LOCTEXT("Sell_SummaryMore", "  ·  외 {0}종"),
+					FText::AsNumber(SelectedCount - DisplayedCount)).ToString();
 			}
 
-			Text_SellSelectionSummary->SetText(FText::FromString(FString::Printf(
-				TEXT("판매 목록  %s\n총 %d종 / %d개    |    예상 %d G"),
-				*ItemSummary, SelectedCount, TotalQuantity, TotalPrice)));
+			Text_SellSelectionSummary->SetText(FText::Format(
+				LOCTEXT("Sell_SelectionSummary", "판매 목록  {0}\n총 {1}종 / {2}개    |    예상 {3} G"),
+				FText::FromString(ItemSummary),
+				FText::AsNumber(SelectedCount),
+				FText::AsNumber(TotalQuantity),
+				FText::AsNumber(TotalPrice)));
 		}
 	}
 	if (Button_SellSelected)
@@ -531,7 +538,7 @@ bool UShopPanelWidget::ExecuteSellSelected()
 {
 	if (!CanExecuteSellSelected())
 	{
-		ShowShopDialogue(DialogueRow_SellFail_NoSelection, INVTEXT("팔 물건을 먼저 골라줘."));
+		ShowShopDialogue(DialogueRow_SellFail_NoSelection, LOCTEXT("DlgFallback_SellNoSelection", "팔 물건을 먼저 골라줘."));
 		return false;
 	}
 
@@ -577,11 +584,11 @@ bool UShopPanelWidget::ExecuteSellSelected()
 		if (bSkippedEquipped)
 		{
 			ShowShopDialogue(DialogueRow_SellFail_NoSelection,
-				INVTEXT("장착 중인 장비는 팔 수 없어. 먼저 장비를 해제해줘."));
+				LOCTEXT("DlgFallback_SellEquipped", "장착 중인 장비는 팔 수 없어. 먼저 장비를 해제해줘."));
 		}
 		else
 		{
-			ShowShopDialogue(DialogueRow_SellFail_NoSelection, INVTEXT("팔 물건을 먼저 골라줘."));
+			ShowShopDialogue(DialogueRow_SellFail_NoSelection, LOCTEXT("DlgFallback_SellNoSelection", "팔 물건을 먼저 골라줘."));
 		}
 		return false;
 	}
@@ -607,14 +614,14 @@ bool UShopPanelWidget::ExecuteSellSelected()
 
 	if (bAnySold)
 	{
-		ShowShopDialogue(DialogueRow_SellSuccess, INVTEXT("좋은 거래였어."));
+		ShowShopDialogue(DialogueRow_SellSuccess, LOCTEXT("DlgFallback_SellSuccess", "좋은 거래였어."));
 		SyncRepurchaseHistoryToSave();
 		RefreshCurrencyText();
 		RefreshSellGrid(CurrentSellCategoryTag);
 	}
 	else
 	{
-		ShowShopDialogue(DialogueRow_SellFail_MerchantNoMoney, INVTEXT("미안해, 지금은 내가 살 수 없겠어."));
+		ShowShopDialogue(DialogueRow_SellFail_MerchantNoMoney, LOCTEXT("DlgFallback_MerchantNoMoney", "미안해, 지금은 내가 살 수 없겠어."));
 	}
 	return bAnySold;
 }
@@ -726,7 +733,7 @@ void UShopPanelWidget::RefreshRepurchaseList()
 		if (!Entry) continue;
 
 		FText NameTxt  = GetItemDisplayName(Record.ItemId, Record.ItemCategoryTag);
-		FText PriceTxt = FText::Format(INVTEXT("{0}골드"), FText::AsNumber(Record.RepurchasePrice));
+		FText PriceTxt = FText::Format(LOCTEXT("Repurchase_Price", "{0}골드"), FText::AsNumber(Record.RepurchasePrice));
 		const bool bCanRepurchase = InventoryComponent && InventoryComponent->HasEnoughCurrency(Record.RepurchasePrice);
 		Entry->InitEntry(i, NameTxt, PriceTxt, this, bCanRepurchase);
 		ScrollBox_RepurchaseList->AddChild(Entry);
@@ -740,7 +747,7 @@ void UShopPanelWidget::RefreshRepurchaseList()
 	if (Text_RepurchaseTotalCost)
 	{
 		Text_RepurchaseTotalCost->SetText(
-			FText::Format(INVTEXT("합계 {0}골드"), FText::AsNumber(TotalCost)));
+			FText::Format(LOCTEXT("Repurchase_TotalCost", "합계 {0}골드"), FText::AsNumber(TotalCost)));
 	}
 	if (Button_RepurchaseAll)
 		Button_RepurchaseAll->SetIsEnabled(!RepurchaseHistory.IsEmpty() && TotalCost > 0);
@@ -920,16 +927,16 @@ void UShopPanelWidget::ApplyShopTypeStyle()
 	switch (ShopDefinition->ShopType)
 	{
 	case ERetrieveShopType::Weapon:
-		BadgeLabel = INVTEXT("무기");   break;
+		BadgeLabel = LOCTEXT("Category_Weapon", "무기");   break;
 	case ERetrieveShopType::Armor:
-		BadgeLabel = INVTEXT("방어구"); break;
+		BadgeLabel = LOCTEXT("Category_Armor", "방어구"); break;
 	default:
-		BadgeLabel = INVTEXT("잡화");   break;
+		BadgeLabel = LOCTEXT("Category_Misc", "잡화");   break;
 	}
 
 	if (Text_ShopTypeBadge) Text_ShopTypeBadge->SetText(BadgeLabel);
-	if (Text_TabBuyLabel)   Text_TabBuyLabel->SetText(INVTEXT("구매"));
-	if (Text_TabSellLabel)  Text_TabSellLabel->SetText(INVTEXT("판매"));
+	if (Text_TabBuyLabel)   Text_TabBuyLabel->SetText(LOCTEXT("Tab_Buy", "구매"));
+	if (Text_TabSellLabel)  Text_TabSellLabel->SetText(LOCTEXT("Tab_Sell", "판매"));
 }
 
 void UShopPanelWidget::ApplyShopModeLayout(bool bSellMode)
@@ -974,9 +981,9 @@ void UShopPanelWidget::RefreshCurrencyText()
 	const int32 Currency = InventoryComponent->GetCurrency();
 	const FText NumText  = FText::AsNumber(Currency);
 	if (Text_Currency) Text_Currency->SetText(NumText);
-	const FText GoldText = FText::Format(FText::FromString(TEXT("{0} G")), NumText);
+	const FText GoldText = FText::Format(LOCTEXT("Shop_GoldAmount", "{0} G"), NumText);
 	if (Text_BuyCurrentGold)
-		Text_BuyCurrentGold->SetText(FText::Format(INVTEXT("보유 골드  {0} G"), NumText));
+		Text_BuyCurrentGold->SetText(FText::Format(LOCTEXT("Buy_CurrentGold", "보유 골드  {0} G"), NumText));
 	if (UTextBlock* InvCurrency = Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_CurrencyInInventory"))))
 	{
 		InvCurrency->SetText(GoldText);
@@ -1100,7 +1107,7 @@ void UShopPanelWidget::RefreshBuyDetail()
 	if (Text_ItemName)    Text_ItemName->SetText(GetItemDisplayName(Row->ItemId, Row->ItemCategoryTag));
 	if (Text_ItemPrice)   Text_ItemPrice->SetText(FText::AsNumber(TotalCost));
 	if (Text_BuyTotalCost)
-		Text_BuyTotalCost->SetText(FText::Format(INVTEXT("구매 예정  {0} G"), FText::AsNumber(TotalCost)));
+		Text_BuyTotalCost->SetText(FText::Format(LOCTEXT("Buy_TotalCost", "구매 예정  {0} G"), FText::AsNumber(TotalCost)));
 	// 재고 상한에 도달하면 증가 버튼 비활성(무한 재고면 99에서만 비활성).
 	if (Button_BuyIncrease) Button_BuyIncrease->SetIsEnabled(BuyQuantity < FMath::Max(1, StockLimit));
 	if (Button_BuyDecrease) Button_BuyDecrease->SetIsEnabled(BuyQuantity > 1);
@@ -1120,11 +1127,11 @@ void UShopPanelWidget::RefreshBuyDetail()
 			return S;
 		};
 
-		auto AddDetailRow = [](FString& Out, const TCHAR* Icon, const TCHAR* Label, const FString& Value)
+		auto AddDetailRow = [](FString& Out, const TCHAR* Icon, const FText& Label, const FString& Value)
 		{
 			if (!Value.IsEmpty())
 			{
-				Out += FString::Printf(TEXT("%s  %s  %s\n"), Icon, Label, *Value);
+				Out += FString::Printf(TEXT("%s  %s  %s\n"), Icon, *Label.ToString(), *Value);
 			}
 		};
 
@@ -1133,34 +1140,37 @@ void UShopPanelWidget::RefreshBuyDetail()
 		{
 			if (const FRetrieveWeaponDataRow* W = WeaponDataTable->FindRow<FRetrieveWeaponDataRow>(Row->ItemId, TEXT("ShopDetail")))
 			{
-				AddDetailRow(Detail, TEXT("◆"), TEXT("공격력"), FString::Printf(TEXT("%.0f"), W->AttackPower));
-				if (W->WeaponTypeTag.IsValid())     AddDetailRow(Detail, TEXT("▣"), TEXT("종류"), TagLeaf(W->WeaponTypeTag));
-				if (W->WeaponAffinityTag.IsValid()) AddDetailRow(Detail, TEXT("◇"), TEXT("속성"), TagLeaf(W->WeaponAffinityTag));
-				if (!W->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), TEXT("설명"), W->ShortDescription.ToString());
+				AddDetailRow(Detail, TEXT("◆"), LOCTEXT("Detail_AttackPower", "공격력"), FString::Printf(TEXT("%.0f"), W->AttackPower));
+				if (W->WeaponTypeTag.IsValid())     AddDetailRow(Detail, TEXT("▣"), LOCTEXT("Detail_Type", "종류"), TagLeaf(W->WeaponTypeTag));
+				if (W->WeaponAffinityTag.IsValid()) AddDetailRow(Detail, TEXT("◇"), LOCTEXT("Detail_Element", "속성"), TagLeaf(W->WeaponAffinityTag));
+				if (!W->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), LOCTEXT("Detail_Description", "설명"), W->ShortDescription.ToString());
 			}
 		}
 		else if (Cat.MatchesTag(ArmorTag) && ArmorDataTable)
 		{
 			if (const FRetrieveArmorDataRow* A = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(Row->ItemId, TEXT("ShopDetail")))
 			{
-				AddDetailRow(Detail, TEXT("◆"), TEXT("방어력"), FString::Printf(TEXT("+%.0f"), A->Defense));
-				if (A->EquipmentSlotTag.IsValid()) AddDetailRow(Detail, TEXT("▣"), TEXT("부위"), TagLeaf(A->EquipmentSlotTag));
-				if (!A->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), TEXT("설명"), A->ShortDescription.ToString());
+				AddDetailRow(Detail, TEXT("◆"), LOCTEXT("Detail_Defense", "방어력"), FString::Printf(TEXT("+%.0f"), A->Defense));
+				if (A->EquipmentSlotTag.IsValid()) AddDetailRow(Detail, TEXT("▣"), LOCTEXT("Detail_Slot", "부위"), TagLeaf(A->EquipmentSlotTag));
+				if (!A->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), LOCTEXT("Detail_Description", "설명"), A->ShortDescription.ToString());
 			}
 		}
 		else if (Cat.MatchesTag(ConsumTag) && ConsumableItemTable)
 		{
 			if (const FRetrieveConsumableItemRow* C = ConsumableItemTable->FindRow<FRetrieveConsumableItemRow>(Row->ItemId, TEXT("ShopDetail")))
 			{
-				if (C->HealAmount > 0.f)            AddDetailRow(Detail, TEXT("◆"), TEXT("회복량"), FString::Printf(TEXT("%.0f"), C->HealAmount));
-				if (C->ElementBuffMultiplier > 1.f) AddDetailRow(Detail, TEXT("◇"), TEXT("속성 충전"), FString::Printf(TEXT("x%.1f (%.0f초)"), C->ElementBuffMultiplier, C->BuffDuration));
-				if (!C->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), TEXT("설명"), C->ShortDescription.ToString());
+				if (C->HealAmount > 0.f)            AddDetailRow(Detail, TEXT("◆"), LOCTEXT("Detail_HealAmount", "회복량"), FString::Printf(TEXT("%.0f"), C->HealAmount));
+				if (C->ElementBuffMultiplier > 1.f) AddDetailRow(Detail, TEXT("◇"), LOCTEXT("Detail_ElementCharge", "속성 충전"),
+					FText::Format(LOCTEXT("Detail_ElementChargeValue", "x{0} ({1}초)"),
+						FText::FromString(FString::Printf(TEXT("%.1f"), C->ElementBuffMultiplier)),
+						FText::FromString(FString::Printf(TEXT("%.0f"), C->BuffDuration))).ToString());
+				if (!C->ShortDescription.IsEmpty()) AddDetailRow(Detail, TEXT("●"), LOCTEXT("Detail_Description", "설명"), C->ShortDescription.ToString());
 			}
 		}
 
 		if (Detail.IsEmpty())
 		{
-			AddDetailRow(Detail, TEXT("●"), TEXT("설명"), GetItemShortDesc(Row->ItemId, Cat).ToString());
+			AddDetailRow(Detail, TEXT("●"), LOCTEXT("Detail_Description", "설명"), GetItemShortDesc(Row->ItemId, Cat).ToString());
 		}
 		Text_ItemDesc->SetText(FText::FromString(Detail));
 	}
@@ -1258,29 +1268,29 @@ UUserWidget* UShopPanelWidget::BuildSellSlotTooltip(const FSellSlotCache& SlotDa
 	FText MainStatText;
 	if (SlotData.CategoryTag.MatchesTag(WeaponTag))
 	{
-		RarityText = INVTEXT("무기");
-		MainStatText = FText::Format(INVTEXT("공격력 {0}"),
+		RarityText = LOCTEXT("Category_Weapon", "무기");
+		MainStatText = FText::Format(LOCTEXT("Tooltip_AttackPower", "공격력 {0}"),
 			FText::AsNumber(FMath::FloorToInt(GetItemStatValue(SlotData.ItemId, SlotData.CategoryTag))));
 	}
 	else if (SlotData.CategoryTag.MatchesTag(ArmorTag))
 	{
-		RarityText = INVTEXT("방어구");
-		MainStatText = FText::Format(INVTEXT("방어력 {0}"),
+		RarityText = LOCTEXT("Category_Armor", "방어구");
+		MainStatText = FText::Format(LOCTEXT("Tooltip_Defense", "방어력 {0}"),
 			FText::AsNumber(FMath::FloorToInt(GetItemStatValue(SlotData.ItemId, SlotData.CategoryTag))));
 	}
 	else if (SlotData.CategoryTag.MatchesTag(ConsumTag))
 	{
-		RarityText = INVTEXT("소모품");
-		MainStatText = FText::Format(INVTEXT("{0}개 보유"), FText::AsNumber(SlotData.Quantity));
+		RarityText = LOCTEXT("Category_Consumable", "소모품");
+		MainStatText = FText::Format(LOCTEXT("Tooltip_OwnedCount", "{0}개 보유"), FText::AsNumber(SlotData.Quantity));
 	}
 	else if (SlotData.CategoryTag.MatchesTag(MaterialTag))
 	{
-		RarityText = INVTEXT("재료");
-		MainStatText = FText::Format(INVTEXT("{0}개 보유"), FText::AsNumber(SlotData.Quantity));
+		RarityText = LOCTEXT("Category_Material", "재료");
+		MainStatText = FText::Format(LOCTEXT("Tooltip_OwnedCount", "{0}개 보유"), FText::AsNumber(SlotData.Quantity));
 	}
 
 	// 뱃지: 장착 중일 때만 노출(기본 텍스트 "장착됨"이 항상 보이던 문제 해결).
-	SetTxt(TEXT("Text_Badge"), SlotData.bEquipped ? INVTEXT("장착 중") : FText::GetEmpty());
+	SetTxt(TEXT("Text_Badge"), SlotData.bEquipped ? LOCTEXT("Badge_Equipped", "장착 중") : FText::GetEmpty());
 	SetVis(TEXT("Text_Badge"), SlotData.bEquipped);
 	SetVis(TEXT("IMG_BadgeFrame"), SlotData.bEquipped);
 
@@ -1588,3 +1598,5 @@ void UShopPanelWidget::HandleInventoryChanged()
 		RefreshBuyDetail();
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

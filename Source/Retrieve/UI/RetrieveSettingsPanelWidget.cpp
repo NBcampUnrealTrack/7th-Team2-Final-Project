@@ -32,6 +32,8 @@
 #include "UserSettings/EnhancedInputUserSettings.h"
 #include "UObject/UnrealType.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveSettings"
+
 namespace
 {
 	template <typename T>
@@ -104,19 +106,24 @@ namespace
 		// 낮음으로 잘못 표기하지 않도록 별도 표기한다.
 		if (Quality < 0)
 		{
-			return FText::FromString(TEXT("사용자 지정"));
+			return LOCTEXT("Quality_Custom", "사용자 지정");
 		}
-		static const TCHAR* Labels[] = { TEXT("낮음"), TEXT("중간"), TEXT("높음"), TEXT("에픽") };
-		return FText::FromString(Labels[FMath::Clamp(Quality, 0, 3)]);
+		switch (FMath::Clamp(Quality, 0, 3))
+		{
+		case 0:  return LOCTEXT("Quality_Low", "낮음");
+		case 1:  return LOCTEXT("Quality_Medium", "중간");
+		case 2:  return LOCTEXT("Quality_High", "높음");
+		default: return LOCTEXT("Quality_Epic", "에픽");
+		}
 	}
 
 	FText WindowModeText(const ERetrieveWindowMode Mode)
 	{
 		switch (Mode)
 		{
-		case ERetrieveWindowMode::Fullscreen: return FText::FromString(TEXT("전체 화면"));
-		case ERetrieveWindowMode::WindowedFullscreen: return FText::FromString(TEXT("테두리 없는 창"));
-		default: return FText::FromString(TEXT("창 모드"));
+		case ERetrieveWindowMode::Fullscreen: return LOCTEXT("WindowMode_Fullscreen", "전체 화면");
+		case ERetrieveWindowMode::WindowedFullscreen: return LOCTEXT("WindowMode_Borderless", "테두리 없는 창");
+		default: return LOCTEXT("WindowMode_Windowed", "창 모드");
 		}
 	}
 
@@ -124,10 +131,10 @@ namespace
 	{
 		switch (Mode)
 		{
-		case ERetrieveColorBlindMode::Protanope: return FText::FromString(TEXT("적색맹"));
-		case ERetrieveColorBlindMode::Deuteranope: return FText::FromString(TEXT("녹색맹"));
-		case ERetrieveColorBlindMode::Tritanope: return FText::FromString(TEXT("청색맹"));
-		default: return FText::FromString(TEXT("끄기"));
+		case ERetrieveColorBlindMode::Protanope: return LOCTEXT("ColorBlind_Protanope", "적색맹");
+		case ERetrieveColorBlindMode::Deuteranope: return LOCTEXT("ColorBlind_Deuteranope", "녹색맹");
+		case ERetrieveColorBlindMode::Tritanope: return LOCTEXT("ColorBlind_Tritanope", "청색맹");
+		default: return LOCTEXT("ColorBlind_Off", "끄기");
 		}
 	}
 
@@ -143,7 +150,7 @@ namespace
 			NewObject<UPlayerMappableKeySettings>(Action, NAME_None, RF_Transient);
 		MappingSettings->Name = MappingName;
 		MappingSettings->DisplayName = DisplayName;
-		MappingSettings->DisplayCategory = FText::FromString(TEXT("전투"));
+		MappingSettings->DisplayCategory = LOCTEXT("MappingCategory_Combat", "전투");
 
 		if (FObjectProperty* Property = FindFProperty<FObjectProperty>(
 			UInputAction::StaticClass(), TEXT("PlayerMappableKeySettings")))
@@ -163,7 +170,7 @@ namespace
 		const TCHAR* ActionAssetName;
 		const TCHAR* AssetPath;
 		const TCHAR* MappingName;
-		const TCHAR* DisplayLabel;
+		FText DisplayLabel;
 		const TCHAR* KeyTextWidgetName;
 		const TCHAR* RebindButtonWidgetName;
 	};
@@ -173,21 +180,21 @@ namespace
 		// 공격(IA_Attack)은 목록에서 제외: 마우스 좌클릭 고정(조작키 안내의 마우스 아이콘 표기를
 		// 바꿀 수 없어 리바인드를 막는다). Key_Attack 행은 RefreshKeyBindings에서 "고정" 표기.
 		static const TArray<FRebindActionDef> Defs = {
-			{ TEXT("IA_Roll"),         TEXT("/Game/Retrieve/Input/Actions/IA_Roll.IA_Roll"),                 TEXT("Retrieve.Dodge"),       TEXT("회피"),     TEXT("Key_Dodge"),        TEXT("KeyBtn_Dodge") },
-			{ TEXT("IA_LockOn"),       TEXT("/Game/Retrieve/Input/Actions/IA_LockOn.IA_LockOn"),             TEXT("Retrieve.LockOn"),      TEXT("락온"),     TEXT("Key_LockOn"),       TEXT("KeyBtn_LockOn") },
-			{ TEXT("IA_Sprint"),       TEXT("/Game/Retrieve/Input/Actions/IA_Sprint.IA_Sprint"),             TEXT("Retrieve.Sprint"),      TEXT("질주"),     TEXT("Key_Sprint"),       TEXT("KeyBtn_Sprint") },
-			{ TEXT("IA_Jump"),         TEXT("/Game/Retrieve/Input/Actions/IA_Jump.IA_Jump"),                 TEXT("Retrieve.Jump"),        TEXT("점프"),     TEXT("Key_Jump"),         TEXT("KeyBtn_Jump") },
-			{ TEXT("IA_Interaction"),  TEXT("/Game/Retrieve/Input/Actions/IA_Interaction.IA_Interaction"),   TEXT("Retrieve.Interact"),    TEXT("상호작용"), TEXT("Key_Interaction"),  TEXT("KeyBtn_Interaction") },
-			{ TEXT("IA_HeavyAttack"),  TEXT("/Game/Retrieve/Input/Actions/IA_HeavyAttack.IA_HeavyAttack"),   TEXT("Retrieve.HeavyAttack"), TEXT("강공격"),   TEXT("Key_HeavyAttack"),  TEXT("KeyBtn_HeavyAttack") },
-			{ TEXT("IA_Guard"),        TEXT("/Game/Retrieve/Input/Actions/IA_Guard.IA_Guard"),               TEXT("Retrieve.Guard"),       TEXT("가드"),     TEXT("Key_Guard"),        TEXT("KeyBtn_Guard") },
-			{ TEXT("IA_Crouch"),       TEXT("/Game/Retrieve/Input/Actions/IA_Crouch.IA_Crouch"),             TEXT("Retrieve.Crouch"),      TEXT("웅크리기"), TEXT("Key_Crouch"),       TEXT("KeyBtn_Crouch") },
-			{ TEXT("IA_Burst"),        TEXT("/Game/Retrieve/Input/Actions/IA_Burst.IA_Burst"),               TEXT("Retrieve.Burst"),       TEXT("버스트"),   TEXT("Key_Burst"),        TEXT("KeyBtn_Burst") },
-			{ TEXT("IA_Absorb"),       TEXT("/Game/Retrieve/Input/Actions/IA_Absorb.IA_Absorb"),             TEXT("Retrieve.Absorb"),      TEXT("흡수"),     TEXT("Key_Absorb"),       TEXT("KeyBtn_Absorb") },
-			{ TEXT("IA_RecallLumen"),  TEXT("/Game/Retrieve/Input/Actions/IA_RecallLumen.IA_RecallLumen"),   TEXT("Retrieve.RecallLumen"), TEXT("루멘 소환"),TEXT("Key_RecallLumen"),  TEXT("KeyBtn_RecallLumen") },
-			{ TEXT("IA_QuickSlotWheel"),TEXT("/Game/Retrieve/Input/Actions/IA_QuickSlotWheel.IA_QuickSlotWheel"),TEXT("Retrieve.QuickSlotWheel"),TEXT("퀵슬롯"),TEXT("Key_QuickSlot"),TEXT("KeyBtn_QuickSlot") },
-			{ TEXT("IA_ElementMode1"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode1.IA_ElementMode1"), TEXT("Retrieve.Element1"),    TEXT("원소 1"),   TEXT("Key_Element1"),     TEXT("KeyBtn_Element1") },
-			{ TEXT("IA_ElementMode2"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode2.IA_ElementMode2"), TEXT("Retrieve.Element2"),    TEXT("원소 2"),   TEXT("Key_Element2"),     TEXT("KeyBtn_Element2") },
-			{ TEXT("IA_ElementMode3"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode3.IA_ElementMode3"), TEXT("Retrieve.Element3"),    TEXT("원소 3"),   TEXT("Key_Element3"),     TEXT("KeyBtn_Element3") },
+			{ TEXT("IA_Roll"),         TEXT("/Game/Retrieve/Input/Actions/IA_Roll.IA_Roll"),                 TEXT("Retrieve.Dodge"),       LOCTEXT("Action_Dodge", "회피"),          TEXT("Key_Dodge"),        TEXT("KeyBtn_Dodge") },
+			{ TEXT("IA_LockOn"),       TEXT("/Game/Retrieve/Input/Actions/IA_LockOn.IA_LockOn"),             TEXT("Retrieve.LockOn"),      LOCTEXT("Action_LockOn", "락온"),         TEXT("Key_LockOn"),       TEXT("KeyBtn_LockOn") },
+			{ TEXT("IA_Sprint"),       TEXT("/Game/Retrieve/Input/Actions/IA_Sprint.IA_Sprint"),             TEXT("Retrieve.Sprint"),      LOCTEXT("Action_Sprint", "질주"),         TEXT("Key_Sprint"),       TEXT("KeyBtn_Sprint") },
+			{ TEXT("IA_Jump"),         TEXT("/Game/Retrieve/Input/Actions/IA_Jump.IA_Jump"),                 TEXT("Retrieve.Jump"),        LOCTEXT("Action_Jump", "점프"),           TEXT("Key_Jump"),         TEXT("KeyBtn_Jump") },
+			{ TEXT("IA_Interaction"),  TEXT("/Game/Retrieve/Input/Actions/IA_Interaction.IA_Interaction"),   TEXT("Retrieve.Interact"),    LOCTEXT("Action_Interact", "상호작용"),   TEXT("Key_Interaction"),  TEXT("KeyBtn_Interaction") },
+			{ TEXT("IA_HeavyAttack"),  TEXT("/Game/Retrieve/Input/Actions/IA_HeavyAttack.IA_HeavyAttack"),   TEXT("Retrieve.HeavyAttack"), LOCTEXT("Action_HeavyAttack", "강공격"),  TEXT("Key_HeavyAttack"),  TEXT("KeyBtn_HeavyAttack") },
+			{ TEXT("IA_Guard"),        TEXT("/Game/Retrieve/Input/Actions/IA_Guard.IA_Guard"),               TEXT("Retrieve.Guard"),       LOCTEXT("Action_Guard", "가드"),          TEXT("Key_Guard"),        TEXT("KeyBtn_Guard") },
+			{ TEXT("IA_Crouch"),       TEXT("/Game/Retrieve/Input/Actions/IA_Crouch.IA_Crouch"),             TEXT("Retrieve.Crouch"),      LOCTEXT("Action_Crouch", "웅크리기"),     TEXT("Key_Crouch"),       TEXT("KeyBtn_Crouch") },
+			{ TEXT("IA_Burst"),        TEXT("/Game/Retrieve/Input/Actions/IA_Burst.IA_Burst"),               TEXT("Retrieve.Burst"),       LOCTEXT("Action_Burst", "버스트"),        TEXT("Key_Burst"),        TEXT("KeyBtn_Burst") },
+			{ TEXT("IA_Absorb"),       TEXT("/Game/Retrieve/Input/Actions/IA_Absorb.IA_Absorb"),             TEXT("Retrieve.Absorb"),      LOCTEXT("Action_Absorb", "흡수"),         TEXT("Key_Absorb"),       TEXT("KeyBtn_Absorb") },
+			{ TEXT("IA_RecallLumen"),  TEXT("/Game/Retrieve/Input/Actions/IA_RecallLumen.IA_RecallLumen"),   TEXT("Retrieve.RecallLumen"), LOCTEXT("Action_RecallLumen", "루멘 소환"), TEXT("Key_RecallLumen"), TEXT("KeyBtn_RecallLumen") },
+			{ TEXT("IA_QuickSlotWheel"),TEXT("/Game/Retrieve/Input/Actions/IA_QuickSlotWheel.IA_QuickSlotWheel"),TEXT("Retrieve.QuickSlotWheel"),LOCTEXT("Action_QuickSlot", "퀵슬롯"), TEXT("Key_QuickSlot"), TEXT("KeyBtn_QuickSlot") },
+			{ TEXT("IA_ElementMode1"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode1.IA_ElementMode1"), TEXT("Retrieve.Element1"),    LOCTEXT("Action_Element1", "원소 1"),     TEXT("Key_Element1"),     TEXT("KeyBtn_Element1") },
+			{ TEXT("IA_ElementMode2"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode2.IA_ElementMode2"), TEXT("Retrieve.Element2"),    LOCTEXT("Action_Element2", "원소 2"),     TEXT("Key_Element2"),     TEXT("KeyBtn_Element2") },
+			{ TEXT("IA_ElementMode3"), TEXT("/Game/Retrieve/Input/Actions/IA_ElementMode3.IA_ElementMode3"), TEXT("Retrieve.Element3"),    LOCTEXT("Action_Element3", "원소 3"),     TEXT("Key_Element3"),     TEXT("KeyBtn_Element3") },
 		};
 		return Defs;
 	}
@@ -215,8 +222,8 @@ namespace
 	/** 연동 그룹 액션의 키 표기 뒤에 붙는 트리거 구분(같은 키가 두 행에 보이는 이유를 설명). */
 	FString GetRebindDisplaySuffix(const FName ActionAssetName)
 	{
-		if (ActionAssetName == TEXT("IA_Roll"))   return TEXT(" (짧게)");
-		if (ActionAssetName == TEXT("IA_Sprint")) return TEXT(" (길게)");
+		if (ActionAssetName == TEXT("IA_Roll"))   return LOCTEXT("RebindSuffix_Tap", " (짧게)").ToString();
+		if (ActionAssetName == TEXT("IA_Sprint")) return LOCTEXT("RebindSuffix_Hold", " (길게)").ToString();
 		return FString();
 	}
 
@@ -262,9 +269,9 @@ namespace
 	/** 키 재설정 버튼 폭에 맞도록 마우스/보조키 표시 이름을 짧은 표기로 바꾼다. */
 	FString ShortKeyDisplayName(const FKey& Key)
 	{
-		if (Key == EKeys::LeftMouseButton)   return TEXT("좌클릭");
-		if (Key == EKeys::RightMouseButton)  return TEXT("우클릭");
-		if (Key == EKeys::MiddleMouseButton) return TEXT("휠클릭");
+		if (Key == EKeys::LeftMouseButton)   return LOCTEXT("Key_LeftClick", "좌클릭").ToString();
+		if (Key == EKeys::RightMouseButton)  return LOCTEXT("Key_RightClick", "우클릭").ToString();
+		if (Key == EKeys::MiddleMouseButton) return LOCTEXT("Key_MiddleClick", "휠클릭").ToString();
 		if (Key == EKeys::LeftShift || Key == EKeys::RightShift)     return TEXT("Shift");
 		if (Key == EKeys::LeftControl || Key == EKeys::RightControl) return TEXT("Ctrl");
 		if (Key == EKeys::LeftAlt || Key == EKeys::RightAlt)         return TEXT("Alt");
@@ -300,7 +307,7 @@ namespace
 			{
 				Dsc->SetFont(RefDsc->GetFont());
 				Dsc->SetColorAndOpacity(RefDsc->GetColorAndOpacity());
-				Dsc->SetText(FText::FromString(TEXT("On: 한 번 클릭으로 조준 유지 / Off: 우클릭 누르는 동안 조준")));
+				Dsc->SetText(LOCTEXT("BowAimToggle_Desc", "On: 한 번 클릭으로 조준 유지 / Off: 우클릭 누르는 동안 조준"));
 			}
 		}
 
@@ -375,7 +382,7 @@ namespace
 			// 왼쪽: 액션 이름 라벨(템플릿 폰트/색 복사)
 			UVerticalBox* LabelBox = Tree->ConstructWidget<UVerticalBox>();
 			UTextBlock* Label = Tree->ConstructWidget<UTextBlock>();
-			Label->SetText(FText::FromString(Def.DisplayLabel));
+			Label->SetText(Def.DisplayLabel);
 			Label->SetFont(TemplateLabel->GetFont());
 			Label->SetColorAndOpacity(TemplateLabel->GetColorAndOpacity());
 			UVerticalBoxSlot* LabelSlot = LabelBox->AddChildToVerticalBox(Label);
@@ -410,7 +417,7 @@ namespace
 			KeyText->SetFont(TemplateKeyText->GetFont());
 			KeyText->SetColorAndOpacity(TemplateKeyText->GetColorAndOpacity());
 			KeyText->SetJustification(ETextJustify::Center);
-			KeyText->SetText(FText::FromString(TEXT("미지정")));
+			KeyText->SetText(LOCTEXT("Key_Unassigned", "미지정"));
 
 			SizeBox->AddChild(KeyText);
 			if (USizeBoxSlot* FromSlot = Cast<USizeBoxSlot>(TemplateKeyText->Slot))
@@ -594,9 +601,9 @@ FName URetrieveSettingsPanelWidget::GetConflictingAction(const FKey& Key) const
 static FString ActionToKorean(const FName& ActionName)
 {
 	const FString S = ActionName.ToString();
-	if (S == TEXT("IA_Attack"))  return TEXT("공격");
-	if (S == TEXT("IA_Roll"))    return TEXT("회피");
-	if (S == TEXT("IA_LockOn"))  return TEXT("록온");
+	if (S == TEXT("IA_Attack"))  return LOCTEXT("Action_Attack", "공격").ToString();
+	if (S == TEXT("IA_Roll"))    return LOCTEXT("Action_Dodge", "회피").ToString();
+	if (S == TEXT("IA_LockOn"))  return LOCTEXT("Action_LockOnAlt", "록온").ToString();
 	if (S.StartsWith(TEXT("IA_"))) return S.RightChop(3);
 	return S;
 }
@@ -638,14 +645,14 @@ void URetrieveSettingsPanelWidget::FinishRebindWithKey(const FKey& NewKey)
 	// 마우스 입력은 할당 금지: 조작키 안내의 마우스 다이어그램은 아이콘·문구가 고정이라 반영할 수 없다.
 	if (NewKey.IsMouseButton())
 	{
-		CancelRebindWithWarning(TEXT("⚠ 마우스 키는 할당 불가"));
+		CancelRebindWithWarning(LOCTEXT("Rebind_NoMouse", "⚠ 마우스 키는 할당 불가").ToString());
 		return;
 	}
 
 	// 조작키 안내 키보드 다이어그램에 슬롯이 있는 키만 허용한다(설정↔안내 항상 일치).
 	if (!URetrieveUISettingsLibrary::IsControlsGuideDisplayableKey(NewKey))
 	{
-		CancelRebindWithWarning(TEXT("⚠ 사용할 수 없는 키"));
+		CancelRebindWithWarning(LOCTEXT("Rebind_UnusableKey", "⚠ 사용할 수 없는 키").ToString());
 		return;
 	}
 
@@ -653,7 +660,8 @@ void URetrieveSettingsPanelWidget::FinishRebindWithKey(const FKey& NewKey)
 	const FName ConflictAction = GetConflictingAction(NewKey);
 	if (!ConflictAction.IsNone())
 	{
-		CancelRebindWithWarning(FString::Printf(TEXT("⚠ 이미 사용 중: %s"), *ActionToKorean(ConflictAction)));
+		CancelRebindWithWarning(FText::Format(LOCTEXT("Rebind_AlreadyUsed", "⚠ 이미 사용 중: {0}"),
+			FText::FromString(ActionToKorean(ConflictAction))).ToString());
 		return;
 	}
 
@@ -830,7 +838,7 @@ void URetrieveSettingsPanelWidget::ShowResolutionConfirmPopup(float TimeoutSecon
 
 	// 메시지 + 버튼 배선(이름으로 찾는다 — 없으면 안전하게 무시).
 	SetText(ActiveResolutionPopup, TEXT("Txt_Message"),
-		FText::FromString(TEXT("변경된 해상도를 유지할까요?")));
+		LOCTEXT("Resolution_KeepPrompt", "변경된 해상도를 유지할까요?"));
 
 	if (UButton* KeepButton = FindWidget<UButton>(ActiveResolutionPopup, TEXT("Btn_Keep")))
 	{
@@ -877,7 +885,8 @@ void URetrieveSettingsPanelWidget::UpdateResolutionCountdown()
 	const UWorld* World = GetWorld();
 	const double Remaining = World ? FMath::Max(0.0, ResolutionConfirmEndTime - World->GetTimeSeconds()) : 0.0;
 	SetText(ActiveResolutionPopup, TEXT("Txt_Countdown"),
-		FText::FromString(FString::Printf(TEXT("%d초 후 자동 복구"), FMath::CeilToInt(Remaining))));
+		FText::Format(LOCTEXT("Resolution_AutoRevert", "{0}초 후 자동 복구"),
+			FText::AsNumber(FMath::CeilToInt(Remaining))));
 }
 
 void URetrieveSettingsPanelWidget::ResetCurrentCategory()
@@ -1175,7 +1184,7 @@ void URetrieveSettingsPanelWidget::RefreshControls()
 	SetChecked(Page, TEXT("Chk_Vibration"), S->bGamepadVibration);
 	SetToggleByKey(Page, TEXT("Controls_InvertY"), S->bInvertMouseY);
 	SetToggleByKey(Page, TEXT("Controls_Vibration"), S->bGamepadVibration);
-	SetText(Page, TEXT("Val_LockOn"), FText::FromString(S->bLockOnToggleMode ? TEXT("토글") : TEXT("홀드")));
+	SetText(Page, TEXT("Val_LockOn"), (S->bLockOnToggleMode ? LOCTEXT("Mode_Toggle", "토글") : LOCTEXT("Mode_Hold", "홀드")));
 	SetToggleByKey(Page, TEXT("Controls_BowAimToggle"), S->bBowAimToggleMode);
 
 	// 슬라이더 행 아키타입(URetrieveSettingRowSlider) 값 갱신. Range는 BindControlsRows에서 이미 설정됨.
@@ -1226,7 +1235,7 @@ void URetrieveSettingsPanelWidget::EnsureInputMappingsRegistered(ULocalPlayer* L
 
 	for (const FRebindActionDef& Def : GetRebindActionDefs())
 	{
-		EnsurePlayerMappableAction(Def.AssetPath, Def.MappingName, FText::FromString(Def.DisplayLabel));
+		EnsurePlayerMappableAction(Def.AssetPath, Def.MappingName, Def.DisplayLabel);
 	}
 	if (const UInputMappingContext* Context = LoadObject<UInputMappingContext>(
 		nullptr, TEXT("/Game/Retrieve/Input/IMC_Default.IMC_Default")))
@@ -1295,12 +1304,12 @@ void URetrieveSettingsPanelWidget::RefreshKeyBindings()
 			}
 		}
 	}
-	SetText(Page, TEXT("Key_Attack"), FText::FromString(TEXT("좌클릭 (고정)")));
+	SetText(Page, TEXT("Key_Attack"), LOCTEXT("Key_LeftClickFixed", "좌클릭 (고정)"));
 
 	for (const FRebindActionDef& Def : GetRebindActionDefs())
 	{
 		// WBP에 아직 이 행이 없으면 SetText가 안전하게 no-op한다.
-		FText Display = FText::FromString(TEXT("미지정"));
+		FText Display = LOCTEXT("Key_Unassigned", "미지정");
 		bool bMouseLocked = false;
 		for (const TPair<FName, FKeyMappingRow>& Pair : Profile->GetPlayerMappingRows())
 		{
@@ -1329,8 +1338,8 @@ void URetrieveSettingsPanelWidget::RefreshKeyBindings()
 								InputSettings->AsyncSaveSettings();
 							}
 						}
-						Display = FText::FromString(
-							FString::Printf(TEXT("%s (고정)"), *ShortKeyDisplayName(Mapping.GetDefaultKey())));
+						Display = FText::Format(LOCTEXT("Key_FixedSuffix", "{0} (고정)"),
+							FText::FromString(ShortKeyDisplayName(Mapping.GetDefaultKey())));
 					}
 					else
 					{
@@ -1391,7 +1400,9 @@ void URetrieveSettingsPanelWidget::BeginRebind(const FName ActionAssetName, cons
 	PendingActionAssetName = PendingMappingName.IsNone() ? NAME_None : ActionAssetName;
 	PendingKeyLabelName = LabelWidgetName;
 	SetText(GetPage(ERetrieveSettingsCategory::Controls), LabelWidgetName,
-		FText::FromString(PendingMappingName.IsNone() ? TEXT("매핑 설정 필요") : TEXT("키를 누르세요")));
+		PendingMappingName.IsNone()
+			? LOCTEXT("Rebind_NeedMapping", "매핑 설정 필요")
+			: LOCTEXT("Rebind_PressKey", "키를 누르세요"));
 
 	// 다음 키 입력을 받으려면 이 위젯에 포커스가 있어야 한다.
 	SetKeyboardFocus();
@@ -1409,22 +1420,22 @@ static ERetrieveAudioChannel RowKeyToAudioChannel(const FName Key)
 
 static FText AudioRowLabel(const FName Key)
 {
-	if (Key == TEXT("Music"))    return FText::FromString(TEXT("음악"));
-	if (Key == TEXT("Sfx"))      return FText::FromString(TEXT("효과음"));
-	if (Key == TEXT("Ambience")) return FText::FromString(TEXT("환경음"));
-	if (Key == TEXT("UI"))       return FText::FromString(TEXT("UI"));
-	if (Key == TEXT("Voice"))    return FText::FromString(TEXT("음성"));
-	return FText::FromString(TEXT("마스터 볼륨"));
+	if (Key == TEXT("Music"))    return LOCTEXT("Audio_Music", "음악");
+	if (Key == TEXT("Sfx"))      return LOCTEXT("Audio_Sfx", "효과음");
+	if (Key == TEXT("Ambience")) return LOCTEXT("Audio_Ambience", "환경음");
+	if (Key == TEXT("UI"))       return LOCTEXT("Audio_UI", "UI");
+	if (Key == TEXT("Voice"))    return LOCTEXT("Audio_Voice", "음성");
+	return LOCTEXT("Audio_Master", "마스터 볼륨");
 }
 
 static FText AudioRowDesc(const FName Key)
 {
-	if (Key == TEXT("Music"))    return FText::FromString(TEXT("배경 음악"));
-	if (Key == TEXT("Sfx"))      return FText::FromString(TEXT("전투·UI 효과음"));
-	if (Key == TEXT("Ambience")) return FText::FromString(TEXT("환경·앰비언스"));
-	if (Key == TEXT("UI"))       return FText::FromString(TEXT("인터페이스 사운드"));
-	if (Key == TEXT("Voice"))    return FText::FromString(TEXT("음성·보이스"));
-	return FText::FromString(TEXT("전체 음량"));
+	if (Key == TEXT("Music"))    return LOCTEXT("AudioDesc_Music", "배경 음악");
+	if (Key == TEXT("Sfx"))      return LOCTEXT("AudioDesc_Sfx", "전투·UI 효과음");
+	if (Key == TEXT("Ambience")) return LOCTEXT("AudioDesc_Ambience", "환경·앰비언스");
+	if (Key == TEXT("UI"))       return LOCTEXT("AudioDesc_UI", "인터페이스 사운드");
+	if (Key == TEXT("Voice"))    return LOCTEXT("AudioDesc_Voice", "음성·보이스");
+	return LOCTEXT("AudioDesc_Master", "전체 음량");
 }
 
 void URetrieveSettingsPanelWidget::RefreshAudio()
@@ -1488,15 +1499,15 @@ void URetrieveSettingsPanelWidget::BindAudioRows()
 
 static FText GraphicsRowLabel(const FName Key)
 {
-	if (Key == TEXT("Graphics_FrameLimit")) return FText::FromString(TEXT("프레임 제한"));
-	if (Key == TEXT("Graphics_Gamma"))      return FText::FromString(TEXT("감마(밝기)"));
+	if (Key == TEXT("Graphics_FrameLimit")) return LOCTEXT("Graphics_FrameLimit", "프레임 제한");
+	if (Key == TEXT("Graphics_Gamma"))      return LOCTEXT("Graphics_Gamma", "감마(밝기)");
 	return FText::GetEmpty();
 }
 
 static FText GraphicsRowDesc(const FName Key)
 {
-	if (Key == TEXT("Graphics_FrameLimit")) return FText::FromString(TEXT("0 = 무제한"));
-	if (Key == TEXT("Graphics_Gamma"))      return FText::FromString(TEXT("화면 밝기"));
+	if (Key == TEXT("Graphics_FrameLimit")) return LOCTEXT("GraphicsDesc_FrameLimit", "0 = 무제한");
+	if (Key == TEXT("Graphics_Gamma"))      return LOCTEXT("GraphicsDesc_Gamma", "화면 밝기");
 	return FText::GetEmpty();
 }
 
@@ -1525,19 +1536,19 @@ void URetrieveSettingsPanelWidget::HandleGraphicsRowChanged(FName RowKey, float 
 
 static FText ControlsRowLabel(const FName Key)
 {
-	if (Key == TEXT("Controls_MouseAll")) return FText::FromString(TEXT("마우스 감도"));
-	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("ㄴ X 감도"));
-	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("ㄴ Y 감도"));
-	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("게임패드 감도"));
+	if (Key == TEXT("Controls_MouseAll")) return LOCTEXT("Controls_MouseAll", "마우스 감도");
+	if (Key == TEXT("Controls_MouseX"))   return LOCTEXT("Controls_MouseX", "ㄴ X 감도");
+	if (Key == TEXT("Controls_MouseY"))   return LOCTEXT("Controls_MouseY", "ㄴ Y 감도");
+	if (Key == TEXT("Controls_PadSens")) return LOCTEXT("Controls_PadSens", "게임패드 감도");
 	return FText::GetEmpty();
 }
 
 static FText ControlsRowDesc(const FName Key)
 {
-	if (Key == TEXT("Controls_MouseAll")) return FText::FromString(TEXT("통합 회전 감도"));
-	if (Key == TEXT("Controls_MouseX"))   return FText::FromString(TEXT("좌우 회전 감도"));
-	if (Key == TEXT("Controls_MouseY"))   return FText::FromString(TEXT("상하 회전 감도"));
-	if (Key == TEXT("Controls_PadSens")) return FText::FromString(TEXT("스틱 회전 감도"));
+	if (Key == TEXT("Controls_MouseAll")) return LOCTEXT("ControlsDesc_MouseAll", "통합 회전 감도");
+	if (Key == TEXT("Controls_MouseX"))   return LOCTEXT("ControlsDesc_MouseX", "좌우 회전 감도");
+	if (Key == TEXT("Controls_MouseY"))   return LOCTEXT("ControlsDesc_MouseY", "상하 회전 감도");
+	if (Key == TEXT("Controls_PadSens")) return LOCTEXT("ControlsDesc_PadSens", "스틱 회전 감도");
 	return FText::GetEmpty();
 }
 
@@ -1599,17 +1610,17 @@ void URetrieveSettingsPanelWidget::HandleControlsRowChanged(FName RowKey, float 
 
 static FText GameplayRowLabel(const FName Key)
 {
-	if (Key == TEXT("Gameplay_SubtitleScale")) return FText::FromString(TEXT("자막 크기"));
-	if (Key == TEXT("Gameplay_FOV"))           return FText::FromString(TEXT("시야각(FOV)"));
-	if (Key == TEXT("Gameplay_CameraShake"))   return FText::FromString(TEXT("카메라 흔들림"));
+	if (Key == TEXT("Gameplay_SubtitleScale")) return LOCTEXT("Gameplay_SubtitleScale", "자막 크기");
+	if (Key == TEXT("Gameplay_FOV"))           return LOCTEXT("Gameplay_FOV", "시야각(FOV)");
+	if (Key == TEXT("Gameplay_CameraShake"))   return LOCTEXT("Gameplay_CameraShake", "카메라 흔들림");
 	return FText::GetEmpty();
 }
 
 static FText GameplayRowDesc(const FName Key)
 {
-	if (Key == TEXT("Gameplay_SubtitleScale")) return FText::FromString(TEXT("자막 글자 크기"));
-	if (Key == TEXT("Gameplay_FOV"))           return FText::FromString(TEXT("카메라 시야각"));
-	if (Key == TEXT("Gameplay_CameraShake"))   return FText::FromString(TEXT("화면 흔들림 강도"));
+	if (Key == TEXT("Gameplay_SubtitleScale")) return LOCTEXT("GameplayDesc_SubtitleScale", "자막 글자 크기");
+	if (Key == TEXT("Gameplay_FOV"))           return LOCTEXT("GameplayDesc_FOV", "카메라 시야각");
+	if (Key == TEXT("Gameplay_CameraShake"))   return LOCTEXT("GameplayDesc_CameraShake", "화면 흔들림 강도");
 	return FText::GetEmpty();
 }
 
@@ -1653,19 +1664,19 @@ void URetrieveSettingsPanelWidget::HandleGameplayRowChanged(FName RowKey, float 
 
 static FText AccessibilityRowLabel(const FName Key)
 {
-	if (Key == TEXT("Accessibility_CBStrength")) return FText::FromString(TEXT("색맹 보정 강도"));
-	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 크기"));
-	if (Key == TEXT("Accessibility_AimAssist"))  return FText::FromString(TEXT("에임 보조"));
-	if (Key == TEXT("Accessibility_SubtitleBG")) return FText::FromString(TEXT("자막 배경"));
+	if (Key == TEXT("Accessibility_CBStrength")) return LOCTEXT("Access_CBStrength", "색맹 보정 강도");
+	if (Key == TEXT("Accessibility_UIScale"))    return LOCTEXT("Access_UIScale", "UI 크기");
+	if (Key == TEXT("Accessibility_AimAssist"))  return LOCTEXT("Access_AimAssist", "에임 보조");
+	if (Key == TEXT("Accessibility_SubtitleBG")) return LOCTEXT("Access_SubtitleBG", "자막 배경");
 	return FText::GetEmpty();
 }
 
 static FText AccessibilityRowDesc(const FName Key)
 {
-	if (Key == TEXT("Accessibility_CBStrength")) return FText::FromString(TEXT("색맹 보정 세기"));
-	if (Key == TEXT("Accessibility_UIScale"))    return FText::FromString(TEXT("UI 글자·요소 크기 (85~115%)"));
-	if (Key == TEXT("Accessibility_AimAssist"))  return FText::FromString(TEXT("조준 보조 강도"));
-	if (Key == TEXT("Accessibility_SubtitleBG")) return FText::FromString(TEXT("자막 배경 불투명도"));
+	if (Key == TEXT("Accessibility_CBStrength")) return LOCTEXT("AccessDesc_CBStrength", "색맹 보정 세기");
+	if (Key == TEXT("Accessibility_UIScale"))    return LOCTEXT("AccessDesc_UIScale", "UI 글자·요소 크기 (85~115%)");
+	if (Key == TEXT("Accessibility_AimAssist"))  return LOCTEXT("AccessDesc_AimAssist", "조준 보조 강도");
+	if (Key == TEXT("Accessibility_SubtitleBG")) return LOCTEXT("AccessDesc_SubtitleBG", "자막 배경 불투명도");
 	return FText::GetEmpty();
 }
 
@@ -1721,7 +1732,7 @@ void URetrieveSettingsPanelWidget::RefreshGameplay()
 	URetrieveGameUserSettings* S = GetUserSettings();
 	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Gameplay);
 	if (!S || !Page) return;
-	SetText(Page, TEXT("Val_Language"), FText::FromString(S->GameCulture == TEXT("en") ? TEXT("English") : TEXT("한국어")));
+	SetText(Page, TEXT("Val_Language"), (S->GameCulture == TEXT("en") ? LOCTEXT("Language_English", "English") : LOCTEXT("Language_Korean", "한국어")));
 	SetChecked(Page, TEXT("Chk_Subtitles"), S->bSubtitlesEnabled);
 	SetChecked(Page, TEXT("Chk_DamageNumbers"), S->bShowDamageNumbers);
 	SetChecked(Page, TEXT("Chk_TutorialHints"), S->bTutorialHints);
@@ -1756,7 +1767,7 @@ void URetrieveSettingsPanelWidget::RefreshAccessibility()
 	UUserWidget* Page = GetPage(ERetrieveSettingsCategory::Accessibility);
 	if (!S || !Page) return;
 	SetText(Page, TEXT("Val_ColorBlind"), ColorBlindText(S->ColorBlindMode));
-	SetText(Page, TEXT("Val_Interact"), FText::FromString(S->bHoldToInteract ? TEXT("홀드") : TEXT("토글")));
+	SetText(Page, TEXT("Val_Interact"), (S->bHoldToInteract ? LOCTEXT("Mode_Hold", "홀드") : LOCTEXT("Mode_Toggle", "토글")));
 	// 접근성 슬라이더는 WBP_SettingRow_Slider(내부 USlider 0..1)로 전환됨 → RowKey로 찾아 정규화값 갱신.
 	if (Page->WidgetTree)
 	{
@@ -2059,7 +2070,7 @@ DEFINE_FLOAT_SETTING_HANDLER(HandlePadSensitivityChanged, GamepadSensitivityX, E
 void URetrieveSettingsPanelWidget::HandleInvertYChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bInvertMouseY = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleVibrationChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bGamepadVibration = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleLockOnPrev() { HandleLockOnNext(); }
-void URetrieveSettingsPanelWidget::HandleLockOnNext() { if (auto* S = GetUserSettings()) { S->bLockOnToggleMode = !S->bLockOnToggleMode; SetText(GetPage(ERetrieveSettingsCategory::Controls), TEXT("Val_LockOn"), FText::FromString(S->bLockOnToggleMode ? TEXT("토글") : TEXT("홀드"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
+void URetrieveSettingsPanelWidget::HandleLockOnNext() { if (auto* S = GetUserSettings()) { S->bLockOnToggleMode = !S->bLockOnToggleMode; SetText(GetPage(ERetrieveSettingsCategory::Controls), TEXT("Val_LockOn"), (S->bLockOnToggleMode ? LOCTEXT("Mode_Toggle", "토글") : LOCTEXT("Mode_Hold", "홀드"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 void URetrieveSettingsPanelWidget::HandleBowAimModeChanged(bool bToggleMode) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bBowAimToggleMode = bToggleMode; APPLY_PREVIEW(ERetrieveSettingsCategory::Controls); } }
 #define DEFINE_REBIND_HANDLER(Func, ActionAssetName, KeyTextWidgetName) \
 	void URetrieveSettingsPanelWidget::Func() { BeginRebind(TEXT(ActionAssetName), TEXT(KeyTextWidgetName)); }
@@ -2093,7 +2104,7 @@ DEFINE_AUDIO_HANDLER(HandleVoiceChanged, ERetrieveAudioChannel::Voice, "Val_Voic
 void URetrieveSettingsPanelWidget::HandleMuteUnfocusedChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) S->bMuteWhenUnfocused = b; }
 
 void URetrieveSettingsPanelWidget::HandleLanguagePrev() { HandleLanguageNext(); }
-void URetrieveSettingsPanelWidget::HandleLanguageNext() { if (auto* S = GetUserSettings()) { S->GameCulture = S->GameCulture == TEXT("en") ? TEXT("ko") : TEXT("en"); SetText(GetPage(ERetrieveSettingsCategory::Gameplay), TEXT("Val_Language"), FText::FromString(S->GameCulture == TEXT("en") ? TEXT("English") : TEXT("한국어"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Gameplay); } }
+void URetrieveSettingsPanelWidget::HandleLanguageNext() { if (auto* S = GetUserSettings()) { S->GameCulture = S->GameCulture == TEXT("en") ? TEXT("ko") : TEXT("en"); SetText(GetPage(ERetrieveSettingsCategory::Gameplay), TEXT("Val_Language"), (S->GameCulture == TEXT("en") ? LOCTEXT("Language_English", "English") : LOCTEXT("Language_Korean", "한국어"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Gameplay); } }
 void URetrieveSettingsPanelWidget::HandleSubtitlesChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bSubtitlesEnabled = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Gameplay); } }
 void URetrieveSettingsPanelWidget::HandleDamageNumbersChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bShowDamageNumbers = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Gameplay); } }
 void URetrieveSettingsPanelWidget::HandleTutorialHintsChanged(bool b) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->bTutorialHints = b; APPLY_PREVIEW(ERetrieveSettingsCategory::Gameplay); } }
@@ -2104,7 +2115,7 @@ void URetrieveSettingsPanelWidget::HandleCameraShakeChanged(float V) { if (bRefr
 void URetrieveSettingsPanelWidget::HandleColorBlindPrev() { if (auto* S = GetUserSettings()) { const auto M = static_cast<ERetrieveColorBlindMode>(WrapIndex(static_cast<int32>(S->ColorBlindMode) - 1, 4)); if (auto* Subsystem = GetSettingsSubsystem()) Subsystem->SetColorBlind(M, S->ColorBlindStrength, true); SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_ColorBlind"), ColorBlindText(M)); } }
 void URetrieveSettingsPanelWidget::HandleColorBlindNext() { if (auto* S = GetUserSettings()) { const auto M = static_cast<ERetrieveColorBlindMode>(WrapIndex(static_cast<int32>(S->ColorBlindMode) + 1, 4)); if (auto* Subsystem = GetSettingsSubsystem()) Subsystem->SetColorBlind(M, S->ColorBlindStrength, true); SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_ColorBlind"), ColorBlindText(M)); } }
 void URetrieveSettingsPanelWidget::HandleInteractPrev() { HandleInteractNext(); }
-void URetrieveSettingsPanelWidget::HandleInteractNext() { if (auto* S = GetUserSettings()) { S->bHoldToInteract = !S->bHoldToInteract; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_Interact"), FText::FromString(S->bHoldToInteract ? TEXT("홀드") : TEXT("토글"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
+void URetrieveSettingsPanelWidget::HandleInteractNext() { if (auto* S = GetUserSettings()) { S->bHoldToInteract = !S->bHoldToInteract; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_Interact"), (S->bHoldToInteract ? LOCTEXT("Mode_Hold", "홀드") : LOCTEXT("Mode_Toggle", "토글"))); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
 void URetrieveSettingsPanelWidget::HandleColorBlindStrengthChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { if (auto* Subsystem = GetSettingsSubsystem()) Subsystem->SetColorBlind(S->ColorBlindMode, FMath::RoundToInt(V), true); SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_CBStrength"), NumberText(FMath::RoundToInt(V))); } }
 void URetrieveSettingsPanelWidget::HandleUIScaleChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->UITextScale = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_UIScale"), PercentText(V)); /* UI 크기는 Apply 시에만 적용(드래그 중 화면 흔들림 방지). 여기선 값/라벨만 갱신. */ } }
 void URetrieveSettingsPanelWidget::HandleAimAssistChanged(float V) { if (bRefreshingControls) return; if (auto* S = GetUserSettings()) { S->AimAssistStrength = V; SetText(GetPage(ERetrieveSettingsCategory::Accessibility), TEXT("Val_AimAssist"), PercentText(V)); APPLY_PREVIEW(ERetrieveSettingsCategory::Accessibility); } }
@@ -2154,3 +2165,4 @@ void URetrieveSettingsPanelWidget::HandleAccessibilityToggleChanged(FName RowKey
 
 #undef DEFINE_FLOAT_SETTING_HANDLER
 #undef APPLY_PREVIEW
+#undef LOCTEXT_NAMESPACE

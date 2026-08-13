@@ -39,7 +39,7 @@ void UShopSellSlotWidget::SetSlotData(FName InItemId, FGameplayTag InCategoryTag
 	// 장착 중인 장비는 "장착" 배지를 노출한다(판매 방지 대상임을 시각적으로 구분).
 	if (Text_Equipped)
 	{
-		Text_Equipped->SetText(INVTEXT("장착"));
+		Text_Equipped->SetText(NSLOCTEXT("RetrieveShop", "SellSlot_Equipped", "장착"));
 		Text_Equipped->SetVisibility(bInEquipped
 			? ESlateVisibility::HitTestInvisible
 			: ESlateVisibility::Collapsed);

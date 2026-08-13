@@ -18,6 +18,8 @@
 #include "UI/RetrieveSettingsPanelWidget.h"
 #include "Engine/LocalPlayer.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveControlsGuide"
+
 URetrieveUITheme* URetrieveUISettingsLibrary::GetActiveUITheme()
 {
 	const URetrieveSettingsConfig* Cfg = GetDefault<URetrieveSettingsConfig>();
@@ -176,7 +178,7 @@ namespace
 	struct FControlsGuideAction
 	{
 		FName ActionAssetName;
-		const TCHAR* DisplayLabel;
+		FText DisplayLabel;
 		FLinearColor CategoryColor;
 	};
 
@@ -592,20 +594,20 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 	// 같은 키에 여러 액션이 매핑되면(회피/질주 = Shift 짧게/길게) 라벨을 "/"로 합쳐 표시한다.
 	// 배열 순서가 곧 합쳐지는 라벨 순서다(IA_Roll 다음 IA_Sprint → "회피/질주").
 	static const FControlsGuideAction Actions[] = {
-		{ TEXT("IA_LockOn"),       TEXT("타겟 고정"), ActionColor },
-		{ TEXT("IA_Absorb"),       TEXT("흡수"),      ActionColor },
-		{ TEXT("IA_Burst"),        TEXT("버스트"),    ActionColor },
-		{ TEXT("IA_Guard"),        TEXT("방어"),      ActionColor },
-		{ TEXT("IA_Interaction"),  TEXT("상호작용"),  ActionColor },
-		{ TEXT("IA_RecallLumen"),  TEXT("루멘"),      SpecialFunctionColor },
-		{ TEXT("IA_QuickSlotWheel"), TEXT("퀵슬롯"),  SpecialActionColor },
-		{ TEXT("IA_Crouch"),       TEXT("앉기"),      SpecialActionColor },
-		{ TEXT("IA_Jump"),         TEXT("점프"),      SpecialActionColor },
-		{ TEXT("IA_ElementMode1"), TEXT("원소"),      SpecialActionColor },
-		{ TEXT("IA_ElementMode2"), TEXT("원소"),      SpecialActionColor },
-		{ TEXT("IA_ElementMode3"), TEXT("원소"),      SpecialActionColor },
-		{ TEXT("IA_Roll"),         TEXT("회피"),      SpecialActionColor },
-		{ TEXT("IA_Sprint"),       TEXT("질주"),      SpecialActionColor },
+		{ TEXT("IA_LockOn"),       LOCTEXT("Guide_LockOn", "타겟 고정"),  ActionColor },
+		{ TEXT("IA_Absorb"),       LOCTEXT("Guide_Absorb", "흡수"),       ActionColor },
+		{ TEXT("IA_Burst"),        LOCTEXT("Guide_Burst", "버스트"),      ActionColor },
+		{ TEXT("IA_Guard"),        LOCTEXT("Guide_Guard", "방어"),        ActionColor },
+		{ TEXT("IA_Interaction"),  LOCTEXT("Guide_Interact", "상호작용"), ActionColor },
+		{ TEXT("IA_RecallLumen"),  LOCTEXT("Guide_Lumen", "루멘"),        SpecialFunctionColor },
+		{ TEXT("IA_QuickSlotWheel"), LOCTEXT("Guide_QuickSlot", "퀵슬롯"), SpecialActionColor },
+		{ TEXT("IA_Crouch"),       LOCTEXT("Guide_Crouch", "앉기"),       SpecialActionColor },
+		{ TEXT("IA_Jump"),         LOCTEXT("Guide_Jump", "점프"),         SpecialActionColor },
+		{ TEXT("IA_ElementMode1"), LOCTEXT("Guide_Element", "원소"),      SpecialActionColor },
+		{ TEXT("IA_ElementMode2"), LOCTEXT("Guide_Element", "원소"),      SpecialActionColor },
+		{ TEXT("IA_ElementMode3"), LOCTEXT("Guide_Element", "원소"),      SpecialActionColor },
+		{ TEXT("IA_Roll"),         LOCTEXT("Guide_Dodge", "회피"),        SpecialActionColor },
+		{ TEXT("IA_Sprint"),       LOCTEXT("Guide_Sprint", "질주"),       SpecialActionColor },
 	};
 
 	// 1) 발견된 관리 키캡을 전부 기본(무채색) 상태로 리셋한다. 리바인드로 자리를 옮긴 액션이
@@ -673,9 +675,10 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 			{
 				// 앞선 액션이 이미 이 키를 칠했으면(같은 키 공유: 회피/질주 등) 라벨을 합친다.
 				const FString Existing = Label->GetText().ToString();
-				const FString NewLabel = (Existing.IsEmpty() || Existing == Act.DisplayLabel)
-					? FString(Act.DisplayLabel)
-					: Existing + TEXT("/") + Act.DisplayLabel;
+				const FString ActLabel = Act.DisplayLabel.ToString();
+				const FString NewLabel = (Existing.IsEmpty() || Existing == ActLabel)
+					? ActLabel
+					: Existing + TEXT("/") + ActLabel;
 				Label->SetText(FText::FromString(NewLabel));
 			}
 			break;
@@ -686,9 +689,9 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 	//    고정 라벨로 표시한다. 스킬 안내(K)는 ARetrievePlayerController::SkillOverviewPanelKey로
 	//    처리되어 위 액션 루프에 잡히지 않으므로, 여기서 라벨+색을 직접 입힌다.
 	//    (리바인드 불가 → IsSystemReservedKey에도 포함되어 있어 액션이 K를 덮어쓰지 않는다.)
-	struct FControlsGuideFixedKey { FKey Key; const TCHAR* DisplayLabel; FLinearColor Color; };
+	struct FControlsGuideFixedKey { FKey Key; FText DisplayLabel; FLinearColor Color; };
 	static const FControlsGuideFixedKey FixedKeys[] = {
-		{ EKeys::K, TEXT("스킬 안내"), SpecialFunctionColor },
+		{ EKeys::K, LOCTEXT("Guide_SkillOverview", "스킬 안내"), SpecialFunctionColor },
 	};
 	for (const FControlsGuideFixedKey& Fixed : FixedKeys)
 	{
@@ -708,7 +711,7 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 			}
 			if (UTextBlock* Label = EnsureSlotLabel(GuideWidget, Slot, RefLabel))
 			{
-				Label->SetText(FText::FromString(Fixed.DisplayLabel));
+				Label->SetText(Fixed.DisplayLabel);
 			}
 			break;
 		}
@@ -717,3 +720,5 @@ void URetrieveUISettingsLibrary::RefreshControlsGuideKeyLabels(UUserWidget* Guid
 	// 공격/강공격은 마우스 고정(리바인드 불가)이므로 마우스 다이어그램의 텍스트는 WBP 기본값
 	// ("공격 (좌클릭)" 등)을 그대로 둔다. 설정 화면에서도 공격 리바인드는 비활성화된다.
 }
+
+#undef LOCTEXT_NAMESPACE

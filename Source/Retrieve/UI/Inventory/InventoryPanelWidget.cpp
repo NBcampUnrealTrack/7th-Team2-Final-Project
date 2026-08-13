@@ -32,6 +32,8 @@
 #include "UObject/UnrealType.h"
 #include "Framework/Application/SlateApplication.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveInventory"
+
 namespace
 {
 void SetTooltipText(UUserWidget* TooltipWidget, const TCHAR* WidgetName, const FString& Value, bool bCollapseWhenEmpty = false)
@@ -692,7 +694,7 @@ FText UInventoryPanelWidget::GetQuickSlotDisplayText(int32 SlotKey) const
 	const FName SlotItemId = GetQuickSlotItemId(SlotKey);
 	if (SlotItemId.IsNone())
 	{
-		return FText::FromString(FString::Printf(TEXT("%d\nEmpty"), SlotKey));
+		return FText::Format(LOCTEXT("QuickSlot_Empty", "{0}\nEmpty"), FText::AsNumber(SlotKey));
 	}
 
 	FString ItemName = SlotItemId.ToString();
@@ -709,7 +711,8 @@ FText UInventoryPanelWidget::GetQuickSlotDisplayText(int32 SlotKey) const
 	}
 
 	const int32 Count = InventoryComponent ? InventoryComponent->GetItemCount(SlotItemId) : 0;
-	return FText::FromString(FString::Printf(TEXT("%d\n%s x%d"), SlotKey, *ItemName, Count));
+	return FText::Format(LOCTEXT("QuickSlot_Item", "{0}\n{1} x{2}"),
+		FText::AsNumber(SlotKey), FText::FromString(ItemName), FText::AsNumber(Count));
 }
 
 bool UInventoryPanelWidget::GetSelectedWeaponData(FRetrieveWeaponDataRow& OutWeaponData) const
@@ -883,11 +886,11 @@ void UInventoryPanelWidget::RefreshSelectedMaterialDetails()
 
 	if (Text_DetailType)
 	{
-		Text_DetailType->SetText(FText::FromString(TEXT("Material")));
+		Text_DetailType->SetText(LOCTEXT("Detail_TypeMaterial", "Material"));
 	}
 	if (Text_DetailState)
 	{
-		Text_DetailState->SetText(FText::FromString(FString::Printf(TEXT("Owned: %d"), Quantity)));
+		Text_DetailState->SetText(FText::Format(LOCTEXT("Detail_Owned", "Owned: {0}"), FText::AsNumber(Quantity)));
 	}
 	if (Text_DetailName)
 	{
@@ -895,7 +898,7 @@ void UInventoryPanelWidget::RefreshSelectedMaterialDetails()
 	}
 	if (Text_DetailMainStat)
 	{
-		Text_DetailMainStat->SetText(FText::FromString(FString::Printf(TEXT("Max Stack: %d"), Material.MaxStack)));
+		Text_DetailMainStat->SetText(FText::Format(LOCTEXT("Detail_MaxStack", "Max Stack: {0}"), FText::AsNumber(Material.MaxStack)));
 	}
 	if (Text_DetailElement)
 	{
@@ -938,12 +941,16 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 		{
 			TArray<FString> Lines;
 			Lines.Add(Row->DisplayName.ToString());
-			Lines.Add(FString::Printf(TEXT("방어력: +%.0f"), Row->Defense));
-			Lines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag)));
+			Lines.Add(FText::Format(LOCTEXT("Tooltip_Defense", "방어력: +{0}"),
+				FText::FromString(FString::Printf(TEXT("%.0f"), Row->Defense))).ToString());
+			Lines.Add(FText::Format(LOCTEXT("Tooltip_Slot", "슬롯: {0}"),
+				FText::FromString(GetGameplayTagLeaf(Row->EquipmentSlotTag))).ToString());
 
 			const FName EquippedId = InventoryComponent
 				? InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) : NAME_None;
-			Lines.Add(EquippedId == ItemId ? TEXT("장착 중") : TEXT("보관 중"));
+			Lines.Add(EquippedId == ItemId
+				? LOCTEXT("State_Equipped", "장착 중").ToString()
+				: LOCTEXT("State_Stored", "보관 중").ToString());
 
 			if (!Row->ShortDescription.IsEmpty())
 			{
@@ -977,11 +984,13 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 		Lines.Add(GetItemDisplayName(FallbackStack));
 		if (ItemCategoryTag.IsValid())
 		{
-			Lines.Add(FString::Printf(TEXT("타입: %s"), *GetItemTypeName(FallbackStack)));
+			Lines.Add(FText::Format(LOCTEXT("Tooltip_Type", "타입: {0}"),
+				FText::FromString(GetItemTypeName(FallbackStack))).ToString());
 		}
 		if (Quantity > 0)
 		{
-			Lines.Add(FString::Printf(TEXT("보유: %d"), Quantity));
+			Lines.Add(FText::Format(LOCTEXT("Tooltip_Owned", "보유: {0}"),
+				FText::AsNumber(Quantity)).ToString());
 		}
 		return FText::FromString(FString::Join(Lines, TEXT("\n")));
 	}
@@ -994,20 +1003,24 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 	{
 		const bool bSameWeaponTypeEquipped = InventoryComponent
 			&& InventoryComponent->GetEquippedWeaponId() == ItemId;
-		ContextLines.Add(bSameWeaponTypeEquipped ? TEXT("장착 됨") : TEXT("보유 중"));
+		ContextLines.Add(bSameWeaponTypeEquipped
+			? LOCTEXT("State_EquippedAlt", "장착 됨").ToString()
+			: LOCTEXT("State_Owned", "보유 중").ToString());
 	}
 	else if (IsConsumableCategory(ItemCategoryTag) && ConsumableItemTable)
 	{
 		if (const FRetrieveConsumableItemRow* Row = ConsumableItemTable->FindRow<FRetrieveConsumableItemRow>(
 			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
 		{
-			ContextLines.Add(FString::Printf(TEXT("보유: %d / 최대: %d"), Quantity, Row->MaxStack));
+			ContextLines.Add(FText::Format(LOCTEXT("Tooltip_OwnedMax", "보유: {0} / 최대: {1}"),
+				FText::AsNumber(Quantity), FText::AsNumber(Row->MaxStack)).ToString());
 		}
 		const int32 SlotKey = InventoryComponent
 			? InventoryComponent->GetAssignedConsumableSlotKey(ItemId) : INDEX_NONE;
 		if (SlotKey != INDEX_NONE)
 		{
-			ContextLines.Add(FString::Printf(TEXT("퀵슬롯: %d"), SlotKey));
+			ContextLines.Add(FText::Format(LOCTEXT("Tooltip_QuickSlot", "퀵슬롯: {0}"),
+				FText::AsNumber(SlotKey)).ToString());
 		}
 	}
 	else if (IsMaterialCategory(ItemCategoryTag))
@@ -1017,7 +1030,8 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 			if (const FRetrieveMaterialItemRow* Row = Table->FindRow<FRetrieveMaterialItemRow>(
 				ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
 			{
-				ContextLines.Add(FString::Printf(TEXT("보유: %d / 최대: %d"), Quantity, Row->MaxStack));
+				ContextLines.Add(FText::Format(LOCTEXT("Tooltip_OwnedMax", "보유: {0} / 최대: {1}"),
+					FText::AsNumber(Quantity), FText::AsNumber(Row->MaxStack)).ToString());
 			}
 		}
 	}
@@ -1026,12 +1040,16 @@ FText UInventoryPanelWidget::BuildItemTooltipText(FName ItemId, FGameplayTag Ite
 		if (const FRetrieveArmorDataRow* Row = ArmorDataTable->FindRow<FRetrieveArmorDataRow>(
 			ItemId, TEXT("UInventoryPanelWidget::BuildItemTooltipText")))
 		{
-			ContextLines.Add(FString::Printf(TEXT("방어력: +%.0f"), Row->Defense));
-			ContextLines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(Row->EquipmentSlotTag)));
+			ContextLines.Add(FText::Format(LOCTEXT("Tooltip_Defense", "방어력: +{0}"),
+				FText::FromString(FString::Printf(TEXT("%.0f"), Row->Defense))).ToString());
+			ContextLines.Add(FText::Format(LOCTEXT("Tooltip_Slot", "슬롯: {0}"),
+				FText::FromString(GetGameplayTagLeaf(Row->EquipmentSlotTag))).ToString());
 
 			const FName EquippedId = InventoryComponent
 				? InventoryComponent->GetEquippedArmorId(Row->EquipmentSlotTag) : NAME_None;
-			ContextLines.Add(EquippedId == ItemId ? TEXT("장착 중") : TEXT("보관 중"));
+			ContextLines.Add(EquippedId == ItemId
+				? LOCTEXT("State_Equipped", "장착 중").ToString()
+				: LOCTEXT("State_Stored", "보관 중").ToString());
 		}
 	}
 
@@ -1107,23 +1125,23 @@ FText UInventoryPanelWidget::GetSelectedItemStateText() const
 
 		if (SlotKey != INDEX_NONE)
 		{
-			return FText::FromString(FString::Printf(TEXT("퀵슬롯 %d"), SlotKey));
+			return FText::Format(LOCTEXT("State_QuickSlot", "퀵슬롯 {0}"), FText::AsNumber(SlotKey));
 		}
 
 		if (IsWeaponCategory(SelectedItemCategoryTag))
 		{
 			return IsSelectedWeaponEquipped()
-				? INVTEXT("장착 중")
-				: INVTEXT("보관 중");
+				? LOCTEXT("State_Equipped", "장착 중")
+				: LOCTEXT("State_Stored", "보관 중");
 		}
 
-		return INVTEXT("없음");
+		return LOCTEXT("State_None", "없음");
 	}
 
 	if (IsMaterialCategory(SelectedItemCategoryTag))
 	{
 		const int32 Count = InventoryComponent->GetItemCount(SelectedItemId);
-		return FText::Format(INVTEXT("보유 {0}개"), Count);
+		return FText::Format(LOCTEXT("State_OwnedCount", "보유 {0}개"), Count);
 	}
 
 	if (IsArmorCategory(SelectedItemCategoryTag))
@@ -1133,11 +1151,11 @@ FText UInventoryPanelWidget::GetSelectedItemStateText() const
 			FRetrieveArmorDataRow ArmorData;
 			if (GetSelectedArmorData(ArmorData))
 			{
-				return FText::Format(INVTEXT("장착 중 ({0})"), ArmorData.DisplayName);
+				return FText::Format(LOCTEXT("State_EquippedWith", "장착 중 ({0})"), ArmorData.DisplayName);
 			}
-			return INVTEXT("장착 중");
+			return LOCTEXT("State_Equipped", "장착 중");
 		}
-		return INVTEXT("보관 중");
+		return LOCTEXT("State_Stored", "보관 중");
 	}
 
 	return FText::GetEmpty();
@@ -1602,10 +1620,13 @@ void UInventoryPanelWidget::RefreshSelectedArmorDetails()
 	if (Text_DetailMainStat)
 	{
 		const float TotalDef = GetTotalDefense();
-		const FString StatText = IsSelectedArmorEquipped()
-			? FString::Printf(TEXT("방어력: +%.0f  (최종: %.0f)"), Armor.Defense, TotalDef)
-			: FString::Printf(TEXT("방어력: +%.0f"), Armor.Defense);
-		SetDetailText(Text_DetailMainStat, FText::FromString(StatText));
+		const FText StatText = IsSelectedArmorEquipped()
+			? FText::Format(LOCTEXT("Detail_DefenseWithTotal", "방어력: +{0}  (최종: {1})"),
+				FText::FromString(FString::Printf(TEXT("%.0f"), Armor.Defense)),
+				FText::FromString(FString::Printf(TEXT("%.0f"), TotalDef)))
+			: FText::Format(LOCTEXT("Tooltip_Defense", "방어력: +{0}"),
+				FText::FromString(FString::Printf(TEXT("%.0f"), Armor.Defense)));
+		SetDetailText(Text_DetailMainStat, StatText);
 	}
 	if (Text_DetailDescription)
 	{
@@ -1674,19 +1695,23 @@ FText UInventoryPanelWidget::BuildArmorSetInfoText(const FRetrieveArmorDataRow& 
 		}
 	}
 
+	const FText ActiveText   = LOCTEXT("SetInfo_Active", "활성");
+	const FText InactiveText = LOCTEXT("SetInfo_Inactive", "비활성");
+
 	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("[%s] 착용 %d부위"), *BonusRow->DisplayName.ToString(), EquippedPieces));
+	Lines.Add(FText::Format(LOCTEXT("SetInfo_Header", "[{0}] 착용 {1}부위"),
+		BonusRow->DisplayName, FText::AsNumber(EquippedPieces)).ToString());
 	if (!BonusRow->Bonus2Desc.IsEmpty())
 	{
-		Lines.Add(FString::Printf(TEXT("2세트(%s): %s"),
-			EquippedPieces >= 2 ? TEXT("활성") : TEXT("비활성"),
-			*BonusRow->Bonus2Desc.ToString()));
+		Lines.Add(FText::Format(LOCTEXT("SetInfo_Bonus2", "2세트({0}): {1}"),
+			EquippedPieces >= 2 ? ActiveText : InactiveText,
+			BonusRow->Bonus2Desc).ToString());
 	}
 	if (!BonusRow->Bonus4Desc.IsEmpty())
 	{
-		Lines.Add(FString::Printf(TEXT("4세트(%s): %s"),
-			EquippedPieces >= 4 ? TEXT("활성") : TEXT("비활성"),
-			*BonusRow->Bonus4Desc.ToString()));
+		Lines.Add(FText::Format(LOCTEXT("SetInfo_Bonus4", "4세트({0}): {1}"),
+			EquippedPieces >= 4 ? ActiveText : InactiveText,
+			BonusRow->Bonus4Desc).ToString());
 	}
 	return FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
@@ -1696,17 +1721,17 @@ FString UInventoryPanelWidget::GetWeaponPassiveSummary(const FGameplayTag& Weapo
 	// GE_WeaponPassive_* (DA_AbilitySet_*에 연결)의 수치와 반드시 일치시켜 유지한다
 	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Staff)
 	{
-		return TEXT("원소 데미지 +10%, 게이지 획득 +15%");
+		return LOCTEXT("Passive_Staff", "원소 데미지 +10%, 게이지 획득 +15%").ToString();
 	}
 	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_Bow)
 	{
-		return TEXT("일반공격 +10%, 치명타 +5%");
+		return LOCTEXT("Passive_Bow", "일반공격 +10%, 치명타 +5%").ToString();
 	}
 	if (WeaponTypeTag == RetrieveGameplayTags::Weapon_Type_SwordShield)
 	{
-		return TEXT("강공격 +10%, 가드 감쇄 +5%");
+		return LOCTEXT("Passive_SwordShield", "강공격 +10%, 가드 감쇄 +5%").ToString();
 	}
-	return TEXT("없음");
+	return LOCTEXT("State_None", "없음").ToString();
 }
 
 void UInventoryPanelWidget::UpdateEquipActionButtons()
@@ -2090,7 +2115,7 @@ void UInventoryPanelWidget::ShowQuickSlotReplaceConfirm(bool bShow)
 	if (Text_QuickSlotReplaceMessage && bShow)
 	{
 		Text_QuickSlotReplaceMessage->SetText(
-			INVTEXT("이미 아이템이 등록된 슬롯입니다.\n교체하시겠습니까?"));
+			LOCTEXT("QuickSlot_ReplaceConfirm", "이미 아이템이 등록된 슬롯입니다.\n교체하시겠습니까?"));
 	}
 
 	if (bShow)
@@ -2651,7 +2676,9 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 	FString RarityText = !OverrideRarity.IsEmpty() ? OverrideRarity : TypeName;
 	FString MainStatText = !OverrideMainStat.IsEmpty()
 		? OverrideMainStat
-		: (Quantity > 0 ? FString::Printf(TEXT("%d개 보유 중"), Quantity) : TypeName);
+		: (Quantity > 0
+			? FText::Format(LOCTEXT("Tooltip_OwningCount", "{0}개 보유 중"), FText::AsNumber(Quantity)).ToString()
+			: TypeName);
 	int32 BasePrice = OverrideBasePrice >= 0 ? OverrideBasePrice : 0;
 
 	if (IsWeaponCategory(Item.ItemCategoryTag) && WeaponDataTable)
@@ -2665,7 +2692,8 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
-				MainStatText = FString::Printf(TEXT("%.0f 공격력"), Row->AttackPower);
+				MainStatText = FText::Format(LOCTEXT("Tooltip_StatAttack", "{0} 공격력"),
+					FText::FromString(FString::Printf(TEXT("%.0f"), Row->AttackPower))).ToString();
 			}
 			if (OverrideBasePrice < 0)
 			{
@@ -2683,7 +2711,8 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
-				MainStatText = FString::Printf(TEXT("%.0f 방어력"), Row->Defense);
+				MainStatText = FText::Format(LOCTEXT("Tooltip_StatDefense", "{0} 방어력"),
+					FText::FromString(FString::Printf(TEXT("%.0f"), Row->Defense))).ToString();
 			}
 			if (OverrideBasePrice < 0)
 			{
@@ -2697,7 +2726,7 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 		{
 			if (OverrideRarity.IsEmpty())
 			{
-				RarityText = TEXT("소모품");
+				RarityText = LOCTEXT("Category_Consumable", "소모품").ToString();
 			}
 			if (OverrideMainStat.IsEmpty())
 			{
@@ -2719,11 +2748,12 @@ void UInventoryPanelWidget::PopulateFantasyTooltipWidget(
 			{
 				if (OverrideRarity.IsEmpty())
 				{
-					RarityText = TEXT("재료");
+					RarityText = LOCTEXT("Category_Material", "재료").ToString();
 				}
 				if (OverrideMainStat.IsEmpty())
 				{
-					MainStatText = FString::Printf(TEXT("%d개 보유"), Quantity);
+					MainStatText = FText::Format(LOCTEXT("Tooltip_OwnedCountShort", "{0}개 보유"),
+						FText::AsNumber(Quantity)).ToString();
 				}
 				if (OverrideBasePrice < 0)
 				{
@@ -2777,7 +2807,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 	FString BadgeText;
 	if (IsWeaponCategory(Item.ItemCategoryTag) && IsWeaponItemEquipped(Item.ItemId, Item.SlotInstanceId))
 	{
-		BadgeText = TEXT("장착 중");
+		BadgeText = LOCTEXT("State_Equipped", "장착 중").ToString();
 	}
 	else if (IsArmorCategory(Item.ItemCategoryTag) && ArmorDataTable && InventoryComponent)
 	{
@@ -2785,7 +2815,7 @@ UWidget* UInventoryPanelWidget::CreateInventorySlotTooltip(const FRetrieveItemSt
 		{
 			if (IsArmorItemEquipped(Item.ItemId, Item.SlotInstanceId))
 			{
-				BadgeText = TEXT("장착 중");
+				BadgeText = LOCTEXT("State_Equipped", "장착 중").ToString();
 			}
 		}
 	}
@@ -2868,13 +2898,15 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 	const FString TypeName = GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag);
 	const FString RarityText = GradeName.IsEmpty() ? TypeName : FString::Printf(TEXT("%s %s"), *GradeName, *TypeName);
 
-	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("장비 비교"));
+	const FString CompareTitle = LOCTEXT("Tooltip_CompareTitle", "장비 비교").ToString();
+	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), CompareTitle);
 	SetTooltipText(TooltipWidget, TEXT("Text_ItemDetails"), DeltaInfo);
 	PopulateFantasyTooltipWidget(
 		TooltipWidget,
 		HoveredItem,
-		TEXT("장비 비교"),
-		FString::Printf(TEXT("%.0f 공격력"), HoveredWeapon.AttackPower),
+		CompareTitle,
+		FText::Format(LOCTEXT("Tooltip_StatAttack", "{0} 공격력"),
+			FText::FromString(FString::Printf(TEXT("%.0f"), HoveredWeapon.AttackPower))).ToString(),
 		RarityText,
 		HoveredWeapon.BasePrice);
 
@@ -2915,14 +2947,16 @@ UWidget* UInventoryPanelWidget::CreateInventoryCompareTooltip(
 
 	const FString SlotName = GetGameplayTagLeaf(HoveredArmor.EquipmentSlotTag);
 
-	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), TEXT("장비 비교"));
+	const FString CompareTitle = LOCTEXT("Tooltip_CompareTitle", "장비 비교").ToString();
+	SetTooltipText(TooltipWidget, TEXT("Text_CompareTitle"), CompareTitle);
 	SetTooltipText(TooltipWidget, TEXT("Text_ItemDetails"), DeltaInfo);
 	PopulateFantasyTooltipWidget(
 		TooltipWidget,
 		HoveredItem,
-		TEXT("장비 비교"),
-		FString::Printf(TEXT("%.0f 방어력"), HoveredArmor.Defense),
-		FString::Printf(TEXT("%s"), *SlotName),
+		CompareTitle,
+		FText::Format(LOCTEXT("Tooltip_StatDefense", "{0} 방어력"),
+			FText::FromString(FString::Printf(TEXT("%.0f"), HoveredArmor.Defense))).ToString(),
+		SlotName,
 		HoveredArmor.BasePrice);
 
 	return TooltipWidget;
@@ -3073,12 +3107,18 @@ FString UInventoryPanelWidget::FormatWeaponTooltipBlock(
 	TArray<FString> Lines;
 	Lines.Add(Header + TEXT(":"));
 	Lines.Add(WeaponData.DisplayName.ToString());
-	Lines.Add(FString::Printf(TEXT("등급: %s"), *GetGameplayTagLeaf(WeaponData.WeaponGradeTag)));
-	Lines.Add(FString::Printf(TEXT("타입: %s"), *GetGameplayTagLeaf(WeaponData.WeaponTypeTag)));
-	Lines.Add(FString::Printf(TEXT("원소: %s"), *GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
-	Lines.Add(FString::Printf(TEXT("공격력: %.0f"), WeaponData.AttackPower));
-	Lines.Add(FString::Printf(TEXT("원소 충전: x%.2f"), WeaponData.ElementChargeMultiplier));
-	Lines.Add(FString::Printf(TEXT("패시브: %s"), *GetWeaponPassiveSummary(WeaponData.WeaponTypeTag)));
+	Lines.Add(FText::Format(LOCTEXT("Block_Grade", "등급: {0}"),
+		FText::FromString(GetGameplayTagLeaf(WeaponData.WeaponGradeTag))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Tooltip_Type", "타입: {0}"),
+		FText::FromString(GetGameplayTagLeaf(WeaponData.WeaponTypeTag))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Block_Element", "원소: {0}"),
+		FText::FromString(GetGameplayTagLeaf(WeaponData.WeaponAffinityTag))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Block_Attack", "공격력: {0}"),
+		FText::FromString(FString::Printf(TEXT("%.0f"), WeaponData.AttackPower))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Block_ElementCharge", "원소 충전: x{0}"),
+		FText::FromString(FString::Printf(TEXT("%.2f"), WeaponData.ElementChargeMultiplier))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Block_Passive", "패시브: {0}"),
+		FText::FromString(GetWeaponPassiveSummary(WeaponData.WeaponTypeTag))).ToString());
 
 	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
 	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
@@ -3095,34 +3135,34 @@ FString UInventoryPanelWidget::BuildWeaponSwapDeltaText(
 	const float AttackDelta = HoveredWeapon.AttackPower - CurrentWeapon.AttackPower;
 	if (!FMath::IsNearlyZero(AttackDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.0f 공격력"), AttackDelta));
+		Lines.Add(FText::Format(LOCTEXT("Delta_Attack", "{0} 공격력"),
+			FText::FromString(FString::Printf(TEXT("%+.0f"), AttackDelta))).ToString());
 	}
 
 	const float ElementChargeDelta = HoveredWeapon.ElementChargeMultiplier - CurrentWeapon.ElementChargeMultiplier;
 	if (!FMath::IsNearlyZero(ElementChargeDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.2f 원소 충전"), ElementChargeDelta));
+		Lines.Add(FText::Format(LOCTEXT("Delta_ElementCharge", "{0} 원소 충전"),
+			FText::FromString(FString::Printf(TEXT("%+.2f"), ElementChargeDelta))).ToString());
 	}
 
 	if (HoveredWeapon.WeaponTypeTag != CurrentWeapon.WeaponTypeTag)
 	{
-		Lines.Add(FString::Printf(
-			TEXT("타입: %s -> %s"),
-			*GetGameplayTagLeaf(CurrentWeapon.WeaponTypeTag),
-			*GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag)));
+		Lines.Add(FText::Format(LOCTEXT("Delta_Type", "타입: {0} -> {1}"),
+			FText::FromString(GetGameplayTagLeaf(CurrentWeapon.WeaponTypeTag)),
+			FText::FromString(GetGameplayTagLeaf(HoveredWeapon.WeaponTypeTag))).ToString());
 	}
 
 	if (HoveredWeapon.WeaponAffinityTag != CurrentWeapon.WeaponAffinityTag)
 	{
-		Lines.Add(FString::Printf(
-			TEXT("원소: %s -> %s"),
-			*GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag),
-			*GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag)));
+		Lines.Add(FText::Format(LOCTEXT("Delta_Element", "원소: {0} -> {1}"),
+			FText::FromString(GetGameplayTagLeaf(CurrentWeapon.WeaponAffinityTag)),
+			FText::FromString(GetGameplayTagLeaf(HoveredWeapon.WeaponAffinityTag))).ToString());
 	}
 
 	if (Lines.IsEmpty())
 	{
-		Lines.Add(TEXT("스탯 변화 없음"));
+		Lines.Add(LOCTEXT("Delta_NoChange", "스탯 변화 없음").ToString());
 	}
 
 	return FString::Join(Lines, TEXT("\n"));
@@ -3135,8 +3175,10 @@ FString UInventoryPanelWidget::FormatArmorTooltipBlock(
 	TArray<FString> Lines;
 	Lines.Add(Header + TEXT(":"));
 	Lines.Add(ArmorData.DisplayName.ToString());
-	Lines.Add(FString::Printf(TEXT("슬롯: %s"), *GetGameplayTagLeaf(ArmorData.EquipmentSlotTag)));
-	Lines.Add(FString::Printf(TEXT("방어력: %.0f"), ArmorData.Defense));
+	Lines.Add(FText::Format(LOCTEXT("Tooltip_Slot", "슬롯: {0}"),
+		FText::FromString(GetGameplayTagLeaf(ArmorData.EquipmentSlotTag))).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Block_Defense", "방어력: {0}"),
+		FText::FromString(FString::Printf(TEXT("%.0f"), ArmorData.Defense))).ToString());
 
 	// ShortDescription은 길이가 가변적이라 비교 칸(고정 크기)에 넣으면 넘치기 쉽다.
 	// 상세 설명은 BuildItemTooltipText 쪽 일반 툴팁에서만 보여준다.
@@ -3153,12 +3195,13 @@ FString UInventoryPanelWidget::BuildArmorSwapDeltaText(
 	const float DefenseDelta = HoveredArmor.Defense - CurrentArmor.Defense;
 	if (!FMath::IsNearlyZero(DefenseDelta))
 	{
-		Lines.Add(FString::Printf(TEXT("%+.0f 방어력"), DefenseDelta));
+		Lines.Add(FText::Format(LOCTEXT("Delta_Defense", "{0} 방어력"),
+			FText::FromString(FString::Printf(TEXT("%+.0f"), DefenseDelta))).ToString());
 	}
 
 	if (Lines.IsEmpty())
 	{
-		Lines.Add(TEXT("스탯 변화 없음"));
+		Lines.Add(LOCTEXT("Delta_NoChange", "스탯 변화 없음").ToString());
 	}
 
 	return FString::Join(Lines, TEXT("\n"));
@@ -3223,7 +3266,7 @@ void UInventoryPanelWidget::PopulateWeaponSkillIcons(UHorizontalBox* SkillIconBo
 		}
 		else
 		{
-			SkillIcon->SetToolTipText(FText::FromString(TEXT("빈 스킬 슬롯")));
+			SkillIcon->SetToolTipText(LOCTEXT("Skill_EmptySlot", "빈 스킬 슬롯"));
 		}
 
 		SkillIconFrame->AddChild(SkillIcon);
@@ -3244,17 +3287,19 @@ FString UInventoryPanelWidget::BuildWeaponComparisonText() const
 
 	if (!bHasSelectedWeapon && !bHasCurrentWeapon)
 	{
-		return TEXT("장비 비교\n무기를 선택하세요.");
+		return LOCTEXT("Compare_SelectWeapon", "장비 비교\n무기를 선택하세요.").ToString();
 	}
 
 	if (!bHasSelectedWeapon)
 	{
-		return FString::Printf(TEXT("현재 장착 중\n%s\n\nSelected\nNone"), *FormatWeaponSummary(CurrentWeaponData));
+		return FText::Format(LOCTEXT("Compare_CurrentOnly", "현재 장착 중\n{0}\n\nSelected\nNone"),
+			FText::FromString(FormatWeaponSummary(CurrentWeaponData))).ToString();
 	}
 
 	if (!bHasCurrentWeapon)
 	{
-		return FString::Printf(TEXT("선택 됨\n%s\n\nCurrent\nNone"), *FormatWeaponSummary(SelectedWeaponData));
+		return FText::Format(LOCTEXT("Compare_SelectedOnly", "선택 됨\n{0}\n\nCurrent\nNone"),
+			FText::FromString(FormatWeaponSummary(SelectedWeaponData))).ToString();
 	}
 
 	const float AttackDelta = SelectedWeaponData.AttackPower - CurrentWeaponData.AttackPower;
@@ -3262,31 +3307,30 @@ FString UInventoryPanelWidget::BuildWeaponComparisonText() const
 		? FString::Printf(TEXT("+%.0f"), AttackDelta)
 		: FString::Printf(TEXT("%.0f"), AttackDelta);
 
-	return FString::Printf(
-		TEXT("Current -> Selected\n")
-		TEXT("%s -> %s\n")
-		TEXT("공격력 %.0f -> %.0f (%s)\n")
-		TEXT("타입 %s -> %s\n")
-		TEXT("원소 충전 %s -> %s"),
-		*CurrentWeaponData.DisplayName.ToString(),
-		*SelectedWeaponData.DisplayName.ToString(),
-		CurrentWeaponData.AttackPower,
-		SelectedWeaponData.AttackPower,
-		*AttackDeltaText,
-		*GetGameplayTagLeaf(CurrentWeaponData.WeaponTypeTag),
-		*GetGameplayTagLeaf(SelectedWeaponData.WeaponTypeTag),
-		*GetGameplayTagLeaf(CurrentWeaponData.WeaponAffinityTag),
-		*GetGameplayTagLeaf(SelectedWeaponData.WeaponAffinityTag));
+	FFormatNamedArguments Args;
+	Args.Add(TEXT("CurrentName"),      CurrentWeaponData.DisplayName);
+	Args.Add(TEXT("SelectedName"),     SelectedWeaponData.DisplayName);
+	Args.Add(TEXT("CurrentATK"),       FText::FromString(FString::Printf(TEXT("%.0f"), CurrentWeaponData.AttackPower)));
+	Args.Add(TEXT("SelectedATK"),      FText::FromString(FString::Printf(TEXT("%.0f"), SelectedWeaponData.AttackPower)));
+	Args.Add(TEXT("Delta"),            FText::FromString(AttackDeltaText));
+	Args.Add(TEXT("CurrentType"),      FText::FromString(GetGameplayTagLeaf(CurrentWeaponData.WeaponTypeTag)));
+	Args.Add(TEXT("SelectedType"),     FText::FromString(GetGameplayTagLeaf(SelectedWeaponData.WeaponTypeTag)));
+	Args.Add(TEXT("CurrentAffinity"),  FText::FromString(GetGameplayTagLeaf(CurrentWeaponData.WeaponAffinityTag)));
+	Args.Add(TEXT("SelectedAffinity"), FText::FromString(GetGameplayTagLeaf(SelectedWeaponData.WeaponAffinityTag)));
+
+	return FText::Format(LOCTEXT("Compare_Full", "Current -> Selected\n{CurrentName} -> {SelectedName}\n공격력 {CurrentATK} -> {SelectedATK} ({Delta})\n타입 {CurrentType} -> {SelectedType}\n원소 충전 {CurrentAffinity} -> {SelectedAffinity}"), Args).ToString();
 }
 
 FString UInventoryPanelWidget::FormatWeaponSummary(const FRetrieveWeaponDataRow& WeaponData) const
 {
-	return FString::Printf(
-		TEXT("%s\n공격력 %.0f\n타입 %s\n원소 충전 %s"),
-		*WeaponData.DisplayName.ToString(),
-		WeaponData.AttackPower,
-		*GetGameplayTagLeaf(WeaponData.WeaponTypeTag),
-		*GetGameplayTagLeaf(WeaponData.WeaponAffinityTag));
+	FFormatNamedArguments Args;
+	Args.Add(TEXT("Name"),     WeaponData.DisplayName);
+	Args.Add(TEXT("ATK"),      FText::FromString(FString::Printf(TEXT("%.0f"), WeaponData.AttackPower)));
+	Args.Add(TEXT("Type"),     FText::FromString(GetGameplayTagLeaf(WeaponData.WeaponTypeTag)));
+	Args.Add(TEXT("Affinity"), FText::FromString(GetGameplayTagLeaf(WeaponData.WeaponAffinityTag)));
+
+	return FText::Format(LOCTEXT("Weapon_Summary",
+		"{Name}\n공격력 {ATK}\n타입 {Type}\n원소 충전 {Affinity}"), Args).ToString();
 }
 
 FString UInventoryPanelWidget::FormatWeaponSkillList(const FRetrieveWeaponDataRow& WeaponData) const
@@ -3791,18 +3835,18 @@ FText UInventoryPanelWidget::GetFinalStatDisplayText() const
 	const float ArmorDEF  = GetArmorBonusDefense();
 	const float TotalDEF  = GetTotalDefense();
 
-	if (const UWorld* World = GetWorld(); World || !World)
-	{
-		return FText::FromString(FString::Printf(
-		TEXT("Base ATK: %.0f\nWeapon ATK: +%.0f\nTotal ATK: %.0f\n기본 방어력: %.0f\nArmor 방어력: +%.0f\n최종 방어력: %.0f"),
-		BaseATK, WeaponATK, TotalATK, BaseDEF, ArmorDEF, TotalDEF));
-	}
+	auto Num = [](float Value) { return FText::FromString(FString::Printf(TEXT("%.0f"), Value)); };
 
-	const FString DisplayStr = FString::Printf(
-		TEXT("기본 ATK: %.0f\n무기 보너스: +%.0f\n최종 ATK: %.0f"),
-		BaseATK, WeaponATK, TotalATK);
-
-	return FText::FromString(DisplayStr);
+	FFormatNamedArguments Args;
+	Args.Add(TEXT("BaseATK"),   Num(BaseATK));
+	Args.Add(TEXT("WeaponATK"), Num(WeaponATK));
+	Args.Add(TEXT("TotalATK"),  Num(TotalATK));
+	Args.Add(TEXT("BaseDEF"),   Num(BaseDEF));
+	Args.Add(TEXT("ArmorDEF"),  Num(ArmorDEF));
+	Args.Add(TEXT("TotalDEF"),  Num(TotalDEF));
+	return FText::Format(LOCTEXT("Stat_FinalDisplay",
+		"Base ATK: {BaseATK}\nWeapon ATK: +{WeaponATK}\nTotal ATK: {TotalATK}\n기본 방어력: {BaseDEF}\nArmor 방어력: +{ArmorDEF}\n최종 방어력: {TotalDEF}"),
+		Args);
 }
 
 FText UInventoryPanelWidget::GetFullStatDisplayText() const
@@ -3814,18 +3858,21 @@ FText UInventoryPanelWidget::GetFullStatDisplayText() const
 	// 현재 체력 / 최대 체력 (ASC 없으면 0으로 표시해 포맷 통일)
 	const float HP    = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetHealthAttribute())    : 0.f;
 	const float MaxHP = ASC ? ASC->GetNumericAttribute(UCombatAttributeSet::GetMaxHealthAttribute()) : 0.f;
-	Lines.Add(FString::Printf(TEXT("현재 체력: %.0f / %.0f"), HP, MaxHP));
+	auto Num = [](float Value) { return FText::FromString(FString::Printf(TEXT("%.0f"), Value)); };
+
+	Lines.Add(FText::Format(LOCTEXT("Stat_CurrentHP", "현재 체력: {0} / {1}"),
+		Num(HP), Num(MaxHP)).ToString());
 
 	// 공격력 분류 (순수 함수들은 ASC 내부에서 개별 null 처리함)
-	Lines.Add(FString::Printf(TEXT("기본 공격력: %.0f"), GetCharacterBaseAttackPower()));
-	Lines.Add(FString::Printf(TEXT("무기 공격력: +%.0f"), GetWeaponBonusAttackPower()));
-	Lines.Add(FString::Printf(TEXT("최종 공격력: %.0f"), GetTotalAttackPower()));
+	Lines.Add(FText::Format(LOCTEXT("Stat_BaseATK", "기본 공격력: {0}"), Num(GetCharacterBaseAttackPower())).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Stat_WeaponATK", "무기 공격력: +{0}"), Num(GetWeaponBonusAttackPower())).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Stat_TotalATK", "최종 공격력: {0}"), Num(GetTotalAttackPower())).ToString());
 
 	// 방어력 (ArmorComponent가 GE로 CombatAttributeSet::Defense를 가산)
 	const float Defense = GetTotalDefense();
-	Lines.Add(FString::Printf(TEXT("기본 방어력: %.0f"), GetCharacterBaseDefense()));
-	Lines.Add(FString::Printf(TEXT("방어구 방어력: +%.0f"), GetArmorBonusDefense()));
-	Lines.Add(FString::Printf(TEXT("최종 방어력: %.0f"), Defense));
+	Lines.Add(FText::Format(LOCTEXT("Stat_BaseDEF", "기본 방어력: {0}"), Num(GetCharacterBaseDefense())).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Stat_ArmorDEF", "방어구 방어력: +{0}"), Num(GetArmorBonusDefense())).ToString());
+	Lines.Add(FText::Format(LOCTEXT("Stat_TotalDEF", "최종 방어력: {0}"), Num(Defense)).ToString());
 
 	// 체력/공격력/방어력 외의 DT_CharacterStats 추가 컬럼(MoveSpeed, MaxStamina 등)은
 	// 인벤토리 최종 스탯 표시에 불필요하므로 자동 표시하지 않는다.
@@ -3995,3 +4042,5 @@ void UInventoryPanelWidget::RefreshSlotIcons()
 		Image_SlotIcon_Weapon->SetColorAndOpacity(FLinearColor::Transparent);
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

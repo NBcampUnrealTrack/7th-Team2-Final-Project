@@ -295,7 +295,7 @@ public:
 	// ── 레이블 텍스트 설정 ──────────────────────────────────────────────────
 	// 플레이어 마커 위에 표시할 텍스트
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label")
-	FText CurrentLocationText = FText::FromString(TEXT("현재 위치"));
+	FText CurrentLocationText = NSLOCTEXT("RetrieveWorldMap", "CurrentLocation", "현재 위치");
 
 	// 플레이어 레이블 폰트 크기
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Retrieve|WorldMap|Label", meta=(ClampMin="8"))

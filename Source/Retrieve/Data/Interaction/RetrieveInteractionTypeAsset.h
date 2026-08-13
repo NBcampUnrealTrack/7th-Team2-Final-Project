@@ -43,7 +43,7 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction|Prompt",
 		meta = (DisplayName = "프롬프트 텍스트"))
-	FText DisplayText = INVTEXT("상호작용");
+	FText DisplayText = NSLOCTEXT("RetrieveInteraction", "InteractionType_DefaultPrompt", "상호작용");
 
 	// ── Hold 설정 ──────────────────────────────────────────────────────────
 	/**

@@ -219,7 +219,7 @@ void UConversationViewModel::BuildOpeningTopicsFor(AActor* NPC)
 		{
 			Topics.Add(FRetrieveDialogueTopic{
 				RetrieveGameplayTags::Dialogue_Bet_Start,
-				FText::FromString(TEXT("내기하기 (가위바위보)")),
+				NSLOCTEXT("RetrieveDialogue", "Topic_RpsBet", "내기하기 (가위바위보)"),
 				true,
 				ETopicKind::Story
 			});

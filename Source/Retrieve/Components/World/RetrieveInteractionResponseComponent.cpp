@@ -28,6 +28,8 @@
 #include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
+#define LOCTEXT_NAMESPACE "RetrieveInteraction"
+
 namespace RetrieveInteractionPrompt
 {
 	struct FPromptData
@@ -159,8 +161,8 @@ URetrieveInteractionResponseComponent::URetrieveInteractionResponseComponent()
 	SetIsReplicatedByDefault(true);
 
 	// 상태 텍스트 한글 기본값(플러그인 기본 "Interacting"/"Completed" 대체). 대상별로 Details에서 바꿀 수 있다.
-	InteractingText = FText::FromString(TEXT("상호작용 중..."));
-	CompletedText = FText::FromString(TEXT("완료"));
+	InteractingText = LOCTEXT("Interaction_InProgress", "상호작용 중...");
+	CompletedText = LOCTEXT("Interaction_Completed", "완료");
 }
 
 void URetrieveInteractionResponseComponent::BeginPlay()
@@ -1502,3 +1504,5 @@ bool URetrieveInteractionResponseComponent::ShouldPlayMontageDuringInteraction()
 	return IsOpenChestMontage(GetEffectiveMontage())
 		|| IsOpenChestMontage(GetEffectiveVisualMeshMontage());
 }
+
+#undef LOCTEXT_NAMESPACE
