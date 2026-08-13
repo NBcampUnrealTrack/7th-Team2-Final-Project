@@ -127,10 +127,9 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::EnterState(
 		return EStateTreeRunStatus::Failed;
 	}
 
-	// Evaluator가 이미 bAttackApproachable(MaxActivationRange 기준)로 패턴 유효성을 검사했다.
-	// 여기서 다시 검사하면 0.2초 갱신 간격 차이로 진입 직후 즉시 실패할 수 있어 제거한다.
-	// 실제 공격 요청 직전(Tick)에서 최종적으로 다시 검사한다.
-
+	// Evaluator의 bAttackApproachable 판정을 사용한다.
+	// 여기서 다시 검사하면 0.2초 갱신 간격 차이로 진입 직후 실패할 수 있으므로,
+	// 실제 공격 요청 직전에 사거리를 다시 검사한다.
 	UEncirclementSubsystem* EncircleSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 	if (!EncircleSubsystem || !EncircleSubsystem->RequestAttackToken(InstanceData.TargetPlayer, Pawn))
 	{
@@ -231,8 +230,8 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 		const FVector AttackMoveTarget = InstanceData.TargetPlayer->GetActorLocation();
 		const float CurrentDistanceToTarget = FVector::Dist2D(Pawn->GetActorLocation(), AttackMoveTarget);
-
-		// 먼 경우
+		
+		// 공격 가능 거리보다 멀면 타깃에게 접근한다.
 		if (CurrentDistanceToTarget > FarThreshold)
 		{
 			InstanceData.bInAttackWindow = false;
@@ -273,7 +272,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 			return EStateTreeRunStatus::Running;
 		}
 
-		// 가까운 경우
+		// 최소 발동 거리보다 가까우면 거리를 벌린다.
 		if (NearThreshold > 0.f && CurrentDistanceToTarget < NearThreshold)
 		{
 			InstanceData.bInAttackWindow = false;
@@ -323,9 +322,7 @@ EStateTreeRunStatus FStateTreeTask_EnemyAttack::Tick(
 
 			return EStateTreeRunStatus::Running;
 		}
-
-
-		// 사용
+		
 		SetChaseAnimationTag(Pawn, false);
 
 		InstanceData.TimeInSoftAttackRange += DeltaTime;

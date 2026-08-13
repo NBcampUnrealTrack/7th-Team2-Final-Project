@@ -144,9 +144,9 @@ EStateTreeRunStatus FStateTreeTask_EnemyPatternAttack::Tick(
 			return EStateTreeRunStatus::Running;
 		}
 	
-		// 회전/턴 애니메이션만 갱신하고, 공격 발동은 막지 않는다.
-		// (combat 컴포넌트의 RequestPatternByPriority가 발동 직전 FaceTarget으로 조준하므로
-		//  여기서 8° 게이트로 막으면 전진 로코모션과 회전이 충돌해 특수공격이 영영 발동 안 될 수 있음)
+		// 회전과 턴 애니메이션은 갱신하지만, FacingAcceptanceAngle(기본 8°)로 특수공격 발동을 제한하지는 않는다.
+		// RequestPatternByPriority가 발동 직전에 FaceTarget을 수행하므로,
+		// 여기서 각도 게이트를 적용하면 전진 로코모션과 회전이 충돌해 특수공격이 계속 발동하지 못할 수 있다.
 		FaceTargetForPatternAttack(
 			Pawn,
 			InstanceData.TargetPlayer,
@@ -229,7 +229,7 @@ void FStateTreeTask_EnemyPatternAttack::ExitState(
 
 	UEnemyCombatComponent* Combat = Pawn->FindComponentByClass<UEnemyCombatComponent>();
 
-	// 진행 중인 패턴은 절대 끊지 않는다. "요청만 하고 발동 못 한" 케이스만 정리.
+	// 진행 중인 패턴은 유지하고, 요청 후 발동하지 못한 패턴만 정리한다.
 	if (!bObservedPatternActive && Combat && !Combat->IsPatternActive())
 	{
 		Combat->StopCurrentPattern();

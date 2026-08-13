@@ -9,23 +9,8 @@ struct FBossStatsRow;
 struct FMonsterDataRow;
 
 /**
- * 보스 캐릭터 베이스 클래스 (가디언 3종 + 여왕).
- *
- * ARetrieveEnemyCharacter를 상속하여 ASC·HealthComponent·EnemyCombatComponent 등을
- * 그대로 재사용하고, 아래 요소를 추가합니다.
- *
- *  - UBossPhaseComponent  : HP 임계값 → DT_MonsterData 행 교체 + EnemyCombatComponent 갱신
- *  - DT_BossStats 참조    : PhaseCount / HPThreshold / GroggyDuration / UnlockElementTag
- *  - HandleDeathStarted   : State.Boss.Dead 적용, GameplayEvent.Boss.Die 전송,
- *                           가디언 → Channel.Quest.GuardianDefeated
- *                           여왕   → Channel.Game.QueenDefeated
- *
- * 에디터에서 반드시 설정할 항목:
- *   - MonsterDataRowName  (예: "Boss_Fire_Phase1")  — 상속된 필드
- *   - MonsterDataTable    (DT_MonsterData)           — 상속된 필드
- *   - PatternTable        (DT_MonsterPattern)        — 상속된 필드
- *   - BossStatsRowName    (예: "Boss_Fire")
- *   - BossStatsTable      (DT_BossStats)
+ * 가디언 3종과 여왕이 사용하는 보스 캐릭터 베이스.
+ * 공통 Enemy 기능에 페이즈 전환, 보스 사망 메시지, 원소 해방 처리를 추가한다.
  */
 UCLASS()
 class RETRIEVE_API ARetrieveBossCharacter : public ARetrieveEnemyCharacter

@@ -311,7 +311,7 @@ struct RETRIEVE_API FMonsterProjectilePatternConfig
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
 	EProjectileSpawnPattern SpawnPattern = EProjectileSpawnPattern::Aimed;
 
-	/** 각 투사체 발사 시점. 비어 있으면 투사체 패턴 설정을 사용하지 않는다. */
+	/** 투사체별 생성 지연 시간. 배열 길이는 생성 수로 사용되며, 비어 있을 때의 처리는 어빌리티별로 다르다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Projectile")
 	TArray<float> ProjectileFireDelays;
 
@@ -515,7 +515,7 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	FGameplayTag AbilityEventTag;
 	
-	/** 발동 최대 거리 */
+	/** 발동 최대 거리. 에픽은 0이면 제한 없음으로 처리한다. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern", meta=(ClampMin="0.0"))
 	float MaxActivationRange = 200.f;
 	
@@ -586,23 +586,23 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Knockback")
 	FMonsterLaunchKnockbackConfig LaunchKnockbackConfig;
 
-	/** 카운터 관련 */
+	/** 적중 시 패링 가능 공격 태그를 부여할지 여부 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     bool bCanBeParried = false;
 
-	/** 파훼 시 Gorggy 트기거 작동 여부 */
+	/** 파훼 성공 시 그로기를 발생시킬지 여부 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     bool bCanTriggerGroggy = false;
 
-	/** 파훼 성공 시 발생시킬 이벤트 */
+	/** 파훼 성공 시 발생시킬 Gameplay Event. 비어 있으면 발생시키지 않는다. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag CounterEventTag;
 
-	/** 파훼에 필요한 원소 모드. 없으면 None  */
+	/** 파훼에 필요한 원소 태그. 비어 있으면 원소 조건을 검사하지 않는다. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag RequiredElementTag;
 
-	/** 파훼에 필요한 행동. 패링 / 회피 / 강공격 등 */
+	/** 파훼에 필요한 행동 태그. 비어 있으면 행동 조건을 검사하지 않는다. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Counter")
     FGameplayTag RequiredActionTag;
 	
@@ -614,7 +614,7 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(ClampMin="0.0"))
 	float HitboxRadius = 30.f;
 
-	/** 피격 판정 HitBox의 본의로부터의 Offset */
+	/** HitboxBoneName 기준 위치 오프셋 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox")
 	FVector HitboxOffset = FVector::ZeroVector;
 	
@@ -630,7 +630,7 @@ struct RETRIEVE_API FMonsterPatternRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern|Hitbox", meta=(EditCondition="bUseWeaponSweepTrace"))
 	float WeaponTraceLengthPadding = 0.0f;
 	
-	/** 사거리 밖에서도 선택 가능 여부*/
+	/** 사거리 밖에서도 패턴을 선택할 수 있는지 여부 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Monster|Pattern")
 	bool bAllowApproachFromOutOfRange = true;
 };

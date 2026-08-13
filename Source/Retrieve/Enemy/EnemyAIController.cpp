@@ -73,8 +73,7 @@ void AEnemyAIController::ConfigureStateTree(UStateTree* InStateTree)
 
 ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Other) const
 {
-	// 루멘은 플레이어의 동반 NPC로, 몬스터의 인식·공격 대상에서 무조건 제외한다.
-	// (LumenAIController가 세팅한 Team ID가 Enemy와 다른 값이라 기본 solver로는 Hostile 판정되므로 여기서 명시적 차단)
+	// 기본 팀 판정이 Lumen을 Hostile로 처리하므로 명시적으로 Neutral 처리한다.
 	if (Cast<const ALumenCharacter>(&Other))
 	{
 		return ETeamAttitude::Neutral;
@@ -98,8 +97,7 @@ ETeamAttitude::Type AEnemyAIController::GetTeamAttitudeTowards(const AActor& Oth
 			}
 		}
 
-		// 컨트롤러·폰 모두 팀 인터페이스가 없으면 Neutral 처리
-		// (기본 solver는 NoTeam(255) != Enemy(2) = Hostile로 판정하므로 명시적으로 차단)
+		// 팀 정보가 없는 Pawn은 기본 solver의 Hostile 판정을 피하도록 Neutral 처리한다.
 		if (OtherTeamId == FGenericTeamId::NoTeam)
 		{
 			return ETeamAttitude::Neutral;
@@ -227,10 +225,7 @@ void AEnemyAIController::TryStartStateTree()
 			StateTreeAIComp->SetStateTree(DefaultStateTree);
 		}
 
-		// StartLogic은 항상 호출해야 한다.
-		// 일반/보스 컨트롤러는 DefaultStateTree 멤버를 비워 두고 StateTreeAIComponent에
-		// 직접 설정된 StateTree 에셋으로 동작한다. StartLogic을 if(DefaultStateTree) 블록
-		// 안에서만 호출하면 이 경우 로직이 시작되지 않아 몬스터가 완전히 정지한다. (회귀 수정)
+		// DefaultStateTree가 비어 있어도 StateTreeAIComponent에 에셋이 직접 설정될 수 있으므로 항상 호출한다.
 		StateTreeAIComp->StartLogic();
 	}
 }

@@ -67,15 +67,11 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	FistHitbox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FistHitbox->SetSphereRadius(30.f);
 	
-	// 카메라 충돌 방지
 	FistHitbox->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-	// GetCapsuleComponent()->SetCollisionObjectType(ECC_GameTraceChannel1);
-	// GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Overlap);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	
-	// 회전 보간 적용
 	bUseControllerRotationYaw = false;
 	
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
@@ -83,7 +79,6 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	MoveComp->bOrientRotationToMovement = true;
 	MoveComp->RotationRate = FRotator(0.f, 180.f, 0.f);
 	
-	// Avoidance
 	MoveComp->bUseRVOAvoidance = true;
 	MoveComp->AvoidanceConsiderationRadius = 200.0f;
 	MoveComp->AvoidanceWeight = 0.5f;
@@ -346,13 +341,10 @@ void ARetrieveEnemyCharacter::InitializeComponents()
 
 	if (DropComponent && Row->DropRows.Num() > 0)
 	{
-		// DropComponent::Initialize는 DropTable도 필요
 		DropComponent->Initialize(DropTable, Row->DropRows);
 	}
 
-	// 몬스터 이름·등급을 체력바 위젯에 연동
-	// DisplayName: 에디터 설정값 우선, 없으면 DataRow 키 사용
-	// TypeTag:     에디터에서 컴포넌트에 직접 설정한 값 우선, 없으면 DataTable 값 사용
+	// 에디터 설정값을 우선하고, 비어 있으면 DataTable 값으로 체력바 정보를 채운다.
 	if (NormalHealthBarComponent)
 	{
 		const FText DisplayName = NormalHealthBarComponent->GetMonsterDisplayName().IsEmpty()
@@ -479,7 +471,7 @@ void ARetrieveEnemyCharacter::ResetRespawnState()
 		PatternCounterComponent->CloseCounterWindow();
 	}
 
-	// 포이즈·그로기 쿨다운 만회
+	// 포이즈·그로기 상태 초기화
 	if (EnemyPoiseComponent)
 	{
 		EnemyPoiseComponent->ResetRespawnState();
@@ -520,7 +512,7 @@ void ARetrieveEnemyCharacter::ResetRespawnState()
 
 void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bool bIsRespawn)
 {
-	// 재조우(리스폰/재활성)는 완전 초기화, 그 외엔 공중 페이즈만 초기화.
+	// 리스폰은 전투 상태를 초기화하고, 일반 활성화는 공중 페이즈만 초기화한다.
 	if (bIsRespawn)
 	{
 		ResetRespawnState();
@@ -583,9 +575,7 @@ void ARetrieveEnemyCharacter::ActivateEnemy(const FTransform& SpawnTransform, bo
 		MoveComp->bUseRVOAvoidance = bDefaultUseRVOAvoidance;
 	}
 
-	// 에픽 전용: 스폰 위치가 네비메시(지면)보다 높이 떠 있으면 지면으로 스냅한다.
-	// 드래곤처럼 비행 진입용으로 공중에 배치/스폰된 경우, 지상 전투 시 네비메시 밖이라
-	// 경로탐색이 전부 실패해 제자리에 멈추는 문제를 방지한다. (일반/보스는 기본 false → 무영향)
+	// 공중에 배치된 에픽이 지상 전투를 시작할 수 있도록 네비메시에 스냅한다.
 	if (ShouldGroundSnapOnSpawn())
 	{
 		if (UWorld* SnapWorld = GetWorld())
@@ -709,9 +699,7 @@ float ARetrieveEnemyCharacter::GetAerialSpecialPhaseElapsedTime() const
 
 bool ARetrieveEnemyCharacter::HasAerialPhase() const
 {
-	// 데이터 기반으로만 판정한다. (특정 행 이름 하드코딩 제거)
-	// 에픽을 보스처럼 지상 전투 + 쿨다운 특수공격으로 운용하기로 했으므로,
-	// DT_MonsterData에서 bHasAerialPhase가 true가 아닌 한 비행 페이즈는 비활성이다.
+	// 공중 페이즈 사용 여부는 DT_MonsterData 설정을 따른다.
 	const FMonsterDataRow* Row = GetMonsterDataRow();
 	return Row && Row->bHasAerialPhase;
 }
@@ -781,10 +769,8 @@ void ARetrieveEnemyCharacter::OnAlerted(FGameplayTag Channel, const FEnemyPlayer
 		return;
 	}
 
-	// 이미 스태거 타이머가 대기 중이면, 더 가까운 인스티게이터의 알림일 때만 교체한다.
-	// 단순히 먼저 온 것을 무조건 유지하면 나중에 온 더 급한(더 가까운) 알림을 놓칠 수 있고,
-	// 반대로 매번 무조건 리셋하면 팩 멤버들이 순차 전파할 때마다 카운트다운이 계속 밀려
-	// 이 개체가 영영 반응하지 못하는 것처럼 보일 수 있다.
+	// 대기 중에는 더 가까운 알림만 반영한다.
+	// 모든 알림으로 타이머를 갱신하면 반응이 계속 지연될 수 있다.
 	if (GetWorldTimerManager().IsTimerActive(AlertStaggerTimer) && InstigatorDist >= PendingAlertInstigatorDist)
 	{
 		return;

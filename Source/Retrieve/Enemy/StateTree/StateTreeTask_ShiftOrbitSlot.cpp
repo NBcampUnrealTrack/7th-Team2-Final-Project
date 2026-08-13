@@ -66,9 +66,9 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::EnterState(
 	FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	// opt-in=false: 기존 동작 유지 (첫 Tick에서 즉시 만료 상태 → 첫 슬롯 요청 지연 없음)
-	// opt-in=true : 도착 후에만 누적한다는 원칙과 충돌하므로 0으로 시작.
-	//               최초 슬롯 배정은 아래 Tick 게이트가 별개로 즉시 처리.
+	
+	// 도착 대기 사용 시 이동 중 시간이 누적되지 않도록 0에서 시작한다.
+	// 미사용 시 첫 Tick부터 슬롯 이동을 평가하도록 StrafeInterval에서 시작한다.
 	InstanceData.ElapsedTime = InstanceData.bWaitForArrivalBeforeShift
 		? 0.f
 		: InstanceData.StrafeInterval;
@@ -105,12 +105,9 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 
-	// === opt-in 게이팅 (opt-in=false면 이 블록 통째로 스킵) ===
-	// opt-in=true 몬스터:
-	//   MinOccupants 미달 → 스킵 (기존 정책 보존)
-	//   슬롯 없음 → 즉시 RequestSlot + ElapsedTime=0 + 반환 (같은 틱에 Shift하지 않음)
-	//   슬롯 있고 미도착 → ElapsedTime=0 리셋 후 반환 (도착 후에만 아래 흐름의 누적 시작)
-	// 이 게이트를 ElapsedTime += DeltaTime 이전에 두어 이동 중 실질적으로 누적이 없다.
+	// 도착 대기 사용 시 점유 수와 슬롯 도착 여부를 먼저 검사한다.
+	// 슬롯이 없으면 즉시 배정을 요청하고 같은 Tick의 이동은 생략한다.
+	// 미도착 중에는 ElapsedTime을 0으로 유지해 StrafeInterval이 누적되지 않게 한다.
 	if (InstanceData.bWaitForArrivalBeforeShift)
 	{
 		if (APawn* GatePawn = Context.GetExternalDataPtr(PawnHandle))
@@ -120,7 +117,6 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 				: nullptr;
 			if (GateEncSub)
 			{
-				// MinOccupants 정책은 opt-in 여부와 무관하게 동일하게 보존.
 				if (GateEncSub->GetCommittedCount(InstanceData.TargetActor)
 					< InstanceData.MinOccupantsToCircle)
 				{
@@ -131,21 +127,22 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 				const int32 GateSlot = GateEncSub->GetCurrentSlot(InstanceData.TargetActor, GatePawn);
 				if (GateSlot == INDEX_NONE)
 				{
-					// 최초 슬롯 배정은 도착 여부와 관계없이 즉시 요청.
-					// Evaluator가 보통 먼저 배정하지만 Task 자체가 그 사실에 의존하지 않도록.
+					// Evaluator의 선행 배정에 의존하지 않도록 현재 슬롯이 없으면 여기서 확보한다.
 					const int32 RequestedSlot = GateEncSub->RequestSlot(InstanceData.TargetActor, GatePawn);
 					if (RequestedSlot == INDEX_NONE)
 					{
 						UE_LOG(LogStateTree, Warning, TEXT("[%s] CurrentSlot not found and slot request failed"), *GatePawn->GetName());
 					}
-					// 새로 배정한 슬롯을 같은 틱에 다시 Shift하지 않는다.
+					
+					// ChaseLocation 갱신 또는 슬롯 배정 재시도를 다음 Tick으로 미루고,
+					// 같은 Tick의 슬롯 이동은 생략한다.
 					InstanceData.ElapsedTime = 0.f;
 					return EStateTreeRunStatus::Running;
 				}
 
-				// ChaseLocation은 Evaluator에서 바인딩된 실제 Move To 목적지
-				// (Inner/Outer, 노이즈, DT 오버라이드 모두 반영). GetSlotLocation 재계산은
-				// 항상 Inner 값이라 실제 목적지와 어긋나므로 반드시 이 값을 써야 한다.
+				// Evaluator가 바인딩한 ChaseLocation은 Inner/Outer, 노이즈, DT 오버라이드가
+				// 반영된 실제 Move To 목적지다.
+				// GetSlotLocation은 Inner 기준만 반환하므로 도착 판정에는 ChaseLocation을 사용한다.
 				const bool bReachedSlot = !InstanceData.ChaseLocation.IsNearlyZero()
 					&& FVector::DistSquared2D(GatePawn->GetActorLocation(), InstanceData.ChaseLocation)
 						<= FMath::Square(InstanceData.ArrivalRadius);
@@ -158,7 +155,7 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 		}
 	}
 
-	// === 여기부터 기존 코드 완전 보존 (opt-in=false는 위 블록 스킵 후 여기부터 실행) ===
+	// 도착 대기 게이트를 통과한 뒤 StrafeInterval을 누적한다.
 	InstanceData.ElapsedTime += DeltaTime;
 
 	if (InstanceData.ElapsedTime < InstanceData.StrafeInterval)
@@ -186,7 +183,7 @@ EStateTreeRunStatus FStateTreeTask_ShiftOrbitSlot::Tick(
 		return EStateTreeRunStatus::Running;
 	}
 	
-	// 소수가 교전 중일 때(1:1 가디언 등)는 자리 재배치가 불필요 → 서클링 생략하고 SetFocus로 바라보며 대기.
+	// 점유 수가 기준 미만인 1:1 가디언 등은 슬롯을 재배치하지 않고 현재 위치에서 타깃을 바라본다.
 	if (EncSubsystem->GetCommittedCount(InstanceData.TargetActor) < InstanceData.MinOccupantsToCircle)
 	{
 		return EStateTreeRunStatus::Running;

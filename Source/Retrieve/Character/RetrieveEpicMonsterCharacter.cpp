@@ -226,7 +226,7 @@ ARetrieveEpicMonsterCharacter::ARetrieveEpicMonsterCharacter(const FObjectInitia
 	PrimaryActorTick.bCanEverTick = true;
 	EpicGroggyComponent = CreateDefaultSubobject<UEpicMonsterGroggyComponent>(TEXT("EpicMonsterGroggyComponent"));
 
-	// 부모(Normal) 기본 크기(64x64)의 1.5배로 확대. 위치도 더 높이 올려 큰 몸체를 벗어나게 한다.
+	// 대형 에픽 체형에 맞춰 경계 아이콘 크기와 높이를 조정한다.
 	if (SuspicionIndicatorComponent)
 	{
 		SuspicionIndicatorComponent->SetDrawSize(FVector2D(96.f, 96.f));
@@ -344,7 +344,6 @@ void ARetrieveEpicMonsterCharacter::ResetRespawnState()
 {
 	Super::ResetRespawnState();
 
-	// 에픽 그로기(강공격 누적/타이머/쿨다운) 내부 상태 초기화
 	if (EpicGroggyComponent)
 	{
 		EpicGroggyComponent->ResetRespawnState();
@@ -399,7 +398,6 @@ void ARetrieveEpicMonsterCharacter::ConfigureEnemyMovement()
 
 void ARetrieveEpicMonsterCharacter::UpdateGroundTurnAnimation(float SignedYawDelta)
 {
-	// 턴 애니메이션 에셋이 지정되지 않은 에픽 몬스터는 턴 애니를 사용하지 않는다.
 	if (TurnRightAnimation.IsNull() && TurnLeftAnimation.IsNull())
 	{
 		return;

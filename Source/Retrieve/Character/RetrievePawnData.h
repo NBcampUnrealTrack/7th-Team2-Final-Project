@@ -37,18 +37,13 @@ public:
 	/**
 	 * 비전투형 동료 Lumen(`PD_Lumen`)은 false로 설정합니다. 전투가 가능한 폰(`PD_Sovereign`,
 	 * `PD_FieldMonster_*`, `PD_Boss_*`)은 true로 설정합니다.
-	*/
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
 	bool bRequiresAbilitySystem = true;
 
 	/**
-	 * 이 폰의 `MaxHealth` / `Health`를 초기화하는 데 사용할 `DT_CharacterStats` 행.
-	 *   1. PawnData에 `CharacterStatsRow`가 설정되어 있으면 스켈레톤이 직접 사용합니다.
-	 *   2. 적/보스 archetype은 이후 스프린트에서 자신의 `DT_MonsterData.StatsRow`를
-	 *      읽어 컴포넌트에 푸시하는 방식으로 오버라이드합니다.
-	 *
-	 * `NAME_None`이면 AttributeSet의 컴파일 타임 기본값을 사용합니다.
-	 *  — DataTable이 아직 작성되지 않은 초기 단계에 유용합니다.
+	 * 초기 스탯에 사용할 CharacterStatsTable의 행.
+	 * NAME_None이거나 행을 찾지 못하면 FCharacterStats 기본값을 사용한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stats")
 	FName CharacterStatsRow;

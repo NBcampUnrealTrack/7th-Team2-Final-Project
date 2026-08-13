@@ -217,7 +217,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 
-	// 위치 갱신은 매 틱 진행하도록 변경
 	APawn* Pawn = Context.GetExternalDataPtr(PawnHandle);
 	if (Pawn && IsValid(InstanceData.TargetPlayer))
 	{
@@ -245,7 +244,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			
 			if (!bFreezeChaseLocation)
 			{
-				// 플레이어에게 무조건 붙는 이동을 피하게 수정
 				const float DirectChaseRange = FMath::Max(InstanceData.AttackableRange + 35.f, 0.f);
 				UEncirclementSubsystem* EncSubsystem = Pawn->GetWorld()->GetSubsystem<UEncirclementSubsystem>();
 				if (InstanceData.bUseDirectChaseToTarget)
@@ -258,9 +256,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					&& (!EncSubsystem
 						|| EncSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn)))
 				{
-					// 대안 D(Phase 2 실험): DirectChase는 공격 진입 자격이 있을 때만.
-					// 개인 토큰 쿨다운 등으로 CanRequest=false인 몬스터는 아래 슬롯 로직으로 흘려
-					// 자연스럽게 Outer로 이동시킨다. Retreat 상태·캐시 도입 없이 목적지 정책만 조건화.
+					// 공격 범위 밖에서는 토큰 요청이 가능한 Enemy만 플레이어에게 직접 접근한다.
 					InstanceData.ChaseLocation = InstanceData.TargetLocation;
 				}
 				else if (EncSubsystem)
@@ -272,8 +268,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 						SlotIndex = EncSubsystem->RequestSlot(InstanceData.TargetPlayer, Pawn);
 					}
 
-					// 진단 디버그: 실제 ChaseLocation과 이동 상태를 표시. Encircle.Debug >= 1일 때만.
-					// 대안 D 실험 판정(Outer 목적지 생성 vs 실제 이동 성공 여부 구분)에 사용.
+					// Encircle.Debug 활성화 시 슬롯 목적지와 실제 이동 상태를 표시한다.
 					auto DrawChaseLocationDebug = [Pawn, &InstanceData](int32 SlotIdx, bool bHasTok, bool bCanReq, bool bOuter)
 					{
 						const IConsoleVariable* DebugCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Encircle.Debug"));
@@ -319,7 +314,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					{
 						const bool bHadToken = InstanceData.bHasToken;
 						const bool bHasTokenForLocation = EncSubsystem->HasAttackToken(InstanceData.TargetPlayer, Pawn);
-						// 토큰을 받을 수 있는(곧 공격할) 적도 안쪽으로 접근해야 사거리에 들어가 공격을 시작할 수 있음
+						// 토큰 요청이 가능한 Enemy도 공격 사거리 진입을 위해 Inner 반경을 사용한다.
 						const bool bCanRequest = EncSubsystem->CanRequestAttackToken(InstanceData.TargetPlayer, Pawn);
 						InstanceData.bHasToken = bHasTokenForLocation;
 						const bool bUseOuterRadius = !(bHasTokenForLocation || bCanRequest);
@@ -334,14 +329,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 						{
 							InstanceData.ChaseLocation = RawTargetLocation;
 						}
-						// else
-						// {
-							// InstanceData.ChaseLocation = FMath::VInterpTo(
-							// 	InstanceData.ChaseLocation, RawTargetLocation, DeltaTime, 7.f);
-						// }
 
-						// 슬롯 전환 보간이 직선으로 링 중심(플레이어)을 가로지르지 않도록,
-						// 보간된 위치가 플레이어에게 너무 가까워지면 각도는 유지한 채 반경만 밀어낸다.
+						// 유지 중인 ChaseLocation이 플레이어 안쪽으로 침범하면 최소 반경 밖으로 보정한다.
 						const FVector ToChase2D = InstanceData.ChaseLocation - InstanceData.TargetLocation;
 						const float MinSafeRadiusSq = FMath::Square(InstanceData.OrbitInnerRadius);
 						const float DistFromPlayerSq = FVector2D(ToChase2D.X, ToChase2D.Y).SizeSquared();
@@ -371,7 +360,6 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		}
 	}
 	
-	// 태그 갱신도 매 틱 진행
 	if (const IAbilitySystemInterface* ASCIf = Cast<IAbilitySystemInterface>(Pawn))
 	{
 		if (UAbilitySystemComponent* ASC = ASCIf->GetAbilitySystemComponent())
@@ -526,11 +514,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 		}
 	}
 
-	// AlertedTarget은 ChosenTarget 유무·기존 TargetPlayer 보유 여부와 무관하게 먼저 소비한다.
-	// Suspicious 상태(TargetPlayer는 이미 있지만 게이지 미완, 즉 ChosenTarget도 이미 non-null)에서도
-	// 동료의 알림이 오면 즉시 확신 단계로 승격시켜야 하는데, ChosenTarget 유무로 게이팅하면
-	// 자기 시야로 이미 플레이어를 인식 중인(=ChosenTarget이 항상 non-null인) Suspicious 개체는
-	// 이 블록에 영영 도달하지 못해 AlertedTarget이 안 지워진 채 그대로 방치된다.
+	// Suspicious 중에도 AlertedTarget을 우선 소비해야 한다.
+	// ChosenTarget 존재 여부로 막으면 Alert가 남아 즉시 Combat 전환이 실패한다.
 	if (ARetrieveEnemyCharacter* EnemyChar = Cast<ARetrieveEnemyCharacter>(Pawn))
 	{
 		if (AActor* Alerted = EnemyChar->AlertedTarget)
@@ -542,10 +527,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 					InstanceData.TargetPlayer = Alerted;
 				}
 				InstanceData.bTargetLost = false;
-				// 동료가 이미 확신하고 전파한 대상이므로 Suspicious를 건너뛰고 바로 Combat 자격을 준다.
-				// bSuspicionGaugeFull도 같이 세팅해야 한다 — 이 값은 이번 틱 하단(게이지 갱신 블록)에서야
-				// SuspicionGauge 기준으로 다시 계산되는데, 그 전에 else if(TargetPlayer) 분기가
-				// 아직 갱신 전(직전 틱)의 false 값을 보고 "즉시 놓친다" 코드를 실행해버리기 때문이다.
+				
+				// Alert 수신 틱에 Combat 자격을 즉시 반영해 아래 분기가 이전 게이지 값을 읽지 않게 한다.
 				InstanceData.SuspicionGauge = 1.f;
 				InstanceData.bSuspicionGaugeFull = true;
 			}
@@ -598,9 +581,8 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 
 	if (bUsesSuspiciousFlow)
 	{
-		// 게이지 판정은 Sight Stimulus의 현재 성공 여부와 실제 거리로 확정한다.
-		// AISense_Sight의 known은 MaxAge(5s) 동안 잔존하므로 현재 감지 목록을 사용한다.
-		// bTargetLost는 아래 게이지 0 도달 시점에서만 세팅해 StateTree 전이 세맨틱을 보존한다.
+		// Suspicious 게이지는 MaxAge가 포함된 Known Actor가 아니라 현재 Sight 결과로 갱신한다.
+		// bTargetLost는 게이지가 0이 될 때만 설정한다.
 		const AEnemyAIController* EnemyAICtrlForGauge = Cast<AEnemyAIController>(AIController);
 		const float LoseRangeForGauge = EnemyAICtrlForGauge
 			? EnemyAICtrlForGauge->GetEffectiveLoseSightRadius()
@@ -707,8 +689,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 				&& !bShouldSuppressNormalAttackWhileFlying
 				&& bAttackPatternAvailable;
 
-			// 특수 공격 가능 여부 — 일반/보스는 원본 동작 그대로(일반 공격 가능 여부와 독립적으로
-			// 쿨다운/락만으로 판정). 에픽도 동일하게 쿨다운 완료 시 발동 가능.
+			// 특수공격은 일반 공격 가능 여부와 독립적으로 쿨다운과 평가 락만 검사한다.
 			const bool bRawSpecialAttackable = bHasValidTarget
 				&& !bPatternActive
 				&& !bSpecialAttackEvaluationLocked
@@ -732,8 +713,7 @@ void FRetrieveEnemyTargetEvaluator::Tick(FStateTreeExecutionContext& Context, co
 			}
 			else
 			{
-				// 일반/보스: 원본 동작 그대로. 일반 공격과 특수 공격 판정은 서로 독립적이며
-				// StateTree 전이 우선순위가 선택을 담당한다.
+				// 일반·보스는 StateTree 전이 우선순위로 일반 공격과 특수공격 중 하나를 선택한다.
 				InstanceData.bHasAerialPhase = false;
 				InstanceData.bAttackable = bNormalAttackable;
 				InstanceData.bAttackApproachable = bNormalAttackApproachable;

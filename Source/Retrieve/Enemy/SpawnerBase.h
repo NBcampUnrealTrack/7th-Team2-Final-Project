@@ -10,8 +10,7 @@ class URetrievePawnData;
 class USphereComponent;
 
 /**
- * 스폰 엔트리: PawnData(스폰 클래스)와 스포너 기준 상대 위치를 1:1로 매핑한다.
- * 랜덤 배치·수량 등 확장이 필요하면 파생 구조체를 사용할 것.
+ * 스폰할 PawnData와 SpawnPoint, 리스폰 가능 여부를 하나의 엔트리로 관리한다.
  */
 USTRUCT(BlueprintType)
 struct FSpawnEntry
@@ -38,7 +37,7 @@ struct FSpawnEntry
  * - 화톳불 휴식(Channel.Player.Rested) 브로드캐스트를 받으면 거리 조건과 무관하게
  *   사망한 모든 엔트리를 즉시 리스폰한다.
  *
- * 랜덤 배치 등 확장은 SpawnAll을 override해 구현한다.
+ * 파생 스포너는 SpawnAll()을 재정의해 배치 방식을 확장할 수 있다.
  */
 UCLASS(Abstract)
 class RETRIEVE_API ASpawnerBase : public AActor
@@ -98,16 +97,15 @@ public:
 	bool bAllowRespawn = true;
 
 	/**
-	 * (선택) 이 스포너가 이루는 스폰 그룹의 식별자.
-	 * 지정할 경우 살아있는 스폰이 모두 사망할 때 Channel.Enemy.SpawnGroupCleared 신호에 이 값을 실어 발행한다.
-	 * 퀘스트/구역 게이트 등 외부 시스템이 이 값으로 자신의 그룹을 매칭한다(스포너는 퀘스트에 의존하지 않음).
-	 * 설정하지 않는 경우 소비자가 없으므로 신호를 발행하지 않는다.
+	 * 스폰 그룹 식별 태그.
+	 * 지정된 그룹이 전멸하면 Channel.Enemy.SpawnGroupCleared로 전달하며,
+	 * 태그가 유효하지 않으면 신호를 발행하지 않는다.
 	 */
 	UPROPERTY(EditAnywhere, Category="Spawner")
 	FGameplayTag SpawnGroupId;
 
-	// ── 퀘스트 마커 연동용 조회 API ─────────────────────────────────────────────
-	/** 아직 살아있는 스폰 개체 수. 목표 마커의 "남은 적 N" 표시에 사용. */
+	// ── 퀘스트 마커 연동용 조회 API ──
+	/** 아직 살아있는 스폰 개체 수. 목표 마커의 남은 적 표시에 사용한다. */
 	UFUNCTION(BlueprintPure, Category="Spawner")
 	int32 GetLiveSpawnCount() const;
 

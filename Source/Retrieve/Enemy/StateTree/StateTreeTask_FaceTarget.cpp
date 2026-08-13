@@ -6,7 +6,7 @@
 
 namespace
 {
-	// StateTreeTask_EnemyAttack.cpp의 FaceTargetForAttack과 동일한 방식(RInterpTo 기반 Yaw 보간).
+	// 공격 회전과 동일하게 허용 각도 밖에서만 Yaw를 보간하고 턴 애니메이션을 갱신한다.
 	void FaceTargetSlowly(APawn* Pawn, AActor* Target, float DeltaTime, float AcceptanceAngle, float InterpSpeed)
 	{
 		if (!Pawn || !Target)
@@ -56,6 +56,6 @@ EStateTreeRunStatus FStateTreeTask_FaceTarget::Tick(FStateTreeExecutionContext& 
 
 	FaceTargetSlowly(Pawn, InstanceData.TargetPlayer, DeltaTime, InstanceData.FacingAcceptanceAngle, InstanceData.FacingInterpSpeed);
 
-	// State 이탈은 StateTree 전이 조건(Gauge/TargetLost)이 담당하므로 계속 Running.
+	// 종료 조건은 StateTree 전이가 판단하므로 Task는 Running을 유지한다.
 	return EStateTreeRunStatus::Running;
 }

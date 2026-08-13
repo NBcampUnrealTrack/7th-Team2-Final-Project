@@ -177,7 +177,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UDropComponent> DropComponent;
 
-	/** 피격 반응 consumer */
+	/** 피격 반응 처리 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UHitReactionComponent> HitReactionComponent;
 	
@@ -213,7 +213,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Retrieve|Team")
 	ERetrieveTeam Team = ERetrieveTeam::Enemy;
 	
-	/** DataTable */
+	// ---- DataTable 설정 ----
 	UPROPERTY(EditDefaultsOnly, Category = "Retrieve|Monster")
 	FName MonsterDataRowName;
 	

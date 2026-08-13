@@ -168,8 +168,7 @@ void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requeste
 			if (const UWorld* World = GetWorld())
 			{
 				Ring->TokenReleaseTime.Add(Requester, World->GetTimeSeconds());
-				// Debug 진단용 — Encircle.Debug >= 1일 때만 로그. 토큰 반환·쿨다운 시작 시점이
-				// 실제 관측되는지 확인 (대안 D 실험 판정에 사용).
+				// Encircle.Debug 활성화 시 토큰 반환과 쿨다운 시작 시점을 기록한다.
 				if (CVarEncircleDebug.GetValueOnGameThread() >= 1)
 				{
 					UE_LOG(LogTemp, Log, TEXT("[Encircle] ReleaseAttackToken: %s Removed=%d Time=%.3f"),
@@ -191,7 +190,7 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 	}
 
 	const float StepAngle = 2.f * PI / NumSlots;
-	const float Angle = SlotIndex * StepAngle; // 고정됨; 서클링 = 의도적인 재슬롯이며, 회전이 아님
+	const float Angle = SlotIndex * StepAngle; // 슬롯 각도는 고정하며 이동은 재슬롯으로 표현한다.
 
 	const FRing* Ring = Rings.Find(Target);
 	const float BaseInner = InnerRadiusOverride > 0.f ? InnerRadiusOverride : InnerRadius;
@@ -209,8 +208,8 @@ FVector UEncirclementSubsystem::GetSlotLocation(const AActor* Target, int32 Slot
 	}
 	else
 	{
-		// 공격자: 결단을 내린 소수가 실제로 플레이어에게 도달하도록 실시간으로 추적
-		Center = (Ring && Ring->bAnchorValid) ? Ring->Anchor : Target->GetActorLocation();//Target->GetActorLocation();
+		// 공격자는 링 앵커를 기준으로 Inner 반경을 사용한다.
+		Center = (Ring && Ring->bAnchorValid) ? Ring->Anchor : Target->GetActorLocation();
 		TargetRadius = BaseInner;
 	}
 
@@ -305,10 +304,7 @@ int32 UEncirclementSubsystem::ShiftSlotExplicit(AActor* Target, AActor* Requeste
 	{
 		AActor* OccupyingEnemy = Ring.Slots[TargetSlotIndex].Get();
 
-		// 링에 빈 슬롯이 남아있다면 점유자와 자리를 바꾸지 않고 실패를 보고한다 —
-		// 호출부(ShiftOrbitSlot::Tick)가 다음 후보 슬롯을 계속 찾도록 하기 위함.
-		// 안 그러면 바로 다음 슬롯이 차 있을 때마다 불필요하게 서로 자리를 바꿔서
-		// 두 개체의 목적지가 동시에 반대로 바뀌고 RVO 진동을 유발한다.
+		// 빈 슬롯이 있으면 교환하지 않고 호출부가 다른 후보를 찾도록 실패를 반환한다.
 		const bool bHasEmptySlot = Ring.Slots.ContainsByPredicate(
 			[](const TWeakObjectPtr<AActor>& Slot) { return !Slot.IsValid(); });
 		if (bHasEmptySlot)
@@ -316,31 +312,28 @@ int32 UEncirclementSubsystem::ShiftSlotExplicit(AActor* Target, AActor* Requeste
 			return INDEX_NONE;
 		}
 
-		// Swap with a non-attacking occupier so orbit movement can continue.
+		// 링이 가득 찬 경우 공격 토큰이 없는 점유자와 슬롯을 교환한다.
 		const int32 PastSlot = Ring.Slots.IndexOfByKey(Requester);
 		const bool bOccupierHasToken = Ring.AttackTokens.Contains(OccupyingEnemy);
 
 		if (PastSlot != INDEX_NONE && !bOccupierHasToken)
 		{
-			// Move the requester into the target slot and move the occupier back.
 			Ring.Slots[TargetSlotIndex] = Requester;
 			Ring.Slots[PastSlot] = OccupyingEnemy;
 
-			// The displaced enemy keeps a valid slot and will update its destination on the next evaluator tick.
+			// 밀려난 점유자는 요청자의 이전 슬롯을 유지한다.
 			return TargetSlotIndex;
 		}
 
-		return INDEX_NONE; // 밀어낼 조건이 안 되면 실패 보고
+		return INDEX_NONE;
 	}
 
-	// 기존에 점유하던 슬롯이 있다면 말끔히 정리
 	const int32 PastSlot = Ring.Slots.IndexOfByKey(Requester);
 	if (PastSlot != INDEX_NONE)
 	{
 		Ring.Slots[PastSlot].Reset();
 	}
 
-	// 새로운 슬롯 강제 점유
 	Ring.Slots[TargetSlotIndex] = Requester;
 	return TargetSlotIndex;
 }
@@ -368,7 +361,7 @@ UEncirclementSubsystem::FRing& UEncirclementSubsystem::FindOrAddRing(AActor* Tar
 	
 	if (Ring.Slots.Num() != NumSlots)
 	{
-		Ring.Slots.SetNum(NumSlots);   // 빈 슬롯 초기화
+		Ring.Slots.SetNum(NumSlots);
 	}
 	
 	return Ring;
@@ -554,10 +547,8 @@ int32 UEncirclementSubsystem::DistanceToNearestOccupied(const FRing& Ring, int32
 
 void UEncirclementSubsystem::DrawDebug() const
 {
-	// 이 원/슬롯 점은 Subsystem 하드코딩 반경(InnerRadius/OuterRadius)만 사용해서
-	// 몬스터별 DT 반경이나 토큰 요청 가능 여부를 반영하지 못한다 — 실제 이동 목표와
-	// 다를 수 있다. Level 2부터만 참고용으로 그리고, Level 1은
-	// RetrieveEnemyTargetEvaluator가 그리는 실제 ChaseLocation만 보이게 한다.
+	// 기본 반경만 표시하므로 실제 DT 기반 ChaseLocation과 다를 수 있다.
+	// 실제 목적지는 Debug 1, 참고용 링과 슬롯은 Debug 2 이상에서 표시한다.
 	if (CVarEncircleDebug.GetValueOnGameThread() < 2)
 	{
 		return;
@@ -580,23 +571,18 @@ void UEncirclementSubsystem::DrawDebug() const
 		const FRing& Ring = Pair.Value;
 		const FVector TargetLoc = Target->GetActorLocation();
 
-		/** 플레이어 주변에 안쪽 원 그리기*/
 		DrawDebugCircle(World, TargetLoc, InnerRadius, 32, FColor::Yellow, false, -1.f, 0, 1.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		
-		/** 플레이어 주변에 바깥쪽 원 그리기*/
 		DrawDebugCircle(World, TargetLoc, OuterRadius, 32, FColor::Orange, false, -1.f, 0, 1.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 
-		/** 각 슬롯 방향별 선점 상태를 확인하여 스피어 배치 */
 		for (int32 i = 0; i < NumSlots; ++i)
 		{
 			if (Ring.Slots.IsValidIndex(i) && Ring.Slots[i].IsValid())
 			{
 				AActor* Shifter = Ring.Slots[i].Get();
 				
-				// 해당 액터가 공격 토큰을 가지고 있는지 여부 판단
 				bool bHasToken = Ring.AttackTokens.Contains(Shifter);
 				
-				// 토큰 보유 여부에 따라 실시간으로 이너/아우터 좌표를 가져와 구체를 그려줌
 				FVector SlotLoc = GetSlotLocation(Target, i, !bHasToken /* 토큰 없으면 아우터 위치 */);
 				
 				DrawDebugSphere(World, SlotLoc, 20.f, 8, bHasToken ? FColor::Red : FColor::Cyan, false, -1.f);

@@ -39,10 +39,8 @@ ARetrieveBossCharacter::ARetrieveBossCharacter(const FObjectInitializer& ObjectI
 
 void ARetrieveBossCharacter::InitializeComponents()
 {
-	// EnemyCombatComponent / PatternCounterComponent / DropComponent 초기화
 	Super::InitializeComponents();
 
-	// BossPhaseComponent 초기화 (DT_BossStats 읽기 + HealthComponent 구독)
 	if (BossPhaseComponent)
 	{
 		BossPhaseComponent->Initialize(BossStatsTable, BossStatsRowName, MonsterDataTable);
@@ -132,10 +130,8 @@ void ARetrieveBossCharacter::ResetRespawnState()
 
 void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 {
-	// 보호된 부모 필드에 직접 접근 가능 (같은 상속 계층)
 	MonsterDataRowName = NewRow;
 
-	// EnemyCombatComponent 패턴 슬롯 재초기화
 	if (!MonsterDataTable || MonsterDataRowName.IsNone()) { return; }
 
 	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(

@@ -9,13 +9,7 @@ class UAnimSequenceBase;
 class UEpicMonsterGroggyComponent;
 
 /**
- * 에픽 몬스터(드래곤/나무/바위 등) 전용 베이스 캐릭터.
- * 일반/보스 몬스터에 영향을 주지 않도록 에픽 전용 이동/회전/턴 애니메이션 로직을 이 클래스에 격리한다.
- *
- * - 전진 로코모션(bOrientRotationToMovement) 기반 이동 설정 적용
- * - 제자리 회전 시 그라운드 턴 애니메이션(좌/우) 재생
- *
- * 모든 수치/애니메이션 에셋은 BP에서 조정 가능하도록 EditDefaultsOnly 로 노출한다 (밸런싱 전용).
+ * 에픽 몬스터 전용 이동·회전·로코모션과 그로기 처리를 담당한다.
  */
 UCLASS()
 class RETRIEVE_API ARetrieveEpicMonsterCharacter : public ARetrieveEnemyCharacter
@@ -27,7 +21,7 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** 전진 로코모션 사용 여부. true면 슬롯 이동 시 포커스 대신 이동 방향으로 회전한다. */
+	/** 전진 로코모션 사용 여부를 반환한다. true면 슬롯 이동 시 포커스 대신 이동 방향으로 회전한다. */
 	virtual bool UsesForwardLocomotion() const override { return bUseForwardLocomotion; }
 
 	/** 제자리 회전 턴 애니메이션 재생/갱신. SignedYawDelta>0이면 우회전, <0이면 좌회전. */

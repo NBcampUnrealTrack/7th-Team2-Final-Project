@@ -41,7 +41,7 @@ void ASpawnerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 스트리밍 재-BeginPlay 시 중복 바인딩 ensure 방지: AddUnique + EndPlay에서 해제
+	// 중복 바인딩을 방지하고 EndPlay에서 명시적으로 해제한다.
 	SpawnSphereComp->OnComponentBeginOverlap.AddUniqueDynamic(
 		this, &ASpawnerBase::OnSpawnSphereBeginOverlap);
 
@@ -164,10 +164,9 @@ void ASpawnerBase::SpawnAll()
 			URetrieveHealthComponent* HealthComp = Pawn->FindComponentByClass<URetrieveHealthComponent>();
 			if (HealthComp && HealthComp->IsDeadOrDying())
 			{
-				// 사망 상태 
 				continue;
 			}
-			// 생존 + 비활성 → 재활성화
+			// 유지 중인 생존 인스턴스를 활성화한다.
 			else if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 			{
 				Enemy->ActivateEnemy(SpawnTransform, true);
@@ -312,10 +311,10 @@ void ASpawnerBase::DespawnAll()
 		URetrieveHealthComponent* HealthCom = Pawn->FindComponentByClass<URetrieveHealthComponent>();
 		if (HealthCom && HealthCom->IsDeadOrDying())
 		{
-			continue; // 이미 사망 → 건드리지 않음
+			continue; // 사망 인스턴스는 비활성화하지 않는다.
 		}
 
-		// 생존 → 비활성화 (EntryPawns에 참조 유지됨)
+		// 생존 인스턴스는 EntryPawns에 유지한 채 비활성화한다.
 		if (ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(Pawn))
 		{
 			Enemy->DeactivateEnemy();
@@ -456,9 +455,7 @@ bool ASpawnerBase::IsPlayerInRange() const
 
 bool ASpawnerBase::HasAnyLiveSpawn() const
 {
-	// SpawnedPawns가 아니라 EntryPawns를 본다: 플레이어가 범위를 벗어나 DespawnAll이
-	// SpawnedPawns를 비운 뒤(생존 개체는 비활성 상태로 EntryPawns에 유지) 지연 사망(DoT 등)이 일어나면
-	// SpawnedPawns.Num()==0을 클리어로 오판할 수 있기 때문.
+	// DespawnAll 이후에도 생존 인스턴스는 EntryPawns에 남으므로 이를 기준으로 전멸 여부를 판단한다.
 	for (const TWeakObjectPtr<APawn>& WeakPawn : EntryPawns)
 	{
 		APawn* Pawn = WeakPawn.Get();

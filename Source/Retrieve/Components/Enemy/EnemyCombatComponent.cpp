@@ -195,35 +195,7 @@ bool UEnemyCombatComponent::IsPatternActive() const
 	{
 		return false;
 	}
-	// 과한 검증 코드로 생각돼 주석처리 후 간단화 만일 이후에 과련 이슈가 있다면 해제
-	// if (ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack)
-	// 	|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_SpecialAttack))
-	// {
-	// 	return true;
-	// }
-	//
-	// auto HasActiveAbilityWithTag = [ASC](const FGameplayTag& AbilityTag)
-	// {
-	// 	FGameplayTagContainer AbilityTags;
-	// 	AbilityTags.AddTag(AbilityTag);
-	//
-	// 	TArray<FGameplayAbilitySpec*> MatchingSpecs;
-	// 	ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(
-	// 		AbilityTags, MatchingSpecs, false);
-	//
-	// 	for (const FGameplayAbilitySpec* Spec : MatchingSpecs)
-	// 	{
-	// 		if (Spec && Spec->IsActive())
-	// 		{
-	// 			return true;
-	// 		}
-	// 	}
-	//
-	// 	return false;
-	// };
-	//
-	// return HasActiveAbilityWithTag(RetrieveGameplayTags::Ability_Enemy_Attack)
-	// 	|| HasActiveAbilityWithTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
+	
 	return ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_Attack)
 		|| ASC->HasMatchingGameplayTag(RetrieveGameplayTags::State_Enemy_SpecialAttack);
 }
@@ -757,12 +729,11 @@ void UEnemyCombatComponent::DeactivateWeaponHitbox()
 bool UEnemyCombatComponent::ActivatePattern(const FMonsterPatternRow& Pattern, FName PatternRowName, AActor* Target,
 	FGameplayTag RequiredPatternType, bool bIsSpecialAttack, FGameplayTag DefaultEventTag)
 {
-		/** SpecialGolbalCooldown은 SpecialAttack 시도 시에만 */
+	// 특수공격의 반복 평가를 막기 위해 활성화 시도 시점에 재시도 쿨다운을 시작한다.
 	if (bIsSpecialAttack)
 	{
 		StartSpecialAttackRetryCooldown();
 	}
-	/** 일반 공격은 HitBox가 기반이기에 체크 필요*/
 	else if (Pattern.HitboxBoneName.IsNone())
 	{
 		UE_LOG(LogRetrieveCombat, Warning,
@@ -953,7 +924,7 @@ bool UEnemyCombatComponent::ApplyHitToActor(AActor* OtherActor, const FHitResult
 					Spec.Data->AddDynamicAssetTag(ActivePatternRow->EffectTag);
 				}
 
-				// 넉백 강도를 GE에 실어 보내면 BroadcastHitEvent가 공격자(적)→피격자로 자동 적용한다.
+				// 넉백 값을 GE에 전달하면 CombatAttributeSet이 피격자에게 적용한다.
 				const FMonsterLaunchKnockbackConfig& KbCfg = ActivePatternRow->LaunchKnockbackConfig;
 				if (KbCfg.bUseLaunchKnockback)
 				{
@@ -991,8 +962,8 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 	const ARetrieveEnemyCharacter* OwnerEnemy = Cast<ARetrieveEnemyCharacter>(OwnerActor);
 	const ACharacter* OwnerChar = Cast<ACharacter>(OwnerActor);
 	const UCharacterMovementComponent* OwnerMoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
-	// 에픽 전용: 공중 비행 중(부양)에는 수평 거리만 사용하여 고도 차이로 사거리가 초과되는 문제 방지.
-	// (일반/보스는 비행하지 않으므로 항상 3D 거리 — 원본 동작)
+	
+	// 비행 중인 에픽은 고도 차이로 사거리를 벗어나지 않도록 수평 거리를 사용한다.
 	const bool bOwnerFlying = OwnerEnemy
 		&& OwnerEnemy->ShouldUse2DPatternRangeWhileFlying()
 		&& OwnerMoveComp
@@ -1040,8 +1011,7 @@ const FMonsterPatternRow* UEnemyCombatComponent::FindBestPattern(AActor* Target,
 		
 		if (!(bIgnoreRange && Row->bAllowApproachFromOutOfRange))
 		{
-			// 에픽 전용: MaxActivationRange == 0 → 사거리 제한 없음으로 해석.
-			// 일반/보스는 원본 strict 동작 유지(MaxActivationRange 값을 그대로 사거리로 적용).
+			// 비행 중인 에픽은 MaxActivationRange가 0이면 사거리 제한이 없는 것으로 처리한다.
 			const bool bEnforceMaxRange =
 				!OwnerEnemy
 				|| !OwnerEnemy->ShouldTreatZeroPatternMaxRangeAsUnlimited()

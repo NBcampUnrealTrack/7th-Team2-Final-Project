@@ -43,9 +43,10 @@ struct FStateTreeTask_ShiftOrbitSlotInstanceData
 	UPROPERTY(EditAnywhere, Category = "Config", meta=(ClampMin="0.0"))
 	float ArrivalRadius = 80.f;
 
-	/** true면 도착 후에만 StrafeInterval을 누적하고 다음 슬롯으로 넘어간다.
-	 *  false면 기존 동작 완전 유지(이동 중에도 누적, 도착 판정 없이 만료 시 슬롯 이동).
-	 *  Normal.Strafe에서만 opt-in. Bow/Boss/Epic은 MoveTo 실효 반경 미검증이라 기본 false. */
+	/**
+	 * true이면 슬롯 도착 후 StrafeInterval을 누적한다.
+	 * false이면 이동 중에도 누적하며 첫 Tick부터 슬롯 이동을 평가한다.
+	 */
 	UPROPERTY(EditAnywhere, Category = "Config")
 	bool bWaitForArrivalBeforeShift = false;
 
