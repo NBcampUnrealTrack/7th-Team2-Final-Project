@@ -21,11 +21,6 @@ ARetrieveAlsCombatCharacter::ARetrieveAlsCombatCharacter(const FObjectInitialize
 
 void ARetrieveAlsCombatCharacter::Revive(const FTransform& RespawnTransform)
 {
-	if (HealthComponent)
-	{
-		HealthComponent->Revive();
-	}
-
 	// 죽음 몽타주의 쓰러진 포즈가 부활 후에도 남으면, 캡슐은 정상인데 몸이 지면 아래로
 	// 그려져 "리스폰 땅꺼짐"처럼 보인다. 몽타주를 멈추고 애님 일시정지도 해제한다.
 	// 주의: 이 몽타주 정리는 반드시 StopRagdoll보다 먼저 한다 — StopRagdoll(ALS StopRagdolling)이
@@ -46,6 +41,13 @@ void ARetrieveAlsCombatCharacter::Revive(const FTransform& RespawnTransform)
 
 	SetActorLocationAndRotation(RespawnTransform.GetLocation(), RespawnTransform.GetRotation().Rotator(), false,
 	                            nullptr, ETeleportType::TeleportPhysics);
+
+	// 기존 아레나 위치에서 생존 상태가 먼저 복구되면 보스가 플레이어를 다시 감지해
+	// 결계를 재활성화할 수 있으므로, 목적지로 이동한 뒤 부활시킨다.
+	if (HealthComponent)
+	{
+		HealthComponent->Revive();
+	}
 
 	// 사망 연출(죽음 몽타주 종료 시 래그돌 트리거)이 부활 "이후" 뒤늦게 발동해 캡슐 콜리전을
 	// NoCollision으로 다시 꺼버리는 경합이 있다 — 그 상태로 걸으면 지면을 통과한다(리스폰 땅꺼짐).

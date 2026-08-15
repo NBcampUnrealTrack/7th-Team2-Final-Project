@@ -128,19 +128,18 @@ void ARetrieveBossCharacter::ResetRespawnState()
 	}
 }
 
-void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
+bool ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 {
-	MonsterDataRowName = NewRow;
-
-	if (!MonsterDataTable || MonsterDataRowName.IsNone()) { return; }
+	if (!MonsterDataTable || NewRow.IsNone()) { return false; }
 
 	const FMonsterDataRow* Row = MonsterDataTable->FindRow<FMonsterDataRow>(
-		MonsterDataRowName, TEXT("ARetrieveBossCharacter::UpdateMonsterDataRow"));
+		NewRow, TEXT("ARetrieveBossCharacter::UpdateMonsterDataRow"));
 	if (!Row)
 	{
-		return;
+		return false;
 	}
 
+	MonsterDataRowName = NewRow;
 
 	if (EnemyCombatComponent)
 	{
@@ -156,6 +155,8 @@ void ARetrieveBossCharacter::UpdateMonsterDataRow(FName NewRow)
 	{
 		EnemyPoiseComponent->InitializeFromMonsterData(*Row, true);
 	}
+
+	return true;
 }
 
 FGameplayTag ARetrieveBossCharacter::GetUnlockElementTag() const

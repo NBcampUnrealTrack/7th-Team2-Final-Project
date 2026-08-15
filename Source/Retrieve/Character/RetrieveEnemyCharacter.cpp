@@ -19,6 +19,7 @@
 #include "Components/Inventory/DropComponent.h"
 #include "Components/Enemy/EnemyCombatComponent.h"
 #include "Components/Enemy/EnemyPoiseComponent.h"
+#include "Components/Enemy/EnemyVFXLifecycleComponent.h"
 #include "Components/Enemy/NormalMonsterHealthBarComponent.h"
 #include "Components/Enemy/EnemySuspicionIndicatorComponent.h"
 #include "Components/Enemy/PatternCounterComponent.h"
@@ -44,6 +45,7 @@ ARetrieveEnemyCharacter::ARetrieveEnemyCharacter(const FObjectInitializer& Objec
 	EnemyCombatComponent = CreateDefaultSubobject<UEnemyCombatComponent>(TEXT("EnemyCombatComponent"));
 	PatternCounterComponent = CreateDefaultSubobject<UPatternCounterComponent>(TEXT("PatternCounterComponent"));
 	EnemyPoiseComponent = CreateDefaultSubobject<UEnemyPoiseComponent>(TEXT("EnemyPoiseComponent"));
+	VFXLifecycleComponent = CreateDefaultSubobject<UEnemyVFXLifecycleComponent>(TEXT("VFXLifecycleComponent"));
 	DropComponent = CreateDefaultSubobject<UDropComponent>(TEXT("DropComponent"));
 	NormalHealthBarComponent = CreateDefaultSubobject<UNormalMonsterHealthBarComponent>(TEXT("NormalHealthBarComponent"));
 	NormalHealthBarComponent->SetupAttachment(GetRootComponent());
@@ -464,6 +466,10 @@ void ARetrieveEnemyCharacter::ResetRespawnState()
 		EnemyCombatComponent->StopCurrentPattern();
 		EnemyCombatComponent->ResetCooldowns();
 	}
+	if (VFXLifecycleComponent)
+	{
+		VFXLifecycleComponent->CleanupAllVFX();
+	}
 
 	// 카운터 취약창
 	if (PatternCounterComponent)
@@ -708,6 +714,15 @@ void ARetrieveEnemyCharacter::DeactivateEnemy()
 {
 	GetWorldTimerManager().ClearTimer(AlertStaggerTimer);
 	AlertedTarget = nullptr;
+
+	if (EnemyCombatComponent)
+	{
+		EnemyCombatComponent->StopCurrentPattern();
+	}
+	if (VFXLifecycleComponent)
+	{
+		VFXLifecycleComponent->CleanupAllVFX();
+	}
 
 	if (MapIconComponent)
 	{

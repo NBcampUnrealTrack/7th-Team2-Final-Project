@@ -71,14 +71,6 @@ void UGA_EpicShootProjectiles::OnSpecialAttackActivated()
 	}
 	
 	ResolveAndCacheActivePattern();
-
-	ProjectileFireEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
-		this, RetrieveGameplayTags::GameplayEvent_Enemy_SpecialAttack_ProjectileFire, nullptr, false, false);
-	if (ProjectileFireEventTask)
-	{
-		ProjectileFireEventTask->EventReceived.AddDynamic(this, &UGA_EpicShootProjectiles::HandleProjectileFireEvent);
-		ProjectileFireEventTask->ReadyForActivation();
-	}
 	
 	ARetrieveEnemyCharacter* Enemy = Cast<ARetrieveEnemyCharacter>(CachedAvatarCharacter);
 	if (!ShouldApplyAerialMode(Enemy))

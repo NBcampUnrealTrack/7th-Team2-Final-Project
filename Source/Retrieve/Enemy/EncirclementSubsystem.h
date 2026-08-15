@@ -71,7 +71,8 @@ private:
 	};
 	
 	FRing& FindOrAddRing(AActor* Target);
-	void CompactInvalidAttackTokens(FRing& Ring) const;
+	void CompactInvalidRings();
+	void CompactRingData(FRing& Ring) const;
 	int32 GetAttackTokenCost(const AActor* Requester) const;
 	int32 GetAttackTokenBudget(const FRing& Ring, const AActor* Requester) const;
 	int32 GetCurrentAttackTokenCost(const FRing& Ring) const;

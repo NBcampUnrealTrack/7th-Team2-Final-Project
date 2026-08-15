@@ -2,6 +2,7 @@
 
 #include "Animation/AnimNotifyQueue.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/Enemy/EnemyVFXLifecycleComponent.h"
 #include "Engine/DataTable.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -72,6 +73,13 @@ void UAnimNotifyState_AttachNiagaraToSocket::NotifyBegin(
 	SpawnedComponent->SetGenerateOverlapEvents(false);
 	SpawnedComponent->SetCanEverAffectNavigation(false);
 	AddCleanupTags(SpawnedComponent, Animation, ResolvedConfig);
+	if (AActor* Owner = MeshComp->GetOwner())
+	{
+		if (UEnemyVFXLifecycleComponent* VFXLifecycle = Owner->FindComponentByClass<UEnemyVFXLifecycleComponent>())
+		{
+			VFXLifecycle->RegisterVFX(SpawnedComponent);
+		}
+	}
 
 	FRetrieveAttachedNiagaraRuntimeEntry RuntimeEntry;
 	RuntimeEntry.Animation = Animation;
@@ -129,6 +137,16 @@ void UAnimNotifyState_AttachNiagaraToSocket::NotifyEnd(
 				}
 
 				CleanupNiagaraComponent(SpawnedComponent, RuntimeEntry.ResolvedConfig);
+				if (RuntimeEntry.ResolvedConfig.bDeactivateOnEnd || RuntimeEntry.ResolvedConfig.bDestroyOnEnd)
+				{
+					if (AActor* Owner = MeshComp->GetOwner())
+					{
+						if (UEnemyVFXLifecycleComponent* VFXLifecycle = Owner->FindComponentByClass<UEnemyVFXLifecycleComponent>())
+						{
+							VFXLifecycle->UnregisterVFX(SpawnedComponent);
+						}
+					}
+				}
 				RuntimeEntries->RemoveAtSwap(Index);
 				break;
 			}
@@ -347,10 +365,12 @@ FRetrieveAttachedNiagaraRuntimeEntry* UAnimNotifyState_AttachNiagaraToSocket::Fi
 		return nullptr;
 	}
 
-	for (FRetrieveAttachedNiagaraRuntimeEntry& RuntimeEntry : *RuntimeEntries)
+	for (int32 Index = RuntimeEntries->Num() - 1; Index >= 0; --Index)
 	{
+		FRetrieveAttachedNiagaraRuntimeEntry& RuntimeEntry = (*RuntimeEntries)[Index];
 		if (!RuntimeEntry.NiagaraComponent.IsValid())
 		{
+			RuntimeEntries->RemoveAtSwap(Index);
 			continue;
 		}
 
@@ -358,6 +378,11 @@ FRetrieveAttachedNiagaraRuntimeEntry* UAnimNotifyState_AttachNiagaraToSocket::Fi
 		{
 			return &RuntimeEntry;
 		}
+	}
+
+	if (RuntimeEntries->IsEmpty())
+	{
+		SpawnedComponentsByMesh.Remove(MeshComp);
 	}
 
 	return nullptr;

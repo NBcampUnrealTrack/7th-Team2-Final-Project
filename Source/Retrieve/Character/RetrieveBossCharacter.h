@@ -23,8 +23,9 @@ public:
 	/**
 	 * UBossPhaseComponent가 페이즈 전환 시 호출합니다.
 	 * MonsterDataRowName 갱신 + EnemyCombatComponent 패턴 슬롯 재초기화.
+	 * @return 행을 찾아 페이즈 데이터를 적용했으면 true.
 	 */
-	void UpdateMonsterDataRow(FName NewRow);
+	bool UpdateMonsterDataRow(FName NewRow);
 	
 	/** 처치 시 해방되는 원소(여왕/비가디언 보스의 경우 비어있음) Getter.
 	 *  UGuardianCoreSpawnerComponent (Channel.Monster.Died 구독자)가 코어 스폰 분기를 위해 읽습니다. */

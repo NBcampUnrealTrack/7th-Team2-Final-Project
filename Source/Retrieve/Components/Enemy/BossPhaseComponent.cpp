@@ -52,8 +52,6 @@ void UBossPhaseComponent::Initialize(UDataTable* InBossStatsTable, FName InBossS
 
 void UBossPhaseComponent::ResetToPhase1()
 {
-	CurrentPhase = 1;
-
 	// 초기 행 이름은 조합("_Phase1")하지 않고 Initialize에서 캐시한 실제 값으로 복구한다.
 	if (Phase1DataRowName.IsNone())
 	{
@@ -62,7 +60,10 @@ void UBossPhaseComponent::ResetToPhase1()
 
 	if (ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(GetOwner()))
 	{
-		Boss->UpdateMonsterDataRow(Phase1DataRowName);
+		if (Boss->UpdateMonsterDataRow(Phase1DataRowName))
+		{
+			CurrentPhase = 1;
+		}
 	}
 }
 
@@ -107,14 +108,22 @@ void UBossPhaseComponent::TransitionToNextPhase()
 	ARetrieveBossCharacter* Boss = Cast<ARetrieveBossCharacter>(GetOwner());
 	if (!Boss) { return; }
 
-	++CurrentPhase;
+	const int32 NextPhase = CurrentPhase + 1;
 
 	// 페이즈 행 이름 규칙: {BossStatsRowName}_Phase{N}
 	// 예) "Boss_Fire" → "Boss_Fire_Phase2"
 	const FName NewDataRow = FName(
-		*(BossStatsRowName.ToString() + FString::Printf(TEXT("_Phase%d"), CurrentPhase)));
+		*(BossStatsRowName.ToString() + FString::Printf(TEXT("_Phase%d"), NextPhase)));
 
-	Boss->UpdateMonsterDataRow(NewDataRow);
+	if (!Boss->UpdateMonsterDataRow(NewDataRow))
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[%s] BossPhaseComponent: Phase %d DataRow '%s' 적용 실패"),
+			*Boss->GetName(), NextPhase, *NewDataRow.ToString());
+		return;
+	}
+
+	CurrentPhase = NextPhase;
 
 	// GameplayEvent.Boss.PhaseTransition 전송 → ST가 PhaseTransition 상태 진입
 	FGameplayEventData EventData;

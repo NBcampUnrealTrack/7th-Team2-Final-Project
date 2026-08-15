@@ -65,7 +65,6 @@ bool UEncirclementSubsystem::RequestAttackToken(AActor* Target, AActor* Requeste
 		return false;
 	}
 	FRing& Ring = FindOrAddRing(Target);
-	CompactInvalidAttackTokens(Ring);
 
 	if (Ring.AttackTokens.Contains(Requester))
 	{
@@ -176,7 +175,7 @@ void UEncirclementSubsystem::ReleaseAttackToken(AActor* Target, AActor* Requeste
 				}
 			}
 		}
-		CompactInvalidAttackTokens(*Ring);
+		CompactRingData(*Ring);
 	}
 }
 
@@ -298,7 +297,6 @@ int32 UEncirclementSubsystem::ShiftSlotExplicit(AActor* Target, AActor* Requeste
 	}
 
 	FRing& Ring = FindOrAddRing(Target);
-	CompactInvalidAttackTokens(Ring);
 
 	if (Ring.Slots[TargetSlotIndex].IsValid() && Ring.Slots[TargetSlotIndex] != Requester)
 	{
@@ -357,23 +355,54 @@ TStatId UEncirclementSubsystem::GetStatId() const
 
 UEncirclementSubsystem::FRing& UEncirclementSubsystem::FindOrAddRing(AActor* Target)
 {
+	CompactInvalidRings();
+
 	FRing& Ring = Rings.FindOrAdd(Target);
 	
 	if (Ring.Slots.Num() != NumSlots)
 	{
 		Ring.Slots.SetNum(NumSlots);
 	}
+
+	CompactRingData(Ring);
 	
 	return Ring;
 }
 
-void UEncirclementSubsystem::CompactInvalidAttackTokens(FRing& Ring) const
+void UEncirclementSubsystem::CompactInvalidRings()
+{
+	for (auto It = Rings.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+}
+
+void UEncirclementSubsystem::CompactRingData(FRing& Ring) const
 {
 	Ring.AttackTokens.RemoveAllSwap(
 		[](const TWeakObjectPtr<AActor>& Token)
 		{
 			return !Token.IsValid();
 		});
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	const float Cooldown = CVarEncircleTokenCooldown.GetValueOnGameThread();
+	for (auto It = Ring.TokenReleaseTime.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid() || CurrentTime - It.Value() >= Cooldown)
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 int32 UEncirclementSubsystem::GetAttackTokenCost(const AActor* Requester) const

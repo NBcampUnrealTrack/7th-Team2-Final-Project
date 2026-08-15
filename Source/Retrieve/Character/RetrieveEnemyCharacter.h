@@ -12,6 +12,7 @@
 class URetrieveAbilitySystemComponent;
 class UEnemyCombatComponent;
 class UEnemyPoiseComponent;
+class UEnemyVFXLifecycleComponent;
 class UPatternCounterComponent;
 class UDropComponent;
 class UNormalMonsterHealthBarComponent;
@@ -172,6 +173,10 @@ protected:
 	/** Poise 누적 기반 그로기 트리거 담당 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
 	TObjectPtr<UEnemyPoiseComponent> EnemyPoiseComponent;
+
+	/** NotifyState에서 생성한 Enemy VFX의 비정상 종료 정리 담당 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")
+	TObjectPtr<UEnemyVFXLifecycleComponent> VFXLifecycleComponent;
 
 	/** 사망 시 드랍 아이템 처리 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Retrieve|Components")

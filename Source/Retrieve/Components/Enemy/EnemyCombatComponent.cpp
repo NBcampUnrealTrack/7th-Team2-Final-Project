@@ -156,14 +156,12 @@ bool UEnemyCombatComponent::HasPatternInRangeByTypeIgnoringCooldown(AActor* Targ
 void UEnemyCombatComponent::StopCurrentPattern()
 {
 	URetrieveAbilitySystemComponent* ASC = GetASC();
-	if (!ASC)
+	if (ASC)
 	{
-		return;
+		FGameplayTagContainer TagsToCancel(RetrieveGameplayTags::Ability_Enemy_Attack);
+		TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
+		ASC->CancelAbilities(&TagsToCancel);
 	}
-
-	FGameplayTagContainer TagsToCancel(RetrieveGameplayTags::Ability_Enemy_Attack);
-	TagsToCancel.AddTag(RetrieveGameplayTags::Ability_Enemy_SpecialAttack);
-	ASC->CancelAbilities(&TagsToCancel);
 
 	if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 	{
@@ -523,7 +521,7 @@ void UEnemyCombatComponent::ActivateHitbox()
 		return;
 	}
 	
-	if (ActivePatternRowName.IsNone())
+	if (!PatternTable || ActivePatternRowName.IsNone())
 	{
 		return;
 	}
@@ -762,6 +760,7 @@ bool UEnemyCombatComponent::ActivatePattern(const FMonsterPatternRow& Pattern, F
 		if (!TryStartSequencePattern(Pattern, PatternRowName, Target))
 		{
 			ActivePatternRowName = NAME_None;
+			ClearFocusTarget();
 			if (UPatternCounterComponent* PatternCounter = GetOwner()->FindComponentByClass<UPatternCounterComponent>())
 			{
 				PatternCounter->CloseCounterWindow();
